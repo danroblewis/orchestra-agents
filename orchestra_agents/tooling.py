@@ -115,11 +115,12 @@ def may_change_tickets(project: Project, role: str) -> bool:
     return bool(ag) and not ag.builtin and "tickets" in effective_tools(ag, all_roles(project), all_teams(project))
 
 
-def snapshot(project: Project, store: AgentStore, role: str = "agents") -> dict:
+def snapshot(store: AgentStore, role: str) -> dict:
     """The task system's snapshot (a query; the fields the prompts read are listed in protocol.py)
-    for a wake-up's or the Supervisor's prompt. When the task system does not answer, an empty one
-    that says so."""
-    got = TaskClient(store.events, role)("snapshot")
+    for a wake-up's or the Supervisor's prompt, asked as the agent being woken (the query's
+    source is its instance, which for a resident is its name). When the task system does not
+    answer, an empty one that says so."""
+    got = TaskClient(store.events, role, source=role)("snapshot")
     snap = got.get("snapshot") if got.get("ok") else None
     if not snap:
         snap = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {},

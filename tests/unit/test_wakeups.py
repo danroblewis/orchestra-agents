@@ -281,3 +281,22 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
     for ser in sample(dump, t0 - 60, 5, 24):
         assert machine_of(ser) == ser.labels["role"] and abs(ser.intervals[0][0] - t0) < 2, (ser.key, ser.intervals)   # live from the start
 
+
+def test_the_host_announces_only_what_it_acts_on_as_itself(project):
+    # a finished ticket's sessions are archived on ticket.transitioned; assignments, releases and
+    # attention are the agents', which announce their own
+    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host.stop.set()
+    host.run(once=True)
+    [ann] = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started" and e["source"] == "agents"]
+    assert ann["listens_for"] == ["ticket.transitioned"]
+
+
+def test_a_wake_ups_snapshot_query_comes_from_the_agent_woken(project):
+    from fake_tasks import FakeTasks
+    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host._refresh_org(store.runtime()["agent_state"])
+    with FakeTasks(project):
+        host._wake("coordinator", ["task.attention_needed: T-1 is blocked"])
+    q = [e for e in events.read(0)[0] if e["type"] == "task.query_requested"]
+    assert [(e["source"], e["op"], e["by"]) for e in q] == [("coordinator", "snapshot", "coordinator")]

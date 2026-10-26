@@ -142,7 +142,7 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     wait_until("the machines", observed, timeout_s=60)
     host = seen["agents"]
     assert host["package"] == "agents" and host["mode"] == "continuous" and host["kind"] == "program" and host["active"]
-    assert {"task.assigned", "task.released", "task.attention_needed"} <= set(host["subscribes"])
+    assert host["subscribes"] == ["ticket.transitioned"]            # what the host acts on as itself; the agents announce their own
     log = get(url + "/api/machines/agents/log")
     assert log["ok"] and any("control endpoint" in line for line in log["lines"])
     for name in ("supervisor", "coordinator"):                                              # resident: continuous, whatever wakes them

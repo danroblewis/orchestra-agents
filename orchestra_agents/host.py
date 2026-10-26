@@ -27,7 +27,7 @@ from .harness import AgentSession, SessionSpec, get_harness
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
-from .protocol import ASSIGNED, ATTENTION, RELEASED, TRANSITIONED, Follower
+from .protocol import TRANSITIONED, Follower
 from .residents import Residents
 from .roles import all_roles
 from .runner import AgentRunner
@@ -115,13 +115,15 @@ class AgentHost:
             except ValueError:  # not the main thread (tests)
                 pass
         self.recover()
+        # the host announces what it acts on as itself: a finished ticket's sessions go to the
+        # archive. Assignments, releases and attention are the agents', which announce their own
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",
-                                                          "listens_for": [ASSIGNED, RELEASED, ATTENTION, TRANSITIONED], "log": str(HOST_LOG)})
+                                                          "listens_for": [TRANSITIONED], "log": str(HOST_LOG)})
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
         self._refresh_org(self.store.runtime()["agent_state"])
+        self.store.measure_idle(self.measured_roles())           # no agent is in a turn at the start: the level is live from here
         try:
             while not self.stop.is_set():
-        self.store.measure_idle(self.measured_roles())           # no agent is in a turn at the start: the level is live from here
                 try:
                     self.tick()
                 except Exception as e:  # noqa: BLE001 - keep the host alive
@@ -147,13 +149,13 @@ class AgentHost:
                 self.store.clear_control(os.getpid())
         return 0
 
-    def _busy(self) -> bool:
-        return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
     def measured_roles(self) -> list[str]:
         """The roles whose sessions are measured (``agents_working{role}``): the resident agents
         and the task system's roles this host serves."""
         return sorted({name for name, a in self.agents.items() if a.resident} | set(self.cfg.serves))
 
+    def _busy(self) -> bool:
+        return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
 
     def idle(self, up_to: int) -> bool:
         """Nothing left to do for the bus as it stood at ``up_to``: both followers have passed it,
@@ -420,7 +422,7 @@ class AgentHost:
             proc.open()
             self.residents.procs["supervisor"] = proc
         new = [e for e in self._digest.new() if e["type"] not in ("session.started", "session.settled")]
-        prefix = prompting.supervisor_context(tooling.snapshot(self.project, self.store, "supervisor"), new, self.project, self.store)
+        prefix = prompting.supervisor_context(tooling.snapshot(self.store, "supervisor"), new, self.project, self.store)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -444,7 +446,7 @@ class AgentHost:
 
     def _wake_turn(self, agent: AgentDef, target: str, reasons: list[str]) -> None:
         sid = agent.session_id
-        snap = tooling.snapshot(self.project, self.store, target)
+        snap = tooling.snapshot(self.store, target)
         if snap.get("unavailable") and all(r.startswith(("scheduled check-in", "scheduled daily session")) for r in reasons):
             log(f"{sid}: the task system did not answer; the scheduled wake-up is skipped")   # a check-in on no picture is a wasted turn
             return

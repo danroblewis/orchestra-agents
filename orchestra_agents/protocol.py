@@ -82,8 +82,8 @@ class Follower:
 class TaskClient:
     """The task system, as an agent's tools reach it: a request on the bus and its answer."""
 
-    def __init__(self, events, role: str = ""):
-        self.events, self.role = events, role
+    def __init__(self, events, role: str = "", source: str | None = None):
+        self.events, self.role, self.source = events, role, source     # source: the machine the requests come from (default: the bus's)
 
     def __call__(self, op: str, args: dict | None = None) -> dict:
         args = dict(args or {})
@@ -92,9 +92,9 @@ class TaskClient:
         subject = args.get("id") or args.get("milestone_id")
         data = {"request": rid, "args": args, "by": self.role}
         if op in QUERIES:
-            self.events.publish(QUERY, {**data, "op": op}, **({"subject": str(subject)} if subject else {}))
+            self.events.publish(QUERY, {**data, "op": op}, source=self.source, **({"subject": str(subject)} if subject else {}))
         elif op in REQUESTS:
-            self.events.publish(REQUESTS[op], data, **({"subject": str(subject)} if subject else {}))
+            self.events.publish(REQUESTS[op], data, source=self.source, **({"subject": str(subject)} if subject else {}))
         else:
             return {"ok": False, "error": f"the task system has no operation {op!r}"}
         end = time.time() + WAIT_S

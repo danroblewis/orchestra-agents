@@ -13,11 +13,12 @@ import os
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from .config import Project
 from .events import Events
+from .org import team_chain
 from .roles import RoleError, parse_interval
 from .store import AgentStore
 
@@ -33,7 +34,6 @@ class ProbeSpec:
     cwd: Path | None = None
     team: str | None = None
     path_dirs: tuple[str, ...] = ()
-    env: dict[str, str] = field(default_factory=dict)
 
 
 def _spec(d: dict, project: Project, team=None, path_dirs: tuple[str, ...] = ()) -> ProbeSpec:
@@ -46,7 +46,6 @@ def _spec(d: dict, project: Project, team=None, path_dirs: tuple[str, ...] = ())
 
 def team_probes(project: Project, teams: dict) -> list[ProbeSpec]:
     """Every team's probes, run in the team's space with the team chain's tools on PATH."""
-    from .org import team_chain
     out = []
     for t in teams.values():
         dirs = tuple(str(x.space_dir(project) / "tools") for x in team_chain(teams, t.name))
@@ -83,7 +82,7 @@ class Prober:
                 self.store.set_probe_state(name, removed=True)
 
     def _run(self, s: ProbeSpec) -> None:
-        env = {**os.environ, **s.env, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_PROBE": s.name}
+        env = {**os.environ, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_PROBE": s.name}
         if s.path_dirs:
             env["PATH"] = os.pathsep.join([*s.path_dirs, env.get("PATH", "")])
         started = time.time()

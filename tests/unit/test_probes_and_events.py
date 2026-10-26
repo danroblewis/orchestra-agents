@@ -6,21 +6,14 @@ import subprocess
 import time
 
 import pytest
+from conftest import agents_project
 
 from orchestra_agents import tooling as api
-from orchestra_agents.config import init_project
 from orchestra_agents.events import Events
-from orchestra_agents.org import (
-    AgentDef,
-    OrgError,
-    RepoOrgStore,
-    TeamDef,
-    all_agents,
-    all_teams,
-    event_matches,
-)
+from orchestra_agents.org import AgentDef, OrgError, TeamDef, event_matches
+from orchestra_agents.org_store import RepoOrgStore, all_agents, all_teams
 from orchestra_agents.probes import Prober, team_probes
-from orchestra_agents.roles import RoleDef, role_store
+from orchestra_agents.roles import RepoRoleStore, RoleDef
 from orchestra_agents.store import AgentStore, StoreError
 
 
@@ -34,7 +27,7 @@ def project(tmp_path, monkeypatch):
     (repo / "README.md").write_text("x")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
-    p = init_project(repo)
+    p = agents_project(repo)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "orchestra"], cwd=repo, check=True)
     return p
@@ -49,7 +42,7 @@ def run_probe(prober, spec):
 def test_team_probe_runs_in_the_space_with_tools_on_path(project):
     store, events = AgentStore(project), Events.for_project(project)
     os_ = RepoOrgStore(project)
-    role_store(project).save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThings, carefully and well.")
+    RepoRoleStore(project).save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThings, carefully and well.")
     os_.save_agent(AgentDef(name="po", roles=["owner"], team="product", kind="scheduled", every="1d"))
     # The probe finds its tool on PATH and runs it through sh: executing a freshly written
     # binary makes macOS scan it first, which takes long enough to make this test flaky.
@@ -76,8 +69,8 @@ def test_agents_subscribe_to_probes_and_declared_events(project):
     AgentDef(name="a_b", roles=["r"], wake_on=["lesson_proposed"]).validate({"lesson_proposed"})
     with pytest.raises(OrgError, match="emits entry"):
         TeamDef(name="tt", lead="a", emits=["gate.landed"]).validate()          # Orchestra's own types are not declarable
-    # built-in wake lists are documentation: the loop wakes those agents itself
-    assert not all_agents(project)["coordinator"].matches_event({"type": "ticket.created"})
+    # the coordinator wakes only on attention addressed to it
+    assert not event_matches(all_agents(project)["coordinator"].wake_on, {"type": "ticket.created"})
 
 
 def test_emit_event_is_declared_rate_limited_and_depth_limited(project):
@@ -101,7 +94,7 @@ def test_emit_event_is_declared_rate_limited_and_depth_limited(project):
         api.handle(project, store, "emit_event", {"type": "gate.landed"}, role="keeper")
     r = api.handle(project, store, "emit_event", {"type": "lesson_proposed", "subject": "CA-30", "note": "plan before editing"}, role="keeper")
     assert r["event"]["depth"] == 1 and r["event"]["by"] == "keeper" and r["wakes"] == ["retro"]
-    assert all_agents(project)["retro"].matches_event(r["event"])
+    assert event_matches(all_agents(project)["retro"].wake_on, r["event"])
     # depth: a turn caused by a three-deep chain may not emit again
     store.set_agent_state("keeper", turn_depth=3)
     with pytest.raises(StoreError, match="deep"):

@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from .config import Project
-
-TERMINAL = ("DONE", "CANCELLED")
+from .org import team_chain, tools_path
+from .org_store import RepoOrgStore, all_teams
+from .protocol import TERMINAL
+from .roles import EVENT_TYPES, TOOL_GROUPS, RepoRoleStore, all_roles
 
 
 class TicketView:
@@ -29,22 +31,19 @@ class TicketView:
             setattr(self, k, getattr(self, k) or "")
 
 
-Ticket = TicketView
-
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def role_prompt(project: Project, role: str) -> str:
-    """A role's own prompt, placeholders resolved: the job description. Built-in roles
-    ship with Orchestra (overridable per project); custom roles come from the role store."""
+    """A role's own prompt, placeholders resolved: the job description. Built-in roles ship with
+    this package (overridable per project); custom roles come from ``.orchestra/roles/``."""
     override = project.config.prompt_overrides.get(role)
     variant = PROMPTS_DIR / f"{role}.{project.config.work}.md"         # e.g. worker.tasks.md: no git, no merge gate
     path = (project.repo_root / override) if override else variant if variant.exists() else (PROMPTS_DIR / f"{role}.md")
     if path.exists():
         text = path.read_text(encoding="utf-8")
     else:
-        from .roles import role_store
-        text = role_store(project).prompt(role)
+        text = RepoRoleStore(project).prompt(role)
         if not text.strip():
             text = f"You are good at being the {role}. Act on the wake-up you receive using your tools, then summarize."
     return _fill(project, text)
@@ -58,8 +57,6 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     """The system prompt an agent is started with: its roles' prompts, then its team's
     responsibilities and those of the teams above it, then its access. Built-in agents
     outside a custom team get exactly their role prompt, as before teams existed."""
-    from .org import all_teams, org_store, team_chain, tools_path
-    from .roles import all_roles
     roles = roles if roles is not None else all_roles(project)
     teams = teams if teams is not None else all_teams(project)
     chain = team_chain(teams, agent.team)
@@ -92,7 +89,7 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     for r in agent.roles:
         parts.append(f"## Your role: {r}\n\n{role_prompt(project, r).strip()}\n")
     for i, t in enumerate(chain):
-        resp = "" if t.builtin else org_store(project).responsibilities(t.name).strip()
+        resp = "" if t.builtin else RepoOrgStore(project).responsibilities(t.name).strip()
         rel = "your team" if i == 0 else f"the team above `{chain[i - 1].name}`"
         who = f"Lead: `{t.lead}`. Agents: {', '.join(f'`{a}`' for a in t.agents) or 'none'}."
         subs = [x.name for x in teams.values() if x.parent == t.name]
@@ -157,16 +154,16 @@ def write_context(project: Project, text: str) -> None:
 
 AGENT_PREAMBLE = """# You are the `{agent}` agent of Orchestra
 
-You are an agent in a software project run by Orchestra, with the role{plural} {roles}. {team_line}
+You are an agent in a software project run by Orchestra, with the role {roles}. {team_line}
 Orchestra wakes you with a message that says why (an event, a schedule, or a note or brief from
 another agent) and gives you a snapshot of the project. Act using your tools, then reply with a
 short summary of what you did and why. You never write code on the base branch and never start
 agents yourself; code changes happen by creating or editing tickets, which the Coordinator
 orders and workers implement. {reach_line}
-""".replace("{plural}", "")
+"""
 
 
-def _ticket_block(t: Ticket) -> str:
+def _ticket_block(t: TicketView) -> str:
     deps = ", ".join(t.depends_on) or "none"
     return (f"Ticket: {t.id}\nTitle: {t.title}\nPriority: {t.priority}\nDepends on: {deps}\n\n"
             f"## Objective (why)\n{t.objective.strip() or '(not stated)'}\n\n"
@@ -175,7 +172,7 @@ def _ticket_block(t: Ticket) -> str:
             f"## Verification (how it is proved)\n{t.verification.strip() or '(none stated; existing tests must keep passing)'}\n")
 
 
-def worker_task(project: Project, t: Ticket, unit_command: str | None) -> str:
+def worker_task(project: Project, t: TicketView, unit_command: str | None) -> str:
     test_line = f"Run the unit tests with: `{unit_command}`" if unit_command else "There is no configured unit test command."
     head = f"# Your assignment\n\n{_ticket_block(t)}\n"
     env = (f"## Environment\nYou are in a git worktree checked out on branch `{t.branch}`. "
@@ -191,7 +188,7 @@ def worker_task(project: Project, t: Ticket, unit_command: str | None) -> str:
             "that test is part of the work. Verify, commit on your branch, then call `report_ticket`.\n")
 
 
-def worker_task_tasks(t: Ticket) -> str:
+def worker_task_tasks(t: TicketView) -> str:
     """A task (not a code change): the worker works in its own scratch folder and reports a result."""
     head = f"# Your assignment\n\n{_ticket_block(t)}\n"
     env = ("## Environment\nYour working directory is this ticket's scratch folder. Put your result in "
@@ -204,7 +201,7 @@ def worker_task_tasks(t: Ticket) -> str:
     return head + env + "Do the task, write `RESULT.md`, then call `report_ticket`.\n"
 
 
-def reviewer_task_tasks(t: Ticket, summary: str, files: list[str], result: str) -> str:
+def reviewer_task_tasks(t: TicketView, summary: str, files: list[str], result: str) -> str:
     """A finished task to review: the ticket, the worker's summary, its RESULT.md and its files."""
     result = result if len(result) < 60000 else result[:60000] + "\n... (truncated; open RESULT.md for the rest)\n"
     return (f"# Review request\n\n{_ticket_block(t)}\n## The worker's summary\n{summary.strip() or '(none)'}\n\n"
@@ -213,7 +210,7 @@ def reviewer_task_tasks(t: Ticket, summary: str, files: list[str], result: str) 
             "Judge the result against the ticket, then call `report_review` exactly once.\n")
 
 
-def reviewer_task(project: Project, t: Ticket, commit: str, diff: str, files: list[str],
+def reviewer_task(project: Project, t: TicketView, commit: str, diff: str, files: list[str],
                   log: str, test_output: str | None) -> str:
     diff = diff if len(diff) < 60000 else diff[:60000] + "\n... (diff truncated; open files in the worktree for the rest)\n"
     tests = f"## Unit test output (already run by Orchestra)\n```\n{test_output.strip()[-4000:]}\n```\n" if test_output else \
@@ -228,7 +225,6 @@ def reviewer_task(project: Project, t: Ticket, commit: str, diff: str, files: li
 
 def org_reference() -> str:
     """What an agent can watch and do, appended to the design guide."""
-    from .roles import EVENT_TYPES, TOOL_GROUPS
     return ("Tool groups: " + ", ".join(TOOL_GROUPS) + ".\nEvent types that can wake an agent: " + ", ".join(EVENT_TYPES)
             + ".\nA wake_on entry may filter transitions, e.g. 'ticket.transitioned:DONE' or 'ticket.transitioned:BLOCKED'.")
 
@@ -260,18 +256,22 @@ def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:
 
 
 def execution_health(snapshot: dict) -> list[str]:
-    """Plain statements about whether work is flowing, with the likely cause when not."""
+    """Plain statements about whether work is flowing, with the likely cause when not. Who is
+    working is read from the task system's assignments: whatever machine holds them."""
     cap = snapshot.get("capacity", {})
-    running = [s for s in snapshot["sessions"] if s.get("status") == "running"]
-    workers = [s["id"] for s in running if s.get("kind") == "worker"]
-    reviewers = [s["id"] for s in running if s.get("kind") == "reviewer"]
-    ready = [f"{t['id']}(p{t.get('effective_priority', t['priority'])})" for t in snapshot["tickets"] if t["state"] == "OPEN" and t.get("ready")]
+    held: dict[str, list[str]] = {}
+    for a in snapshot.get("assignments", []):
+        if a.get("instance"):
+            held.setdefault(a.get("role") or "?", []).append(a["instance"])
+    workers, reviewers = held.get("worker", []), held.get("reviewer", [])
+    ready = [f"{t['id']}(p{(t.get('priority_info') or {}).get('effective', t['priority'])})"
+             for t in snapshot["tickets"] if t["state"] == "OPEN" and t.get("ready")]
     waiting = [t for t in snapshot["tickets"] if t["state"] == "OPEN" and not t.get("ready")]
     blocked = [t["id"] for t in snapshot["tickets"] if t["state"] == "BLOCKED"]
     out = [f"Worker capacity: {cap.get('workers')} of a configured maximum {cap.get('max_workers')}"
-           + (f" (runtime dial set: {cap.get('note') or 'no note'})" if cap.get("dial_set") else ""),
+           + (f" (dial note: {cap['note']})" if cap.get("note") else ""),
            f"Reviewer capacity: {cap.get('reviewers')} of {cap.get('max_reviewers')}",
-           f"Workers running: {len(workers)} {workers or ''}".rstrip(), f"Reviewers running: {len(reviewers)}",
+           f"Workers running: {len(workers)} {workers or ''}".rstrip(), f"Reviewers running: {len(reviewers)} {reviewers or ''}".rstrip(),
            f"Ready tickets (OPEN, deps DONE, milestone open): {len(ready)} {ready[:8]}",
            f"OPEN but not ready: {len(waiting)}" + (f" e.g. {waiting[0]['id']}: {waiting[0].get('why_waiting')}" if waiting else ""),
            f"BLOCKED: {len(blocked)} {blocked[:8]}",

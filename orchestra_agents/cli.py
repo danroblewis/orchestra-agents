@@ -41,13 +41,18 @@ def cmd_sessions(args) -> int:
     project = _project(args)
     store, _ = _store(project)
     if args.action == "list":
+        print(f"{'session':28} {'status':8} {'ticket':10} last said")
         for s in store.sessions():
-            print(f"{s['id']:28} {s.get('status', '?'):8} {s.get('ticket_id') or '':10} {(s.get('last_text') or '')[:60]!r}")
+            print(f"{s['id']:28} {s.get('status', '?'):8} {s.get('ticket_id') or '':10} {' '.join((s.get('last_text') or '').split())[:60]}")
         return 0
-    s = next((s for s in store.sessions() if s["id"] == args.id), None)
-    if not s or not s.get("session_file"):
-        sys.exit(f"no transcript for {args.id}")
-    for m in read_transcript(s):
+    s = store.find_session(args.id or "")
+    if not s:
+        sys.exit(f"no session {args.id!r}; `orchestra-agents sessions list` names them")
+    messages = read_transcript(s) if s.get("session_file") else []
+    if not messages:
+        print(f"{args.id}: no turns yet")
+        return 0
+    for m in messages:
         tools = " ".join(f"[{t['name']}]" for t in m["tool_calls"])
         print(f"--- {m['role']} {tools}\n{m['text'][:3000]}\n")
     return 0
@@ -67,12 +72,14 @@ def cmd_tools(args) -> int:
 
 
 def cmd_api(args) -> int:
+    role = os.environ.get("ORCHESTRA_ROLE", "")
+    if not role:
+        sys.exit("orchestra-agents api is the agents' tool interface and runs inside an agent's session (ORCHESTRA_ROLE is set by the host)")
     project = _project(args)
     store, _ = _store(project)
     try:
         payload = json.loads(args.args) if args.args else {}
-        out = tooling.handle(project, store, args.command, payload,
-                         role=os.environ.get("ORCHESTRA_ROLE", ""), ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
+        out = tooling.handle(project, store, args.command, payload, role=role, ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
     except (StoreError, KeyError, ValueError) as e:
         print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}))
         return 1
@@ -90,7 +97,7 @@ def _print_event(ev: dict) -> None:
             print(f"\n{txt.strip()}\n", flush=True)
 
 
-def _chat_attached(project: Project, store: AgentStore, port: int) -> int:
+def _chat_attached(project: Project, port: int) -> int:
     import urllib.request
 
     print(f"Supervisor for {project.key} via orchestra-agents run on 127.0.0.1:{port}. Ctrl-D or 'exit' to leave.\n")
@@ -131,7 +138,7 @@ def cmd_chat(args) -> int:
     if ctl.get("port"):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{ctl['port']}/health", timeout=3)
-            return _chat_attached(project, store, int(ctl["port"]))
+            return _chat_attached(project, int(ctl["port"]))
         except OSError:
             print(f"[agents] the host's control endpoint on port {ctl['port']} is not answering.")
     print("[agents] the Supervisor is reachable while `orchestra-agents run` is up; start it first.")
@@ -142,12 +149,15 @@ def cmd_roles(args) -> int:
     project = _project(args)
     store, _ = _store(project)
     if args.action == "list":
+        print(f"{'role':20} {'kind':9} {'used by':24} tools")
         for r in tooling.handle(project, store, "list_roles", {})["roles"]:
             kind = "built-in" if r["builtin"] else "custom"
-            wake = ", ".join(r.get("wake_on") or []) + (f" every {r['every']}" if r.get("every") else "") + (f" at {r['at']}" if r.get("at") else "")
-            print(f"{r['name']:20} {kind:9} {r['session']:9} {'paused' if r['paused'] else '':7} {wake.strip() or '-'}")
+            print(f"{r['name']:20} {kind:9} {', '.join(r.get('agents') or []) or '-':24} {', '.join(r.get('tools') or []) or '-'}")
         return 0
-    print(json.dumps(tooling.handle(project, store, "get_role", {"name": args.name}), indent=2))
+    try:
+        print(json.dumps(tooling.handle(project, store, "get_role", {"name": args.name or ""}), indent=2))
+    except StoreError as e:
+        sys.exit(f"orchestra-agents: {e}")
     return 0
 
 
@@ -156,26 +166,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--repo", help="repository root (default: ORCHESTRA_REPO or cwd)")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("run", help="run the agents' host: resident agents, wake-ups, assignments for the roles they fill")
-    s.add_argument("--once", action="store_true", help="until nothing is running, then exit")
+    s.add_argument("--once", action="store_true", help="exit once every running turn has finished")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("chat", help="talk to the Supervisor")
     s.set_defaults(fn=cmd_chat)
-    s = sub.add_parser("sessions")
-    s.add_argument("action", choices=["list", "show"])
-    s.add_argument("id", nargs="?")
+    s = sub.add_parser("sessions", help="the agents' sessions: list them, or show one's transcript")
+    s.add_argument("action", choices=["list", "show"], help="list | show")
+    s.add_argument("id", nargs="?", help="a session id from `sessions list`")
     s.set_defaults(fn=cmd_sessions)
     s = sub.add_parser("tools", help="the tools agents get, as data (used by the Pi extension)")
-    s.add_argument("--json", action="store_true")
+    s.add_argument("--json", action="store_true", help="the catalogue as JSON")
     s.add_argument("--groups", help="comma-separated tool groups (default: ORCHESTRA_TOOLS, else all)")
     s.set_defaults(fn=cmd_tools)
-    s = sub.add_parser("api", help="the interface the agents' tools call")
-    s.add_argument("command")
+    s = sub.add_parser("api", help="the interface the agents' tools call (inside an agent's session: ORCHESTRA_ROLE is set by the host)")
+    s.add_argument("command", help="a tool name from `orchestra-agents tools`")
     s.add_argument("--args", default="{}", help="JSON object of arguments")
-    s.add_argument("--compact", action="store_true")
+    s.add_argument("--compact", action="store_true", help="one line of JSON")
     s.set_defaults(fn=cmd_api)
     s = sub.add_parser("roles", help="agent roles: built-in and custom")
-    s.add_argument("action", choices=["list", "show"])
-    s.add_argument("name", nargs="?")
+    s.add_argument("action", choices=["list", "show"], help="list | show")
+    s.add_argument("name", nargs="?", help="a role name")
     s.set_defaults(fn=cmd_roles)
     return p
 

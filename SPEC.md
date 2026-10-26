@@ -23,7 +23,7 @@ It meets the task system (orchestra-tasking) only on Orchestra's bus. This file 
   reports, with the ticket as subject and the agent's instance as source, so Orchestra's
   Machines page shows the agents as machines without reading any payload.
 
-## 2. The organisation (`builtins.py`, `roles.py`, `org.py`, `prompts/`)
+## 2. The organisation (`builtins.py`, `roles.py`, `org.py`, `org_store.py`, `prompts/`)
 
 Three things, kept apart:
 
@@ -72,7 +72,8 @@ when what the agent is saying has changed (the heartbeat's `text`: a line for th
 Tasks panel), runs the turn, and reports `task.reported` with the agent's report (a worker's
 `report_ticket`: READY_FOR_REVIEW or BLOCKED with a reason; a reviewer's `report_review`:
 APPROVED or REJECTED with feedback), or `failed` when the turn ended without one. A
-`task.released` for its assignment kills the turn. A finished ticket's sessions (its
+`task.released` for its assignment kills the turn (`turn.interrupted`, with the reason; nothing is
+reported for an assignment the instance no longer holds). A finished ticket's sessions (its
 `ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable.
 
 **Requests** (`tooling.py`): an agent's ticket and milestone tools are requests on the bus
@@ -86,7 +87,7 @@ grant the `tickets` group; a worker or reviewer only reports.
 (`to`: supervisor or coordinator, the reason, the ticket). The built-in planners wake on it like
 any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
 
-## 4. The host (`host.py`, `control.py`, `cli.py`)
+## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
 `orchestra-agents run` is one process per project, the machine `agents`. It:
 
@@ -106,8 +107,13 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   a harness failure is `turn.error`; a restart mid-turn is `turn.interrupted`;
 - bounds every session's context: past `session_max_bytes` of transcript since the last
   compaction it asks the harness to compact (`agent.compacted`), and rotates the session when
-  the harness cannot (`agent.reset`, the old transcript archived as a run);
-- on start, stops any turn the previous host left running (no orphans) and marks the cut;
+  the harness cannot (`agent.reset`, the old transcript archived as a run); the events that
+  concern one session are also kept on its record, so its transcript shows them without a read
+  of the bus;
+- on start, stops any turn the previous host left running (no orphans) and marks the cut. After a
+  host crash the task system re-offers the assignment the dead host held when its lease runs
+  out: the host reports nothing it did not see end. At a clean stop it waits briefly for each
+  open assignment's `task.reported` (`failed`) to go out;
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
   recorded in the runtime record): one turn on the resident session per message, prefixed with
   the project context when it changed and the events since the last turn, streamed as NDJSON.
@@ -119,7 +125,8 @@ Events the host and the agents publish: `session.started`, `session.settled`, `a
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, and a team's own declared types raised with `emit_event` (rate-limited, and
 refused when the cause chain is three deep). The source of a session's events is the agent's
-instance; the host's own are `agents`.
+instance; the host's own are `agents`; the web plugin's operator controls publish as
+`agents_web`.
 
 Metrics (`measures.py`, Orchestra's metrics store): `agents_working{role}` and the counters
 `agent_turns_started_total{role}`, `agent_turns_finished_total{role}`, named for what they
@@ -163,14 +170,16 @@ reviewer), `turn_timeout` (default none), `silence_timeout` (default 20m), `sess
 `ticket_prefix` and `work` are read for the prompts. The bus and the metrics store are
 Orchestra's, found through the Orchestra project.
 
-State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions, archived sessions, the
-reports an agent's tool handed to the host, queued wake-ups, each agent's state, probe states,
-the control endpoint), behind one file lock and written only by `store.py`; `sessions/` (the
+State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions and archived sessions, each
+with the host's markers for its transcript; the reports an agent's tool handed to the host;
+queued wake-ups; each agent's state; probe states; the control endpoint; the metric counters,
+`metric_counts`; and `supervisor_seen_at`, when the human last read the Supervisor), behind one
+file lock and written only by `store.py`; `sessions/` (the
 harnesses' own session data and the archive); `logs/` (the host's log and, under `agents/`, each
 session's stderr and the prompt it was started with); `PROJECT.md`, the project context the
 Supervisor maintains. The organisation's custom records are in the repository under `.orchestra/`.
 
-## 8. The web plugin (`web.py`, `static/`)
+## 8. The web plugin (`web.py`, `org_views.py`, `static/`)
 
 Mounted by Orchestra's web app (`orchestra/plugins.py`):
 
@@ -192,8 +201,11 @@ it runs as, with the ticket it is on; the cards read this); `GET /state` (sessio
 `GET /sessions/{id}/transcript` (paged, with the markers); `GET /eventmap`; `GET /context`;
 `GET /attention` and `POST /attention/seen`; `POST /supervisor` (a message to the Supervisor,
 proxied to the host, streamed); `POST /control` (pause, resume, restart, reset, delete an agent;
-delete a role or a team). The UI is read-only for humans except these operator controls on the
-agents and the Supervisor chat: a ticket is changed only by telling the Supervisor.
+delete a role or a team; recorded as the operator's, with the Supervisor's permission). The UI is
+read-only for humans except these operator controls on the agents and the Supervisor chat: a
+ticket is changed only by telling the Supervisor. This is wider than Orchestra's rule 9
+(read-only except the task plugin's operator controls) and awaits the owner's decision; deleting
+a role or team is otherwise the Supervisor's, through its roles tools.
 
 ## 9. Cost
 

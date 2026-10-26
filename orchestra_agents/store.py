@@ -1,13 +1,16 @@
 """The agents' own state, in ``~/.orchestrator/<key>/agents/runtime.json``, behind one file lock:
-their sessions (live and archived), the reports an agent's tool hands to the agent that runs it,
-wake-ups queued for an agent, and each agent's state (paused, crashes, schedules). Nothing of the
-task system's is here: tickets are the task system's, reached over the bus (protocol.TaskClient)."""
+their sessions (live and archived, each with the host's markers for its transcript), the reports
+an agent's tool hands to the agent that runs it, wake-ups queued for an agent, each agent's state
+(paused, crashes, schedules), the probes' states, the control endpoint, the metric counters and
+when the human last read the Supervisor. Nothing of the task system's is here: tickets are the
+task system's, reached over the bus (protocol.TaskClient)."""
 
 from __future__ import annotations
 
 import fcntl
 import json
 import os
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -24,6 +27,7 @@ class StoreError(Exception):
 
 
 EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}}
+MARKERS_KEPT = 50         # the host's markers kept per session, newest last
 
 
 def now() -> str:
@@ -52,24 +56,19 @@ class AgentStore:
             finally:
                 fcntl.flock(fh, fcntl.LOCK_UN)
 
-    def _r(self) -> dict:
+    def runtime(self) -> dict:
         p = self.project.runtime_file
         data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
         for k, v in EMPTY.items():
             data.setdefault(k, json.loads(json.dumps(v)))
         return data
 
-    def runtime(self) -> dict:
-        return self._r()
-
     def _mutate_runtime(self, fn) -> Any:
         with self._locked():
-            data = self._r()
+            data = self.runtime()
             result = fn(data)
             _write(self.project.runtime_file, data)
             return result
-
-    # -- sessions --------------------------------------------------------------
 
     def set_session(self, session_id: str, **fields: Any) -> dict:
         def fn(data):
@@ -80,13 +79,22 @@ class AgentStore:
         return self._mutate_runtime(fn)
 
     def sessions(self) -> list[dict]:
-        return list(self._r()["sessions"].values())
+        return list(self.runtime()["sessions"].values())
 
     def find_session(self, session_id: str) -> dict | None:
-        r = self._r()
+        r = self.runtime()
         return r["sessions"].get(session_id) or r.get("archived_sessions", {}).get(session_id)
 
-    def purge_ticket_sessions(self, ticket_id: str) -> list[str]:
+    def add_marker(self, session_id: str, event: dict) -> None:
+        """One of the host's events about a session (a turn start, a cut-off, a reset), kept on
+        the session's record so its transcript can show it without reading the bus."""
+        def fn(data):
+            rec = data["sessions"].get(session_id) or data["archived_sessions"].get(session_id)
+            if rec is not None:
+                rec["markers"] = (rec.get("markers") or [])[-(MARKERS_KEPT - 1):] + [event]
+        self._mutate_runtime(fn)
+
+    def purge_ticket_sessions(self, ticket_id: str) -> None:
         """A finished ticket's worker and reviewer sessions leave the live list for the archive."""
         def fn(data):
             for sid in (f"worker-{ticket_id}", f"reviewer-{ticket_id}"):
@@ -94,8 +102,7 @@ class AgentStore:
                 if rec:
                     rec.update(status="archived", pid=None)
                     data["archived_sessions"][sid] = rec
-            return []
-        return self._mutate_runtime(fn)
+        self._mutate_runtime(fn)
 
     def retire_session(self, session_id: str) -> str | None:
         """Start a resident agent over: its transcript moves to sessions/archive/ and its record is
@@ -115,7 +122,8 @@ class AgentStore:
                 old["session_file"] = str(dest / Path(f).name)
             old.update({"id": archived_id, "status": "archived", "pid": None, "reset_at": now()})
             data["archived_sessions"][archived_id] = old
-            rec.update({"session_file": None, "status": "idle", "pid": None, "last_text": "", "phase": "idle", "tool_name": None})
+            rec.update({"session_file": None, "status": "idle", "pid": None, "last_text": "", "phase": "idle", "tool_name": None,
+                        "markers": []})
             return archived_id
         return self._mutate_runtime(fn)
 
@@ -124,19 +132,16 @@ class AgentStore:
             list(d["sessions"].values()), d.setdefault("metric_counts", {}), role=role, source=source, started=started))
         self.measures.write(points)
 
-    # -- what an agent's tool hands to the agent that runs it ------------------
-
     def set_report(self, ticket_id: str, report: dict) -> None:
+        """What an agent's exit tool hands to the session that runs it."""
         report["ts"] = now()
         self._mutate_runtime(lambda d: d["reports"].__setitem__(ticket_id, report))
 
     def pop_report(self, ticket_id: str) -> dict | None:
         return self._mutate_runtime(lambda d: d["reports"].pop(ticket_id, None))
 
-    # -- agents: their state and their wake-ups --------------------------------
-
     def agent_state(self, name: str) -> dict:
-        return dict(self._r()["agent_state"].get(name) or {})
+        return dict(self.runtime()["agent_state"].get(name) or {})
 
     def set_agent_state(self, name: str, **fields) -> dict:
         def fn(d):
@@ -149,19 +154,21 @@ class AgentStore:
         self._mutate_runtime(lambda d: d["wakeups"].append({"target": target, "reason": reason, "ts": now()}))
 
     def drain_wakeups(self, target: str) -> list[dict]:
-        def fn(data):
+        """The wake-ups queued for an agent, removed from the queue. Nothing is written when
+        there are none: the host asks every second for every agent."""
+        with self._locked():
+            data = self.runtime()
             mine = [w for w in data["wakeups"] if w["target"] == target]
-            data["wakeups"] = [w for w in data["wakeups"] if w["target"] != target]
+            if mine:
+                data["wakeups"] = [w for w in data["wakeups"] if w["target"] != target]
+                _write(self.project.runtime_file, data)
             return mine
-        return self._mutate_runtime(fn)
-
-    # -- the teams' probes (probes.py) -----------------------------------------
 
     def probe_state(self, name: str) -> dict:
-        return dict(self._r()["probes"].get(name) or {})
+        return dict(self.runtime()["probes"].get(name) or {})
 
     def probes(self) -> list[str]:
-        return list(self._r()["probes"])
+        return list(self.runtime()["probes"])
 
     def set_probe_state(self, name: str, **fields: Any) -> dict:
         def fn(d):
@@ -169,3 +176,17 @@ class AgentStore:
             st.update(fields)
             return dict(st)
         return self._mutate_runtime(fn)
+
+    def set_control(self, port: int, pid: int) -> None:
+        """Where the running host serves the Supervisor chat (control.py)."""
+        self._mutate_runtime(lambda d: d.__setitem__("control", {"port": port, "pid": pid}))
+
+    def clear_control(self, pid: int) -> None:
+        """Only the host that recorded the endpoint clears it: a replacement may already be up."""
+        self._mutate_runtime(lambda d: d.pop("control", None) if (d.get("control") or {}).get("pid") == pid else None)
+
+    def mark_supervisor_seen(self) -> float:
+        """The human has read what the Supervisor last said; returns when."""
+        now_t = time.time()
+        self._mutate_runtime(lambda d: d.__setitem__("supervisor_seen_at", now_t))
+        return now_t

@@ -17,7 +17,10 @@ from typing import Any
 from . import prompting
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
+from .org import effective_tools
+from .org_store import all_agents, all_teams
 from .protocol import QUERIES, REQUESTS, TaskClient
+from .roles import all_roles
 from .store import AgentStore, StoreError
 
 
@@ -53,7 +56,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
         return {"ok": True, "context": prompting.read_context(project)}
 
     if command == "update_project_context":
-        if role and role != "supervisor":
+        if role != "supervisor":
             raise StoreError("only the supervisor maintains the project context")
         text = a.get("text") or ""
         if len(text.strip()) < 20:
@@ -103,22 +106,22 @@ PLANNERS = {"supervisor", "coordinator"}
 def may_change_tickets(project: Project, role: str) -> bool:
     """Whether an agent may ask the task system to change tickets: the Supervisor and the
     Coordinator, and a custom agent whose roles or team grant it the ``tickets`` tools (the same
-    grant the harness started it with). Without a role it is the operator's command line."""
-    if not role or role in PLANNERS:
+    grant the harness started it with). Without a role, nothing."""
+    if not role:
+        return False
+    if role in PLANNERS:
         return True
-    from .org import all_agents, all_teams, effective_tools
-    from .roles import all_roles
     ag = all_agents(project).get(role)
     return bool(ag) and not ag.builtin and "tickets" in effective_tools(ag, all_roles(project), all_teams(project))
 
 
 def snapshot(project: Project, store: AgentStore, role: str = "agents") -> dict:
-    """The task system's snapshot (a query), with the agents' own sessions in it, for a wake-up's
-    or the Supervisor's prompt. When the task system does not answer, an empty one that says so."""
+    """The task system's snapshot (a query; the fields the prompts read are listed in protocol.py)
+    for a wake-up's or the Supervisor's prompt. When the task system does not answer, an empty one
+    that says so."""
     got = TaskClient(store.events, role)("snapshot")
     snap = got.get("snapshot") if got.get("ok") else None
     if not snap:
         snap = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {},
-                "unavailable": got.get("error") or "the task system did not answer"}
-    snap["sessions"] = store.sessions()
+                "assignments": [], "unavailable": got.get("error") or "the task system did not answer"}
     return snap

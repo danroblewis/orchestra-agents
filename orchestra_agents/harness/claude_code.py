@@ -43,15 +43,12 @@ class ClaudeCodeSession(AgentSession):
         self._lock = threading.Lock()
         self.proc: subprocess.Popen | None = None
         self._closed = False
-        self.busy = False
         self.session_file = None
         self.uuid: str | None = None
 
     @property
     def harness_name(self) -> str:
         return "claude_code"
-
-    # -- session identity --------------------------------------------------------
 
     def open(self) -> None:
         """Create or load the session's uuid. Claude writes the transcript on the first turn."""
@@ -71,8 +68,6 @@ class ClaudeCodeSession(AgentSession):
 
     def alive(self) -> bool:
         return not self._closed
-
-    # -- one turn ------------------------------------------------------------------
 
     def _mcp_config(self) -> Path:
         env = {k: v for k, v in self.spec.env.items()}
@@ -113,7 +108,6 @@ class ClaudeCodeSession(AgentSession):
     def prompt(self, text: str, timeout: float | None, on_event: OnEvent | None = None,
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
-            self.busy = True
             result = TurnResult()
             emit = _Normalizer(on_event)
             self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -155,9 +149,7 @@ class ClaudeCodeSession(AgentSession):
                     t = ev.get("type")
                     if t == "assistant":
                         for part in (ev.get("message") or {}).get("content") or []:
-                            if part.get("type") == "tool_use":
-                                result.tool_calls.append(_short(part.get("name", "?")))
-                            elif part.get("type") == "text" and part.get("text", "").strip():
+                            if part.get("type") == "text" and part.get("text", "").strip():
                                 last_text = part["text"]
                     elif t == "result":
                         if ev.get("is_error"):
@@ -170,14 +162,12 @@ class ClaudeCodeSession(AgentSession):
                 if result.error:
                     result.text = last_text
                     return result
-                result.settled = True
                 result.text = last_text
                 emit.settled(last_text)
                 return result
             finally:
                 self.proc = None
                 stderr.close()
-                self.busy = False
 
     def kill(self) -> None:
         p = self.proc

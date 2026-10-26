@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import agents_project
 
-from orchestra_agents.config import init_project
 from orchestra_agents.harness import HARNESSES, SessionSpec, get_harness, read_transcript
 from orchestra_agents.harness.claude_code import (
     ClaudeCodeHarness,
@@ -225,7 +225,7 @@ def test_codex_turn_without_binary_reports_error(tmp_path, monkeypatch):
     (tmp_path / "wt").mkdir()
     s = CodexSession(spec(tmp_path), binary=str(tmp_path / "no-such-codex"))
     res = s.prompt("hi", timeout=5)
-    assert res.error and "cannot start" in res.error and not res.settled
+    assert res.error and "cannot start" in res.error
 
 
 def spec(tmp_path, **kw) -> SessionSpec:
@@ -265,7 +265,7 @@ def test_claude_turn_without_binary_reports_error(tmp_path, monkeypatch):
     (tmp_path / "wt").mkdir()
     s = ClaudeCodeSession(spec(tmp_path), binary=str(tmp_path / "no-such-claude"))
     res = s.prompt("hi", timeout=5)
-    assert res.error and "cannot start" in res.error and not res.settled
+    assert res.error and "cannot start" in res.error
 
 
 class McpClient:
@@ -291,7 +291,7 @@ def project(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
-    return init_project(repo, provider="p", model="m")
+    return agents_project(repo, provider="p", model="m")
 
 
 def test_mcp_server_serves_the_role_tools(project, tmp_path):

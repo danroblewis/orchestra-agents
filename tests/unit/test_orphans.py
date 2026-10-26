@@ -1,4 +1,4 @@
-"""No orphans: a turn's process that outlived its loop is stopped when the next loop starts."""
+"""No orphans: a turn's process that outlived its host is stopped when the next host starts."""
 
 import subprocess
 import time
@@ -10,6 +10,13 @@ from orchestra_agents.host import AgentHost
 
 def test_an_orphaned_turn_is_stopped():
     p = subprocess.Popen(["sleep", "60"], start_new_session=True)       # as a harness starts a turn
+    AgentHost._kill_orphan(p.pid, "worker-T-1")
+    p.wait(timeout=5)
+    assert p.returncode is not None
+
+
+def test_a_process_that_is_not_a_group_leader_is_stopped_too():
+    p = subprocess.Popen(["sleep", "60"])                              # in this process's group, as an older Pi session was
     AgentHost._kill_orphan(p.pid, "worker-T-1")
     p.wait(timeout=5)
     assert p.returncode is not None

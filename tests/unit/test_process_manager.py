@@ -5,8 +5,8 @@ import subprocess
 import time
 
 import pytest
+from conftest import FakeHarness, agents_project
 
-from orchestra_agents.config import init_project
 from orchestra_agents.events import Events
 from orchestra_agents.host import AgentHost
 from orchestra_agents.store import AgentStore
@@ -30,7 +30,7 @@ def project(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
-    return init_project(repo, provider="p", model="m")
+    return agents_project(repo, provider="p", model="m")
 
 
 def test_dead_process_has_no_pid(project):
@@ -40,31 +40,33 @@ def test_dead_process_has_no_pid(project):
 
 def test_crashed_resident_is_recorded_restarted_and_crash_looped(project):
     store, events = AgentStore(project), Events.for_project(project)
-    loop = AgentHost(project, store, events)
+    host = AgentHost(project, store, events)
+    host.harness = FakeHarness()
     (project.logs_dir / "agents").mkdir(parents=True, exist_ok=True)
     (project.logs_dir / "agents" / "retro.stderr.log").write_text("boom: model not found\n")
     for n in (1, 2, 3):
         store.set_session("retro", kind="retro", status="idle", pid=4242)
-        loop.agent_procs["retro"] = FakeProc("retro", alive=False)
-        loop._reap_residents()
-        assert "retro" not in loop.agent_procs                        # dropped: the next tick starts it again
+        host.residents.procs["retro"] = FakeProc("retro", alive=False)
+        host.residents.reap()
+        assert "retro" not in host.residents.procs                    # dropped: the next tick starts it again
         assert store.find_session("retro")["pid"] is None
         crashes = [e for e in events.read(0)[0] if e["type"] == "agent.crashed"]
         assert len(crashes) == n and crashes[-1]["count"] == n and "model not found" in crashes[-1]["stderr"]
+        assert [m["type"] for m in store.find_session("retro")["markers"]].count("agent.crashed") == n   # the transcript shows it
     st = store.agent_state("retro")
     assert st["paused"] and "3 crashes" in st["crash_loop"]
     assert [e["type"] for e in events.read(0)[0]][-1] == "agent.crash_loop"
     wake = store.drain_wakeups("supervisor")
     assert wake and "crashed 3 times" in wake[0]["reason"] and "model not found" in wake[0]["reason"]
     # an agent mid-turn is left to its turn; a live one is left alone
-    loop.agent_procs["busy"] = FakeProc("busy", alive=False)
-    loop.agent_threads["busy"] = type("T", (), {"is_alive": lambda self: True})()
-    loop.agent_procs["fine"] = FakeProc("fine", alive=True)
-    loop._reap_residents()
-    assert "busy" in loop.agent_procs and "fine" in loop.agent_procs
+    host.residents.procs["busy"] = FakeProc("busy", alive=False)
+    host.agent_threads["busy"] = type("T", (), {"is_alive": lambda self: True})()
+    host.residents.procs["fine"] = FakeProc("fine", alive=True)
+    host.residents.reap()
+    assert "busy" in host.residents.procs and "fine" in host.residents.procs
     # old crashes fall out of the window
     store.set_agent_state("slow", crashes=[time.time() - 3600] * 5)
     store.set_session("slow", kind="slow", status="idle", pid=1)
-    loop.agent_procs["slow"] = FakeProc("slow", alive=False)
-    loop._reap_residents()
+    host.residents.procs["slow"] = FakeProc("slow", alive=False)
+    host.residents.reap()
     assert not store.agent_state("slow").get("paused")

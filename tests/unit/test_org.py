@@ -4,20 +4,13 @@ import json
 import subprocess
 
 import pytest
+from conftest import agents_project
 
 from orchestra_agents import tooling as api
-from orchestra_agents.config import init_project
-from orchestra_agents.org import (
-    AgentDef,
-    OrgError,
-    RepoOrgStore,
-    TeamDef,
-    all_agents,
-    all_teams,
-    effective_tools,
-    may_message,
-)
-from orchestra_agents.roles import RoleDef, role_store
+from orchestra_agents.cli import main
+from orchestra_agents.org import AgentDef, OrgError, TeamDef, effective_tools, may_message
+from orchestra_agents.org_store import RepoOrgStore, all_agents, all_teams
+from orchestra_agents.roles import RepoRoleStore, RoleDef
 from orchestra_agents.store import AgentStore, StoreError
 
 
@@ -31,7 +24,7 @@ def project(tmp_path, monkeypatch):
     (repo / "README.md").write_text("x")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
-    p = init_project(repo)
+    p = agents_project(repo)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "orchestra"], cwd=repo, check=True)
     return p
@@ -78,7 +71,7 @@ def test_validation():
 
 def test_store_round_trip_nesting_space_and_commits(project):
     os_ = RepoOrgStore(project)
-    role_store(project).save(RoleDef(name="qa_engineer", description="tests things", tools=["tickets"]), "# You test things\n\nThoroughly, in a browser.")
+    RepoRoleStore(project).save(RoleDef(name="qa_engineer", description="tests things", tools=["tickets"]), "# You test things\n\nThoroughly, in a browser.")
     os_.save_agent(AgentDef(name="qa_lead", roles=["qa_engineer"], team="product/qa", kind="scheduled", every="1d"))
     with pytest.raises(OrgError):
         os_.save_team(TeamDef(name="product/qa", lead="qa_lead"), "# QA\n1. x")      # parent must exist
@@ -100,7 +93,7 @@ def test_store_round_trip_nesting_space_and_commits(project):
 
 
 def test_roles_with_wake_rules_become_implicit_agents(project):
-    role_store(project).save(RoleDef(name="product_owner", description="keeps the backlog full", tools=["tickets", "escalate"],
+    RepoRoleStore(project).save(RoleDef(name="product_owner", description="keeps the backlog full", tools=["tickets", "escalate"],
                                      wake_on=["ticket.transitioned:DONE"], every="45m"), "# You own the product\n\nKeep the backlog full.")
     a = all_agents(project)["product_owner"]
     assert a.source == "role" and a.kind == "scheduled" and a.every == "45m" and a.wake_on == ["ticket.transitioned:DONE"]
@@ -114,7 +107,7 @@ def test_team_record_decides_membership(project):
     """A role record (no team field) named by a team belongs to it; an agent whose
     own record names the team belongs to it even before the team lists it."""
     from orchestra_agents.org import members_of
-    rs, os_ = role_store(project), RepoOrgStore(project)
+    rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
     rs.save(RoleDef(name="product_owner", tools=["tickets"], every="45m"), "# You own\n\nThe product, with opinions.")
     rs.save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThings.")
     os_.save_agent(AgentDef(name="writer", roles=["owner"], team="product", kind="ad_hoc", session="ephemeral"))
@@ -138,7 +131,7 @@ def test_team_record_decides_membership(project):
 
 
 def test_effective_tools_and_the_message_tree(project):
-    rs, os_ = role_store(project), RepoOrgStore(project)
+    rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
     rs.save(RoleDef(name="analyst", tools=["events"]), "# You analyse\n\nTranscripts and logs, carefully.")
     rs.save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThe backlog, opinionatedly.")
     os_.save_agent(AgentDef(name="po", roles=["owner"], team="product", kind="scheduled", every="6h"))
@@ -146,7 +139,8 @@ def test_effective_tools_and_the_message_tree(project):
     os_.save_agent(AgentDef(name="hunter", roles=["analyst"], team="product/qa", kind="ad_hoc", session="ephemeral"))
     os_.save_team(TeamDef(name="product", lead="po", access=[{"tools": ["escalate"]}]), "# P\n\n1. x")
     os_.save_team(TeamDef(name="product/qa", lead="qa_lead", members=["hunter"], access=[{"tools": ["pipeline"]}]), "# Q\n\n1. y")
-    roles, teams, ags = __import__("orchestra_agents.roles", fromlist=["all_roles"]).all_roles(project), all_teams(project), all_agents(project)
+    from orchestra_agents.roles import all_roles
+    roles, teams, ags = all_roles(project), all_teams(project), all_agents(project)
     assert effective_tools(ags["hunter"], roles, teams) == ("events", "pipeline", "escalate", "team")  # role + team + parent team; `team` so it can reach its lead
     assert effective_tools(ags["qa_lead"], roles, teams) == ("tickets", "events", "pipeline", "escalate", "team")
     assert may_message(teams, ags, "qa_lead", "hunter") is None          # lead to member
@@ -160,7 +154,7 @@ def test_effective_tools_and_the_message_tree(project):
 
 def test_agent_prompt_is_roles_then_responsibilities_then_access(project):
     from orchestra_agents import prompting as agents
-    rs, os_ = role_store(project), RepoOrgStore(project)
+    rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
     rs.save(RoleDef(name="owner", tools=["tickets"]), "# You own the product\n\nBe opinionated about {base_branch}.")
     rs.save(RoleDef(name="analyst", tools=["events"]), "# You analyse\n\nCarefully.")
     os_.save_agent(AgentDef(name="po", roles=["owner"], team="product", kind="scheduled", every="6h"))
@@ -240,6 +234,27 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     assert next(r for r in org["roles"] if r["name"] == "owner")["agents"] == ["po", "writer"]
     rec = json.loads((project.repo_root / ".orchestra" / "agents" / "po.json").read_text())
     assert rec["team"] == "product" and "builtin" not in rec
+
+
+def test_without_a_role_there_is_no_write(project, monkeypatch):
+    """An empty role is nobody: it may read, and nothing else; `orchestra-agents api` refuses to
+    run at all without ORCHESTRA_ROLE, which the host sets inside an agent's session."""
+    store = AgentStore(project)
+    assert api.handle(project, store, "list_roles", {}, role="")["ok"]
+    with pytest.raises(StoreError, match="only the supervisor"):
+        api.handle(project, store, "create_role", {"name": "owner", "description": "d", "prompt": "x" * 50}, role="")
+    with pytest.raises(StoreError, match="only the supervisor"):
+        api.handle(project, store, "update_project_context", {"text": "# Project context\n\n## Objectives\n- x"}, role="")
+    with pytest.raises(StoreError, match="no role"):
+        api.handle(project, store, "message_agent", {"name": "coordinator", "note": "hi"}, role="")
+    with pytest.raises(StoreError, match="no role"):
+        api.handle(project, store, "emit_event", {"type": "direction_changed"}, role="")
+    assert not api.may_change_tickets(project, "")
+    with pytest.raises(StoreError, match="may not change tickets"):
+        api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": "M1"}, role="")
+    monkeypatch.delenv("ORCHESTRA_ROLE", raising=False)
+    with pytest.raises(SystemExit, match="ORCHESTRA_ROLE"):
+        main(["--repo", str(project.repo_root), "api", "list_roles"])
 
 
 def test_custom_agent_with_tickets_tools_may_create_tickets(project):

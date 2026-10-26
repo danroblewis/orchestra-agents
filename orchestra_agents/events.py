@@ -10,6 +10,7 @@ ORCHESTRA_EVENTS_URL), so one place decides where the events go.
 The source is the machine that emitted the event:
 
 - the agents' host (``orchestra-agents run``) is ``agents``, a program: it starts the agents;
+- the web plugin's operator controls (web.py) are ``agents_web``;
 - an event about an agent's session (its turn starting, settling, timing out) is the agent's own,
   sent as the instance the host bound to that session (``bind``): ``supervisor``, ``coordinator``,
   or a slot of a per-ticket role, ``worker/1``;
@@ -19,7 +20,6 @@ The source is the machine that emitted the event:
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from orchestra.events import Events as OrchestraEvents
@@ -31,12 +31,7 @@ HOST = "agents"
 
 
 def default_source() -> str:
-    if os.environ.get("ORCHESTRA_SOURCE"):
-        return os.environ["ORCHESTRA_SOURCE"]
-    role, ticket = os.environ.get("ORCHESTRA_ROLE"), os.environ.get("ORCHESTRA_TICKET")
-    if not role:
-        return HOST
-    return f"{role}/{ticket}" if ticket else role
+    return os.environ.get("ORCHESTRA_SOURCE") or os.environ.get("ORCHESTRA_ROLE") or HOST
 
 
 def flat(ev: dict) -> dict:
@@ -50,15 +45,11 @@ def flat(ev: dict) -> dict:
 class Events(OrchestraEvents):
     def __init__(self, *args, source: str | None = None, **kwargs):
         super().__init__(*args, source=source or default_source(), **kwargs)
-        self._flat_subs: list[Callable[[dict], None]] = []
         self._bound: dict[str, str] = {}             # session id -> the instance its events come from
 
     @classmethod
     def for_project(cls, project: Project, source: str | None = None) -> Events:
         return super().for_project(project.orchestra, source=source or default_source())
-
-    def subscribe(self, fn: Callable[[dict], None]) -> None:
-        self._flat_subs.append(fn)
 
     def bind(self, session: str, source: str) -> None:
         self._bound[session] = source
@@ -69,14 +60,7 @@ class Events(OrchestraEvents):
     def emit(self, type: str, **data: Any) -> dict:
         subject = data.get("ticket") or data.get("milestone") or data.get("session")
         source = self._bound.get(data.get("session") or "")
-        ev = self.publish(type, data or None, source=source, **({"subject": str(subject)} if subject else {}))
-        f = flat(ev)
-        for fn in list(self._flat_subs):
-            try:
-                fn(f)
-            except Exception:  # noqa: BLE001, S110 - a subscriber never breaks the publisher
-                pass
-        return f
+        return flat(self.publish(type, data or None, source=source, **({"subject": str(subject)} if subject else {})))
 
     def read(self, since: int = 0, limit: int = 500) -> tuple[list[dict], int]:
         evs, nxt = super().read(since, limit)

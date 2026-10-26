@@ -1,5 +1,5 @@
-"""A stdio MCP server exposing the agents' tools to a harness that speaks MCP (Claude Code,
-Codex, OpenCode). Dependency-free: newline-delimited JSON-RPC 2.0 over stdin/stdout.
+"""A stdio MCP server exposing the agents' tools to a harness that speaks MCP (Claude Code and
+Codex). Dependency-free: newline-delimited JSON-RPC 2.0 over stdin/stdout.
 
     ORCHESTRA_REPO=<repo> ORCHESTRA_ROLE=<role> ORCHESTRA_TOOLS=<groups> ORCHESTRA_TICKET=<id> \\
         python -m orchestra_agents.harness.mcp

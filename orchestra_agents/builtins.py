@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .protocol import ASSIGNED, ATTENTION, RELEASED
+from .protocol import ASSIGNED, ATTENTION, DONE, REFUSED, RELEASED, TASK_EVENTS, TRANSITIONED
 
 
 @dataclass(frozen=True)
@@ -75,9 +75,9 @@ register(Role(name="reviewer", session_id="reviewer-{ticket}", prompt="reviewer"
 SYSTEM_BINDINGS = {
     "task_scheduler": {"description": "The task system's scheduler: offers ready tickets to the roles, applies their reports, "
                                       "keeps the ticket state machine and asks a planner for attention.",
-                       "emits": (ASSIGNED, RELEASED, ATTENTION, "request.done", "request.refused",
-                                 "ticket.transitioned:OPEN", "ticket.transitioned:IN_PROGRESS", "ticket.transitioned:IN_REVIEW",
-                                 "ticket.transitioned:DONE", "ticket.transitioned:BLOCKED", "scheduler.started", "scheduler.stopped"),
+                       # the transitions it emits are named by state so a wake rule's filter finds its emitter on the map
+                       "emits": (ASSIGNED, RELEASED, ATTENTION, DONE, REFUSED, *(e for e in TASK_EVENTS if e != TRANSITIONED),
+                                 *(f"{TRANSITIONED}:{s}" for s in ("OPEN", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"))),
                        "wake_on": ("task.accepted", "task.reported", "task.requested", "task.query_requested")},
     "probes": {"description": "A team's commands, run on an interval; an event on each change of result.",
                "emits": ("probe.failed", "probe.recovered"), "wake_on": ()},
@@ -85,7 +85,7 @@ SYSTEM_BINDINGS = {
                               "restarts crashed agents and answers the task system's assignments for the roles it serves.",
                "emits": ("session.started", "session.settled", "turn.timed_out", "turn.error", "turn.interrupted",
                          "agent.crashed", "agent.crash_loop", "agent.compacted", "agent.reset"),
-               "wake_on": (ASSIGNED, RELEASED)},
+               "wake_on": (ASSIGNED, RELEASED, ATTENTION, TRANSITIONED)},
 }
 
 

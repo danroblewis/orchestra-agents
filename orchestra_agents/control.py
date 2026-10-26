@@ -3,7 +3,9 @@
 `orchestra-agents chat` attaches here to talk to the Supervisor session that the host keeps
 resident, so there is exactly one session per project agent. Bound to 127.0.0.1 only.
 
-POST /supervisor  body {"message": "..."}  -> NDJSON stream of Pi events, then {"type": "done"}
+POST /supervisor  body {"message": "..."}  -> NDJSON stream of the session's normalized events (harness/base.py;
+                                              only tool_start and assistant_end are forwarded, host.py
+                                              prompt_supervisor), then {"type": "done"}
 GET  /health                                -> {"ok": true}
 """
 

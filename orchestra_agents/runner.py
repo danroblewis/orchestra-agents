@@ -13,8 +13,19 @@ import time
 from pathlib import Path
 
 from . import prompting as agents
+from .builtins import ROLES
 from .prompting import TicketView
-from .protocol import ACCEPTED, ASSIGNED, HEARTBEAT_S, RELEASED, REPORTED, WORKING, Follower
+from .protocol import (
+    ACCEPTED,
+    ASSIGNED,
+    HEARTBEAT_S,
+    RELEASED,
+    REPORTED,
+    TERMINAL,
+    TRANSITIONED,
+    WORKING,
+    Follower,
+)
 
 SAY_S = 2.0            # a heartbeat goes out early when what the agent is saying has changed, at most this often
 
@@ -29,6 +40,7 @@ class AgentRunner:
         self.threads: dict[str, threading.Thread] = {}      # assignment -> the thread running it
         self.sessions: dict[str, str] = {}                   # assignment -> its session id
         self.instances: dict[str, str] = {}                  # assignment -> the instance it runs as
+        self.released: dict[str, str] = {}                   # assignment -> why the task system took it back
 
     def busy(self) -> bool:
         return any(th.is_alive() for th in self.threads.values())
@@ -39,29 +51,30 @@ class AgentRunner:
         for ev in self.follow.new():
             serves = [r for r in self.ROLES if r in (self.host.cfg.serves or [])]   # [agents] serves: another machine may take a role
             if ev.get("type") == ASSIGNED and ev.get("role") in serves and ev.get("assignment") not in self.threads:
-                th = threading.Thread(target=self._run, args=(ev,), daemon=True, name=ev["assignment"])
-                self.threads[ev["assignment"]] = th
+                aid, role, tid = ev["assignment"], ev["role"], ev["ticket"]
+                sid = f"{role}-{tid}"
+                instance = self.host._instance(sid, role, tid)       # the slot is taken here, on the one thread that allocates them
+                self.sessions[aid], self.instances[aid] = sid, instance
+                th = threading.Thread(target=self._run, args=(ev, sid, instance), daemon=True, name=aid)
+                self.threads[aid] = th
                 th.start()
-            elif ev.get("type") == "ticket.transitioned" and ev.get("to") in ("DONE", "CANCELLED") and ev.get("ticket"):
+            elif ev.get("type") == TRANSITIONED and ev.get("to") in TERMINAL and ev.get("ticket"):
                 self.host.store.purge_ticket_sessions(ev["ticket"])     # a finished ticket's sessions go to the archive
             elif ev.get("type") == RELEASED and ev.get("assignment") in self.sessions \
                     and ev.get("instance") in (None, self.instances.get(ev["assignment"])):     # a release for another machine is not ours
+                self.released[ev["assignment"]] = ev.get("reason") or "no reason given"
                 proc = self.host.live_procs.get(self.sessions[ev["assignment"]])
                 if proc is not None:
                     try:
-                        proc.kill()                           # the turn ends; its report says so
+                        proc.kill()                           # the turn ends; turns.py records the interruption
                     except OSError:
                         pass
 
-    # -- one assignment --------------------------------------------------------
-
-    def _run(self, a: dict) -> None:
+    def _run(self, a: dict, sid: str, instance: str) -> None:
+        """One assignment: accept, run the session's turn with heartbeats, report."""
         host = self.host
         aid, role, tid = a["assignment"], a["role"], a["ticket"]
         path = Path(a["workspace"])
-        sid = f"{role}-{tid}"
-        instance = host._instance(sid, role, tid)
-        self.sessions[aid], self.instances[aid] = sid, instance
         say = lambda kind, **data: self.events.publish(kind, {"assignment": aid, "ticket": tid, "role": role, **data},
                                                        source=instance, subject=tid)
         say(ACCEPTED, instance=instance, session=sid)
@@ -79,21 +92,23 @@ class AgentRunner:
                     say(WORKING, text=text)
         threading.Thread(target=beat, daemon=True, name=f"{aid}:beat").start()
         report, text, failed, commit = None, "", True, None
+        spec = ROLES[role]
+        open_session = lambda: host._open_session(sid, role, agents.role_prompt(host.project, spec.prompt), tuple(spec.tools), path, tid)
         try:
             t = TicketView({**(a.get("brief") or {}), "id": tid, "branch": a.get("branch")})
             if role == "worker":
                 task, nudge = self._work_task(t, a)
             else:
                 task, nudge, commit = self._review_task(t, a, path)
-            proc = host._session(sid, role, path, tid)
+            proc = open_session()
             try:
                 host._session_running(sid, role, proc, tid)
                 host.store.set_session(sid, ticket_title=t.title, ticket_state="IN_PROGRESS" if role == "worker" else "IN_REVIEW",
                                        worker_turns=(a.get("brief") or {}).get("worker_turns") or 0)   # for the cards: no query needed
-                if host._trim_if_large(proc, sid, role) == "rotated":
-                    proc = host._session(sid, role, path, tid)
+                if host.residents.trim_if_large(proc, sid, role) == "rotated":
+                    proc = open_session()
                     host._session_running(sid, role, proc, tid)
-                report, text, failed = host._prompt_with_retry(proc, tid, task, nudge)
+                report, text, failed = host.turns.prompt_with_retry(proc, tid, task, nudge, released=lambda: self.released.get(aid))
             finally:
                 proc.close()
                 host._session_idle(sid, text)
@@ -103,9 +118,10 @@ class AgentRunner:
             done.set()
             self.sessions.pop(aid, None)
             self.instances.pop(aid, None)
-            say(REPORTED, report=report, failed=failed, text=(text or "")[-2000:], commit=commit)
+            if self.released.pop(aid, None) is None:      # a released assignment is no longer this instance's to report on
+                say(REPORTED, report=report, failed=failed, text=(text or "")[-2000:], commit=commit)
 
-    def _work_task(self, t, a: dict) -> tuple[str, str]:
+    def _work_task(self, t: TicketView, a: dict) -> tuple[str, str]:
         if a.get("branch") is None:                           # a task: a folder and a result
             return (agents.worker_task_tasks(t),
                     ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your result is written, "
@@ -114,7 +130,7 @@ class AgentRunner:
                 ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your work is "
                  "committed and tested, otherwise BLOCKED with the reason."))
 
-    def _review_task(self, t, a: dict, path: Path) -> tuple[str, str, str | None]:
+    def _review_task(self, t: TicketView, a: dict, path: Path) -> tuple[str, str, str | None]:
         nudge = "You stopped without a verdict. Call `report_review` now with APPROVED or REJECTED."
         review = a.get("review") or {}
         if a.get("branch") is None:                           # a task: the worker's result in its folder

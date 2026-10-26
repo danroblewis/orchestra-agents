@@ -1,9 +1,10 @@
 """Organisation commands: roles, agents, and teams. Called from ``orchestra_agents.tooling.handle``.
 
-Creating, changing, and deleting any of the three is the Supervisor's alone (and the
-human's, through the web UI, which acts as the Supervisor). Reading is open to any agent
-with the `team` or `roles` tool group. Messages and briefs follow the tree enforced by
-``orchestra_agents.org.may_message``."""
+Creating, changing, and deleting any of the three is the Supervisor's alone (the operator's
+controls on the Agents page, web.py, pass the Supervisor's role with their own name as author).
+Reading is open to any agent with the `team` or `roles` tool group. Messages and briefs follow
+the tree enforced by ``orchestra_agents.org.may_message``. The views the commands and the web
+plugin return are in ``org_views.py``."""
 
 from __future__ import annotations
 
@@ -12,21 +13,19 @@ from typing import Any
 
 from . import prompting as agents
 from .config import Project
-from .harness.tools import tools_for
 from .org import (
     AgentDef,
     OrgError,
     TeamDef,
-    all_agents,
-    all_teams,
     custom_event_types,
-    effective_tools,
+    event_matches,
     may_message,
     members_of,
-    org_store,
     team_chain,
 )
-from .roles import EVENT_TYPES, RoleDef, RoleError, all_roles, parse_interval, role_store
+from .org_store import RepoOrgStore, all_agents, all_teams
+from .org_views import agent_definition, agent_view, role_definition, team_definition, team_view
+from .roles import EVENT_TYPES, RepoRoleStore, RoleDef, RoleError, all_roles
 from .store import AgentStore, StoreError
 
 ORG_COMMANDS = frozenset({
@@ -43,7 +42,7 @@ MUTATIONS = frozenset({"create_role", "update_role", "delete_role", "create_agen
 
 
 def handle_org(project: Project, store: AgentStore, command: str, a: dict[str, Any], author: str, role: str) -> dict:
-    if command in MUTATIONS and role and role != "supervisor":
+    if command in MUTATIONS and role != "supervisor":
         raise StoreError("only the supervisor may create, change, or delete roles, agents, or teams")
     try:
         return _handle(project, store, command, a, author, role)
@@ -52,12 +51,11 @@ def handle_org(project: Project, store: AgentStore, command: str, a: dict[str, A
 
 
 def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any], author: str, role: str) -> dict:
-    rs, os_ = role_store(project), org_store(project)
+    rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
 
     if command == "org_guide":
         return {"ok": True, "guide": agents.org_guide() + "\n\n## Reference\n\n" + agents.org_reference()}
 
-    # -- roles: job descriptions --------------------------------------------------------
     if command == "list_roles":
         used: dict[str, list[str]] = {}
         for ag in all_agents(project).values():
@@ -99,7 +97,6 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.events.emit("role.deleted", role=a["name"], by=author)
         return {"ok": True, "storage": rs.last_commit_note}
 
-    # -- agents: what runs ----------------------------------------------------------------
     if command == "list_agents":
         teams = all_teams(project)
         return {"ok": True, "agents": [agent_view(project, store, ag, teams) for ag in all_agents(project).values()]}
@@ -169,8 +166,10 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.set_agent_state(a["name"], reset_requested=True, reset_by=author)
         return {"ok": True, "message": "the agent's session will start over at the next tick; its transcript so far is kept as an archived run"}
     if command in ("run_agent", "message_agent"):
+        if not role:
+            raise StoreError("no role")
         teams, ags = all_teams(project), all_agents(project)
-        why = may_message(teams, ags, role or "supervisor", a["name"])
+        why = may_message(teams, ags, role, a["name"])
         if why:
             raise StoreError(why)
         target = ags[a["name"]]
@@ -185,7 +184,6 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.events.emit("agent.messaged", agent=target.name, by=author)
         return {"ok": True, "message": f"{target.name} will wake at the next tick with your {'brief' if command == 'run_agent' else 'message'}"}
 
-    # -- teams ----------------------------------------------------------------------------
     if command == "list_teams":
         return {"ok": True, "teams": [team_view(project, store, t) for t in all_teams(project).values()]}
     if command == "get_team":
@@ -220,7 +218,9 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         etype = str(a.get("type") or "").strip()
         if not etype or etype in EVENT_TYPES_SET:
             raise StoreError("type must be a new lowercase_name declared by your team's `emits`; Orchestra's own types cannot be raised")
-        emitter = role or "supervisor"
+        if not role:
+            raise StoreError("no role")
+        emitter = role
         if emitter != "supervisor":
             ag = ags.get(emitter)
             allowed = sorted({e for t in team_chain(teams, ag.team if ag else None) for e in t.emits})
@@ -240,7 +240,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         subject, note = (a.get("subject") or "").strip()[:120], (a.get("note") or "").strip()[:500]
         ev = store.events.emit(etype, by=emitter, subject=subject or None, note=note or None, depth=depth,
                                team=(ags[emitter].team if emitter in ags else None))
-        listeners = [x.name for x in ags.values() if x.matches_event(ev) and x.name != emitter]
+        listeners = [x.name for x in ags.values() if event_matches(x.wake_on, ev) and x.name != emitter]
         return {"ok": True, "event": ev, "wakes": listeners}
     if command == "delete_team":
         t = all_teams(project).get(a["name"])
@@ -253,67 +253,3 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.events.emit("team.deleted", team=t.name, by=author)
         return {"ok": True, "storage": os_.last_commit_note}
     raise StoreError(f"unknown command {command}")
-
-
-# -- views ---------------------------------------------------------------------------------
-
-def role_definition(project: Project, role: RoleDef) -> dict:
-    """What makes a role that role: its prompt, where it comes from, the tools behind its groups."""
-    override = project.config.prompt_overrides.get(role.name)
-    if role.builtin:
-        source = str(project.repo_root / override) if override else str(agents.PROMPTS_DIR / f"{role.name}.md")
-    else:
-        source = str(project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
-    return {"prompt": agents.role_prompt(project, role.name), "prompt_source": source,
-            "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
-
-
-def agent_runs(store: AgentStore, ag: AgentDef) -> list[dict]:
-    """Every session this agent has run under, newest first. A resident agent has one; an
-    ephemeral agent has one per run, under a timestamped id, and they are all kept."""
-    runs = [s for s in [*store.sessions(), *store.runtime().get("archived_sessions", {}).values()]
-            if s.get("kind") == ag.name or s.get("id") == ag.session_id]
-    runs.sort(key=lambda s: s.get("started_at") or 0, reverse=True)
-    return [{k: s.get(k) for k in ("id", "status", "started_at", "settled_at", "last_text", "session_file", "harness")} for s in runs]
-
-
-def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | None = None) -> dict:
-    st = store.agent_state(ag.name)
-    teams = teams if teams is not None else all_teams(project)
-    runs = agent_runs(store, ag)
-    return {**ag.to_dict(), "builtin": ag.builtin, "source": ag.source, "session_id": ag.session_id,
-            "triggers": list(ag.triggers), "emits": list(ag.emits),
-            "last_run_id": runs[0]["id"] if runs else ag.session_id, "run_count": len(runs),
-            "team_exists": ag.team is None or ag.team in teams,   # an agent may be created before its team (the guide's order)
-            "resident": ag.resident, "paused": bool(st.get("paused")), "deleted": bool(st.get("deleted")),
-            "crash_loop": st.get("crash_loop") if st.get("paused") else None,
-            "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"),
-            "every_seconds": parse_interval(ag.every) if ag.every else None}
-
-
-def agent_definition(project: Project, store: AgentStore, ag: AgentDef) -> dict:
-    roles, teams = all_roles(project), all_teams(project)
-    tools = effective_tools(ag, roles, teams)
-    return {"agent": agent_view(project, store, ag), "state": store.agent_state(ag.name), "runs": agent_runs(store, ag)[:30],
-            "roles": [{**roles[r].to_dict(), "builtin": roles[r].builtin} for r in ag.roles if r in roles],
-            "team_chain": [t.name for t in team_chain(teams, ag.team)],
-            "leads": [t.name for t in teams.values() if t.lead == ag.name],
-            "tool_groups": list(tools), "tool_names": {g: [t.name for t in tools_for([g])] for g in tools},
-            "prompt": agents.agent_prompt(project, ag, roles, teams)}
-
-
-def team_view(project: Project, store: AgentStore, t: TeamDef) -> dict:
-    ags = all_agents(project)
-    return {**t.to_dict(), "builtin": t.builtin, "parent": t.parent, "space": t.space,
-            "agents": [agent_view(project, store, ags[n]) for n in members_of(t, ags)],
-            "sub_teams": [x.name for x in all_teams(project).values() if x.parent == t.name]}
-
-
-def team_definition(project: Project, store: AgentStore, t: TeamDef) -> dict:
-    v = team_view(project, store, t)
-    resp = "" if t.builtin else org_store(project).responsibilities(t.name)
-    chain = team_chain(all_teams(project), t.parent)
-    return {"team": v, "responsibilities": resp,
-            "inherited": [{"team": x.name, "responsibilities": org_store(project).responsibilities(x.name) if not x.builtin else ""}
-                          for x in chain],
-            "space_dir": str(t.space_dir(project)), "tools_dir": str(t.space_dir(project) / "tools")}

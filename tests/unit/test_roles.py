@@ -2,8 +2,9 @@ import subprocess
 import time
 
 import pytest
+from conftest import agents_project
 
-from orchestra_agents.config import init_project
+from orchestra_agents.org import event_matches
 from orchestra_agents.roles import RepoRoleStore, RoleDef, RoleError, all_roles, due_at
 
 
@@ -17,7 +18,7 @@ def project(tmp_path, monkeypatch):
     (repo / "README.md").write_text("x")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
-    p = init_project(repo)
+    p = agents_project(repo)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "orchestra"], cwd=repo, check=True)
     return p
@@ -50,10 +51,10 @@ def test_validation():
 
 
 def test_event_matching_and_daily_due():
-    r = RoleDef(name="w", wake_on=["ticket.transitioned:DONE", "gate.landed"])
-    assert r.matches_event({"type": "ticket.transitioned", "to": "DONE"})
-    assert not r.matches_event({"type": "ticket.transitioned", "to": "OPEN"})
-    assert r.matches_event({"type": "gate.landed"})
+    wake_on = ["ticket.transitioned:DONE", "gate.landed"]
+    assert event_matches(wake_on, {"type": "ticket.transitioned", "to": "DONE"})
+    assert not event_matches(wake_on, {"type": "ticket.transitioned", "to": "OPEN"})
+    assert event_matches(wake_on, {"type": "gate.landed"})
     noon_today = time.mktime(time.localtime()[:3] + (12, 0, 0, 0, 0, -1))
     assert due_at("12:00", None, noon_today + 60)
     assert not due_at("12:00", noon_today + 30, noon_today + 60)   # already fired today
@@ -64,7 +65,6 @@ def test_get_role_explains_what_the_role_is(project):
     """The Agents page shows what makes a role that role: its effective prompt, where it
     comes from, the concrete tools behind its groups, and its schedule."""
     from orchestra_agents import tooling as api
-    from orchestra_agents.roles import RoleDef, role_store
     from orchestra_agents.store import AgentStore
 
     store = AgentStore(project)
@@ -72,7 +72,7 @@ def test_get_role_explains_what_the_role_is(project):
     assert r["role"]["builtin"] and "Coordinator" in r["prompt"] and r["prompt_source"].endswith("prompts/coordinator.md")
     assert "create_ticket" in r["tool_names"]["tickets"] and "set_capacity" in r["tool_names"]["capacity"]
     assert r["agents"] == ["coordinator"]
-    role_store(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"],
+    RepoRoleStore(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"],
                                      wake_on=["ticket.transitioned:DONE"], every="45m"), "Be opinionated about {base_branch}.")
     r = api.handle(project, store, "get_role", {"name": "product_owner"})
     assert not r["role"]["builtin"] and r["prompt"].strip() == "Be opinionated about main."   # the job description, placeholders resolved

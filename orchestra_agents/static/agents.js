@@ -43,18 +43,21 @@ async function openTranscript(id) {
 }
 
 function transcriptHead(id, s, d) {
-  const state = s.status === "running" ? "working" : s.status === "archived" ? "finished (ticket closed)" : s.alive ? "resident, waiting for work" : "not running";
+  const st = agentStatus(s, Date.now() / 1000, { host_alive: d.host && d.host.alive });
+  const state = st.text + (st.title ? " · " + st.title : "");
   const when = (t) => (t ? new Date(t * 1000).toLocaleString() : "—");
   const perTicket = /^(worker|reviewer)-/.test(id);
   const agentLink = s.kind && !perTicket ? `<a href="/agents#agent=${encodeURIComponent(s.kind)}" class="muted" style="margin-left:auto;font-size:11px" title="The agent's definition, schedule, and every run it has made">↩ ${esc(s.kind)}: definition and all runs</a>` : "";
-  return `<h3>${esc(id)} <span class="muted">${state}</span>${agentLink}</h3>
-    <div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${s.alive ? "pid " + s.pid : "none"}</div>
+  // a harness that keeps a process between turns (Pi) has its own pid; otherwise the host holds the session open
+  const process = !s.alive ? "none" : d.host && s.pid === d.host.pid ? `kept by orchestra-agents run (pid ${s.pid})` : `pid ${s.pid} (the harness's own process)`;
+  return `<h3>${esc(id)} <span class="muted">${esc(state)}</span>${agentLink}</h3>
+    <div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${esc(process)}</div>
     ${s.ticket_id ? `<div>ticket</div><div><a href="#" onclick="(window.openTicket ? openTicket('${esc(s.ticket_id)}') : (location.href='/tickets#ticket=${esc(s.ticket_id)}'));return false">${esc(s.ticket_id)}</a></div>` : ""}
     <div>last started</div><div>${when(s.started_at)}${s.status === "running" ? ` <span class="muted">(turn running ${ago((Date.now() / 1000) - s.started_at)})</span>` : ""}</div>
     <div>doing now</div><div>${sessionChip(s, Date.now() / 1000)}</div>
     <div>last output</div><div>${s.last_output_at ? ago((Date.now() / 1000) - s.last_output_at) + " ago" : "—"}</div>
     <div>last settled</div><div>${when(s.settled_at)}</div>
-    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${esc(s.session_file || "not created yet")}</div></div>
+    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>
     ${s.status === "running" && (s.partial_text || s.thinking_chars) ? `<div class="msg assistant inprogress"><div class="r">reply in progress <span class="muted">· not in the transcript until the message completes${s.thinking_chars ? ` · ${Number(s.thinking_chars).toLocaleString()} chars of thinking so far` : ""}</span></div>${s.partial_text ? md(s.partial_text) : '<span class="muted">(thinking; no reply text yet)</span>'}</div>` : ""}`;
 }
 
@@ -181,12 +184,37 @@ function withMarkers(messages, markers, newerThan) {
   const ms = (markers || []).filter((e) => tsOf(e) > (newerThan || 0)).map((e) => ({ ...e, _marker: true }));
   return [...messages, ...ms].sort((a, b) => tsOf(b) - tsOf(a));
 }
+// A user message that Orchestra wrote: a wake-up, an assignment, a review request, a nudge.
+const FROM_ORCHESTRA = /^(\[Orchestra:|# Wake-up for |# Your assignment|# Review request|You stopped without)/;
+// The Supervisor's prompt is the context Orchestra put in front (leading `[Orchestra: ...]` blocks:
+// the project context document, the events since its last turn, the ticket counts) and then the
+// human's words. The last block is either the one-line counts or the context document, which
+// ends at the last blank line before the human's words.
+function splitSupervisorPrompt(text) {
+  if (!text.startsWith("[Orchestra:") || /^\[Orchestra: escalation/.test(text) || /\n# Wake-up for /.test(text)) return null;
+  const lines = text.split("\n");
+  let last = -1;
+  lines.forEach((ln, i) => { if (ln.startsWith("[Orchestra:")) last = i; });
+  let cut = last + 1;
+  if (!/^\[Orchestra: ticket counts now/.test(lines[last])) { cut = lines.length; while (cut > last + 1 && lines[cut - 1] !== "") cut--; }
+  while (cut < lines.length && lines[cut] === "") cut++;
+  if (cut >= lines.length) return null;
+  const context = lines.slice(0, cut).join("\n").trimEnd();
+  return { context, contextLines: context.split("\n").length, human: lines.slice(cut).join("\n") };
+}
 function renderMessage(m) {
   if (m._marker) return renderMarker(m);
   if (m.role === "toolResult") {
     const shell = SHELL_TOOLS.has(m.tool_name);
     const body = shell ? `<pre class="term">${highlightLog(m.text)}</pre>` : `<pre><code>${esc(m.text)}</code></pre>`;
     return `<div class="msg toolResult ${m.is_error ? "err" : ""}"><div class="r">result · ${esc(m.tool_name || "tool")}${m.is_error ? ' <span class="bad">error</span>' : ""}${msgTime(m)}</div>${body}</div>`;
+  }
+  if (m.role === "user") {
+    const split = splitSupervisorPrompt(m.text);
+    if (split) return `<details class="msg marker context"><summary>context the Supervisor was given (${split.contextLines} lines)</summary><div class="prompt md">${md(split.context.slice(0, 12000))}</div></details>
+      <div class="msg user"><div class="r">you${msgTime(m)}</div>${md(split.human.slice(0, 12000))}</div>`;
+    const who = FROM_ORCHESTRA.test(m.text) ? "orchestra" : "you";
+    return `<div class="msg user"><div class="r">${who}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}</div>`;
   }
   return `<div class="msg ${m.role}"><div class="r">${m.role}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}${m.tool_calls.map(renderToolCall).join("")}</div>`;
 }
@@ -200,11 +228,26 @@ function agentsFromHash() {
 }
 window.addEventListener("hashchange", agentsFromHash);
 
-function sessionPhase(s, now) {
-  if (!s) return { cls: "down", text: "down", title: "" };
-  if (s.status === "archived") return { cls: "archived", text: "finished", title: "" };
-  const alive = !!s.alive;
-  if (s.status !== "running") return alive ? { cls: "resident", text: "resident", title: "waiting for work" } : { cls: "down", text: "down", title: "" };
+// The one source of an agent's status text: `s` is its latest session (or null), `a` what is
+// known of the agent beyond its session (resident, name, next_scheduled_at, host_alive), when
+// known. A per-ticket role or an ephemeral agent with nothing running is idle, never down; down
+// is a resident whose host is gone; a resident between turns says what it waits for.
+function agentStatus(s, now, a) {
+  a = a || {};
+  if (s && s.status === "archived") return { cls: "archived", text: "finished", title: "ticket closed" };
+  if (s && s.status === "running") return runningPhase(s, now);
+  const perTicket = s ? (!!s.ticket_id || /^(worker|reviewer)-/.test(s.id || s.session || "")) : false;
+  const resident = a.resident != null ? a.resident : !perTicket && !!s;
+  if (!resident) {
+    const last = s && s.settled_at ? `last run ${ago(now - s.settled_at)} ago` : "no run yet";
+    return { cls: "", text: "idle", title: s && s.last_text ? `${last}: ${s.last_text.slice(0, 160)}` : last };
+  }
+  if (a.host_alive === false || !(s && s.alive)) return { cls: "down", text: "down", title: "the agents' host (orchestra-agents run) is not up" };
+  const name = a.name || (s && s.kind);
+  const title = name === "supervisor" ? "waiting for your message" : a.next_scheduled_at ? `next wake-up in ${ago(a.next_scheduled_at - now)}` : "waiting for an event";
+  return { cls: "resident", text: "resident", title };
+}
+function runningPhase(s, now) {
   const age = (t) => ago(now - (t || now));
   const turn = `turn started ${age(s.started_at)} ago`;
   if (s.phase === "tool") return { cls: "working", text: `running ${s.tool_name || "tool"} · ${age(s.phase_since)}`, title: turn };
@@ -217,7 +260,7 @@ function sessionPhase(s, now) {
   const wait = now - (s.phase_since || s.started_at || now);
   return { cls: wait > 60 ? "waiting" : "working", text: `no new message for ${ago(wait)}`, title: turn + " · session has not exited and nothing has streamed" };
 }
-function sessionChip(s, now) {
-  const p = sessionPhase(s, now);
+function sessionChip(s, now, a) {
+  const p = agentStatus(s, now, a);
   return `<span class="chip ${p.cls}" title="${esc(p.title)}"><span class="dot"></span>${esc(p.text)}</span>`;
 }

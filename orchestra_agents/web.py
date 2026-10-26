@@ -6,8 +6,11 @@ Its API is at ``/api/plugins/agents``."""
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import json
 import threading
 import time
+import urllib.request
 from pathlib import Path
 
 import psutil
@@ -15,14 +18,23 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from orchestra.plugins import Declared, Page, Plugin
 
+from . import prompting, tooling
+from .api_org import handle_org
+from .builtins import SYSTEM_BINDINGS
 from .config import load_project
 from .events import Events
 from .harness import read_transcript
+from .org_store import all_agents, all_teams
+from .protocol import Follower
+from .roles import EVENT_TYPES
 from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
+WEB = "agents_web"       # the source of the operator's controls on the bus
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
-MARKER_TYPES = ("session.started", "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted")
+OBSERVED_WINDOW_S = 24 * 3600
+OBSERVED_REFRESH_S = 60
+_observed: dict[str, dict] = {}   # project key -> what the event map saw on the bus (read once a minute, not per request)
 
 
 def _alive(pid) -> bool:
@@ -43,7 +55,6 @@ def declared(project) -> list[Declared]:
     """The agents, for Orchestra's Machines page before they run: the host, the resident and
     custom agents, and the per-ticket roles the agents serve (a role another machine fills is
     that machine's, not declared here)."""
-    from .org import all_agents
     out = [Declared("agents", "program", "Runs the AI agents: their sessions, wake-ups, and the task system's assignments.", "continuous")]
     for a in all_agents(project).values():
         if a.builtin and not a.resident and a.name not in project.config.serves:
@@ -55,44 +66,40 @@ def declared(project) -> list[Declared]:
 
 def router(project) -> APIRouter:
     r = APIRouter()
-    events = Events.for_project(project, source="agents-web")
+    events = Events.for_project(project, source=WEB)
     store = AgentStore(project, events)
 
     @r.get("/roles")
     async def roles() -> dict:
-        from . import tooling as api_mod
-        return api_mod.handle(project, store, "list_roles", {})
+        return tooling.handle(project, store, "list_roles", {})
 
     @r.get("/roles/{name}")
     async def role_detail(name: str) -> dict:
-        from . import tooling as api_mod
         try:
-            return api_mod.handle(project, store, "get_role", {"name": name})
+            return tooling.handle(project, store, "get_role", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
     @r.get("/org")
     async def org() -> dict:
-        """The organisation in one read: roles (job descriptions), agents (what runs), teams (who owns what)."""
-        from . import tooling as api_mod
-        return {"ok": True, "now": time.time(),
-                "roles": api_mod.handle(project, store, "list_roles", {})["roles"],
-                "agents": api_mod.handle(project, store, "list_agents", {})["agents"],
-                "teams": api_mod.handle(project, store, "list_teams", {})["teams"]}
+        """The organisation in one read: roles (job descriptions), agents (what runs), teams (who
+        owns what), and which of the task system's roles the agents here serve."""
+        return {"ok": True, "now": time.time(), "serves": project.config.serves,
+                "roles": tooling.handle(project, store, "list_roles", {})["roles"],
+                "agents": tooling.handle(project, store, "list_agents", {})["agents"],
+                "teams": tooling.handle(project, store, "list_teams", {})["teams"]}
 
     @r.get("/agents/{name}")
     async def agent_detail(name: str) -> dict:
-        from . import tooling as api_mod
         try:
-            return api_mod.handle(project, store, "get_agent", {"name": name})
+            return tooling.handle(project, store, "get_agent", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
     @r.get("/teams/{name:path}")
     async def team_detail(name: str) -> dict:
-        from . import tooling as api_mod
         try:
-            return api_mod.handle(project, store, "get_team", {"name": name})
+            return tooling.handle(project, store, "get_team", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
@@ -103,18 +110,19 @@ def router(project) -> APIRouter:
         for s in sessions:
             s["alive"] = _alive(s.get("pid"))
         probes = [{"name": n, **store.probe_state(n)} for n in store.probes() if not store.probe_state(n).get("removed")]
+        ctl = store.runtime().get("control") or {}
         return {"ok": True, "now": time.time(), "project": {"key": project.key}, "sessions": sessions, "probes": probes,
-                "control": store.runtime().get("control") or {}}
+                "control": {**ctl, "alive": _alive(ctl.get("pid"))}}
 
     @r.post("/control")
     async def control(request: Request) -> dict:
-        """The operator's controls on agents: pause, resume, restart, start over, delete."""
-        from . import tooling
+        """The operator's controls on agents: pause, resume, restart, start over, delete. The
+        commands are the Supervisor's (the permission check), recorded as the operator's."""
         body = await request.json()
         action = body.get("action")
         if action in ("pause_agent", "resume_agent", "restart_agent", "reset_agent", "delete_agent", "delete_role", "delete_team"):
             try:
-                return tooling.handle(project, store, action, {"name": body.get("name") or ""}, role="supervisor")
+                return handle_org(project, store, action, {"name": body.get("name") or ""}, author="operator", role="supervisor")
             except StoreError as e:
                 raise HTTPException(409, str(e)) from e
         raise HTTPException(400, "unknown action")
@@ -130,22 +138,18 @@ def router(project) -> APIRouter:
 
     @r.post("/attention/seen")
     async def attention_seen() -> dict:
-        now_t = time.time()
-        store._mutate_runtime(lambda d: d.__setitem__("supervisor_seen_at", now_t))
-        return {"ok": True, "seen_at": now_t}
+        return {"ok": True, "seen_at": store.mark_supervisor_seen()}
 
     @r.post("/supervisor")
     async def supervisor_message(request: Request):
         """The one write path in the UI: a human message to the resident Supervisor.
         Proxied to the control endpoint that `orchestra-agents run` serves; streams its NDJSON."""
-        import urllib.request
-
         body = await request.json()
         ctl = store.runtime().get("control") or {}
         if not ctl.get("port"):
             raise HTTPException(503, "the agents' host (orchestra-agents run) is not running; the Supervisor is only reachable while it is")
         req = urllib.request.Request(f"http://127.0.0.1:{ctl['port']}/supervisor", method="POST",
-                                     data=__import__("json").dumps({"message": body.get("message", "")}).encode(),
+                                     data=json.dumps({"message": body.get("message", "")}).encode(),
                                      headers={"Content-Type": "application/json"})
         try:
             # The control endpoint ends the stream when the turn ends; reads must not time out before that.
@@ -184,8 +188,7 @@ def router(project) -> APIRouter:
 
     @r.get("/context")
     async def context() -> dict:
-        from . import prompting as agents
-        return {"text": agents.read_context(project)}
+        return {"text": prompting.read_context(project)}
 
     @r.get("/sessions/{session_id}/transcript")
     async def transcript(session_id: str, before: int = 0, limit: int = 30, after: int | None = None) -> dict:
@@ -209,24 +212,18 @@ def router(project) -> APIRouter:
         s = {**s, "alive": _alive(s.get("pid")), "file_exists": exists}
         pf = project.logs_dir / "agents" / f"{session_id}.prompt.md"
         started_with = pf.read_text(encoding="utf-8") if pf.exists() else None
-        # What Orchestra did to this session: turn starts, cut-offs, errors, operator stops.
-        # The session file stays the only transcript; the view overlays the event log.
-        markers = [e for e in events.read(0, limit=100000)[0]
-                   if e.get("session") == session_id and e["type"] in MARKER_TYPES][-50:]
+        # What the host did to this session (turn starts, cut-offs, errors, resets) is kept on
+        # its record; the session file stays the only transcript, and the view overlays these.
+        ctl = store.runtime().get("control") or {}
         return {"session": s, "messages": page, "total": total, "before": before, "next_before": total - (end - len(page)) if page else before,
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
-                "markers": markers}
+                "markers": s.get("markers") or [], "host": {**ctl, "alive": _alive(ctl.get("pid"))}}
 
     @r.get("/eventmap")
     async def eventmap() -> dict:
         """Who wakes whom through which events (the Agents page's map): the intended bindings
         (each agent's wake_on and emits, team emits, probes, the task system's and the host's)
         and what was observed on the bus over the last 24 hours, by the machine that sent it."""
-        import datetime as _dt
-
-        from .builtins import SYSTEM_BINDINGS
-        from .org import all_agents, all_teams
-        from .roles import EVENT_TYPES
         agents_, teams = all_agents(project), all_teams(project)
         nodes: dict[str, dict] = {}
         edges: list[dict] = []
@@ -268,21 +265,7 @@ def router(project) -> APIRouter:
             if ag.team and ag.team in teams:
                 for e in teams[ag.team].emits:
                     edges.append({"from": "agent:" + ag.name, "to": "ev:" + e, "kind": "may_emit", "filter": None})
-        since = (_dt.datetime.now(_dt.UTC) - _dt.timedelta(days=1)).isoformat(timespec="seconds")
-        counts: dict[str, int] = {}
-        by: dict[str, dict[str, int]] = {}
-        end = events.end()
-        for e in events.read(max(0, end - 200000), limit=200000)[0]:
-            if (e.get("ts") or "") < since:
-                continue
-            counts[e["type"]] = counts.get(e["type"], 0) + 1
-            variant = e.get("to") or e.get("probe")
-            if variant:
-                counts[f"{e['type']}:{variant}"] = counts.get(f"{e['type']}:{variant}", 0) + 1
-            who = (e.get("source") or "").partition("/")[0]           # the machine that sent it (worker/1 is worker)
-            if who:
-                by.setdefault(who, {})
-                by[who][e["type"]] = by[who].get(e["type"], 0) + 1
+        counts, by = observed(project.key, events)
         for who, ts_ in by.items():
             if who in agents_:
                 for t, n in ts_.items():
@@ -300,17 +283,18 @@ def router(project) -> APIRouter:
     async def agents_view() -> dict:
         """Every agent, and every session as the machine instance it runs (or last ran) as, with
         the ticket it is on (as its assignment named it): for the machine cards and the Agents page."""
-        from .org import all_agents
-        sessions = store.sessions()
+        rt = store.runtime()
+        sessions = list(rt["sessions"].values())
         out = []
         for a in all_agents(project).values():
             mine = [x for x in sessions if x["id"] == a.session_id or x.get("kind") == a.name or x["id"].startswith(a.name + "-")]
             jobs = [{"session": x["id"], "ticket": x.get("ticket_id"), "text": (x.get("partial_text") or x.get("last_text") or "")[-160:]}
                     for x in mine if x.get("status") == "running"]
+            st = rt["agent_state"].get(a.name) or {}
             out.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team, "session_id": a.session_id,
-                        "resident": a.resident, "paused": bool(store.agent_state(a.name).get("paused")),
+                        "resident": a.resident, "paused": bool(st.get("paused")), "next_scheduled_at": st.get("next_scheduled_at"),
                         "status": "working" if jobs else ("waiting" if any(_alive(x.get("pid")) for x in mine) else "not running"), "jobs": jobs})
-        ctl = store.runtime().get("control") or {}
+        ctl = rt.get("control") or {}
         host_alive = _alive(ctl.get("pid"))
         residents = {a["session_id"] for a in out if a.get("resident")}
         insts = []
@@ -327,3 +311,29 @@ def router(project) -> APIRouter:
                 "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
 
     return r
+
+
+def observed(key: str, events: Events) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+    """What was on the bus in the last 24 hours, for the event map: counts by event type (and by
+    its variant, the transition target or the probe) and by the machine that sent each. The bus
+    is read from where the last read stopped, at most once a minute, whoever asks."""
+    now_t = time.time()
+    c = _observed.get(key)
+    if c is None:
+        c = _observed[key] = {"follow": Follower(events, start=max(0, events.end() - 200000)), "recent": [], "at": 0.0}
+    if now_t - c["at"] >= OBSERVED_REFRESH_S:
+        c["at"] = now_t
+        c["recent"] += [(e.get("ts") or "", e["type"], e.get("to") or e.get("probe"), (e.get("source") or "").partition("/")[0])
+                        for e in c["follow"].new()]
+        since = (dt.datetime.now(dt.UTC) - dt.timedelta(seconds=OBSERVED_WINDOW_S)).isoformat(timespec="seconds")
+        c["recent"] = [x for x in c["recent"] if x[0] >= since]
+    counts: dict[str, int] = {}
+    by: dict[str, dict[str, int]] = {}
+    for _ts, type_, variant, who in c["recent"]:
+        counts[type_] = counts.get(type_, 0) + 1
+        if variant:
+            counts[f"{type_}:{variant}"] = counts.get(f"{type_}:{variant}", 0) + 1
+        if who:                                            # the machine that sent it (worker/1 is worker)
+            by.setdefault(who, {})
+            by[who][type_] = by[who].get(type_, 0) + 1
+    return counts, by

@@ -22,10 +22,12 @@
   const ROLE_C = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
   const RANK = { supervisor: 10, coordinator: 11, agents: 15, worker: 30, reviewer: 31 };
   const stateColor = (st) => (typeof color === "function" ? color(st) : "var(--muted)");
-  const chip = (s) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000) : "");
   const kindOf = (m) => (m.about && m.about.kind) || (m.declared && m.declared.kind);
   const roleOf = (m) => (m.about && m.about.role) || m.id;
   const sessionsOf = (m) => (D ? D.sessions.filter((s) => s.role === roleOf(m)) : []);
+  // what is known of the agent beyond its sessions, for its status (agents.js agentStatus)
+  const agentOf = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? { ...a, host_alive: D.host.alive } : { host_alive: D ? D.host.alive : undefined }; };
+  const chip = (s, m) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000, m ? agentOf(m) : undefined) : "");
   const more = (m, compact) => (compact ? "" : `<div class="tkc-more" onclick="event.stopPropagation();Orchestra.machineCards.openDefault('${e_(m.id)}')">machine details</div>`);
 
   const css = document.createElement("style");
@@ -44,9 +46,9 @@
     // the stored text is a message's tail: start it at a sentence, not mid-word
     const tail = s ? s.last_text || "" : "", cut = tail.search(/[.!?]\s+[A-Z*`(]/);
     const role = roleOf(m), say = tail.length >= 290 && cut >= 0 && cut < 160 ? tail.slice(cut + 1).trim() : tail;
-    const text = m.unseen ? "declared, not run yet" : say || "waiting for work";
+    const text = m.unseen ? "declared, not run yet" : say || (typeof agentStatus === "function" ? agentStatus(s, D.now, agentOf(m)).title : "");
     return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_((m.declared || {}).description || role)}">
-        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${e_(m.id)}</div><div class="say">${e_(text)}</div>${s ? chip(s) : ""}</div>${more(m, compact)}`;
+        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${e_(m.id)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
   }
 
   function ticketsCard(m, compact) {
@@ -83,9 +85,9 @@
       if (m.id === "agents") return D ? (D.host.alive ? "running" : "not running") : null;
       if (kindOf(m) !== "agent") return null;
       const live = sessionsOf(m).filter((s) => s.status === "running");
-      if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0]);
-      const s = sessionsOf(m)[0];
-      return s ? chip(s) : null;
+      if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0], m);
+      const s = sessionsOf(m).sort((a, b) => (b.settled_at || 0) - (a.settled_at || 0))[0];
+      return s || m.mode === "ad hoc" ? chip(s || null, m) : null;
     },
     card(m, { compact } = {}) {
       if (m.id === "agents") return hostCard(m, compact);

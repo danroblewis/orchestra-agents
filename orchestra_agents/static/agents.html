@@ -330,11 +330,17 @@ function nextWake(a, st, now) {
   if (a.name === "supervisor") parts.push("when the human sends a message, and on escalations");
   return parts.join("; ") || "only when another agent messages it";
 }
+// A built-in per-ticket role the agents here do not serve is another machine's on the bus.
+function unfilled(role) {
+  if (role.builtin && (role.name === "worker" || role.name === "reviewer") && ORG && !(ORG.serves || []).includes(role.name))
+    return "not served by the agents here (<code>serves</code> in orchestra.toml); another machine fills it on the bus";
+  return "no agent";
+}
 function statusOf(a, now) {
   if (a.paused) return `<span class="chip ${a.crash_loop ? "down" : ""}" title="${esc(a.crash_loop || "")}"><span class="dot"></span>${a.crash_loop ? "paused: crash loop" : "paused"}</span>`;
-  const s = sessionOf(a);
-  if (s && (s.alive || s.status === "running")) return sessionChip(s, now);
-  return a.resident ? '<span class="chip down"><span class="dot"></span>not running</span>' : `<span class="chip"><span class="dot"></span>${a.kind === "ad_hoc" ? "idle" : "ephemeral"}</span>`;
+  // the latest session of this agent: its resident one, or the newest of its runs
+  const s = sessionOf(a) || (STATE ? STATE.sessions.filter((x) => x.kind === a.name).sort((x, y) => (y.started_at || 0) - (x.started_at || 0))[0] : null) || null;
+  return sessionChip(s, now, { ...a, host_alive: !!(STATE && STATE.control && STATE.control.alive) });
 }
 function agentRow(a, lead, now) {
   const letter = a.name[0].toUpperCase();
@@ -345,7 +351,7 @@ function agentRow(a, lead, now) {
     <span class="name"><a href="#" onclick="openAgent('${a.name}');return false">${esc(a.name)}</a>${lead ? ' <span class="tag">lead</span>' : ""}</span>
     <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span>
     <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.source === "role" ? ' <span class="tag" title="A role record that is its own agent">from role</span>' : ""}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
-    ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one long-lived transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button>${ctls}</span></div>`;
+    ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one continuing transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button>${ctls}</span></div>`;
 }
 function teamCard(t, byName, now, sub) {
   const agents = t.agents.map((a) => agentRow(byName[a.name] || a, a.name === t.lead, now)).join("") || '<div class="empty">no agents yet</div>';
@@ -396,8 +402,8 @@ async function openAgent(name) {
       <div>team</div><div>${a.team ? ((r.team_chain || []).length ? r.team_chain.map((t) => `<a href="#" onclick="openTeam('${t}');return false">${esc(t)}</a>`).join(" ← ") : `<code>${esc(a.team)}</code> is not created yet; the agent runs without team responsibilities until it is`) : "none (reports to the Supervisor)"}${(r.leads || []).length ? ` · leads ${r.leads.map((t) => `<code>${esc(t)}</code>`).join(", ")}` : ""}</div>
       <div>triggers</div><div class="tools">${triggerRows(a)}</div>
       <div>next wake-up</div><div>${nextWake(a, st, now)}</div>
-      <div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>
-      <div>session</div><div>${a.resident ? "resident: one long-lived process; earlier wake-ups stay in its memory and it shows on the Dashboard while up" : "ephemeral: a fresh process and conversation every time it runs; it shows on the Dashboard only while a run is in progress"}</div>
+      ${a.resident ? `<div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
+      <div>session</div><div>${a.resident ? "resident: one conversation that continues across wake-ups (a process only while a turn runs, on harnesses that start one per turn); it shows on the Dashboard while the host is up" : "a new session for each run; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
       <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}${a.source === "role" ? " (a role record acting as its own agent)" : ""}`}</div>
     </div>
@@ -414,7 +420,7 @@ async function openRole(name) {
   openDrawer(`<h3>role ${esc(name)} ${role.builtin ? '<span class="tag">built-in</span>' : ""}<span style="margin-left:auto;display:flex;gap:6px">${role.builtin ? "" : `<button class="ctl kill" onclick="act('delete_role','${name}')">delete</button>`}<button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(role.description || "")}</div>
     <div class="def">
-      <div>used by agents</div><div>${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || "no agent yet"}</div>
+      <div>used by agents</div><div>${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || unfilled(role)}</div>
       <div>tools it needs</div><div class="tools">${tools}</div>
       <div>defined by</div><div>${role.builtin ? "Orchestra" : `${esc(role.created_by || "supervisor")} on ${esc((role.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
       <div>prompt file</div><div><code>${esc(r.prompt_source || "")}</code></div>
@@ -444,7 +450,7 @@ async function refresh() {
     html += `<h2>Roles <span class="count">${org.roles.length}</span></h2>` + org.roles.map((r) => `<div class="rolecard"><div>
         <h3><a href="#" onclick="openRole('${r.name}');return false">${esc(r.name)}</a> ${r.builtin ? '<span class="tag">built-in</span>' : '<span class="tag">custom</span>'}</h3>
         <div class="desc">${esc(r.description || "")}</div>
-        <div class="meta">used by: ${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || "no agent"} · tools: ${(r.tools || []).map((t) => `<code>${esc(t)}</code>`).join(" ")}</div>
+        <div class="meta">used by: ${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || unfilled(r)} · tools: ${(r.tools || []).map((t) => `<code>${esc(t)}</code>`).join(" ")}</div>
       </div><div><button class="ctl" onclick="openRole('${r.name}')">role</button></div></div>`).join("");
     $("list").innerHTML = html;
   } catch (e) { if ($("conn")) $("conn").textContent = "disconnected"; }

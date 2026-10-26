@@ -3,15 +3,18 @@
 A project with nothing of its own: Orchestra, the task system (orchestra-tasking), the agents
 (orchestra-agents) and one plain program. The reviewer is an AI agent on Claude Code with Haiku;
 the worker is a program that runs shell commands (`machines/shell_worker.py`, a copy of the task
-system's). Both work the same queue. From the orchestra-agents repository:
+system's, kept identical to it by a test; change the task system's and copy it here). Both work
+the same queue. From the orchestra-agents repository:
 
     uv run demo/run.py                 # copies this folder to ~/orchestra-agents-demo and starts everything
     uv run demo/run.py /tmp/d --port 8072
 
 Ctrl-C stops everything. To start over, remove the target directory and run it again: `run.py`
 removes the state a previous run left for that path (under `~/.orchestrator/<name>-<hash>/`)
-before it starts. The reviews cost a few cents; `CLAUDE_BINARY=tests/e2e/fake_claude.py` runs
-the demo with a fake that approves everything, as the e2e tests do.
+before it starts. The reviews cost a few cents. While the demo is up the Coordinator costs a
+Haiku call every ten minutes whether or not anything changed, and the Supervisor one per chat
+message or attention event; Ctrl-C when done. `CLAUDE_BINARY=tests/e2e/fake_claude.py` runs the
+demo with a fake that approves everything, as the e2e tests do.
 
 ## What runs
 

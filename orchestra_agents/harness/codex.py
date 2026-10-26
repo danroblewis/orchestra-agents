@@ -71,15 +71,12 @@ class CodexSession(AgentSession):
         self._lock = threading.Lock()
         self.proc: subprocess.Popen | None = None
         self._closed = False
-        self.busy = False
         self.session_file = None
         self.thread_id: str | None = None
 
     @property
     def harness_name(self) -> str:
         return "codex"
-
-    # -- session identity --------------------------------------------------------
 
     def open(self) -> None:
         """Load the thread id if a first turn already ran. Codex assigns it on that turn."""
@@ -107,8 +104,6 @@ class CodexSession(AgentSession):
 
     def alive(self) -> bool:
         return not self._closed
-
-    # -- one turn ------------------------------------------------------------------
 
     def _mcp_override(self) -> str:
         env = {k: v for k, v in self.spec.env.items()}
@@ -140,7 +135,6 @@ class CodexSession(AgentSession):
     def prompt(self, text: str, timeout: float | None, on_event: OnEvent | None = None,
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
-            self.busy = True
             result = TurnResult()
             emit = _Normalizer(on_event)
             self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,8 +179,6 @@ class CodexSession(AgentSession):
                         self._remember(ev["thread_id"])
                     elif t == "item.completed" and item.get("type") == "agent_message" and (item.get("text") or "").strip():
                         last_text = item["text"]
-                    elif t == "item.started" and (tool := _item_tool(item)):
-                        result.tool_calls.append(tool[0])
                     elif t == "turn.failed":
                         result.error = str((ev.get("error") or {}).get("message") or "turn failed")
                     elif t == "error":
@@ -199,14 +191,12 @@ class CodexSession(AgentSession):
                 if result.error:
                     result.text = last_text
                     return result
-                result.settled = True
                 result.text = last_text
                 emit.settled(last_text)
                 return result
             finally:
                 self.proc = None
                 stderr.close()
-                self.busy = False
 
     def kill(self) -> None:
         p = self.proc

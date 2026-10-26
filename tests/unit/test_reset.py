@@ -4,9 +4,9 @@ process begins with an empty one."""
 import subprocess
 
 import pytest
+from conftest import FakeHarness, agents_project
 
 from orchestra_agents import tooling as api
-from orchestra_agents.config import init_project
 from orchestra_agents.events import Events
 from orchestra_agents.host import AgentHost
 from orchestra_agents.store import AgentStore, StoreError
@@ -32,7 +32,7 @@ def project(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
-    return init_project(repo, provider="p", model="m")
+    return agents_project(repo, provider="p", model="m")
 
 
 class CompactingProc(FakeProc):
@@ -42,21 +42,21 @@ class CompactingProc(FakeProc):
 
 def test_large_sessions_are_compacted_in_place_when_the_harness_can(project):
     store, events = AgentStore(project), Events.for_project(project)
-    loop = AgentHost(project, store, events)
+    host = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-1.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("x" * 10)
     store.set_session("worker-T-1", kind="worker", status="idle", session_file=str(f))
     proc = CompactingProc("worker-T-1")
-    assert loop._trim_if_large(proc, "worker-T-1", "worker") is None                        # small: left alone
+    assert host.residents.trim_if_large(proc, "worker-T-1", "worker") is None                        # small: left alone
     f.write_text("x" * (project.config.session_max_bytes + 1))
-    assert loop._trim_if_large(proc, "worker-T-1", "worker") == "compacted"
+    assert host.residents.trim_if_large(proc, "worker-T-1", "worker") == "compacted"
     assert f.exists() and proc.alive()                                                       # transcript and process kept
     s = store.find_session("worker-T-1")
     assert s["compactions"] == 1 and s["compacted_at_bytes"] == f.stat().st_size
-    assert loop._trim_if_large(proc, "worker-T-1", "worker") is None                        # growth is measured since the compaction
+    assert host.residents.trim_if_large(proc, "worker-T-1", "worker") is None                        # growth is measured since the compaction
     f.write_text("x" * (2 * project.config.session_max_bytes + 10))
-    assert loop._trim_if_large(proc, "worker-T-1", "worker") == "compacted"
+    assert host.residents.trim_if_large(proc, "worker-T-1", "worker") == "compacted"
     ev = [e for e in events.read(0)[0] if e["type"] == "agent.compacted"]
     assert len(ev) == 2 and ev[0]["tokens_before"] == 150000 and ev[0]["tokens_after"] == 32000
 
@@ -66,25 +66,25 @@ def test_a_self_compacting_harness_is_left_alone(project):
         def compact(self):
             return {"mode": "auto", "limit": 100000}
     store, events = AgentStore(project), Events.for_project(project)
-    loop = AgentHost(project, store, events)
+    host = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-3.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("x" * (project.config.session_max_bytes + 1))
     store.set_session("worker-T-3", kind="worker", status="idle", session_file=str(f))
     proc = AutoProc("worker-T-3")
-    assert loop._trim_if_large(proc, "worker-T-3", "worker") == "compacted" and f.exists() and proc.alive()
+    assert host.residents.trim_if_large(proc, "worker-T-3", "worker") == "compacted" and f.exists() and proc.alive()
     ev = [e for e in events.read(0)[0] if e["type"] == "agent.compacted"][-1]
     assert ev["mode"] == "auto" and "100,000 tokens" in ev["reason"]
 
 
 def test_large_sessions_rotate_only_when_the_harness_cannot_compact(project):
     store, events = AgentStore(project), Events.for_project(project)
-    loop = AgentHost(project, store, events)
+    host = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-2.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("x" * (project.config.session_max_bytes + 1))
     store.set_session("worker-T-2", kind="worker", status="idle", session_file=str(f))
-    assert loop._trim_if_large(FakeProc("worker-T-2"), "worker-T-2", "worker") == "rotated"   # base compact() returns None
+    assert host.residents.trim_if_large(FakeProc("worker-T-2"), "worker-T-2", "worker") == "rotated"   # base compact() returns None
     assert not f.exists() and (project.sessions_dir / "archive" / f.name).exists()
     assert store.find_session("worker-T-2")["session_file"] is None
     ev = [e for e in events.read(0)[0] if e["type"] == "agent.reset"][-1]
@@ -101,12 +101,13 @@ def test_reset_archives_the_transcript_and_starts_over(project):
     with pytest.raises(StoreError):
         api.handle(project, store, "reset_agent", {"name": "worker"}, role="supervisor")     # not resident
     api.handle(project, store, "reset_agent", {"name": "supervisor"}, role="supervisor")
-    loop = AgentHost(project, store, events)
-    loop.agent_procs["supervisor"] = proc = FakeProc("supervisor")
-    loop._refresh_org()
-    assert not proc.alive() and "supervisor" not in loop.agent_procs
+    host = AgentHost(project, store, events)
+    host.harness = FakeHarness()
+    host.residents.procs["supervisor"] = proc = FakeProc("supervisor")
+    host._refresh_org(store.runtime()["agent_state"])
+    assert not proc.alive() and host.residents.procs["supervisor"] is not proc                  # closed, and started over
     live = store.find_session("supervisor")
-    assert live["session_file"] is None and live["last_text"] == ""                           # fresh
+    assert live["session_file"] != str(f) and live["last_text"] == "" and live["markers"][-1]["type"] == "agent.reset"   # fresh
     archived = [k for k in store.runtime()["archived_sessions"] if k.startswith("supervisor-reset-")]
     assert len(archived) == 1
     old = store.runtime()["archived_sessions"][archived[0]]

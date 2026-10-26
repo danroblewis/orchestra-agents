@@ -51,19 +51,16 @@ class PiSession(AgentSession):
                     "ORCHESTRA_PYTHON": sys.executable}
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr = spec.log_path.open("a", encoding="utf-8")
-        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=self._stderr, text=True, cwd=str(spec.cwd), env=full_env, bufsize=1)
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr, text=True,
+                                     cwd=str(spec.cwd), env=full_env, bufsize=1, start_new_session=True)   # its own group: an orphan is found by it
         self._q: queue.Queue[dict | None] = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
         self._lock = threading.Lock()
         self.session_file = None
-        self.busy = False
 
     @property
     def harness_name(self) -> str:
         return "pi"
-
-    # -- plumbing --------------------------------------------------------------
 
     def _read(self) -> None:
         for line in self.proc.stdout:  # type: ignore[union-attr]
@@ -110,8 +107,6 @@ class PiSession(AgentSession):
                     self._reply_ui(ev)
             raise PiError(f"timeout waiting for {cmd['type']}")
 
-    # -- interface -------------------------------------------------------------
-
     def open(self) -> None:
         r = self.command({"type": "get_state"})
         data = r.get("data", {}) if r.get("success") else {}
@@ -127,49 +122,41 @@ class PiSession(AgentSession):
     def prompt(self, text: str, timeout: float | None, on_event: OnEvent | None = None,
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
-            self.busy = True
             result = TurnResult()
             emit = _Normalizer(on_event)
-            try:
-                self._send({"type": "prompt", "message": text})
-                clock = _Deadlines(timeout, idle_timeout)
-                last_text = ""
-                while True:
-                    why = clock.expired()
-                    if why:
-                        result.timed_out, result.stopped_by, result.text = True, why, last_text
-                        self._abort()
-                        return result
-                    ev = self._next(clock.wait())
-                    if ev is None:
-                        result.error = "pi exited"
-                        return result
-                    if not ev:
-                        continue
-                    clock.touch()
-                    t = ev.get("type")
-                    emit(ev)
-                    if t == "response" and ev.get("command") == "prompt" and not ev.get("success", True):
-                        result.error = f"prompt rejected: {ev.get('error')}"
-                        return result
-                    if t == "extension_ui_request":
-                        self._reply_ui(ev)
-                    elif t == "message_end":
-                        msg = ev.get("message", {})
-                        if msg.get("role") == "assistant":
-                            txt = assistant_text(msg.get("content"))
-                            if txt.strip():
-                                last_text = txt
-                            for p in msg.get("content", []) if isinstance(msg.get("content"), list) else []:
-                                if isinstance(p, dict) and p.get("type") == "toolCall":
-                                    result.tool_calls.append(p.get("name", "?"))
-                    elif t == "agent_settled":
-                        result.settled = True
-                        result.text = last_text
-                        emit.settled(last_text)
-                        return result
-            finally:
-                self.busy = False
+            self._send({"type": "prompt", "message": text})
+            clock = _Deadlines(timeout, idle_timeout)
+            last_text = ""
+            while True:
+                why = clock.expired()
+                if why:
+                    result.timed_out, result.stopped_by, result.text = True, why, last_text
+                    self._abort()
+                    return result
+                ev = self._next(clock.wait())
+                if ev is None:
+                    result.error = "pi exited"
+                    return result
+                if not ev:
+                    continue
+                clock.touch()
+                t = ev.get("type")
+                emit(ev)
+                if t == "response" and ev.get("command") == "prompt" and not ev.get("success", True):
+                    result.error = f"prompt rejected: {ev.get('error')}"
+                    return result
+                if t == "extension_ui_request":
+                    self._reply_ui(ev)
+                elif t == "message_end":
+                    msg = ev.get("message", {})
+                    if msg.get("role") == "assistant":
+                        txt = assistant_text(msg.get("content"))
+                        if txt.strip():
+                            last_text = txt
+                elif t == "agent_settled":
+                    result.text = last_text
+                    emit.settled(last_text)
+                    return result
 
     def compact(self) -> dict | None:
         """Pi's own compaction: older messages become a summary entry in the session file and

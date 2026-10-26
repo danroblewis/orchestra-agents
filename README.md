@@ -33,9 +33,14 @@ this repository's environment:
     #   harness = "claude_code"      # pi | claude_code | codex
     #   model = "haiku"
     #   serves = ["worker", "reviewer"]   # the task system's roles these agents fill
-    uv run --project <this repo> orchestra web                 # Orchestra's UI with the Agents page
+    uv run --project <this repo> --extra dev orchestra web     # Orchestra's UI with both plugins' pages
     uv run --project <this repo> orchestra-agents run          # the host
     uv run --project <this repo> orchestra-agents chat         # the Supervisor, in the terminal
+
+`orchestra web` must run from an environment that has both plugins installed, or the Agents
+page's ticket links and the Supervisor's banner open nothing: this repository's `dev` extra has
+the task system, and a project environment that depends on both `orchestra-tasking` and
+`orchestra-agents` does too.
 
 State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in the repository
 under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page

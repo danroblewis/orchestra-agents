@@ -8,11 +8,11 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
+from conftest import agents_project
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from orchestra_agents import web
-from orchestra_agents.config import init_project
 from orchestra_agents.store import AgentStore
 
 
@@ -22,7 +22,7 @@ def project(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
-    return init_project(repo, provider="p", model="m")
+    return agents_project(repo, provider="p", model="m")
 
 
 class SlowControl(BaseHTTPRequestHandler):
@@ -44,7 +44,7 @@ def test_chat_stream_pings_while_the_supervisor_is_silent(project, monkeypatch):
     srv = HTTPServer(("127.0.0.1", 0), SlowControl)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     store = AgentStore(project)
-    store._mutate_runtime(lambda d: d.__setitem__("control", {"port": srv.server_port, "pid": 1}))
+    store.set_control(srv.server_port, 1)
     monkeypatch.setattr(web, "CHAT_PING_SECONDS", 0.2)
     app = FastAPI()
     app.include_router(web.router(project), prefix="/api/plugins/agents")

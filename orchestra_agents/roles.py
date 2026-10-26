@@ -1,9 +1,8 @@
-"""Roles as data, behind a store interface (SPEC.md: the organisation).
+"""Roles as data (SPEC.md: the organisation).
 
-A role is a JSON record plus a prompt file. Built-in roles live in ``builtins.py``; custom
-roles come from a RoleStore. The default store is the project repository under
-``.orchestra/roles/``, versioned with the code. Other stores (an external git repository, an
-object store) implement the same interface."""
+A role is a JSON record plus a prompt file. Built-in roles live in ``builtins.py``; custom roles
+live in the project repository under ``.orchestra/roles/``, versioned with the code
+(``RepoRoleStore``)."""
 
 from __future__ import annotations
 
@@ -12,28 +11,28 @@ import re
 import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Protocol
 
 from .builtins import ROLES as BUILTIN
 from .config import Project
-from .protocol import ACCEPTED, ASSIGNED, ATTENTION, DONE, REFUSED, RELEASED, REPORTED, WORKING
+from .protocol import (
+    ACCEPTED,
+    ASSIGNED,
+    ATTENTION,
+    DONE,
+    REFUSED,
+    RELEASED,
+    REPORTED,
+    TASK_EVENTS,
+    WORKING,
+)
 from .store import now
 
 TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team")
-# The event types an agent may wake on. The task system's, beyond the contract in protocol.py,
-# are copied by hand: the truth is orchestra-tasking's `git grep 'emit("'` (nothing is imported
-# from it). The rest are the agents' own (host.py, api_org.py, probes.py).
-TASK_EVENT_TYPES = (
-    ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED,
-    "ticket.created", "ticket.updated", "ticket.transitioned", "ticket.note_added",
-    "milestone.created", "milestone.updated", "milestone.closed",
-    "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
-    "staging.deployed", "staging.failed", "staging.restarted",
-    "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
-    "scheduler.started", "scheduler.stopped",
-)
+# The event types an agent may wake on: the task system's (protocol.py, where the contract and
+# the hand-copied list live) and the agents' own (host.py, api_org.py, probes.py).
+TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, *TASK_EVENTS)
 AGENT_EVENT_TYPES = (
-    "agent.said", "context.updated", "session.started", "session.settled", "probe.failed", "probe.recovered",
+    "agent.said", "context.updated", "session.started", "session.settled",
     "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
     "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
@@ -98,15 +97,6 @@ class RoleDef:
         known = cls.__dataclass_fields__
         return cls(**{k: v for k, v in d.items() if k in known})
 
-    def matches_event(self, ev: dict) -> bool:
-        for w in self.wake_on:
-            t, _, suffix = w.partition(":")
-            if ev.get("type") != t:
-                continue
-            if not suffix or ev.get("to") == suffix or ev.get("status") == suffix:
-                return True
-        return False
-
 
 def parse_interval(text: str) -> float:
     m = re.fullmatch(r"\s*(\d+)\s*(m|h|d)\s*", text)
@@ -120,14 +110,6 @@ def due_at(at: str, last: float | None, now_ts: float) -> bool:
     hh, mm = (int(x) for x in at.split(":"))
     today = datetime.fromtimestamp(now_ts).replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
     return now_ts >= today and (last is None or last < today)
-
-
-class RoleStore(Protocol):
-    def list(self) -> list[RoleDef]: ...
-    def get(self, name: str) -> RoleDef: ...
-    def prompt(self, name: str) -> str: ...
-    def save(self, role: RoleDef, prompt: str) -> RoleDef: ...
-    def delete(self, name: str) -> None: ...
 
 
 class RepoRoleStore:
@@ -208,17 +190,12 @@ def commit_orchestra_files(project: Project, message: str) -> str:
     return "committed to " + base if p.returncode == 0 else "nothing to commit"
 
 
-def role_store(project: Project) -> RoleStore:
-    """The configured role store. Only the repository store exists today."""
-    return RepoRoleStore(project)
-
-
 def all_roles(project: Project) -> dict[str, RoleDef]:
     """Built-in roles plus the project's custom roles, by name."""
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
         out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), session="resident" if b.resident else "ephemeral",
                               wake_on=list(b.wake_on), every=(f"{int(b.every // 60)}m" if b.every else None), builtin=True)
-    for r in role_store(project).list():
+    for r in RepoRoleStore(project).list():
         out[r.name] = r
     return out

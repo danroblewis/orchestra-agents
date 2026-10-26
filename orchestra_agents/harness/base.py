@@ -28,7 +28,7 @@ from __future__ import annotations
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 OnEvent = Callable[[dict], None]
@@ -37,11 +37,9 @@ OnEvent = Callable[[dict], None]
 @dataclass
 class TurnResult:
     text: str = ""
-    settled: bool = False
     timed_out: bool = False
     stopped_by: str | None = None    # "silence" (no event for idle_timeout) or "limit" (the hard cap), when timed_out
-    error: str | None = None
-    tool_calls: list[str] = field(default_factory=list)
+    error: str | None = None         # the harness failed: the turn did not end on the agent's terms
 
 
 class _Deadlines:
@@ -94,7 +92,6 @@ class SessionSpec:
     model: str | None = None
     provider: str | None = None
     thinking: str | None = None
-    ticket_id: str = ""
     compact_tokens: int | None = None   # ask the harness to compact its own context past this many tokens, if it can
 
 

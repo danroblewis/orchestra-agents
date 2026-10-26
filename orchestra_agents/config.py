@@ -18,7 +18,7 @@ from orchestra.config import ConfigError, home, parse_duration
 from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
 
-__all__ = ["Config", "ConfigError", "Project", "init_project", "load_project", "parse_duration"]
+__all__ = ["Config", "ConfigError", "Project", "load_project", "parse_duration"]
 
 
 @dataclass
@@ -89,29 +89,6 @@ class Project:
 
     def reload_config(self) -> None:
         self.config = Config.from_toml((self.repo_root / "orchestra.toml").read_text())
-
-
-STARTER = """
-[agents]
-harness = "{harness}"      # pi | claude_code | codex
-model = "{model}"
-serves = ["worker", "reviewer"]   # the task system's roles these agents fill
-"""
-
-
-def init_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "") -> Project:
-    """Orchestra's starter ``orchestra.toml`` (if there is none) with an ``[agents]`` section added
-    (if it has none), and the project registered with Orchestra."""
-    from orchestra.config import init_project as init_orchestra
-    o = init_orchestra(Path(repo))
-    toml = o.repo_root / "orchestra.toml"
-    text = toml.read_text()
-    if "agents" not in tomllib.loads(text):
-        extra = STARTER.format(harness=harness, model=model)
-        if provider:
-            extra += f'provider = "{provider}"\n'
-        toml.write_text(text.rstrip() + "\n" + extra)
-    return load_project(o.repo_root)
 
 
 def load_project(repo: Path | str | None = None) -> Project:

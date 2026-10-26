@@ -33,12 +33,19 @@ broken without updating the spec and saying so in the commit.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
    run once per harness. Real Claude runs only in the demo, with Haiku, and the demo honours
    `CLAUDE_BINARY` so a test can stand a fake in.
-9. **State lives in `~/.orchestrator/<key>/agents/`**, written only by `store.py` under its lock,
-   and the organisation's custom records in the repository under `.orchestra/`. Nothing else
-   touches a backend or those files directly.
+9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
+   `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
+   each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host, the
+   harnesses and the Supervisor's context tool respectively. The organisation's custom records
+   are in the repository under `.orchestra/`. Nothing else touches a backend or those files
+   directly.
 10. **Humans talk only to the Supervisor.** The pages and CLI read; the writes a person has are
     the Supervisor chat and the operator controls on agents (pause, resume, restart, reset,
-    delete). Operator controls on tickets are the task system's.
+    delete). Operator controls on tickets are the task system's. This is wider than Orchestra's
+    rule 9 (read-only except the task plugin's operator controls) and awaits the owner's
+    decision; deleting a role or team is otherwise the Supervisor's, through its roles tools.
+    `orchestra-agents api` runs only inside an agent's session (`ORCHESTRA_ROLE`); without a role
+    the tool interface reads and changes nothing.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
     is a template project and its runner, not a package. No `sys.path` manipulation; the one
     exception is pytest's `pythonpath` in `pyproject.toml`, so the tests can import `conftest`,

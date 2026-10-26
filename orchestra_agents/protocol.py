@@ -9,7 +9,14 @@ contract (orchestra-tasking: docs/proposals/agents-split.md); nothing is importe
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
   it); it answers ``request.done`` with the result or ``request.refused`` with why.
 - Attention: the task system asks a planner to look at something (``task.attention_needed``,
-  to a role, with the reason)."""
+  to a role, with the reason).
+
+The snapshot (the ``snapshot`` query's answer) is read by the prompts (prompting.py) in these
+fields and no others: ``counts``; ``tickets[]`` with ``id``, ``state``, ``title``, ``priority``,
+``priority_info.effective``, ``milestone_id``, ``ready``, ``why_waiting``, ``blocked_reason``,
+``review_rounds``, ``objective``; ``milestones[]`` with ``id``, ``status``, ``name``;
+``capacity`` with ``workers``, ``reviewers``, ``max_workers``, ``max_reviewers``, ``note``;
+``pipeline`` with ``paused``, ``reason``; ``assignments[]`` with ``role``, ``instance``, ``ticket``."""
 
 from __future__ import annotations
 
@@ -19,6 +26,21 @@ import uuid
 ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED = "task.assigned", "task.accepted", "task.working", "task.reported", "task.released"
 ATTENTION = "task.attention_needed"
 HEARTBEAT_S = 30.0
+TRANSITIONED = "ticket.transitioned"
+TERMINAL = ("DONE", "CANCELLED")      # a transition to one of these ends the ticket: the runner archives its sessions
+
+# The task system's other event types, which an agent may wake on. Copied by hand; the truth is
+# orchestra-tasking's emit calls (nothing is imported from it); tests/unit/test_protocol_drift.py
+# checks the copy against its source when it is installed. Both packages emit probe.failed and
+# probe.recovered: the task system for its [[probes]], the agents' host for a team's.
+TASK_EVENTS = (
+    "ticket.created", "ticket.updated", TRANSITIONED, "ticket.note_added",
+    "milestone.created", "milestone.updated", "milestone.closed",
+    "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
+    "staging.deployed", "staging.failed", "staging.restarted",
+    "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
+    "scheduler.started", "scheduler.stopped", "probe.failed", "probe.recovered",
+)
 
 REQUESTS = {"create_ticket": "task.requested", "update_ticket": "task.change_requested", "add_note": "task.note_requested",
             "cancel_ticket": "task.cancel_requested", "unblock_ticket": "task.unblock_requested",

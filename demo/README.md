@@ -7,7 +7,7 @@ target by `run.py` from the orchestra-tasking checkout the `dev` extra installs)
 same queue. From the orchestra-agents repository:
 
     uv run demo/run.py                 # copies this folder to ~/orchestra-agents-demo and starts everything
-    uv run demo/run.py /tmp/d --port 8072 --tickets 3     # a two-minute look instead of the ten minutes
+    uv run demo/run.py /tmp/d --port 8072 --tickets 3     # a one-minute look instead of the four minutes
 
 Needs: Claude Code installed and signed in, with `claude` on the PATH or named by
 `CLAUDE_BINARY`; or the fake, `CLAUDE_BINARY=$PWD/tests/e2e/fake_claude.py uv run demo/run.py`,
@@ -46,8 +46,8 @@ stands for work where there is none), so a ticket is seen in progress.
 
 `run.py` creates one milestone and fifteen tickets as a planner would (requests over the bus):
 eight at once, then one every 30 seconds, so a queue forms in front of the one reviewer and the
-run lasts about ten minutes. The worker takes ten seconds per ticket, two at a time; the reviewer
-ten to twenty seconds with a real model, so the Tasks panel shows `reviewer/1 · since Ns · <what
+run lasts about four minutes. The worker takes ten seconds per ticket, two at a time; the
+reviewer six to fifteen seconds with a real model, so the Tasks panel shows `reviewer/1 · since Ns · <what
 it is doing>` on the ticket's card while it holds it and three or four tickets waiting for
 review behind it. Eight tickets are written to go wrong:
 
@@ -91,10 +91,11 @@ Where to look, at http://127.0.0.1:8072:
   reviewer` …).
 - **Tickets**: the task system's page; click a ticket for its description, acceptance, notes
   (the worker's summary, the reviewer's verdict with its reasons).
-- **Dynamics**: nothing for the first five minutes. A shell ticket's whole life (offered, worked,
-  reviewed, done) fits inside one 30 s discovery step, so the demo sets `step = "5s"` with a 60 m
-  window in `orchestra.toml` (`[discovery]`): at 5 s the ticket levels move across several steps
-  and can be stocks, and a level needs five such steps. The host rediscovers every five minutes.
+- **Dynamics**: the model appears after the run has finished: the host discovers five and ten
+  minutes after its start, so leave the demo up until the page fills. A shell ticket's whole
+  life (offered, worked, reviewed, done) fits inside one 30 s discovery step, so the demo sets
+  `step = "5s"` with a 60 m window in `orchestra.toml` (`[discovery]`): at 5 s the ticket levels
+  move across several steps and can be stocks, and a level needs five such steps.
   What the model is expected to show, with the tickets done: the ticket states as stocks (OPEN,
   IN_PROGRESS between OPEN and READY_FOR_REVIEW, READY_FOR_REVIEW, IN_REVIEW, REJECTED,
   BLOCKED, DONE as where the material ends) and the reviewer's sessions (`agents working
@@ -103,7 +104,9 @@ Where to look, at http://127.0.0.1:8072:
   proportional to what waits (the reviewer's turns start in proportion to READY_FOR_REVIEW); the
   rework loop IN_REVIEW → REJECTED → IN_PROGRESS → READY_FOR_REVIEW → IN_REVIEW and the block
   loop through BLOCKED → OPEN; every equation fitted, with the alternatives it beat recorded.
-  One honest sentence: this is a model of the task pipeline itself, since the demo has no domain
+  The Supervisor is not in it: its three turns (one per escalation) are below discovery's bar of
+  five events, so the escalation path (ticket blocked → Coordinator → Supervisor) is not in the
+  model, and "how it was found" says so. One honest sentence: this is a model of the task pipeline itself, since the demo has no domain
   of its own, so no loop between a domain and its process can appear here (Orchestra's
   `docs/roadmap/use-cases.md`, UC-3b, is the sample that will have one). The page's "how it was
   found" lists every series left out and why. With `--tickets 3` there is nothing to balance and

@@ -47,9 +47,10 @@ broken without updating the spec and saying so in the commit.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
     is a template project and its runner, not a package. No `sys.path` manipulation; the one
     exception is pytest's `pythonpath` in `pyproject.toml`, so the tests can import `conftest`,
-    the fakes and `demo.run`. Orchestra comes from `../orchestra_2` and the task system from
-    `../orchestra-tasking` (both editable); the task system is a dev dependency, for the tests
-    and the demo only.
+    the fakes and `demo.run`. Orchestra comes from `../orchestra_2` (a clone of
+    github.com/danroblewis/orchestra beside this repository, named `orchestra_2` as
+    `[tool.uv.sources]` says) and the task system from `../orchestra-tasking` (both editable);
+    the task system is a dev dependency, for the tests and the demo only.
 
 ## Harness facts the code depends on
 

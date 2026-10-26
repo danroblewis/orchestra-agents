@@ -14,13 +14,13 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
 
 ## Try it
 
-    uv sync --extra dev                # needs Orchestra and the task system checked out beside this repository, at ../orchestra_2 and ../orchestra-tasking ([tool.uv.sources])
+    uv sync --extra dev                # first clone github.com/danroblewis/orchestra beside this repository as `orchestra_2`, and orchestra-tasking as `orchestra-tasking` (the paths in [tool.uv.sources])
     uv run demo/run.py                 # a fresh demo project at ~/orchestra-agents-demo, http://127.0.0.1:8072
 
 An AI reviewer (Claude Code, Haiku) and a program worker (a shell runner) work the same queue:
-fifteen tickets over about ten minutes, eight at once and then one every 30 s, five of them
+fifteen tickets over about four minutes, eight at once and then one every 30 s, five of them
 rejected once and three blocked for a planner, about ten cents of Haiku; `--tickets 3` is a
-two-minute look. `demo/README.md` says what you will see and where. Ctrl-C stops everything;
+one-minute look. `demo/README.md` says what you will see and where. Ctrl-C stops everything;
 remove `~/orchestra-agents-demo` first to run it again. With `CLAUDE_BINARY` set to
 `tests/e2e/fake_claude.py` it runs without a model.
 
@@ -38,13 +38,17 @@ If your tasks live seconds, set `[discovery] step = "5s"` (with a window of 30â€
 `orchestra.toml` too: Orchestra's default grid is 30 s, and a level that changes inside one
 step is not a stock.
 
-Then run `orchestra web` (Orchestra's UI with both plugins' pages), `orchestra-agents run` (the
-host) and `orchestra-agents chat` (the Supervisor, in the terminal) from a project environment
-that depends on both `orchestra-tasking` and `orchestra-agents`: a `pyproject.toml` naming both
-as dependencies, then `uv sync`. From this checkout alone, the `dev` extra is what has the task
-system (`uv sync --extra dev`). Without the task plugin in the same `orchestra web`, the agents
-still run, but a ticket link on the Agents page opens no ticket drawer and no banner says a
-ticket is blocked.
+The commands run from this repository's environment (`--project <this repo>`, as the task
+system's README does it), since the target repository need not have anything installed; the
+`dev` extra brings the task system (`uv sync --extra dev` here first):
+
+    cd <repo> && uv run --project <this repo> orchestra web          # Orchestra's UI with both plugins' pages
+    uv run --project <this repo> tasking run                         # the task system's scheduler
+    uv run --project <this repo> orchestra-agents run                # the agents' host
+    uv run --project <this repo> orchestra-agents chat               # the Supervisor, in the terminal
+
+Without the task plugin in the same `orchestra web`, the agents still run, but a ticket link on
+the Agents page opens no ticket drawer and no banner says a ticket is blocked.
 
 State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in the repository
 under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page

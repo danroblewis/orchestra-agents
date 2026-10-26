@@ -13,12 +13,12 @@ every ``--every`` seconds; prints the URL and stops everything on Ctrl-C. The pr
 goes to run/*.log in the target.
 
 Fifteen tickets, eight at the start and one every 30 s after, keep the one reviewer behind a
-queue for about ten minutes: long enough for Orchestra to discover a model from the metrics with
-something accumulating in it (README.md, "Dynamics"). Every ticket's commands run for at least
+queue for about four minutes: long enough for Orchestra to discover a model from the metrics
+with something accumulating in it (README.md, "Dynamics"). Every ticket's commands run for at least
 ten seconds (two discovery steps; a `sleep` stands for work where there is none), five are
 written to be rejected once and three to be blocked, so the rework and attention paths each
 happen often enough to be counted (a counter needs five events to carry a stock's balance).
-``--tickets 3`` is a two-minute look at the machines; more than fifteen repeats the list.
+``--tickets 3`` is a one-minute look at the machines; more than fifteen repeats the list.
 
 The reviewer is an AI agent on Claude Code with Haiku, which costs money: about ten cents for
 the twenty reviews and the planners' turns on the eight tickets that need them. The demo

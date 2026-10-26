@@ -14,6 +14,7 @@ from . import tooling
 from .builtins import ROLES
 from .config import ConfigError, Project, load_project
 from .events import Events
+from .harness.base import assistant_text
 from .store import AgentStore, StoreError
 
 
@@ -87,11 +88,9 @@ def _print_event(ev: dict) -> None:
     if t == "tool_start":
         print(f"  ⚙ {ev.get('name', 'tool')} {json.dumps(ev.get('args') or {})[:160]}", flush=True)
     elif t == "assistant_end":
-        content = ev.get("text") or ""
-        if isinstance(content, list):
-            txt = "".join(p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text")
-            if txt.strip():
-                print(f"\n{txt.strip()}\n", flush=True)
+        txt = assistant_text(ev.get("text") or "")      # the harnesses normalise it to a string; a list of parts is read too
+        if txt.strip():
+            print(f"\n{txt.strip()}\n", flush=True)
 
 
 def _chat_attached(project: Project, store: AgentStore, port: int) -> int:
@@ -119,8 +118,8 @@ def _chat_attached(project: Project, store: AgentStore, port: int) -> int:
                             print(f"[agents] turn ended: {ev.get('error') or 'timed out'}")
                     else:
                         _print_event(ev)
-        except Exception as e:
-            print(f"[agents] lost the loop: {e}. Is `orchestra-agents run` still up?")
+        except Exception as e:  # noqa: BLE001 - whatever cut the connection, say so and leave
+            print(f"[agents] lost the host: {e}. Is `orchestra-agents run` still up?")
             return 1
     return 0
 
@@ -137,8 +136,8 @@ def cmd_chat(args) -> int:
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{ctl['port']}/health", timeout=3)
             return _chat_attached(project, store, int(ctl["port"]))
-        except Exception:
-            pass
+        except OSError:
+            print(f"[agents] the host's control endpoint on port {ctl['port']} is not answering.")
     print("[agents] `orchestra-agents run` is not running; starting a temporary supervisor session for this chat.")
     sid = "supervisor"
     role = ROLES["supervisor"]
@@ -150,8 +149,8 @@ def cmd_chat(args) -> int:
         model=cfg.model, provider=cfg.provider, thinking=cfg.thinking))
     try:
         proc.open()
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 - a session that will not open still gets its turn; say what happened
+        print(f"[agents] could not open the session yet: {e}")
     store.set_session(sid, kind="supervisor", status="idle", pid=proc.pid or os.getpid(),
                       session_file=proc.session_file, harness=proc.harness_name)
     _, offset = events.read(0, limit=1)
@@ -168,7 +167,7 @@ def cmd_chat(args) -> int:
                 continue
             new, offset = events.read(offset)
             new = [e for e in new if e["type"] not in ("session.started", "session.settled")]
-            prefix = agents.supervisor_context(store.snapshot(), new, project, store)
+            prefix = agents.supervisor_context(tooling.snapshot(project, store, "supervisor"), new, project, store)
             store.set_session(sid, status="running", started_at=time.time())
             events.emit("session.started", session=sid, kind="supervisor")
             res = proc.prompt(prefix + line, cfg.turn_timeout or None, on_event=_print_event, idle_timeout=cfg.silence_timeout)

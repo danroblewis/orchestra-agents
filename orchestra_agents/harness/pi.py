@@ -242,7 +242,7 @@ class _Normalizer:
         if self.on_event:
             try:
                 self.on_event(ev)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
                 pass
 
     def settled(self, text: str) -> None:

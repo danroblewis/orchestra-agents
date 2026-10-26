@@ -98,11 +98,11 @@ class AgentRunner:
     def _work_task(self, t, a: dict) -> tuple[str, str]:
         if a.get("branch") is None:                           # a task: a folder and a result
             return (agents.worker_task_tasks(t),
-                    "You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your result is written, "
-                    "otherwise BLOCKED with the reason.")
+                    ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your result is written, "
+                     "otherwise BLOCKED with the reason."))
         return (agents.worker_task(self.loop.project, t, a.get("unit_command")),
-                "You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your work is "
-                "committed and tested, otherwise BLOCKED with the reason.")
+                ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your work is "
+                 "committed and tested, otherwise BLOCKED with the reason."))
 
     def _review_task(self, t, a: dict, path: Path) -> tuple[str, str, str | None]:
         nudge = "You stopped without a verdict. Call `report_review` now with APPROVED or REJECTED."

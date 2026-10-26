@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import ClassVar
 
 from .config import Project
 
@@ -15,7 +16,7 @@ TERMINAL = ("DONE", "CANCELLED")
 class TicketView:
     """A ticket as the task system described it, with the fields the prompts read."""
 
-    FIELDS = {"id": "", "title": "", "priority": 5, "depends_on": [], "objective": "", "description": "", "acceptance": "",
+    FIELDS: ClassVar[dict[str, object]] = {"id": "", "title": "", "priority": 5, "depends_on": [], "objective": "", "description": "", "acceptance": "",
               "verification": "", "feedback": None, "rejected_by": None, "review_rounds": 0, "branch": None,
               "reviewed_commit": None, "milestone_id": None, "state": None, "worker_turns": 0}
 
@@ -252,8 +253,8 @@ def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:
         extra += f" (review rounds: {t['review_rounds']})" if t["review_rounds"] else ""
         obj = f" | objective: {t['objective'][:80]}" if t.get("objective") else ""
         lines.append(f"- {t['id']} {t['state']} p{t['priority']} {t['milestone_id']} {t['title']}{extra}{obj}")
-    lines += ["", "Use your tools to act, then report the way your role says to; if it does not say, reply with a few "
-              "lines on what you did and why."]
+    lines += ["", ("Use your tools to act, then report the way your role says to; if it does not say, reply with a few "
+                   "lines on what you did and why.")]
     return "\n".join(lines)
 
 
@@ -310,7 +311,7 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
     for e in events[-40:]:
         parts = [e["type"]]
         for k in ("ticket", "milestone", "from", "to", "reason", "by", "summary"):
-            if k in e and e[k]:
+            if e.get(k):
                 parts.append(f"{k}={e[k]}")
         lines.append("- " + " ".join(str(p) for p in parts))
     counts = ", ".join(f"{k}={v}" for k, v in snapshot["counts"].items() if v)

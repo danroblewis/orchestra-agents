@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 from tasking.config import init_project
 from tasking.events import Events
-from tasking.scheduler import Scheduler
 from tasking.model import State
+from tasking.scheduler import Scheduler
 from tasking.store import LocalStore
 
 from orchestra_agents.config import init_project as init_agents
@@ -126,7 +126,7 @@ def test_ticket_goes_open_to_done(env):
 
 
 def test_rejection_loops_back_to_worker(env, monkeypatch):
-    project, store, events, ms, repo = env
+    project, store, events, ms, _repo = env
     monkeypatch.setenv("FAKE_PI_REJECT_FIRST", "1")
     t = store.create_ticket(title="Needs two tries", milestone_id=ms.id)
     run_loop(project, store, events)
@@ -138,7 +138,7 @@ def test_rejection_loops_back_to_worker(env, monkeypatch):
 
 
 def test_blocked_worker(env, monkeypatch):
-    project, store, events, ms, repo = env
+    project, store, events, ms, _repo = env
     monkeypatch.setenv("FAKE_PI_WORKER_BLOCK", "1")
     t = store.create_ticket(title="Blocked one", milestone_id=ms.id)
     run_loop(project, store, events)
@@ -198,7 +198,7 @@ def test_team_lead_is_woken_in_its_space(env):
     When a ticket lands, the loop wakes it in the team's space with a prompt made of its
     role, the team's responsibilities, and its access."""
     from orchestra_agents import tooling as api
-    project, store, events, ms, repo = env
+    project, store, events, ms, _repo = env
     agents, astore = agents_of(project)
     api.handle(agents, astore, "create_role", {"name": "owner", "description": "Owns the backlog",
                                                "prompt": "# You own the backlog\n\n" + "Keep it full and honest. " * 4, "tools": ["tickets"]}, role="supervisor")

@@ -29,7 +29,6 @@ from pathlib import Path
 
 from .builtins import ROLES as BUILTIN_ROLES
 from .config import Project
-from .store import now
 from .roles import (
     EVENT_TYPES,
     TOOL_GROUPS,
@@ -38,6 +37,7 @@ from .roles import (
     commit_orchestra_files,
     parse_interval,
 )
+from .store import now
 
 AGENT_KINDS = ("continuous", "scheduled", "ad_hoc")
 ACCESS_MODES = ("read", "write")

@@ -146,7 +146,7 @@ def router(project) -> APIRouter:
             # The control endpoint ends the stream when the turn ends; reads must not time out before that.
             resp = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=max(project.config.turn_timeout or 0, 86400)))
         except Exception as e:
-            raise HTTPException(503, f"cannot reach the agents' host: {e}")
+            raise HTTPException(503, f"cannot reach the agents' host: {e}") from e
 
         async def gen():
             # Proxies in front of this page (Cloudflare closes a response that is silent for
@@ -162,7 +162,7 @@ def router(project) -> APIRouter:
                         loop.call_soon_threadsafe(q.put_nowait, line or None)
                         if not line:
                             return
-                except Exception:
+                except Exception:  # noqa: BLE001 - a broken upstream ends the stream
                     loop.call_soon_threadsafe(q.put_nowait, None)
             threading.Thread(target=pump, daemon=True).start()
             while True:

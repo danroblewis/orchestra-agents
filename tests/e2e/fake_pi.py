@@ -33,10 +33,10 @@ def emit(obj: dict) -> None:
 def api(cmd: str, args: dict) -> dict:
     py = os.environ.get("ORCHESTRA_PYTHON", sys.executable)
     p = subprocess.run([py, "-m", "orchestra_agents", "api", cmd, "--compact", "--args", json.dumps(args)],
-                       capture_output=True, text=True, cwd=os.environ.get("ORCHESTRA_REPO"))
+                       capture_output=True, text=True, cwd=os.environ.get("ORCHESTRA_REPO"), check=False)
     try:
         return json.loads(p.stdout.strip().splitlines()[-1])
-    except Exception:
+    except (IndexError, ValueError):
         return {"ok": False, "error": p.stdout + p.stderr}
 
 

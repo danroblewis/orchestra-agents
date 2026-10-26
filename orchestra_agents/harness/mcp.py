@@ -60,7 +60,7 @@ class Server:
             result = tooling.handle(project, store, tool.api_command, dict(args or {}), role=self.role,
                                     ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
             return {"content": [{"type": "text", "text": _tool_text(result)}]}
-        except Exception as e:  # the model gets the error text, like the Pi extension
+        except Exception as e:  # noqa: BLE001 - the model gets the error text, like the Pi extension
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}], "isError": True}
 
     def handle(self, msg: dict) -> None:
@@ -94,7 +94,7 @@ class Server:
                 continue
             try:
                 self.handle(msg)
-            except Exception:
+            except Exception:  # noqa: BLE001 - one bad message never stops the server
                 traceback.print_exc(file=sys.stderr)
                 if msg.get("id") is not None:
                     _reply(msg["id"], error={"code": -32603, "message": "internal error"})

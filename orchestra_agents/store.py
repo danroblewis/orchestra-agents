@@ -19,7 +19,6 @@ from .events import Events
 from .measures import Measures
 
 
-
 class StoreError(Exception):
     """A request the agents cannot carry out (an unknown agent, a role in use, a grant missing)."""
 

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable
 
 PromptFn = Callable[[str, Callable[[dict], None]], dict]
 
@@ -65,7 +65,7 @@ class ControlServer:
                 try:
                     result = outer.prompt_supervisor(body.get("message", ""), emit)
                     emit({"type": "done", **result})
-                except Exception as e:  # report instead of dropping the connection
+                except Exception as e:  # noqa: BLE001 - reported to the caller instead of dropping the connection
                     emit({"type": "done", "error": str(e)})
 
         self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)

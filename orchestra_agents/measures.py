@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from orchestra.metrics import Point
 from orchestra.metrics import for_project as metrics_for
 
-
 if TYPE_CHECKING:
     from .config import Project
 

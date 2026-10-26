@@ -30,7 +30,7 @@ def test_repo_store_saves_commits_and_deletes(project):
     rs.save(r, "# You keep the product honest\n\nWatch landings and keep user stories current.")
     assert (project.repo_root / ".orchestra" / "roles" / "product_owner.json").exists()
     assert rs.last_commit_note.startswith("committed")
-    log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=project.repo_root, capture_output=True, text=True).stdout
+    log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=project.repo_root, capture_output=True, text=True, check=False).stdout
     assert "role product_owner" in log
     assert rs.get("product_owner").every == "1d" and "product honest" in rs.prompt("product_owner")
     assert "product_owner" in all_roles(project) and all_roles(project)["coordinator"].builtin

@@ -14,7 +14,6 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 import uuid
 from pathlib import Path
 
@@ -187,10 +186,10 @@ class ClaudeCodeSession(AgentSession):
         try:
             os.killpg(p.pid, signal.SIGTERM)
             p.wait(timeout=5)
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             try:
                 os.killpg(p.pid, signal.SIGKILL)
-            except Exception:
+            except OSError:
                 pass
 
     def close(self) -> None:
@@ -218,7 +217,7 @@ class _LineReader:
 
 
 def _short(name: str) -> str:
-    return name[len(TOOL_PREFIX):] if name.startswith(TOOL_PREFIX) else name
+    return name.removeprefix(TOOL_PREFIX)
 
 
 class _Normalizer:
@@ -232,7 +231,7 @@ class _Normalizer:
         if self.on_event:
             try:
                 self.on_event(ev)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
                 pass
 
     def settled(self, text: str) -> None:

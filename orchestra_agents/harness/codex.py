@@ -18,7 +18,6 @@ import signal
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 from .base import AgentSession, Harness, OnEvent, SessionSpec, TurnResult, _Deadlines
@@ -216,10 +215,10 @@ class CodexSession(AgentSession):
         try:
             os.killpg(p.pid, signal.SIGTERM)
             p.wait(timeout=5)
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             try:
                 os.killpg(p.pid, signal.SIGKILL)
-            except Exception:
+            except OSError:
                 pass
 
     def close(self) -> None:
@@ -257,7 +256,7 @@ class _Normalizer:
         if self.on_event:
             try:
                 self.on_event(ev)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
                 pass
 
     def settled(self, text: str) -> None:

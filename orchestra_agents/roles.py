@@ -12,10 +12,9 @@ import re
 import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Protocol
 
-from .builtins import ROLES as BUILTIN, Role as BuiltinRole
+from .builtins import ROLES as BUILTIN
 from .config import Project
 from .store import now
 
@@ -194,7 +193,7 @@ def commit_orchestra_files(project: Project, message: str) -> str:
     merge gate. Returns a note saying what happened. Shared by the role and org stores."""
     root = project.repo_root
     base = project.config.base_branch
-    run = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    run = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, check=False)
     branch = run("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     dirty = [ln for ln in run("status", "--porcelain", "--untracked-files=all").stdout.splitlines() if ln.strip()
              and not ln[3:].strip().strip('"').startswith(".orchestra/")]

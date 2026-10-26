@@ -221,7 +221,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     assert [x["id"] for x in w["runs"]] == ["writer-20260102-000000", "writer-20260101-000000"]
     assert w["agent"]["last_run_id"] == "writer-20260102-000000" and w["agent"]["run_count"] == 2
     # wake-ups: creation queues an introduction for scheduled/continuous agents, never for ad hoc ones
-    assert [w["reason"] for w in store.drain_wakeups("po")][0].startswith("you were just created")
+    assert next(w["reason"] for w in store.drain_wakeups("po")).startswith("you were just created")
     assert store.drain_wakeups("writer") == []
     # the tree: the lead briefs its ad hoc member; the member may not brief the lead; the supervisor may message anyone
     api.handle(project, store, "run_agent", {"name": "writer", "brief": "draft the stories"}, role="po")

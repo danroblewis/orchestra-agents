@@ -187,7 +187,7 @@ class AgentHost:
         new agents, close processes for agents that were deleted, paused, or asked to restart."""
         try:
             roles, teams, agents_ = all_roles(self.project), all_teams(self.project), all_agents(self.project)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a broken record is logged; the host keeps running
             log(f"org: could not load roles, teams, or agents: {e}")
             return
         for name in list(self.agent_procs):
@@ -225,7 +225,7 @@ class AgentHost:
             self.store.set_session(agent.session_id, kind=agent.name, status="idle", pid=self._pid(proc),
                                    session_file=proc.session_file, harness=proc.harness_name)
             log(f"{agent.session_id}: session resident ({self.harness.name})")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one agent that cannot start never stops the others
             log(f"{agent.session_id}: could not start: {e}")
 
     def _session_for(self, agent: AgentDef, session_id: str) -> AgentSession:
@@ -351,7 +351,7 @@ class AgentHost:
             self.agent_procs.pop(name)
             try:
                 proc.close()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - the process is gone either way
                 log(f"{proc.session_id}: close after exit: {e!r}")
             sid = proc.session_id
             tail = ""
@@ -388,8 +388,8 @@ class AgentHost:
         self.live_procs[sid] = proc
         try:
             proc.open()
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 - a session that will not open still gets its turn; say what happened
+            log(f"{sid}: could not open the session yet: {e!r}")
         self.store.set_session(sid, kind=role, status="running", ticket_id=ticket_id, pid=self._pid(proc), instance=self._slots.get(sid, role),
                                session_file=proc.session_file, harness=proc.harness_name, started_at=time.time(), last_text="",
                                partial_text="", thinking_chars=0,
@@ -504,7 +504,7 @@ class AgentHost:
                 self.store.set_session(sid, kind=target, status="idle", pid=self._pid(proc),
                                        session_file=proc.session_file, harness=proc.harness_name)
                 log(f"{sid}: session resident ({self.harness.name})")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - one agent that cannot start never stops the others
                 log(f"{sid}: could not start: {e}")
 
     def _start_control(self) -> None:

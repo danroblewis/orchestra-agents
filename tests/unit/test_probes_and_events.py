@@ -68,16 +68,16 @@ def test_team_probe_runs_in_the_space_with_tools_on_path(project):
 
 
 def test_agents_subscribe_to_probes_and_declared_events(project):
-    assert event_matches(["probe_failed:docs_budget"], {"type": "probe_failed", "probe": "docs_budget"})
-    assert not event_matches(["probe_failed:docs_budget"], {"type": "probe_failed", "probe": "other"})
+    assert event_matches(["probe.failed:docs_budget"], {"type": "probe.failed", "probe": "docs_budget"})
+    assert not event_matches(["probe.failed:docs_budget"], {"type": "probe.failed", "probe": "other"})
     assert event_matches(["flaky_test_suspected:test_x"], {"type": "flaky_test_suspected", "subject": "test_x"})
     with pytest.raises(OrgError, match="unknown event type"):
         AgentDef(name="a_b", roles=["r"], wake_on=["lesson_proposed"]).validate()
     AgentDef(name="a_b", roles=["r"], wake_on=["lesson_proposed"]).validate({"lesson_proposed"})
     with pytest.raises(OrgError, match="emits entry"):
-        TeamDef(name="tt", lead="a", emits=["gate_landed"]).validate()          # Orchestra's own types are not declarable
+        TeamDef(name="tt", lead="a", emits=["gate.landed"]).validate()          # Orchestra's own types are not declarable
     # built-in wake lists are documentation: the loop wakes those agents itself
-    assert not all_agents(project)["coordinator"].matches_event({"type": "ticket_created"})
+    assert not all_agents(project)["coordinator"].matches_event({"type": "ticket.created"})
 
 
 def test_emit_event_is_declared_rate_limited_and_depth_limited(project):
@@ -98,7 +98,7 @@ def test_emit_event_is_declared_rate_limited_and_depth_limited(project):
     with pytest.raises(StoreError, match="may not emit"):
         api.handle(project, store, "emit_event", {"type": "flaky_test_suspected"}, role="keeper")
     with pytest.raises(StoreError, match="cannot be raised"):
-        api.handle(project, store, "emit_event", {"type": "gate_landed"}, role="keeper")
+        api.handle(project, store, "emit_event", {"type": "gate.landed"}, role="keeper")
     r = api.handle(project, store, "emit_event", {"type": "lesson_proposed", "subject": "CA-30", "note": "plan before editing"}, role="keeper")
     assert r["event"]["depth"] == 1 and r["event"]["by"] == "keeper" and r["wakes"] == ["retro"]
     assert all_agents(project)["retro"].matches_event(r["event"])

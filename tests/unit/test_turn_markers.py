@@ -30,8 +30,8 @@ def test_timed_out_turn_is_recorded_with_what_the_agent_was_doing(project):
     loop._note_turn("retro-1", SimpleNamespace(timed_out=True, error=None, text="Let me read the transcript."), "retrospective")
     loop._note_turn("retro-1", SimpleNamespace(timed_out=False, error=None, text="fine"), "retrospective")   # a normal end: nothing
     loop._note_turn("retro-2", SimpleNamespace(timed_out=False, error="pi exited 1", text=""), "retrospective")
-    evs = [e for e in events.read(0)[0] if e["type"].startswith("turn_")]
-    assert [e["type"] for e in evs] == ["turn_timed_out", "turn_error"]
+    evs = [e for e in events.read(0)[0] if e["type"].startswith("turn.")]
+    assert [e["type"] for e in evs] == ["turn.timed_out", "turn.error"]
     t = evs[0]
     assert t["session"] == "retro-1" and t["agent"] == "retrospective" and t["limit"] == project.config.turn_timeout
     assert t["doing"] == "running `bash`" and 125 <= t["phase_for"] <= 135 and 10 <= t["silent_for"] <= 15
@@ -40,7 +40,7 @@ def test_timed_out_turn_is_recorded_with_what_the_agent_was_doing(project):
     loop.stop.set()                                                                      # a harness exit during shutdown is not an error
     loop._note_turn("retro-3", SimpleNamespace(timed_out=False, error="pi exited", text=""), "retrospective")
     last = events.read(0)[0][-1]
-    assert last["type"] == "turn_interrupted" and last["session"] == "retro-3"
+    assert last["type"] == "turn.interrupted" and last["session"] == "retro-3"
 
 
 def test_shutdown_marks_every_running_turn(project):
@@ -50,10 +50,10 @@ def test_shutdown_marks_every_running_turn(project):
     loop = AgentHost(project, store, events)
     loop.stop.set()
     loop.run(once=True)
-    cut = [e for e in events.read(0)[0] if e["type"] == "turn_interrupted"]
+    cut = [e for e in events.read(0)[0] if e["type"] == "turn.interrupted"]
     assert [(e["session"], e["ticket"]) for e in cut] == [("worker-T-1", "T-1")]     # found running at startup: a crash
     assert "crashed" in cut[0]["reason"]
     store.set_session("po", status="running")
     loop._shutdown_markers()
-    cut = [e for e in events.read(0)[0] if e["type"] == "turn_interrupted"]
+    cut = [e for e in events.read(0)[0] if e["type"] == "turn.interrupted"]
     assert cut[-1]["session"] == "po" and "shut down" in cut[-1]["reason"]           # cut off by a clean stop

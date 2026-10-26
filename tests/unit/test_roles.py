@@ -26,7 +26,7 @@ def project(tmp_path, monkeypatch):
 def test_repo_store_saves_commits_and_deletes(project):
     rs = RepoRoleStore(project)
     r = RoleDef(name="product_owner", description="keeps stories current", tools=["tickets", "escalate"],
-                wake_on=["ticket_transition:DONE", "milestone_closed"], every="1d", at="09:00")
+                wake_on=["ticket.transitioned:DONE", "milestone.closed"], every="1d", at="09:00")
     rs.save(r, "# You keep the product honest\n\nWatch landings and keep user stories current.")
     assert (project.repo_root / ".orchestra" / "roles" / "product_owner.json").exists()
     assert rs.last_commit_note.startswith("committed")
@@ -46,14 +46,14 @@ def test_validation():
         RoleDef(name="x_role", tools=["nope"]).validate()
     with pytest.raises(RoleError):
         RoleDef(name="x_role", wake_on=["not_an_event"]).validate()
-    RoleDef(name="x_role", wake_on=["ticket_transition:BLOCKED"], every="30m").validate()
+    RoleDef(name="x_role", wake_on=["ticket.transitioned:BLOCKED"], every="30m").validate()
 
 
 def test_event_matching_and_daily_due():
-    r = RoleDef(name="w", wake_on=["ticket_transition:DONE", "gate_landed"])
-    assert r.matches_event({"type": "ticket_transition", "to": "DONE"})
-    assert not r.matches_event({"type": "ticket_transition", "to": "OPEN"})
-    assert r.matches_event({"type": "gate_landed"})
+    r = RoleDef(name="w", wake_on=["ticket.transitioned:DONE", "gate.landed"])
+    assert r.matches_event({"type": "ticket.transitioned", "to": "DONE"})
+    assert not r.matches_event({"type": "ticket.transitioned", "to": "OPEN"})
+    assert r.matches_event({"type": "gate.landed"})
     noon_today = time.mktime(time.localtime()[:3] + (12, 0, 0, 0, 0, -1))
     assert due_at("12:00", None, noon_today + 60)
     assert not due_at("12:00", noon_today + 30, noon_today + 60)   # already fired today
@@ -73,7 +73,7 @@ def test_get_role_explains_what_the_role_is(project):
     assert "create_ticket" in r["tool_names"]["tickets"] and "set_capacity" in r["tool_names"]["capacity"]
     assert r["agents"] == ["coordinator"]
     role_store(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"],
-                                     wake_on=["ticket_transition:DONE"], every="45m"), "Be opinionated about {base_branch}.")
+                                     wake_on=["ticket.transitioned:DONE"], every="45m"), "Be opinionated about {base_branch}.")
     r = api.handle(project, store, "get_role", {"name": "product_owner"})
     assert not r["role"]["builtin"] and r["prompt"].strip() == "Be opinionated about main."   # the job description, placeholders resolved
     a = api.handle(project, store, "get_agent", {"name": "product_owner"})                 # a Stage 1 role is its own agent

@@ -84,7 +84,7 @@ class AgentHost:
             if s.get("status") == "running" and s.get("pid"):
                 self._kill_orphan(int(s["pid"]), s["id"])
             if s.get("status") == "running":
-                self.events.emit("turn_interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
+                self.events.emit("turn.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
                                  reason="the agents' host was not running (it crashed or was killed) during this turn")
             self.store.set_session(s["id"], status="idle", pid=None)
 
@@ -179,7 +179,7 @@ class AgentHost:
         event log, so the transcript does not look like the agent stopped on its own."""
         for s in self.store.sessions():
             if s.get("status") == "running":
-                self.events.emit("turn_interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
+                self.events.emit("turn.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
                                  reason="orchestra shut down (restart or stop) during this turn")
 
     def _refresh_org(self) -> None:
@@ -203,7 +203,7 @@ class AgentHost:
                 if st.get("reset_requested"):
                     archived = self.store.retire_session(sid)
                     self.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0)
-                    self.events.emit("agent_reset", session=sid, agent=name, archived=archived, by=st.get("reset_by") or "operator")
+                    self.events.emit("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by") or "operator")
                     log(f"{name}: session reset by request; previous transcript archived as {archived}")
                 elif st.get("restart_requested"):
                     self.store.set_agent_state(name, restart_requested=False)
@@ -363,11 +363,11 @@ class AgentHost:
             st = self.store.agent_state(name)
             crashes = [t for t in st.get("crashes", []) if now_t - t < self.CRASH_LOOP_WINDOW] + [now_t]
             self.store.set_agent_state(name, crashes=crashes)
-            self.events.emit("agent_crashed", session=sid, agent=name, count=len(crashes), stderr=tail)
+            self.events.emit("agent.crashed", session=sid, agent=name, count=len(crashes), stderr=tail)
             log(f"{sid}: process exited between turns ({len(crashes)} in {self.CRASH_LOOP_WINDOW // 60}m); will restart")
             if len(crashes) >= self.CRASH_LOOP_COUNT:
                 self.store.set_agent_state(name, paused=True, crash_loop=f"{len(crashes)} crashes in {self.CRASH_LOOP_WINDOW // 60} minutes")
-                self.events.emit("agent_crash_loop", session=sid, agent=name, count=len(crashes), stderr=tail)
+                self.events.emit("agent.crash_loop", session=sid, agent=name, count=len(crashes), stderr=tail)
                 self.store.add_wakeup("supervisor", f"agent {name} crashed {len(crashes)} times in {self.CRASH_LOOP_WINDOW // 60} minutes and has been "
                                       f"paused. Its last stderr: {tail.strip()[-200:] or '(empty)'}. Fix its definition or ask the human, then resume it.")
                 log(f"{sid}: crash loop; paused and the supervisor woken")
@@ -395,7 +395,7 @@ class AgentHost:
                                partial_text="", thinking_chars=0,
                                last_output_at=None, phase="prompting", phase_since=time.time(),
                                last_token_at=None, tool_name=None)
-        self.events.emit("session_started", session=sid, kind=role, ticket=ticket_id)
+        self.events.emit("session.started", session=sid, kind=role, ticket=ticket_id)
         self.store.measure_turn(role, self._slots.get(sid, role), started=True)
 
     def _session_idle(self, sid: str, text: str, resident: bool = False) -> None:
@@ -405,7 +405,7 @@ class AgentHost:
             fields["session_file"] = proc.session_file   # some harnesses only name the transcript after the first turn
         self.store.set_session(sid, status="idle", last_text=(text or "")[-500:], settled_at=time.time(), phase="idle", tool_name=None,
                                **fields)
-        self.events.emit("session_settled", session=sid)
+        self.events.emit("session.settled", session=sid)
         s = self.store.find_session(sid) or {}
         self.store.measure_turn(s.get("kind") or sid, self._slots.get(sid, s.get("kind") or sid), started=False)
         if not resident:
@@ -422,7 +422,7 @@ class AgentHost:
         now_t = time.time()
         if res.error and self.stop.is_set():
             # The harness "failed" because this loop is shutting down and closed it.
-            self.events.emit("turn_interrupted", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None,
+            self.events.emit("turn.interrupted", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None,
                              reason="orchestra shut down (restart or stop) during this turn")
             return
         if res.timed_out:
@@ -430,13 +430,13 @@ class AgentHost:
             doing = f"running `{s['tool_name']}`" if phase == "tool" and s.get("tool_name") else \
                 "generating a reply" if phase == "generating" else "waiting for the model to start replying" if phase == "prompting" else phase
             by = getattr(res, "stopped_by", None) or "limit"
-            self.events.emit("turn_timed_out", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None,
+            self.events.emit("turn.timed_out", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None,
                              stopped_by=by, limit=self.cfg.silence_timeout if by == "silence" else self.cfg.turn_timeout, doing=doing,
                              phase_for=round(now_t - s["phase_since"]) if s.get("phase_since") else None,
                              silent_for=round(now_t - s["last_output_at"]) if s.get("last_output_at") else None,
                              last_text=(res.text or s.get("last_text") or "")[-300:])
         else:
-            self.events.emit("turn_error", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None, error=str(res.error)[:500])
+            self.events.emit("turn.error", session=sid, agent=kind or s.get("kind"), ticket=s.get("ticket_id") or None, error=str(res.error)[:500])
 
     def _proc_for(self, sid: str) -> AgentSession | None:
         if sid in self.live_procs:
@@ -526,7 +526,7 @@ class AgentHost:
             proc = self._session("supervisor", "supervisor", self.project.repo_root)
             proc.open()
             self.agent_procs["supervisor"] = proc
-        new = [e for e in self._digest.new() if e["type"] not in ("session_started", "session_settled")]
+        new = [e for e in self._digest.new() if e["type"] not in ("session.started", "session.settled")]
         prefix = agents.supervisor_context(tooling.snapshot(self.project, self.store, "supervisor"), new, self.project, self.store)
         self._session_running("supervisor", "supervisor", proc)
 
@@ -562,12 +562,12 @@ class AgentHost:
             if res and res.get("mode") == "auto":
                 # The harness bounds its own context (Claude Code's --autocompact); nothing to do but note it.
                 self.store.set_session(sid, compacted_at_bytes=Path(f).stat().st_size)
-                self.events.emit("agent_compacted", session=sid, agent=agent, mode="auto", limit=res.get("limit"),
+                self.events.emit("agent.compacted", session=sid, agent=agent, mode="auto", limit=res.get("limit"),
                                  reason=f"the harness compacts itself past {int(res.get('limit') or 0):,} tokens")
                 return "compacted"
             if res:
                 self.store.set_session(sid, compacted_at_bytes=Path(f).stat().st_size, compactions=int(s.get("compactions") or 0) + 1)
-                self.events.emit("agent_compacted", session=sid, agent=agent, tokens_before=res.get("tokens_before"),
+                self.events.emit("agent.compacted", session=sid, agent=agent, tokens_before=res.get("tokens_before"),
                                  tokens_after=res.get("tokens_after"), reason=f"{grown // 1000} KB of transcript since the last compaction")
                 log(f"{sid}: compacted ({res.get('tokens_before')} -> {res.get('tokens_after')} tokens)")
                 return "compacted"
@@ -579,7 +579,7 @@ class AgentHost:
             proc.close()
         archived = self.store.retire_session(sid)
         self.store.set_agent_state(agent, context_hash=None)
-        self.events.emit("agent_reset", session=sid, agent=agent, archived=archived, by="orchestra",
+        self.events.emit("agent.reset", session=sid, agent=agent, archived=archived, by="orchestra",
                          reason=f"transcript reached {size // 1000} KB and the harness could not compact it")
         log(f"{sid}: transcript {size // 1000} KB, no compaction; archived as {archived}, starting fresh")
         return "rotated"
@@ -613,5 +613,5 @@ class AgentHost:
         self._session_idle(sid, res.text, resident=not ephemeral)
         if ephemeral:
             proc.close()
-        self.events.emit("agent_said", session=sid, summary=(res.text or "")[:500])
+        self.events.emit("agent.said", session=sid, summary=(res.text or "")[:500])
         log(f"{sid}: {(res.text or '(no text)')[:160]!r}")

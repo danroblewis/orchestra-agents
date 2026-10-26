@@ -20,18 +20,23 @@ from .config import Project
 from .store import now
 
 TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team")
-EVENT_TYPES = (
-    "ticket_created", "ticket_updated", "ticket_transition", "note_added",
-    "milestone_created", "milestone_updated", "milestone_closed",
-    "gate_started", "gate_landed", "gate_rejected", "gate_conflict", "gate_error", "gate_base_broken",
-    "staging_deployed", "staging_failed", "staging_restarted",
-    "pipeline_paused", "pipeline_resumed", "pickup_paused", "pickup_resumed", "capacity_changed",
-    "agent_said", "agent_killed", "context_updated", "loop_started", "loop_stopped",
-    "session_started", "session_settled",
-    "role_created", "role_changed", "role_deleted", "agent_created", "agent_changed", "agent_deleted",
-    "agent_paused", "agent_resumed", "agent_messaged", "team_created", "team_changed", "team_deleted",
-    "probe_failed", "probe_recovered", "turn_timed_out", "turn_error", "turn_interrupted", "agent_crashed", "agent_crash_loop", "agent_reset", "agent_compacted",
+# The task system's event names, copied by hand: the truth is orchestra-tasking's tasking/events.py
+# and its emit() calls (nothing is imported from it). The rest are the agents' own.
+TASK_EVENT_TYPES = (
+    "ticket.created", "ticket.updated", "ticket.transitioned", "ticket.note_added",
+    "milestone.created", "milestone.updated", "milestone.closed",
+    "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
+    "staging.deployed", "staging.failed", "staging.restarted",
+    "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
+    "scheduler.started", "scheduler.stopped", "probe.failed", "probe.recovered",
 )
+AGENT_EVENT_TYPES = (
+    "agent.said", "agent.killed", "context.updated", "session.started", "session.settled",
+    "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
+    "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
+    "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
+)
+EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
 # Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
 # those are validated against the teams, not this list.
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
@@ -49,7 +54,7 @@ class RoleDef:
     description: str = ""
     tools: list[str] = field(default_factory=lambda: ["tickets", "escalate"])
     session: str = "resident"            # resident | ephemeral
-    wake_on: list[str] = field(default_factory=list)   # event types, optionally "ticket_transition:DONE"
+    wake_on: list[str] = field(default_factory=list)   # event types, optionally "ticket.transitioned:DONE"
     every: str | None = None             # interval like "30m", "6h", "1d"
     at: str | None = None                # daily time "HH:MM" (local)
     created_by: str = "supervisor"

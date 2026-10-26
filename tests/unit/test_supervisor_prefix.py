@@ -29,8 +29,8 @@ def test_context_document_is_sent_once_until_it_changes(project):
     assert again.startswith("[Orchestra: project context, updated]") and "ship it" in again
     assert agents.supervisor_context(snap, [], project, store) == ""
     # events still arrive, compactly
-    evs = [{"type": "ticket_transition", "ticket": "T-1", "from": "OPEN", "to": "DONE"}]
+    evs = [{"type": "ticket.transitioned", "ticket": "T-1", "from": "OPEN", "to": "DONE"}]
     out = agents.supervisor_context(snap, evs, project, store)
-    assert "[Orchestra: project context" not in out and "ticket_transition ticket=T-1" in out
+    assert "[Orchestra: project context" not in out and "ticket.transitioned ticket=T-1" in out
     # without a store (the CLI's temporary session) the document is always included
     assert agents.supervisor_context(snap, [], project).startswith("[Orchestra: project context]")

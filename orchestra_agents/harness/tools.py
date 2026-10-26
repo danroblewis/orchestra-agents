@@ -165,7 +165,7 @@ TOOLS: list[ToolDef] = [
             "a wake_on event). The team may be one you create next.",
             {"name": S("lowercase_with_underscores"), "roles": A("Role names, at least one"), "team": S("Team name, or empty for none"),
              "kind": S("continuous | scheduled | ad_hoc"), "session": S("resident | ephemeral"),
-             "wake_on": A("Event types, optionally 'ticket_transition:DONE'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
+             "wake_on": A("Event types, optionally 'ticket.transitioned:DONE'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
              "description": S("One line: what this agent is for")},
             ("name", "roles", "kind")),
     ToolDef("update_agent", "roles", "Change a custom agent's roles, team, kind, schedule, or session policy.",
@@ -192,7 +192,7 @@ TOOLS: list[ToolDef] = [
              "probes": {"type": "array", "items": {"type": "object"},
                         "description": "Conditions Orchestra checks on an interval, run in the team's space: "
                                        "[{\"name\": \"docs_budget\", \"command\": \"tools/doc-budget\", \"every\": \"30m\"}]. "
-                                       "Exit 0 = holds; probe_failed:<name> / probe_recovered:<name> fire on the transition."}},
+                                       "Exit 0 = holds; probe.failed:<name> / probe.recovered:<name> fire on the transition."}},
             ("name", "lead", "responsibilities")),
     ToolDef("update_team", "roles", "Change a team: lead, members, responsibilities, access, capacity, tracking.",
             {"name": S("Team name"), "description": S(""), "lead": S(""), "members": A(), "responsibilities": S("Full new markdown"),

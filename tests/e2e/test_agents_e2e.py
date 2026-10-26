@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from tasking.config import init_project
 from tasking.events import Events
-from tasking.loop import Loop
+from tasking.scheduler import Scheduler
 from tasking.model import State
 from tasking.store import LocalStore
 
@@ -66,7 +66,7 @@ def env(tmp_path, monkeypatch, request):
     git("add", "-A", cwd=repo)
     git("commit", "-qm", "orchestra config", cwd=repo)
     monkeypatch.setenv("ORCHESTRA_REPO", str(repo))
-    events = Events(project.events_file)
+    events = Events(project.events_file, source="task_scheduler")
     store = LocalStore(project, events)
     ms = store.create_milestone(name="m")
     return project, store, events, ms, repo
@@ -90,7 +90,7 @@ def run_loop(project, store, events):
     th.start()
     desk = None
     try:
-        Loop(project, store, events).run(once=True)
+        Scheduler(project, store, events).run(once=True)
         desk = Desk(project, store, events, lambda *_: None)
         desk.start()
         end, deadline = ev.end(), time.time() + 60
@@ -177,7 +177,7 @@ def test_gate_rejection_reengages_worker_then_lands(env, monkeypatch):
     assert kinds.count(("merge_gate", "gate")) == 2   # the rejection and the landing
     assert kinds.count(("reviewer", "review")) == 2   # reviewed before each gate run
     evs, _ = events.read(0, limit=10000)
-    trail = [(e["from"], e["to"]) for e in evs if e["type"] == "ticket_transition" and e["ticket"] == t.id]
+    trail = [(e["from"], e["to"]) for e in evs if e["type"] == "ticket.transitioned" and e["ticket"] == t.id]
     assert trail == [("OPEN", "IN_PROGRESS"), ("IN_PROGRESS", "READY_FOR_REVIEW"), ("READY_FOR_REVIEW", "IN_REVIEW"),
                      ("IN_REVIEW", "APPROVED"), ("APPROVED", "MERGING"), ("MERGING", "REJECTED"),
                      ("REJECTED", "IN_PROGRESS"), ("IN_PROGRESS", "READY_FOR_REVIEW"), ("READY_FOR_REVIEW", "IN_REVIEW"),
@@ -203,7 +203,7 @@ def test_team_lead_is_woken_in_its_space(env):
     api.handle(agents, astore, "create_role", {"name": "owner", "description": "Owns the backlog",
                                                "prompt": "# You own the backlog\n\n" + "Keep it full and honest. " * 4, "tools": ["tickets"]}, role="supervisor")
     api.handle(agents, astore, "create_agent", {"name": "po", "roles": ["owner"], "team": "product", "kind": "scheduled", "every": "1d",
-                                                "wake_on": ["ticket_transition:DONE"]}, role="supervisor")
+                                                "wake_on": ["ticket.transitioned:DONE"]}, role="supervisor")
     api.handle(agents, astore, "create_team", {"name": "product", "lead": "po", "responsibilities": "# Product\n\n1. The backlog is never empty.",
                                                "access": [{"tools": ["events"]}]}, role="supervisor")
     astore.drain_wakeups("po")   # the creation introduction; this test is about the landing
@@ -213,7 +213,7 @@ def test_team_lead_is_woken_in_its_space(env):
     from orchestra_agents.harness import read_transcript
     sess = next(s for s in astore.sessions() if s["id"] == "po")
     texts = [m["text"] for m in read_transcript(sess) if m["role"] == "user"]
-    assert any("event ticket_transition" in x and "to=DONE" in x for x in texts)
+    assert any("event ticket.transitioned" in x and "to=DONE" in x for x in texts)
     assert (project.repo_root / ".orchestra" / "spaces" / "product" / "tools").is_dir()
     assert "The backlog is never empty" in (agents.logs_dir / "agents" / "po.prompt.md").read_text()   # what it was started with
     assert astore.agent_state("po").get("last_woken")

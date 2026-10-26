@@ -39,7 +39,7 @@ class AgentRunner:
                 th = threading.Thread(target=self._run, args=(ev,), daemon=True, name=ev["assignment"])
                 self.threads[ev["assignment"]] = th
                 th.start()
-            elif ev.get("type") == "ticket_transition" and ev.get("to") in ("DONE", "CANCELLED") and ev.get("ticket"):
+            elif ev.get("type") == "ticket.transitioned" and ev.get("to") in ("DONE", "CANCELLED") and ev.get("ticket"):
                 self.loop.store.purge_ticket_sessions(ev["ticket"])     # a finished ticket's sessions go to the archive
             elif ev.get("type") == RELEASED and ev.get("assignment") in self.sessions \
                     and ev.get("instance") in (None, self.instances.get(ev["assignment"])):     # a release for another machine is not ours

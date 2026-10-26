@@ -22,7 +22,7 @@ from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
-MARKER_TYPES = ("session_started", "turn_timed_out", "turn_error", "turn_interrupted", "agent_killed", "agent_crashed", "agent_crash_loop", "agent_reset", "agent_compacted")
+MARKER_TYPES = ("session.started", "turn.timed_out", "turn.error", "turn.interrupted", "agent.killed", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted")
 
 
 def _alive(pid) -> bool:
@@ -249,7 +249,7 @@ def router(project) -> APIRouter:
                 node("ev:" + e, "event", e, custom=True, team=t.name)
             for pr in t.probes or []:
                 node("probe:" + pr["name"], "probe", pr["name"], team=t.name)
-                for e in ("probe_failed", "probe_recovered"):
+                for e in ("probe.failed", "probe.recovered"):
                     node("ev:" + e, "event", e)
                     edges.append({"from": "probe:" + pr["name"], "to": "ev:" + e, "kind": "emits", "filter": pr["name"]})
         for ag in agents_.values():

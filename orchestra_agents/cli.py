@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 from . import prompting as agents
 from . import tooling
@@ -166,13 +167,13 @@ def cmd_chat(args) -> int:
             if not line:
                 continue
             new, offset = events.read(offset)
-            new = [e for e in new if e["type"] not in ("session_started", "session_settled")]
+            new = [e for e in new if e["type"] not in ("session.started", "session.settled")]
             prefix = agents.supervisor_context(store.snapshot(), new, project, store)
             store.set_session(sid, status="running", started_at=time.time())
-            events.emit("session_started", session=sid, kind="supervisor")
+            events.emit("session.started", session=sid, kind="supervisor")
             res = proc.prompt(prefix + line, cfg.turn_timeout or None, on_event=_print_event, idle_timeout=cfg.silence_timeout)
             store.set_session(sid, status="idle", last_text=(res.text or "")[-500:], settled_at=time.time())
-            events.emit("session_settled", session=sid)
+            events.emit("session.settled", session=sid)
             if res.error or res.timed_out:
                 print(f"[agents] turn ended: {res.error or 'timed out'}")
     finally:
@@ -182,17 +183,15 @@ def cmd_chat(args) -> int:
 
 
 def cmd_roles(args) -> int:
-    from . import api as api_mod
-
     project = _project(args)
     store, _ = _store(project)
     if args.action == "list":
-        for r in api_mod.handle(project, store, "list_roles", {})["roles"]:
+        for r in tooling.handle(project, store, "list_roles", {})["roles"]:
             kind = "built-in" if r["builtin"] else "custom"
             wake = ", ".join(r.get("wake_on") or []) + (f" every {r['every']}" if r.get("every") else "") + (f" at {r['at']}" if r.get("at") else "")
             print(f"{r['name']:20} {kind:9} {r['session']:9} {'paused' if r['paused'] else '':7} {wake.strip() or '-'}")
         return 0
-    print(json.dumps(api_mod.handle(project, store, "get_role", {"name": args.name}), indent=2))
+    print(json.dumps(tooling.handle(project, store, "get_role", {"name": args.name}), indent=2))
     return 0
 
 

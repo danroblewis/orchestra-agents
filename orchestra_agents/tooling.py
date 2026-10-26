@@ -59,7 +59,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
         if len(text.strip()) < 20:
             raise StoreError("context text is too short; write the full document")
         prompting.write_context(project, text)
-        store.events.emit("context_updated", by=author)
+        store.events.emit("context.updated", by=author)
         return {"ok": True}
 
     if command == "escalate_to_supervisor":
@@ -78,7 +78,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
                 ts = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
             except (KeyError, TypeError, ValueError):     # an event without a time is not in a time window
                 continue
-            if ts < since or (types and e.get("type") not in types) or e.get("type") in ("session_started", "session_settled"):
+            if ts < since or (types and e.get("type") not in types) or e.get("type") in ("session.started", "session.settled"):
                 continue
             out.append(e)
         return {"ok": True, "events": out[-200:], "count": len(out)}

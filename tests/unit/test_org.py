@@ -61,7 +61,7 @@ def test_validation():
         AgentDef(name="x_a", roles=["r"], kind="continuous", session="ephemeral").validate()   # a contradiction
     with pytest.raises(OrgError, match="fresh session"):
         AgentDef(name="x_a", roles=["r"], kind="ad_hoc", session="resident").validate()
-    AgentDef(name="x_a", roles=["r"], kind="ad_hoc", session="ephemeral", wake_on=["gate_conflict"]).validate()  # on events, fresh each time
+    AgentDef(name="x_a", roles=["r"], kind="ad_hoc", session="ephemeral", wake_on=["gate.conflict"]).validate()  # on events, fresh each time
     AgentDef(name="x_a", roles=["r"], kind="scheduled", every="1d", session="ephemeral").validate()
     with pytest.raises(OrgError):
         TeamDef(name="Bad", lead="a").validate()
@@ -101,18 +101,18 @@ def test_store_round_trip_nesting_space_and_commits(project):
 
 def test_stage1_roles_become_implicit_agents(project):
     role_store(project).save(RoleDef(name="product_owner", description="keeps the backlog full", tools=["tickets", "escalate"],
-                                     wake_on=["ticket_transition:DONE"], every="45m"), "# You own the product\n\nKeep the backlog full.")
+                                     wake_on=["ticket.transitioned:DONE"], every="45m"), "# You own the product\n\nKeep the backlog full.")
     a = all_agents(project)["product_owner"]
-    assert a.source == "role" and a.kind == "scheduled" and a.every == "45m" and a.wake_on == ["ticket_transition:DONE"]
+    assert a.source == "role" and a.kind == "scheduled" and a.every == "45m" and a.wake_on == ["ticket.transitioned:DONE"]
     assert a.resident and a.team is None
-    RepoOrgStore(project).save_agent(AgentDef(name="product_owner", roles=["product_owner"], kind="continuous", wake_on=["milestone_closed"]))
+    RepoOrgStore(project).save_agent(AgentDef(name="product_owner", roles=["product_owner"], kind="continuous", wake_on=["milestone.closed"]))
     a = all_agents(project)["product_owner"]
     assert a.source == "agent" and a.kind == "continuous" and a.resident          # an explicit record wins
     # a record from before the kinds were pinned down reads as what it is
     (project.repo_root / ".orchestra" / "agents" / "old.json").write_text(
-        json.dumps({"name": "old", "roles": ["product_owner"], "kind": "continuous", "session": "ephemeral", "wake_on": ["gate_conflict"]}))
+        json.dumps({"name": "old", "roles": ["product_owner"], "kind": "continuous", "session": "ephemeral", "wake_on": ["gate.conflict"]}))
     old = all_agents(project)["old"]
-    assert old.kind == "ad_hoc" and not old.resident and old.matches_event({"type": "gate_conflict"})
+    assert old.kind == "ad_hoc" and not old.resident and old.matches_event({"type": "gate.conflict"})
 
 
 def test_team_record_decides_membership(project):
@@ -132,7 +132,7 @@ def test_team_record_decides_membership(project):
     assert [a["name"] for a in v["agents"]] == ["product_owner", "writer"]
     assert [a["name"] for a in api.handle(project, store, "list_agents", {})["agents"] if not a["team"] and not a["builtin"]] == []
     # the third case: an agent whose team does not exist yet is still an agent, visibly so
-    os_.save_agent(AgentDef(name="retro", roles=["owner"], team="devex", kind="ad_hoc", session="ephemeral", wake_on=["gate_conflict"]))
+    os_.save_agent(AgentDef(name="retro", roles=["owner"], team="devex", kind="ad_hoc", session="ephemeral", wake_on=["gate.conflict"]))
     listed = {a["name"]: a for a in api.handle(project, store, "list_agents", {})["agents"]}
     assert listed["retro"]["team"] == "devex" and listed["retro"]["team_exists"] is False and listed["writer"]["team_exists"] is True
     shown = {n for t in api.handle(project, store, "list_teams", {})["teams"] for n in [a["name"] for a in t["agents"]]}
@@ -191,7 +191,7 @@ def test_agent_prompt_is_roles_then_responsibilities_then_access(project):
 def test_api_builds_a_team_the_way_the_guide_says(project):
     store = AgentStore(project)
     guide = api.handle(project, store, "org_guide", {}, role="supervisor")["guide"]
-    assert "One creation per turn" in guide and "ticket_transition" in guide
+    assert "One creation per turn" in guide and "ticket.transitioned" in guide
     with pytest.raises(StoreError):
         api.handle(project, store, "create_role", {"name": "owner", "description": "d", "prompt": "x" * 50}, role="coordinator")
     api.handle(project, store, "create_role", {"name": "owner", "description": "Owns a backlog", "prompt": "# You own\n\n" + "Be opinionated. " * 5,

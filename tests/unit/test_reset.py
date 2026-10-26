@@ -57,7 +57,7 @@ def test_large_sessions_are_compacted_in_place_when_the_harness_can(project):
     assert loop._trim_if_large(proc, "worker-T-1", "worker") is None                        # growth is measured since the compaction
     f.write_text("x" * (2 * project.config.session_max_bytes + 10))
     assert loop._trim_if_large(proc, "worker-T-1", "worker") == "compacted"
-    ev = [e for e in events.read(0)[0] if e["type"] == "agent_compacted"]
+    ev = [e for e in events.read(0)[0] if e["type"] == "agent.compacted"]
     assert len(ev) == 2 and ev[0]["tokens_before"] == 150000 and ev[0]["tokens_after"] == 32000
 
 
@@ -73,7 +73,7 @@ def test_a_self_compacting_harness_is_left_alone(project):
     store.set_session("worker-T-3", kind="worker", status="idle", session_file=str(f))
     proc = AutoProc("worker-T-3")
     assert loop._trim_if_large(proc, "worker-T-3", "worker") == "compacted" and f.exists() and proc.alive()
-    ev = [e for e in events.read(0)[0] if e["type"] == "agent_compacted"][-1]
+    ev = [e for e in events.read(0)[0] if e["type"] == "agent.compacted"][-1]
     assert ev["mode"] == "auto" and "100,000 tokens" in ev["reason"]
 
 
@@ -87,7 +87,7 @@ def test_large_sessions_rotate_only_when_the_harness_cannot_compact(project):
     assert loop._trim_if_large(FakeProc("worker-T-2"), "worker-T-2", "worker") == "rotated"   # base compact() returns None
     assert not f.exists() and (project.sessions_dir / "archive" / f.name).exists()
     assert store.find_session("worker-T-2")["session_file"] is None
-    ev = [e for e in events.read(0)[0] if e["type"] == "agent_reset"][-1]
+    ev = [e for e in events.read(0)[0] if e["type"] == "agent.reset"][-1]
     assert ev["by"] == "orchestra" and "could not compact" in ev["reason"]
 
 
@@ -114,7 +114,7 @@ def test_reset_archives_the_transcript_and_starts_over(project):
     assert (project.sessions_dir / "archive" / "2026_supervisor.jsonl").read_text() == "old conversation\n" and not f.exists()
     st = store.agent_state("supervisor")
     assert not st.get("reset_requested") and st.get("context_hash") is None and st.get("turn_depth") == 0   # context is re-sent
-    ev = [e for e in events.read(0)[0] if e["type"] == "agent_reset"][0]
+    ev = [e for e in events.read(0)[0] if e["type"] == "agent.reset"][0]
     assert ev["archived"] == archived[0] and ev["by"] == "supervisor"
     runs = api.handle(project, store, "get_agent", {"name": "supervisor"})["runs"]
     assert archived[0] in [r["id"] for r in runs]                                              # the old conversation is still a run

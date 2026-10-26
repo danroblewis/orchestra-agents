@@ -49,11 +49,11 @@ def test_crashed_resident_is_recorded_restarted_and_crash_looped(project):
         loop._reap_residents()
         assert "retro" not in loop.agent_procs                        # dropped: the next tick starts it again
         assert store.find_session("retro")["pid"] is None
-        crashes = [e for e in events.read(0)[0] if e["type"] == "agent_crashed"]
+        crashes = [e for e in events.read(0)[0] if e["type"] == "agent.crashed"]
         assert len(crashes) == n and crashes[-1]["count"] == n and "model not found" in crashes[-1]["stderr"]
     st = store.agent_state("retro")
     assert st["paused"] and "3 crashes" in st["crash_loop"]
-    assert [e["type"] for e in events.read(0)[0]][-1] == "agent_crash_loop"
+    assert [e["type"] for e in events.read(0)[0]][-1] == "agent.crash_loop"
     wake = store.drain_wakeups("supervisor")
     assert wake and "crashed 3 times" in wake[0]["reason"] and "model not found" in wake[0]["reason"]
     # an agent mid-turn is left to its turn; a live one is left alone

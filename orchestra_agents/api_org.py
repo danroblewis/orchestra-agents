@@ -85,7 +85,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
             if len(prompt.strip()) < 40:
                 raise StoreError("prompt is required: the job description, in a few paragraphs")
         rs.save(r, prompt)
-        store.events.emit("role_changed" if command == "update_role" else "role_created", role=r.name, by=author)
+        store.events.emit("role.changed" if command == "update_role" else "role.created", role=r.name, by=author)
         for ag in all_agents(project).values():
             if r.name in ag.roles and not ag.builtin and command == "update_role":
                 store.add_wakeup(ag.name, f"your role {r.name} was updated; re-read your responsibilities")
@@ -96,7 +96,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
             raise StoreError(f"role {a['name']!r} is used by agents {users}; change or delete them first")
         rs.delete(a["name"])
         store.set_agent_state(a["name"], deleted=True)   # an implicit Stage 1 agent of the same name stops too
-        store.events.emit("role_deleted", role=a["name"], by=author)
+        store.events.emit("role.deleted", role=a["name"], by=author)
         return {"ok": True, "storage": rs.last_commit_note}
 
     # -- agents: what runs ----------------------------------------------------------------
@@ -130,7 +130,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
             raise StoreError(f"unknown roles {missing}; create them first with create_role")
         os_.save_agent(ag, custom_event_types(all_teams(project)))
         store.set_agent_state(ag.name, deleted=False)
-        store.events.emit("agent_changed" if command == "update_agent" else "agent_created", agent=ag.name, by=author)
+        store.events.emit("agent.changed" if command == "update_agent" else "agent.created", agent=ag.name, by=author)
         if ag.kind != "ad_hoc":
             store.add_wakeup(ag.name, "you were just created; introduce yourself in one line and check the project state"
                              if command == "create_agent" else "your definition was updated; re-read your responsibilities")
@@ -153,11 +153,11 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         else:
             rs.delete(ag.name)   # a Stage 1 role record that was its own agent
         store.set_agent_state(a["name"], deleted=True)
-        store.events.emit("agent_deleted", agent=a["name"], by=author)
+        store.events.emit("agent.deleted", agent=a["name"], by=author)
         return {"ok": True, "storage": os_.last_commit_note}
     if command in ("pause_agent", "resume_agent"):
         store.set_agent_state(a["name"], paused=(command == "pause_agent"), crash_loop=None, crashes=[])
-        store.events.emit("agent_paused" if command == "pause_agent" else "agent_resumed", agent=a["name"], by=author)
+        store.events.emit("agent.paused" if command == "pause_agent" else "agent.resumed", agent=a["name"], by=author)
         return {"ok": True, "paused": command == "pause_agent"}
     if command == "restart_agent":
         store.set_agent_state(a["name"], restart_requested=True)
@@ -182,7 +182,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         if command == "message_agent" and target.kind == "ad_hoc":
             raise StoreError(f"{target.name} is ad_hoc: it has no next wake-up to add a note to. Use run_agent with a brief.")
         store.add_wakeup(target.name, f"{'brief' if command == 'run_agent' else 'message'} from {author}: {text}")
-        store.events.emit("agent_messaged", agent=target.name, by=author)
+        store.events.emit("agent.messaged", agent=target.name, by=author)
         return {"ok": True, "message": f"{target.name} will wake at the next tick with your {'brief' if command == 'run_agent' else 'message'}"}
 
     # -- teams ----------------------------------------------------------------------------
@@ -211,7 +211,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
             if len(resp.strip()) < 20:
                 raise StoreError("responsibilities are required: the standing conditions this team keeps true, as a numbered list")
         os_.save_team(t, resp)
-        store.events.emit("team_changed" if command == "update_team" else "team_created", team=t.name, by=author)
+        store.events.emit("team.changed" if command == "update_team" else "team.created", team=t.name, by=author)
         if t.lead:
             store.add_wakeup(t.lead, f"team {t.name} was {'updated' if command == 'update_team' else 'created'}; re-read its responsibilities")
         return {"ok": True, "team": t.to_dict(), "storage": os_.last_commit_note}
@@ -250,7 +250,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         if left:
             raise StoreError(f"team {t.name!r} still has agents {left}; move or delete them first")
         os_.delete_team(t.name)
-        store.events.emit("team_deleted", team=t.name, by=author)
+        store.events.emit("team.deleted", team=t.name, by=author)
         return {"ok": True, "storage": os_.last_commit_note}
     raise StoreError(f"unknown command {command}")
 

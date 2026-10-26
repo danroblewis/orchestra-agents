@@ -54,12 +54,12 @@ as many agents as the responsibilities need.
 
 ## Events and probes: how an agent learns that something is true
 
-Orchestra emits events for what it detects itself (tickets, gate runs, staging, agents).
+The task system emits events for what it sees (tickets, gate runs, staging) and the agents' host for the agents' turns.
 Two more sources exist, and a team design should say which it uses:
 
 - **Probes.** A command with an interval, declared on the team (`probes`), run in the
   team's space with its tools on PATH. Exit 0 means the condition holds. Orchestra emits
-  `probe_failed:<name>` and `probe_recovered:<name>` only when the result changes, so an
+  `probe.failed:<name>` and `probe.recovered:<name>` only when the result changes, so an
   agent subscribed to a probe wakes once per failure, not every interval. Use a probe for
   any condition that lives in the repository or on staging: a flaky test, a slow endpoint,
   a document over budget. A responsibility that can be checked by a script should be.

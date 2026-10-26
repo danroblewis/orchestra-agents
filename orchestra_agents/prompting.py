@@ -228,7 +228,7 @@ def org_reference() -> str:
     """What an agent can watch and do, appended to the design guide."""
     from .roles import EVENT_TYPES, TOOL_GROUPS
     return ("Tool groups: " + ", ".join(TOOL_GROUPS) + ".\nEvent types that can wake an agent: " + ", ".join(EVENT_TYPES)
-            + ".\nA wake_on entry may filter transitions, e.g. 'ticket_transition:DONE' or 'ticket_transition:BLOCKED'.")
+            + ".\nA wake_on entry may filter transitions, e.g. 'ticket.transitioned:DONE' or 'ticket.transitioned:BLOCKED'.")
 
 
 def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:

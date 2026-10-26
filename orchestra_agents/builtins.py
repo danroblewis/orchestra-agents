@@ -29,9 +29,9 @@ class Role:
     prompt: str                     # prompt file stem under agents/prompts/
     tools: tuple[str, ...]          # tool groups
     resident: bool = True           # kept alive for the life of `orchestra-agents run`
-    wake_on: tuple[str, ...] = ()   # event types this role is woken for (the loop detects them in code and wakes it)
+    wake_on: tuple[str, ...] = ()   # event types this role is woken for (the host matches them and wakes it)
     triggers: tuple[str, ...] = ()  # conditions that are not events: a free slot, a human message, a threshold
-    emits: tuple[str, ...] = ()     # event types this role's actions cause, through its tools or the loop
+    emits: tuple[str, ...] = ()     # event types this role's actions cause, through its tools or the task system
     every: float | None = None      # seconds between scheduled wake-ups, or None
     description: str = ""
 
@@ -47,45 +47,52 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", session_id="supervisor", prompt="supervisor",
     tools=("tickets", "context", "pipeline", "roles", "team", "events"),
-    wake_on=("gate_base_broken", "gate_error", "staging_failed", "pipeline_paused"),
+    wake_on=("gate.base_broken", "gate.error", "staging.failed", "pipeline.paused"),
     triggers=("a message from the human", "escalate_to_supervisor from any agent"),
-    emits=("ticket_created", "ticket_updated", "milestone_created", "milestone_closed", "context_updated",
-           "role_created", "agent_created", "team_created", "agent_messaged"),
+    emits=("ticket.created", "ticket.updated", "milestone.created", "milestone.closed", "context.updated",
+           "role.created", "agent.created", "team.created", "agent.messaged"),
     description="Talks to the human; translates requests into objectives, verification, and tickets.",
 ))
 register(Role(
     name="coordinator", session_id="coordinator", prompt="coordinator",
     tools=("tickets", "capacity", "escalate"), every=10 * 60,
-    wake_on=("ticket_created", "ticket_transition:DONE", "ticket_transition:BLOCKED", "milestone_created", "milestone_closed"),
+    wake_on=("ticket.created", "ticket.transitioned:DONE", "ticket.transitioned:BLOCKED", "milestone.created", "milestone.closed"),
     triggers=("a ticket rejected at the review threshold",),
-    emits=("ticket_updated", "ticket_transition:CANCELLED", "note_added", "capacity_changed"),
+    emits=("ticket.updated", "ticket.transitioned:CANCELLED", "ticket.note_added", "capacity.changed"),
     description="Keeps the plan executable: clarity, size, order, dependencies. Never changes intent.",
 ))
-# Per-ticket roles are not resident; the loop starts them on demand.
+# Per-ticket roles are not resident; the host starts them on the task system's assignments.
 register(Role(name="worker", session_id="worker-{ticket}", prompt="worker", tools=("report_ticket",), resident=False,
               wake_on=("task.assigned", "task.released"),
               triggers=("an OPEN ticket whose dependencies are DONE and whose milestone is open", "a free worker slot"),
-              emits=("ticket_transition:READY_FOR_REVIEW", "ticket_transition:BLOCKED"),
+              emits=("ticket.transitioned:READY_FOR_REVIEW", "ticket.transitioned:BLOCKED"),
               description="Implements one ticket on its own branch and reports READY_FOR_REVIEW or BLOCKED."))
 register(Role(name="reviewer", session_id="reviewer-{ticket}", prompt="reviewer", tools=("report_review",), resident=False,
               wake_on=("task.assigned", "task.released"), triggers=("a free reviewer slot",),
-              emits=("ticket_transition:APPROVED", "ticket_transition:REJECTED"),
+              emits=("ticket.transitioned:APPROVED", "ticket.transitioned:REJECTED"),
               description="Reviews one ticket's diff like a pull request and reports APPROVED or REJECTED."))
 
 # Not agents, but parts of the same event graph (the Agents page's map, web.py eventmap):
 SYSTEM_BINDINGS = {
-    "task_scheduler": {"description": "The loop itself: assigns tickets, starts and wakes the agents, and keeps the ticket state machine.",
-                  "emits": ("ticket_transition:OPEN", "ticket_transition:IN_PROGRESS", "ticket_transition:IN_REVIEW",
-                            "ticket_transition:DONE", "session_started", "session_settled",
-                            "turn_timed_out", "turn_interrupted", "agent_crashed", "agent_compacted", "agent_reset",
-                            "pickup_paused", "pickup_resumed", "loop_started", "loop_stopped"), "wake_on": ()},
+    "task_scheduler": {"description": "The task system's scheduler: offers ready tickets to the roles, applies their reports, "
+                                      "keeps the ticket state machine and asks a planner for attention.",
+                       "emits": ("task.assigned", "task.released", "task.attention_needed",
+                                 "ticket.transitioned:OPEN", "ticket.transitioned:IN_PROGRESS", "ticket.transitioned:IN_REVIEW",
+                                 "ticket.transitioned:DONE", "pickup.paused", "pickup.resumed", "kill.requested",
+                                 "scheduler.started", "scheduler.stopped"),
+                       "wake_on": ("task.accepted", "task.reported")},
     "merge_gate": {"description": "Lands approved branches: build, unit, start, acceptance; then staging.",
-                   "emits": ("gate_started", "gate_landed", "gate_rejected", "gate_conflict", "gate_error", "gate_base_broken",
-                             "ticket_transition:MERGING", "ticket_transition:DONE", "ticket_transition:REJECTED",
-                             "staging_deployed", "staging_failed", "pipeline_paused"),
-                   "wake_on": ("ticket_transition:APPROVED",)},
+                   "emits": ("gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
+                             "ticket.transitioned:MERGING", "ticket.transitioned:DONE", "ticket.transitioned:REJECTED",
+                             "staging.deployed", "staging.failed", "pipeline.paused"),
+                   "wake_on": ("ticket.transitioned:APPROVED",)},
     "probes": {"description": "Commands run on an interval; an event on each change of result.",
-               "emits": ("probe_failed", "probe_recovered"), "wake_on": ()},
+               "emits": ("probe.failed", "probe.recovered"), "wake_on": ()},
+    "agents": {"description": "The agents' host (orchestra-agents run): runs the sessions, cuts turns off at their limits, "
+                              "restarts crashed agents and queues a planner's wake-up when the task system asks.",
+               "emits": ("session.started", "session.settled", "turn.timed_out", "turn.error", "turn.interrupted",
+                         "agent.crashed", "agent.crash_loop", "agent.compacted", "agent.reset"),
+               "wake_on": ("task.attention_needed",)},
 }
 
 # Future roles slot in here, for example:

@@ -2,7 +2,7 @@
 
 A probe is a command with a schedule, declared by a team (``probes`` in its record), run in the
 team's space with the team chain's tools on PATH. Exit 0 means the condition holds. The host
-remembers each probe's last state and emits ``probe_failed`` and ``probe_recovered`` only on the
+remembers each probe's last state and emits ``probe.failed`` and ``probe.recovered`` only on the
 transition, so a failing probe wakes the agents subscribed to it once, not every interval. Agents
 never run probes; the host supplies the clock and the event, the team supplies the check.
 (The probes in ``orchestra.toml``, ``[[probes]]``, are the task system's.)"""
@@ -103,6 +103,6 @@ class Prober:
             fields["since"] = started
         self.store.set_probe_state(s.name, **fields)
         if status == "failed" and prev != "failed":
-            self.events.emit("probe_failed", probe=s.name, team=s.team, output=output[-600:])
+            self.events.emit("probe.failed", probe=s.name, team=s.team, output=output[-600:])
         elif status == "ok" and prev == "failed":
-            self.events.emit("probe_recovered", probe=s.name, team=s.team)
+            self.events.emit("probe.recovered", probe=s.name, team=s.team)

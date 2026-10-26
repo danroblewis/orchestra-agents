@@ -145,9 +145,9 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     assert {"task.assigned", "task.released", "task.attention_needed"} <= set(host["subscribes"])
     log = get(url + "/api/machines/agents/log")
     assert log["ok"] and any("control endpoint" in line for line in log["lines"])
-    for name, mode in (("supervisor", "continuous"), ("coordinator", "scheduled")):
+    for name in ("supervisor", "coordinator"):                                              # resident: continuous, whatever wakes them
         m = seen[name]
-        assert m["package"] == "agents" and m["mode"] == mode and m["about"]["kind"] == "agent" and not m.get("unseen")
+        assert m["package"] == "agents" and m["mode"] == "continuous" and m["about"]["kind"] == "agent" and not m.get("unseen")
         assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == "haiku" and m["instances"] == []
     reviewer = seen["reviewer"]
     assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["about"]["kind"] == "agent"

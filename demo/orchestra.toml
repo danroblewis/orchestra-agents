@@ -10,7 +10,7 @@ url = "file"
 
 [discovery]
 window = "60m"
-step = "30s"
+step = "5s"               # a shell ticket lives and dies inside one 30 s step; at 5 s the ticket levels move as stocks
 every = "5m"
 
 # ---- the task system (orchestra-tasking; sections Orchestra itself ignores) ----

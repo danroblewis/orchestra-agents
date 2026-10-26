@@ -2,12 +2,13 @@
 
     uv run demo/run.py [target] [--port 8072]       # target: a new directory, default ~/orchestra-agents-demo
 
-It copies the template beside it (orchestra.toml, README.md, machines/) to the target, makes it a
-git repository (Orchestra wants orchestra.toml at a repository root), removes any state a previous
-run left for it, starts Orchestra's host and web UI, the task system's scheduler, the agents' host
-and the shell worker, creates a milestone and three tickets as a planner would (requests over the
-bus, protocol.py), prints the URL and stops everything on Ctrl-C. The processes' output goes to
-run/*.log in the target.
+It copies the template beside it (orchestra.toml, README.md) and the task system's own shell
+worker (orchestra-tasking's demo/machines/shell_worker.py, from the checkout the dev extra
+installs) to the target, makes it a git repository (Orchestra wants orchestra.toml at a repository
+root), removes any state a previous run left for it, starts Orchestra's host and web UI, the task
+system's scheduler, the agents' host and the shell worker, creates a milestone and three tickets
+as a planner would (requests over the bus, protocol.py), prints the URL and stops everything on
+Ctrl-C. The processes' output goes to run/*.log in the target.
 
 The reviewer is an AI agent on Claude Code with Haiku, which costs money: a few cents for the
 three reviews. CLAUDE_BINARY names another ``claude`` to run instead; the e2e tests set it to
@@ -31,16 +32,22 @@ from orchestra.config import home, project_key
 
 HERE = Path(__file__).resolve().parent
 PYTHON = sys.executable
+# The tickets are written for the task system's shell worker (its README, "Writing tickets for the
+# demo's worker"): the commands run in the ticket's own empty folder, a task about the repository
+# goes to $ORCHESTRA_REPO first, and the acceptance names a `file` in that folder or a "text" in
+# RESULT.md, which a program (and the fake reviewer) can check.
 PLAN = {"milestone": {"name": "Demo", "description": "Three tasks done by a program and reviewed by an AI agent."},
         "tickets": [
             {"title": "Say hello", "objective": "Show a task going through a program worker and an AI reviewer.",
              "description": "Write a greeting into a file and show it.\n\n```sh\nsleep 3\necho 'hello from the agents demo' > hello.txt\ncat hello.txt\n```",
              "acceptance": "- `hello.txt` exists\n- RESULT.md shows \"hello from the agents demo\"", "verification": "The reviewer reads RESULT.md."},
             {"title": "Count the words in the README", "objective": "A second task for the same pair of machines.", "depends_on": [0],
-             "description": "```sh\nwc -w README.md\n```", "acceptance": "- RESULT.md shows a word count for README.md",
-             "verification": "The reviewer reads RESULT.md."},
+             "description": "The commands run in the ticket's own empty folder; a task about the repository goes there first.\n\n"
+                            "```sh\ncd \"$ORCHESTRA_REPO\" && wc -w README.md\n```",
+             "acceptance": "- RESULT.md shows \"README.md\"", "verification": "The reviewer reads RESULT.md."},
             {"title": "List the project's files", "objective": "A task with nothing to judge but the listing.",
-             "description": "```sh\nls -1\n```", "acceptance": "- RESULT.md lists `orchestra.toml`", "verification": "The reviewer reads RESULT.md."},
+             "description": "```sh\ncd \"$ORCHESTRA_REPO\" && ls -1\n```", "acceptance": "- RESULT.md shows \"orchestra.toml\"",
+             "verification": "The reviewer reads RESULT.md."},
         ]}
 
 
@@ -52,6 +59,8 @@ def make_project(target: Path) -> Path:
     if target.exists():
         sys.exit(f"{target} exists; remove it or name another directory")
     shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__"))
+    (target / "machines").mkdir()
+    shutil.copy(shell_worker(), target / "machines" / "shell_worker.py")
     git = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.invalid"]
     subprocess.run([*git, "init", "-q", "-b", "main"], cwd=target, check=True)
     subprocess.run([*git, "add", "-A"], cwd=target, check=True)
@@ -61,6 +70,15 @@ def make_project(target: Path) -> Path:
         shutil.rmtree(state)
         print(f"removed the state a previous run left in {state}", flush=True)
     return target
+
+
+def shell_worker() -> Path:
+    """The task system's own program worker, from its checkout: the wheel does not ship the demo."""
+    import tasking
+    src = Path(tasking.__file__).resolve().parents[1] / "demo" / "machines" / "shell_worker.py"
+    if not src.exists():
+        sys.exit(f"the demo needs the orchestra-tasking checkout (uv sync --extra dev): no shell worker at {src}")
+    return src
 
 
 def start(target: Path, port: int, env: dict[str, str] | None = None) -> dict[str, subprocess.Popen]:

@@ -8,6 +8,10 @@ tool call goes through the real MCP server named in that config (JSON-RPC over s
 so the server is exercised end to end. It appends a Claude-format transcript under
 CLAUDE_CONFIG_DIR/projects/<cwd>/<uuid>.jsonl, where the harness expects it.
 
+A reviewer judges: each `file` named in the acceptance criteria must exist in the workspace and
+each "text" must be in RESULT.md there, else it rejects with a line per failure (criteria of
+other shapes are not its to check).
+
 Env knobs shared with fake_pi: FAKE_PI_WORKER_BLOCK, FAKE_PI_REJECT_FIRST, FAKE_PI_BREAK_FIRST.
 FAKE_CLAUDE_SLOW=<seconds>: a reviewer says what it is reading, then takes that long before its
 verdict, so what it is doing can be seen while it holds the ticket."""
@@ -65,6 +69,20 @@ class Mcp:
     def close(self) -> None:
         self.p.stdin.close()
         self.p.wait(timeout=10)
+
+
+def judge(prompt: str, cwd: Path) -> list[str]:
+    """What the acceptance criteria ask for and the workspace does not show."""
+    m = re.search(r"## Acceptance criteria\n(.*?)(?=\n## |\Z)", prompt, re.DOTALL)
+    criteria = m.group(1) if m else ""
+    result = (cwd / "RESULT.md").read_text() if (cwd / "RESULT.md").exists() else None
+    failures = [f"`{name}` is not in the workspace" for name in re.findall(r"`([^`\n]+)`", criteria) if not (cwd / name).exists()]
+    for text in re.findall(r'"([^"\n]+)"', criteria):
+        if result is None:
+            failures.append(f'RESULT.md is missing, so it cannot show "{text}"')
+        elif text not in result:
+            failures.append(f'RESULT.md does not show "{text}"')
+    return failures
 
 
 def main() -> None:
@@ -135,10 +153,15 @@ def main() -> None:
             record("assistant", [{"type": "text", "text": said}])
             time.sleep(float(os.environ["FAKE_CLAUDE_SLOW"]))
         marker = cwd / ".fake_reviewed"
+        failures = judge(prompt, cwd)
         if os.environ.get("FAKE_PI_REJECT_FIRST") and not marker.exists():
             marker.write_text("1")
             use_tool("report_review", {"verdict": "REJECTED", "summary": "needs work", "feedback": "1. add more"})
             text = "Rejected."
+        elif failures:
+            use_tool("report_review", {"verdict": "REJECTED", "summary": "the acceptance criteria are not met",
+                                       "feedback": "\n".join(f"{i}. {f}" for i, f in enumerate(failures, 1))})
+            text = "Rejected: " + "; ".join(failures)
         else:
             use_tool("report_review", {"verdict": "APPROVED", "summary": "looks good"})
             text = "Approved."

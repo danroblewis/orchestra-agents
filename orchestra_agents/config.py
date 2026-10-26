@@ -1,0 +1,130 @@
+"""The agents' settings and where they keep their state.
+
+The settings are ``[agents]`` in the repository's ``orchestra.toml`` (which product runs them,
+the model, time limits, which roles they fill), and three of the task system's ``[project]``
+settings their prompts are filled with (the base branch, the ticket prefix, whether work is tasks
+or code). ``[events]`` and ``[metrics]`` are Orchestra's, read to reach the same bus and metrics
+store. State lives in ``~/.orchestrator/<key>/agents/``; the project key is Orchestra's."""
+
+from __future__ import annotations
+
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from orchestra.config import Config as OrchestraConfig
+from orchestra.config import ConfigError, home, parse_duration
+from orchestra.config import Project as OrchestraProject
+from orchestra.config import load_project as load_orchestra_project
+
+__all__ = ["Config", "ConfigError", "Project", "init_project", "load_project", "parse_duration"]
+
+
+@dataclass
+class Config:
+    harness: str = "pi"                 # pi | claude_code | codex
+    provider: str | None = None
+    model: str | None = None
+    thinking: str | None = None
+    serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
+    turn_timeout: float = 0.0           # hard cap per turn; 0 = none
+    silence_timeout: float = 1200.0     # end a turn after this long with nothing from the harness
+    session_max_bytes: int = 300_000    # transcript growth since the last compaction that triggers one
+    compact_tokens: int = 100_000
+    prompt_overrides: dict[str, str] = field(default_factory=dict)
+    control_port: int = 0               # 0: any free port, recorded for the web and `chat`
+    base_branch: str = "main"           # from the task system's [project], for the prompts
+    ticket_prefix: str = "ORC"
+    work: str = "tasks"
+    events_url: str | None = None
+    metrics_url: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_toml(cls, text: str) -> Config:
+        raw = tomllib.loads(text)
+        a, p = raw.get("agents", {}) or {}, raw.get("project", {}) or {}
+        return cls(
+            harness=(a.get("harness") or "pi").replace("-", "_"), provider=a.get("provider") or None,
+            model=a.get("model") or None, thinking=a.get("thinking"),
+            serves=list(a.get("serves", ["worker", "reviewer"])),
+            turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
+            silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
+            session_max_bytes=int(a.get("session_max_bytes", 300_000)), compact_tokens=int(a.get("compact_tokens", 100_000)),
+            prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
+            base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"),
+            events_url=(raw.get("events", {}) or {}).get("url"), metrics_url=(raw.get("metrics", {}) or {}).get("url"), raw=raw)
+
+
+@dataclass
+class Project:
+    key: str
+    repo_root: Path
+    config: Config
+
+    @property
+    def orchestra(self) -> OrchestraProject:
+        return OrchestraProject(self.key, self.repo_root, OrchestraConfig.from_toml((self.repo_root / "orchestra.toml").read_text()))
+
+    @property
+    def state_dir(self) -> Path:
+        return home() / self.key / "agents"
+
+    @property
+    def events_file(self) -> Path:
+        return home() / self.key / "events.jsonl"      # Orchestra's (the file bus)
+
+    @property
+    def runtime_file(self) -> Path:
+        return self.state_dir / "runtime.json"
+
+    @property
+    def lock_file(self) -> Path:
+        return self.state_dir / ".lock"
+
+    @property
+    def sessions_dir(self) -> Path:
+        return self.state_dir / "sessions"
+
+    @property
+    def logs_dir(self) -> Path:
+        return self.state_dir / "logs"
+
+    def ensure_dirs(self) -> None:
+        for d in (self.state_dir, self.sessions_dir, self.logs_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+    def reload_config(self) -> None:
+        self.config = Config.from_toml((self.repo_root / "orchestra.toml").read_text())
+
+
+STARTER = """
+[agents]
+harness = "{harness}"      # pi | claude_code | codex
+model = "{model}"
+serves = ["worker", "reviewer"]   # the task system's roles these agents fill
+"""
+
+
+def init_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "") -> Project:
+    """Orchestra's starter ``orchestra.toml`` (if there is none) with an ``[agents]`` section added
+    (if it has none), and the project registered with Orchestra."""
+    from orchestra.config import init_project as init_orchestra
+    o = init_orchestra(Path(repo))
+    toml = o.repo_root / "orchestra.toml"
+    text = toml.read_text()
+    if "agents" not in tomllib.loads(text):
+        extra = STARTER.format(harness=harness, model=model)
+        if provider:
+            extra += f'provider = "{provider}"\n'
+        toml.write_text(text.rstrip() + "\n" + extra)
+    return load_project(o.repo_root)
+
+
+def load_project(repo: Path | str | None = None) -> Project:
+    """The project for ``repo`` (default: ORCHESTRA_REPO, else the cwd), as Orchestra resolves it."""
+    o = load_orchestra_project(repo)
+    project = Project(key=o.key, repo_root=o.repo_root, config=Config.from_toml((o.repo_root / "orchestra.toml").read_text()))
+    project.ensure_dirs()
+    return project

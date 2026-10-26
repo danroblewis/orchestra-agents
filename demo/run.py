@@ -198,8 +198,7 @@ def plan(target: Path, count: int = len(PLAN["tickets"]), every_s: float = 0.0, 
 
     events = Events.for_project(load_project(target), source="planner")
     # the planner is a machine of the demo too: it says what it is before its first request
-    events.publish("orchestra.machine.started", {"mode": "scheduled", "kind": "program", "listens_for": ["request.done", "request.refused"],
-                                                 "does": f"creates the demo's milestone and tickets, {burst} at once and then one every {every_s:g} s"})
+    events.publish("orchestra.machine.started", {"mode": "scheduled", "kind": "program", "listens_for": ["request.done", "request.refused"]})
     ask = TaskClient(events, "planner")
 
     def request(op: str, args: dict) -> dict:

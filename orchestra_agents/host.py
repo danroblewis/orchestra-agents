@@ -116,9 +116,7 @@ class AgentHost:
                 pass
         self.recover()
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",
-                                                          "listens_for": [ASSIGNED, RELEASED, ATTENTION, TRANSITIONED], "log": str(HOST_LOG),
-                                                          "does": "runs the AI agents: their sessions, wake-ups, and the task system's "
-                                                                  "assignments for the roles they fill"})
+                                                          "listens_for": [ASSIGNED, RELEASED, ATTENTION, TRANSITIONED], "log": str(HOST_LOG)})
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
         self._refresh_org(self.store.runtime()["agent_state"])
         try:

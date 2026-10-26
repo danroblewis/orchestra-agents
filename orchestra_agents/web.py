@@ -40,10 +40,9 @@ def declared(project) -> list[Declared]:
     """The agents, for Orchestra's Machines page before they run: the host, the resident and
     custom agents, and the per-ticket roles the agents serve (a role another machine fills is
     that machine's, not declared here)."""
-    out = [Declared("agents", "program", "Runs the AI agents: their sessions, wake-ups, and the task system's assignments.", "continuous")]
+    out = [Declared("agents", "program", "continuous")]
     for a in all_agents(project).values():
-        out.append(Declared(a.name, "agent", a.description, "continuous" if a.resident else "ad hoc",
-                            sorted({w.split(":")[0] for w in a.wake_on})))
+        out.append(Declared(a.name, "agent", "continuous" if a.resident else "ad hoc", sorted({w.split(":")[0] for w in a.wake_on})))
     return out
 
 

@@ -31,6 +31,7 @@ from .protocol import (
     RELEASED,
     REPORTED,
     REQUESTS,
+    STATES,
     TASK_EVENTS,
     TRANSITIONED,
     WORKING,
@@ -88,10 +89,11 @@ PER_TICKET_ROLES = tuple(r.name for r in ROLES.values() if not r.resident)   # t
 SYSTEM_BINDINGS = {
     "task_scheduler": {"description": "The task system's scheduler: offers ready tickets to the roles, applies their reports, "
                                       "keeps the ticket state machine and asks a planner for attention.",
-                       # the transitions it emits are named by state so a wake rule's filter finds its emitter on the map
-                       "emits": (ASSIGNED, RELEASED, ATTENTION, DONE, REFUSED, *(e for e in TASK_EVENTS if e != TRANSITIONED),
-                                 *(f"{TRANSITIONED}:{s}" for s in ("OPEN", "IN_PROGRESS", "IN_REVIEW", "DONE", "BLOCKED"))),
-                       "wake_on": (ACCEPTED, REPORTED, REQUESTS["create_ticket"], QUERY)},
+                       # the transitions and the attention events it emits are named by state and by addressee, so a
+                       # wake rule's filter finds its emitter on the map
+                       "emits": (ASSIGNED, RELEASED, f"{ATTENTION}:supervisor", f"{ATTENTION}:coordinator", DONE, REFUSED,
+                                 *(e for e in TASK_EVENTS if e != TRANSITIONED), *(f"{TRANSITIONED}:{s}" for s in STATES)),
+                       "wake_on": (ACCEPTED, WORKING, REPORTED, *REQUESTS.values(), QUERY)},
     "probes": {"description": "A team's commands, run on an interval; an event on each change of result.",
                "emits": ("probe.failed", "probe.recovered"), "wake_on": ()},
     "agents": {"description": "The agents' host (orchestra-agents run): runs the sessions, cuts turns off at their limits, "

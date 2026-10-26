@@ -24,13 +24,38 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from orchestra.config import ConfigError
+
 from .builtins import ROLES as BUILTIN_ROLES
+from .clock import now, parse_interval
 from .config import Project
-from .roles import EVENT_TYPES, TOOL_GROUPS, RoleError, parse_interval
-from .store import now
+from .protocol import (
+    ACCEPTED,
+    ASSIGNED,
+    ATTENTION,
+    DONE,
+    REFUSED,
+    RELEASED,
+    REPORTED,
+    TASK_EVENTS,
+    WORKING,
+)
+from .roles import TOOL_GROUPS
 
 AGENT_KINDS = ("continuous", "scheduled", "ad_hoc")
 ACCESS_MODES = ("read", "write")
+# The event types an agent may wake on: the task system's (protocol.py, where the contract and
+# the hand-copied list live) and the agents' own (host.py, api_org.py, probes.py).
+TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, *TASK_EVENTS)
+AGENT_EVENT_TYPES = (
+    "agent.said", "context.updated", "session.started", "session.settled",
+    "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
+    "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
+    "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
+)
+EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
+# Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
+# those are validated against the teams, not this list.
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
 
@@ -57,7 +82,7 @@ def event_matches(wake_on: list[str], ev: dict) -> bool:
 def custom_event_types(teams: dict) -> set[str]:
     out: set[str] = set()
     for t in teams.values():
-        out.update(getattr(t, "emits", []) or [])
+        out.update(t.emits)
     return out
 
 
@@ -76,7 +101,6 @@ class AgentDef:
     created_at: str = field(default_factory=now)
     updated_at: str = field(default_factory=now)
     builtin: bool = False
-    source: str = "agent"                 # agent | role (implicit, from a role record with wake rules)
     triggers: list[str] = field(default_factory=list)   # built-ins: what else wakes them, which is not an event on the bus
     emits: list[str] = field(default_factory=list)      # built-ins: event types their actions cause
 
@@ -110,8 +134,8 @@ class AgentDef:
         if self.every is not None:
             try:
                 parse_interval(self.every)
-            except RoleError as e:
-                raise OrgError(str(e))
+            except ConfigError as e:
+                raise OrgError(f"every: {e}")
         if self.at is not None and not re.fullmatch(r"\d{2}:\d{2}", self.at):
             raise OrgError("at must be HH:MM")
         if self.kind == "ad_hoc" and (self.every or self.at):
@@ -126,7 +150,7 @@ class AgentDef:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        for k in ("builtin", "source", "triggers", "emits"):
+        for k in ("builtin", "triggers", "emits"):
             d.pop(k, None)
         return d
 
@@ -198,7 +222,7 @@ class TeamDef:
                 raise OrgError("each probe is {name, command, every} with a lowercase_name")
             try:
                 parse_interval(str(pr.get("every", "5m")))
-            except RoleError as e:
+            except ConfigError as e:
                 raise OrgError(f"probe {pr.get('name')}: {e}")
         for g in self.access:
             if "tools" in g:

@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import prompting as agents
+from . import prompting
 from .builtins import PER_TICKET_ROLES
 from .builtins import ROLES as BUILTIN
 from .harness import AgentSession
@@ -96,7 +96,7 @@ class AgentRunner:
         threading.Thread(target=beat, daemon=True, name=f"{aid}:beat").start()
         report, text, failed, commit = None, "", True, None
         spec = BUILTIN[role]
-        open_session = lambda: host._open_session(sid, role, agents.role_prompt(host.project, spec.prompt), tuple(spec.tools), path, tid)
+        open_session = lambda: host._open_session(sid, role, prompting.role_prompt(host.project, spec.prompt), tuple(spec.tools), path, tid)
         try:
             t = TicketView({**(a.get("brief") or {}), "id": tid, "branch": a.get("branch")})
             if role == "worker":
@@ -131,10 +131,10 @@ class AgentRunner:
 
     def _work_task(self, t: TicketView, a: dict) -> tuple[str, str]:
         if a.get("branch") is None:                           # a task: a folder and a result
-            return (agents.worker_task_tasks(self.host.project, t),
+            return (prompting.worker_task_tasks(self.host.project, t),
                     ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your result is written, "
                      "otherwise BLOCKED with the reason."))
-        return (agents.worker_task(self.host.project, t, a.get("unit_command")),
+        return (prompting.worker_task(self.host.project, t, a.get("unit_command")),
                 ("You stopped without reporting. Call `report_ticket` now: READY_FOR_REVIEW if your work is "
                  "committed and tested, otherwise BLOCKED with the reason."))
 
@@ -144,11 +144,11 @@ class AgentRunner:
         if a.get("branch") is None:                           # a task: the worker's result in its folder
             files = sorted(str(p.relative_to(path)) for p in path.rglob("*") if p.is_file())[:200]
             result = (path / "RESULT.md").read_text(encoding="utf-8", errors="replace") if (path / "RESULT.md").exists() else ""
-            return agents.reviewer_task_tasks(t, review.get("summary") or "", files, result), nudge, None
+            return prompting.reviewer_task_tasks(t, review.get("summary") or "", files, result), nudge, None
         # code: the task system ran the tests (verifying is its job) and names the commit; the diff is read here
         base, commit = self.host.cfg.base_branch, review.get("commit") or "HEAD"
         git = lambda *args: subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False).stdout
-        task = agents.reviewer_task(self.host.project, t, commit, git("diff", f"{base}...{commit}"),
+        task = prompting.reviewer_task(self.host.project, t, commit, git("diff", f"{base}...{commit}"),
                                     git("diff", "--name-only", f"{base}...{commit}").split(), git("log", "--oneline", f"{base}..{commit}"),
                                     review.get("test_output"))
         return task, nudge, commit

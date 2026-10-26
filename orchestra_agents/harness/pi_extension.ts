@@ -32,7 +32,7 @@ function api(command: string, args: Record<string, unknown>): string {
   }
 }
 
-interface ToolSpec { name: string; description: string; inputSchema: Record<string, unknown>; command: string }
+interface ToolSpec { name: string; description: string; inputSchema: Record<string, unknown> }
 
 function loadTools(): ToolSpec[] {
   const out = execFileSync(PYTHON, ["-m", "orchestra_agents", "tools", "--json"], {
@@ -50,7 +50,7 @@ export default function (pi: ExtensionAPI) {
         description: t.description,
         parameters: Type.Unsafe<Record<string, unknown>>(t.inputSchema),
         async execute(_id, p) {
-          const text = api(t.command, (p ?? {}) as Record<string, unknown>);
+          const text = api(t.name, (p ?? {}) as Record<string, unknown>);
           return { content: [{ type: "text", text }], details: undefined };
         },
       }),

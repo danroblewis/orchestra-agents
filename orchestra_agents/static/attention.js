@@ -31,7 +31,7 @@
     .att-btn .att-n { min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#f59e0b; color:#1a1205;
       font-weight:700; font-size:11px; display:none; align-items:center; justify-content:center }
     .att-btn.on { border-color:#f59e0b; box-shadow:0 0 0 0 rgba(245,158,11,.6); animation:att-pulse 2s infinite }
-    .att-btn.on .att-n { display:inline-flex }
+    .att-btn.count .att-n { display:inline-flex }
     .att-btn .att-dot { width:7px; height:7px; border-radius:50%; background:#6ea8fe; display:none }
     .att-btn.working .att-dot { display:inline-block; animation:att-blink 1s infinite alternate }
     @keyframes att-pulse { 0% { box-shadow:0 0 0 0 rgba(245,158,11,.55) } 70% { box-shadow:0 0 0 8px rgba(245,158,11,0) } 100% { box-shadow:0 0 0 0 rgba(245,158,11,0) } }
@@ -43,6 +43,7 @@
     .att-bar .att-what { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
     .att-bar button { flex:none; padding:4px 12px; border-radius:6px; border:1px solid #f59e0b; background:#f59e0b; color:#1a1205; font-weight:600; cursor:pointer }
     .att-bar .att-x { background:transparent; border-color:transparent; color:var(--muted, #8a90a3); font-weight:400; padding:4px 6px }
+    .att-bar button.att-down, .att-item button.att-down { background:transparent; border-color:var(--border2, #2a3142); color:var(--muted, #8a90a3); font-weight:400 }
     .att-panel { border:1px solid rgba(245,158,11,.5); background:rgba(245,158,11,.07); border-radius:8px; padding:12px 14px; margin:4px 0 14px }
     .att-panel h4 { margin:0 0 8px; color:#fbbf24; font-size:12px; letter-spacing:.06em; text-transform:uppercase }
     .att-item { display:grid; grid-template-columns:1fr auto; gap:4px 12px; padding:8px 0; border-top:1px solid rgba(245,158,11,.2) }
@@ -59,13 +60,18 @@
       #nav { overflow-x:auto; scrollbar-width:none } #nav::-webkit-scrollbar { display:none } }`;
   document.head.appendChild(css);
 
-  let A = { blocked: [], message: null, count: 0, working: false };   // blocked: the task system's [{id, reason}]
+  let A = { blocked: [], message: null, count: 0, working: false, host: { alive: true } };   // blocked: the task system's [{id, reason}]
   let dismissed = "";                       // the banner's content when the viewer closed it
   let rendered = "";                        // the banner's content as last built: a click never lands on a replaced button
   const baseTitle = document.title;
-  const sig = () => JSON.stringify([A.blocked.map((b) => b.id), A.message && A.message.at]);
+  const hostUp = () => !A.host || A.host.alive !== false;
+  const sig = () => JSON.stringify([A.blocked.map((b) => b.id), A.message && A.message.at, hostUp()]);
   const ago_ = (t) => (typeof ago === "function" && t ? ago(Date.now() / 1000 - t) : "");
   const e_ = (s) => (typeof esc === "function" ? esc(s) : String(s ?? ""));
+  // With the host down nothing can be answered: the way in still opens the chat, which says so, but does not promise an answer.
+  const DOWN = "the Supervisor is down · start orchestra-agents run";
+  const answerBtn = (onclick, label) => (hostUp() ? `<button class="primary" onclick="${onclick}">${label}</button>`
+    : `<button class="att-down" onclick="window.SupervisorAttention.open()">${DOWN}</button>`);
 
   // the navigation button
   const btn = document.createElement("button");
@@ -81,10 +87,11 @@
   if (nav) nav.insertAdjacentElement("afterend", bar);
 
   function render() {
-    btn.classList.toggle("on", A.count > 0);
-    btn.classList.toggle("working", !!A.working);
+    btn.classList.toggle("count", A.count > 0);
+    btn.classList.toggle("on", A.count > 0 && hostUp());        // the pulse asks for an answer; with the host down there is none to give
+    btn.classList.toggle("working", !!A.working && hostUp());
     btn.querySelector(".att-n").textContent = A.count || "";
-    btn.title = A.count ? `${A.count} thing${A.count === 1 ? "" : "s"} waiting on you` : "Talk to the Supervisor";
+    btn.title = A.count ? `${A.count} thing${A.count === 1 ? "" : "s"} waiting on you${hostUp() ? "" : " (" + DOWN + ")"}` : hostUp() ? "Talk to the Supervisor" : DOWN;
     document.title = (A.count ? `(${A.count}) ` : "") + baseTitle;
     const parts = [];
     if (A.blocked.length) parts.push(`<b>${A.blocked.length} ticket${A.blocked.length === 1 ? " is" : "s are"} blocked</b> waiting for a decision (${A.blocked.slice(0, 3).map((b) => e_(b.id)).join(", ")}${A.blocked.length > 3 ? ", …" : ""})`);
@@ -94,7 +101,7 @@
     if (show && sig() !== rendered) {
       rendered = sig();
       bar.innerHTML = `<span>⚠</span><span class="att-what">${parts.join(" · ")}</span>
-      <button onclick="window.SupervisorAttention.open()">Review &amp; answer</button><button class="att-x" title="hide until something changes" onclick="window.SupervisorAttention.dismiss()">✕</button>`;
+      <button class="${hostUp() ? "" : "att-down"}" onclick="window.SupervisorAttention.open()">${hostUp() ? "Review &amp; answer" : DOWN}</button><button class="att-x" title="hide until something changes" onclick="window.SupervisorAttention.dismiss()">✕</button>`;
     }
     const panel = document.getElementById("att-panel");
     if (panel) panel.outerHTML = panelHtml();
@@ -105,12 +112,12 @@
     const items = A.blocked.map((b) => `<div class="att-item">
         <div class="att-t"><code>${e_(b.id)}</code> <span class="muted" style="font-weight:400">· blocked</span></div>
         <div class="att-r">${e_(b.reason) || "(no reason recorded)"}</div>
-        <div class="att-acts"><button class="primary" onclick="window.SupervisorAttention.answer('${e_(b.id)}')">Answer</button>
+        <div class="att-acts">${answerBtn(`window.SupervisorAttention.answer('${e_(b.id)}')`, "Answer")}
           <button onclick="window.openTicket ? openTicket('${e_(b.id)}') : (location.href='/tickets#ticket=${e_(b.id)}')">Ticket</button></div></div>`);
     if (A.message) items.unshift(`<div class="att-item">
         <div class="att-t">The Supervisor wrote to you <span class="muted" style="font-weight:400">· ${ago_(A.message.at)} ago</span></div>
         <div class="att-r">${e_(A.message.text.slice(0, 400))}${A.message.text.length > 400 ? "…" : ""}</div>
-        <div class="att-acts"><button class="primary" onclick="document.getElementById('chat-input')?.focus()">Reply</button></div></div>`);
+        <div class="att-acts">${answerBtn("document.getElementById('chat-input')?.focus()", "Reply")}</div></div>`);
     return `<div id="att-panel" class="att-panel"><h4>Waiting on you</h4>${items.join("")}
       <div class="muted" style="font-size:11px;margin-top:6px">Answer by telling the Supervisor what to do; it unblocks, changes or cancels the ticket.</div></div>`;
   }

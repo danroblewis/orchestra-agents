@@ -19,9 +19,7 @@
   .team { background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px }
   .team.sub { margin:8px 0 0 22px; border-left:3px solid var(--border2) }
   .team .head { display:flex; gap:10px; align-items:center; flex-wrap:wrap } .team .head h3 { margin:0; font-size:14px }
-  .team .desc { color:var(--text2); font-size:12.5px; margin:4px 0 8px }
-  .team .resp { font-size:12px; color:var(--text2); border-left:2px solid var(--border2); padding-left:10px; margin:6px 0 8px; max-height:96px; overflow:hidden }
-  .team .resp p, .team .resp ol, .team .resp ul { margin:2px 0 } .team .meta { color:var(--muted); font-size:11.5px; margin-top:4px }
+  .team .desc { color:var(--text2); font-size:12.5px; margin:4px 0 8px } .team .meta { color:var(--muted); font-size:11.5px; margin-top:4px }
   .arow { display:grid; grid-template-columns:22px auto auto 1fr auto auto; gap:8px; align-items:center; padding:5px 8px; border:1px solid var(--border); border-radius:8px; margin-top:5px; background:var(--panel) }
   .arow .av { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; font-weight:800; font-size:11px; color:#0b0d12; background:#94a3b8 }
   .arow .av.lead { background:#fcd34d } .arow .name { font-weight:700; font-size:12.5px; white-space:nowrap } .arow .name a { color:inherit; text-decoration:none }
@@ -85,7 +83,6 @@
 // The agents, their teams and roles, the teams' probes, and who wakes whom through which events
 // (AGENTS_API, /api/plugins/agents).
 const API = AGENTS_API;
-function renderNav() {}                                     // the navigation is Orchestra's now
 let STATE = null, ORG = null;
 const sessionOf = (a) => STATE && STATE.sessions.find((x) => x.id === a.session_id);
 let HORIZON = 8 * 3600;
@@ -121,6 +118,7 @@ function agentGraph(m) {
   const link = (a, b, extra) => { const k = a + ">" + b; links[k] = links[k] || { source: a, target: b, seen: 0 }; links[k].seen += extra.seen || 0; };
   const emits = m.edges.filter((e) => e.to.startsWith("ev:")), wakes = m.edges.filter((e) => e.from.startsWith("ev:"));
   const typeOf = (id) => nodes[id].label, isCustom = (id) => !!nodes[id].custom;
+  const filtered = new Set(wakes.filter((w) => w.filter).map((w) => typeOf(w.from) + ":" + w.filter));   // variants a wake rule names
   for (const e of emits) link(e.from, evNode(typeOf(e.to), e.filter, isCustom(e.to)), e);
   for (const w of wakes) {
     const t = typeOf(w.from);
@@ -132,8 +130,9 @@ function agentGraph(m) {
   let ls = Object.values(links);
   if (!window.EV_SHOW_ALL) { const watched = new Set(ls.filter((l) => l.source.startsWith("ev:")).map((l) => l.source)); ls = ls.filter((l) => !l.target.startsWith("ev:") || watched.has(l.target)); }
   // Collapse the variants of one event type that connect to exactly the same emitters and the
-  // same subscribers into one box (its first line the type, then the variants): the map is about
-  // who talks to whom, not the catalogue of names. Different types stay apart.
+  // same subscribers into one box: its first line the type, then the variants that flowed, each
+  // with its count, and the variants a wake rule names even at zero (the hover title lists all).
+  // The map is about who talks to whom, not the catalogue of names. Different types stay apart.
   const sig = {};
   for (const n of Object.values(evNodes)) {
     const ins = ls.filter((l) => l.target === n.id).map((l) => l.source).sort().join(","), outs = ls.filter((l) => l.source === n.id).map((l) => l.target).sort().join(",");
@@ -146,7 +145,8 @@ function agentGraph(m) {
     if (group.length < 2) continue;
     group.sort((a, b) => b.cnt - a.cnt || a.label.localeCompare(b.label));
     const id = "ev:group:" + group.map((n) => n.id).join("+");
-    evNodes[id] = { id, kind: "event", label: group[0].type, labels: [group[0].type, ...group.map((n) => "→ " + (n.filter || "(any)"))], type: group[0].type, filter: null,
+    const shown = group.filter((n) => n.cnt || filtered.has(n.type + ":" + n.filter));
+    evNodes[id] = { id, kind: "event", label: group[0].type, labels: [group[0].type, ...shown.map((n) => `→ ${n.filter || "(any)"} ${n.cnt}`)], type: group[0].type, filter: null,
                     custom: group.some((n) => n.custom), cnt: group.reduce((a, n) => a + n.cnt, 0), variants: group.map((n) => `${n.label}: ${n.cnt}/24h`) };
     for (const n of group) { alias[n.id] = id; delete evNodes[n.id]; }
   }
@@ -350,7 +350,7 @@ function agentRow(a, lead, now) {
   return `<div class="arow"><div class="av ${lead ? "lead" : ""}" title="${lead ? "lead" : "member"}">${letter}</div>
     <span class="name"><a href="#" onclick="openAgent('${a.name}');return false">${esc(a.name)}</a>${lead ? ' <span class="tag">lead</span>' : ""}</span>
     <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span>
-    <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.source === "role" ? ' <span class="tag" title="A role record that is its own agent">from role</span>' : ""}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
+    <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
     ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one continuing transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button></span></div>`;
 }
 function teamCard(t, byName, now, sub) {
@@ -362,7 +362,6 @@ function teamCard(t, byName, now, sub) {
       ${t.builtin ? '<span class="tag">built-in</span>' : `<span class="tag">${t.tracked ? "space tracked" : "space untracked"}</span>`}
       <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTeam('${t.name}')">team</button></span></div>
     <div class="desc">${esc(t.description || "")}</div>
-    ${t.responsibilities_excerpt ? `<div class="resp md">${md(t.responsibilities_excerpt)}</div>` : ""}
     <div class="meta">${access ? "access: " + access : "access: only what its agents' roles carry"} · space <code>${esc(t.space)}</code> · capacity ${t.capacity}${extra ? " · " + extra : ""}</div>
     ${agents}${subs}</div>`;
 }
@@ -404,7 +403,7 @@ async function openAgent(name) {
       ${a.resident ? `<div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
       <div>session</div><div>${a.resident ? "resident: one conversation that continues across wake-ups (a process only while a turn runs, on harnesses that start one per turn); it shows on the Dashboard while the host is up" : "a new session for each run; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
-      <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}${a.source === "role" ? " (a role record acting as its own agent)" : ""}`}</div>
+      <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
     </div>
     ${!a.resident ? `<div class="prompt-head"><h4>Runs</h4><span class="muted">Each run is its own session and transcript; nothing is forgotten, it is just not carried into the next run.</span></div>
     ${(r.runs || []).map((x) => `<div class="arow" style="grid-template-columns:auto 1fr auto auto"><span class="name"><code>${esc(x.id)}</code></span><span class="sched">${esc(x.last_text || "")}</span><span class="muted">${x.started_at ? ago(now - x.started_at) + " ago" : ""}${x.status === "running" ? " · running" : ""}</span><button class="ctl" onclick="openTranscript('${x.id}')">transcript</button></div>`).join("") || '<div class="empty">no runs yet</div>'}` : ""}
@@ -430,7 +429,7 @@ async function openRole(name) {
 async function refresh() {
   try {
     const [st, org, evm] = await Promise.all([fetch(API + "/state").then((r) => r.json()), fetch(API + "/org").then((r) => r.json()), fetch(API + "/eventmap").then((r) => r.json())]);
-    STATE = st; ORG = org; renderNav("agents", st.project); $("conn").textContent = "live";
+    STATE = st; ORG = org; $("conn").textContent = "live";
     const byName = Object.fromEntries(org.agents.map((a) => [a.name, a]));
     const top = org.teams.filter((t) => !t.parent);
     // Every agent that is not a per-ticket worker appears exactly once: under its team, or here.

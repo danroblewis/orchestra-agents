@@ -9,21 +9,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-STATES = "OPEN, BLOCKED, IN_PROGRESS, READY_FOR_REVIEW, IN_REVIEW, REJECTED, APPROVED, MERGING, DONE, CANCELLED"
+from ..protocol import STATES as _STATES
+
+STATES = ", ".join(_STATES)
 
 
 @dataclass(frozen=True)
 class ToolDef:
-    name: str
+    name: str                                         # also the ``orchestra_agents.tooling`` command
     group: str
     description: str
     properties: dict = field(default_factory=dict)   # JSON schema properties
     required: tuple[str, ...] = ()
-    command: str | None = None                        # api command; defaults to name
-
-    @property
-    def api_command(self) -> str:
-        return self.command or self.name
 
     @property
     def input_schema(self) -> dict:
@@ -31,8 +28,7 @@ class ToolDef:
                 "additionalProperties": False}
 
     def to_dict(self) -> dict:
-        return {"name": self.name, "group": self.group, "description": self.description,
-                "inputSchema": self.input_schema, "command": self.api_command}
+        return {"name": self.name, "group": self.group, "description": self.description, "inputSchema": self.input_schema}
 
 
 def S(d: str) -> dict:

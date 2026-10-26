@@ -92,28 +92,33 @@ def test_store_round_trip_nesting_space_and_commits(project):
     assert all_teams(project)["product/qa"].lead == "qa_lead"
 
 
-def test_roles_with_wake_rules_become_implicit_agents(project):
-    RepoRoleStore(project).save(RoleDef(name="product_owner", description="keeps the backlog full", tools=["tickets", "escalate"],
-                                     wake_on=["ticket.transitioned:DONE"], every="45m"), "# You own the product\n\nKeep the backlog full.")
-    a = all_agents(project)["product_owner"]
-    assert a.source == "role" and a.kind == "scheduled" and a.every == "45m" and a.wake_on == ["ticket.transitioned:DONE"]
-    assert a.resident and a.team is None
+def test_a_role_record_with_wake_rules_is_a_role_and_no_agent(project):
+    """A role has no runtime. A record from before the move, carrying wake rules and a schedule,
+    loads as a plain role; the agent that runs it is an agent record."""
+    d = project.repo_root / ".orchestra" / "roles"
+    d.mkdir(parents=True)
+    (d / "product_owner.json").write_text(json.dumps({"name": "product_owner", "description": "keeps the backlog full", "tools": ["tickets", "escalate"],
+                                                      "wake_on": ["ticket.transitioned:DONE"], "every": "45m"}))
+    (d / "product_owner.md").write_text("# You own the product\n\nKeep the backlog full.\n")
+    assert RepoRoleStore(project).get("product_owner").tools == ["tickets", "escalate"]
+    assert "product_owner" not in all_agents(project)
     RepoOrgStore(project).save_agent(AgentDef(name="product_owner", roles=["product_owner"], kind="continuous", wake_on=["milestone.closed"]))
     a = all_agents(project)["product_owner"]
-    assert a.source == "agent" and a.kind == "continuous" and a.resident          # an explicit record wins
+    assert a.kind == "continuous" and a.resident and a.wake_on == ["milestone.closed"]
 
 
 def test_team_record_decides_membership(project):
-    """A role record (no team field) named by a team belongs to it; an agent whose
-    own record names the team belongs to it even before the team lists it."""
+    """An agent named by a team's record belongs to it even when its own record says nothing
+    (or something older); an agent whose own record names the team belongs to it even before
+    the team lists it."""
     from orchestra_agents.org import members_of
     rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
-    rs.save(RoleDef(name="product_owner", tools=["tickets"], every="45m"), "# You own\n\nThe product, with opinions.")
     rs.save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThings.")
+    os_.save_agent(AgentDef(name="product_owner", roles=["owner"], kind="scheduled", every="45m"))
     os_.save_agent(AgentDef(name="writer", roles=["owner"], team="product", kind="ad_hoc", session="ephemeral"))
     os_.save_team(TeamDef(name="product", lead="product_owner"), "# P\n\n1. x")
     ags = all_agents(project)
-    assert ags["product_owner"].source == "role" and ags["product_owner"].team == "product"
+    assert ags["product_owner"].team == "product"
     assert members_of(all_teams(project)["product"], ags) == ["product_owner", "writer"]
     store = AgentStore(project)
     v = api.handle(project, store, "get_team", {"name": "product"})["team"]
@@ -194,6 +199,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     r = api.handle(project, store, "create_team", {"name": "product", "lead": "po", "responsibilities": "# Product\n\n1. The backlog is never empty.",
                                                    "access": [{"tools": ["events"]}]}, role="supervisor")
     assert r["storage"].startswith("committed")
+    assert store.agent_state("po").get("restart_requested") is True        # the team is in its prompt: its session starts over with it
     assert "warning" not in api.handle(project, store, "create_agent", {"name": "writer", "roles": ["owner"], "team": "product", "kind": "ad_hoc", "session": "ephemeral"}, role="supervisor")
     api.handle(project, store, "update_team", {"name": "product", "members": ["writer"]}, role="supervisor")
     t = api.handle(project, store, "get_team", {"name": "product"})

@@ -1,6 +1,8 @@
 """Roles as data (SPEC.md: the organisation).
 
-A role is a JSON record plus a prompt file. Built-in roles live in ``builtins.py``; custom roles
+A role is a job description: a JSON record (its name, a line on what it is good at, the tool
+groups the job needs) plus a prompt file. It has no runtime: no schedule, no wake rules, no
+session; those are an agent's (``org.py``). Built-in roles live in ``builtins.py``; custom roles
 live in the project repository under ``.orchestra/roles/``, versioned with the code
 (``RepoRoleStore``)."""
 
@@ -10,36 +12,12 @@ import json
 import re
 import subprocess
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 
 from .builtins import ROLES as BUILTIN
+from .clock import now
 from .config import Project
-from .protocol import (
-    ACCEPTED,
-    ASSIGNED,
-    ATTENTION,
-    DONE,
-    REFUSED,
-    RELEASED,
-    REPORTED,
-    TASK_EVENTS,
-    WORKING,
-)
-from .store import now
 
 TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team")
-# The event types an agent may wake on: the task system's (protocol.py, where the contract and
-# the hand-copied list live) and the agents' own (host.py, api_org.py, probes.py).
-TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, *TASK_EVENTS)
-AGENT_EVENT_TYPES = (
-    "agent.said", "context.updated", "session.started", "session.settled",
-    "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
-    "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
-    "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
-)
-EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
-# Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
-# those are validated against the teams, not this list.
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
 
@@ -54,22 +32,10 @@ class RoleDef:
     name: str
     description: str = ""
     tools: list[str] = field(default_factory=lambda: ["tickets", "escalate"])
-    session: str = "resident"            # resident | ephemeral
-    wake_on: list[str] = field(default_factory=list)   # event types, optionally "ticket.transitioned:DONE"
-    every: str | None = None             # interval like "30m", "6h", "1d"
-    at: str | None = None                # daily time "HH:MM" (local)
     created_by: str | None = "supervisor"      # None for a built-in role: nobody created it
     created_at: str | None = field(default_factory=now)
     updated_at: str | None = field(default_factory=now)
     builtin: bool = False
-
-    @property
-    def session_id(self) -> str:
-        return self.name.replace("_", "-")
-
-    @property
-    def resident(self) -> bool:
-        return self.session == "resident"
 
     def validate(self) -> None:
         if not _NAME.match(self.name):
@@ -77,15 +43,6 @@ class RoleDef:
         bad = [t for t in self.tools if t not in TOOL_GROUPS]
         if bad:
             raise RoleError(f"unknown tool groups {bad}; known: {list(TOOL_GROUPS)}")
-        if self.session not in ("resident", "ephemeral"):
-            raise RoleError("session must be 'resident' or 'ephemeral'")
-        for w in self.wake_on:
-            if w.split(":", 1)[0] not in EVENT_TYPES:
-                raise RoleError(f"unknown event type {w!r}; known: {list(EVENT_TYPES)}")
-        if self.every is not None:
-            parse_interval(self.every)
-        if self.at is not None and not re.fullmatch(r"\d{2}:\d{2}", self.at):
-            raise RoleError("at must be HH:MM")
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -94,22 +51,10 @@ class RoleDef:
 
     @classmethod
     def from_dict(cls, d: dict) -> RoleDef:
+        """A record's known fields; anything else in it (the schedule and wake rules an older
+        record carried, which are an agent's now) is ignored."""
         known = cls.__dataclass_fields__
         return cls(**{k: v for k, v in d.items() if k in known})
-
-
-def parse_interval(text: str) -> float:
-    m = re.fullmatch(r"\s*(\d+)\s*(m|h|d)\s*", text)
-    if not m:
-        raise RoleError("every must look like 30m, 6h, or 1d")
-    return int(m.group(1)) * {"m": 60, "h": 3600, "d": 86400}[m.group(2)]
-
-
-def due_at(at: str, last: float | None, now_ts: float) -> bool:
-    """True if the daily `at` time has passed today and has not fired since."""
-    hh, mm = (int(x) for x in at.split(":"))
-    today = datetime.fromtimestamp(now_ts).replace(hour=hh, minute=mm, second=0, microsecond=0).timestamp()
-    return now_ts >= today and (last is None or last < today)
 
 
 class RepoRoleStore:
@@ -194,8 +139,8 @@ def all_roles(project: Project) -> dict[str, RoleDef]:
     """Built-in roles plus the project's custom roles, by name."""
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
-        out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), session="resident" if b.resident else "ephemeral",
-                              wake_on=list(b.wake_on), created_by=None, created_at=None, updated_at=None, builtin=True)
+        out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), created_by=None, created_at=None,
+                              updated_at=None, builtin=True)
     for r in RepoRoleStore(project).list():
         out[r.name] = r
     return out

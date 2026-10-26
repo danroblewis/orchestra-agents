@@ -84,7 +84,7 @@
     rank: (m) => RANK[roleOf(m)] ?? (kindOf(m) === "agent" ? 12 : 25),
     // a few words for the Dashboard's machine list: what the machine is on now
     summary(m) {
-      if (m.id === "agents") return D ? (D.host.alive ? "running" : "not running") : null;
+      if (m.id === "agents") return D ? (D.host.alive ? `running · fills ${e_((D.serves || []).join(", ") || "no task roles")}` : "not running") : null;
       if (kindOf(m) !== "agent") return null;
       const live = sessionsOf(m).filter((s) => s.status === "running");
       if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0], m);

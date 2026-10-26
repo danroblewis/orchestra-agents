@@ -1,21 +1,24 @@
-"""What a role, an agent and a team look like to a reader: the dicts the organisation commands
-(api_org.py) and the web plugin return."""
+"""What a role, an agent, a team and the running agents look like to a reader: the dicts the
+organisation commands (api_org.py), the web plugin and the CLI's ``status`` return."""
 
 from __future__ import annotations
 
-from . import prompting as agents
+import time
+
+from . import prompting
+from .clock import parse_interval
 from .config import Project
 from .harness.tools import tools_for
 from .org import AgentDef, TeamDef, effective_tools, members_of, team_chain
 from .org_store import RepoOrgStore, all_agents, all_teams
-from .roles import RoleDef, all_roles, parse_interval
-from .store import AgentStore
+from .roles import RoleDef, all_roles
+from .store import AgentStore, alive
 
 
 def role_definition(project: Project, role: RoleDef) -> dict:
     """What makes a role that role: its prompt, where it comes from, the tools behind its groups."""
-    source = str(agents.prompt_path(project, role.name) if role.builtin else project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
-    return {"prompt": agents.role_prompt(project, role.name), "prompt_source": source,
+    source = str(prompting.prompt_path(project, role.name) if role.builtin else project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
+    return {"prompt": prompting.role_prompt(project, role.name), "prompt_source": source,
             "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
 
 
@@ -32,7 +35,7 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
     st = store.agent_state(ag.name)
     teams = teams if teams is not None else all_teams(project)
     runs = agent_runs(store, ag)
-    return {**ag.to_dict(), "builtin": ag.builtin, "source": ag.source, "session_id": ag.session_id,
+    return {**ag.to_dict(), "builtin": ag.builtin, "session_id": ag.session_id,
             "triggers": list(ag.triggers), "emits": list(ag.emits),
             "last_run_id": runs[0]["id"] if runs else ag.session_id, "run_count": len(runs),
             "team_exists": ag.team is None or ag.team in teams,   # an agent may be created before its team (the guide's order)
@@ -50,7 +53,7 @@ def agent_definition(project: Project, store: AgentStore, ag: AgentDef) -> dict:
             "team_chain": [t.name for t in team_chain(teams, ag.team)],
             "leads": [t.name for t in teams.values() if t.lead == ag.name],
             "tool_groups": list(tools), "tool_names": {g: [t.name for t in tools_for([g])] for g in tools},
-            "prompt": agents.agent_prompt(project, ag, roles, teams)}
+            "prompt": prompting.agent_prompt(project, ag, roles, teams)}
 
 
 def team_view(project: Project, store: AgentStore, t: TeamDef) -> dict:
@@ -68,3 +71,42 @@ def team_definition(project: Project, store: AgentStore, t: TeamDef) -> dict:
             "inherited": [{"team": x.name, "responsibilities": RepoOrgStore(project).responsibilities(x.name) if not x.builtin else ""}
                           for x in chain],
             "space_dir": str(t.space_dir(project)), "tools_dir": str(t.space_dir(project) / "tools")}
+
+
+def session_alive(s: dict, host_alive: bool, residents: set[str]) -> bool:
+    """A session is alive while its turn's process is; a resident agent between turns (on a
+    harness that starts a process per turn there is none) is alive while its host is up."""
+    return alive(s.get("pid")) or (s["id"] in residents and s.get("status") != "running" and host_alive)
+
+
+def residents_of(project: Project) -> set[str]:
+    return {a.session_id for a in all_agents(project).values() if a.resident}
+
+
+def agents_status(project: Project, store: AgentStore) -> dict:
+    """The running agents in one read: the host (alive or not, its pid and control port), what
+    it runs the agents on and which of the task system's roles it fills, every agent with its
+    state, and every session as the machine instance it runs (or last ran) as, with the ticket
+    it is on (as its assignment named it). The machine cards, the Agents page and
+    ``orchestra-agents status`` read this."""
+    rt = store.runtime()
+    ctl = rt.get("control") or {}
+    host_alive = alive(ctl.get("pid"))
+    agents = []
+    for a in all_agents(project).values():
+        st = rt["agent_state"].get(a.name) or {}
+        agents.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team,
+                       "session_id": a.session_id, "resident": a.resident, "paused": bool(st.get("paused")),
+                       "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at")})
+    residents = {a["session_id"] for a in agents if a["resident"]}
+    sessions = []
+    for x in rt["sessions"].values():
+        sessions.append({**{k: v for k, v in x.items() if k not in ("partial_text", "last_text")},
+                         "session": x["id"], "instance": x.get("instance") or x.get("kind"), "role": x.get("kind"),
+                         "alive": session_alive(x, host_alive, residents),
+                         "tool": x.get("tool_name"), "last_text": (x.get("partial_text") or x.get("last_text") or "")[-300:],
+                         "ticket": ({"id": x["ticket_id"], "title": x.get("ticket_title") or "", "state": x.get("ticket_state") or "IN_PROGRESS",
+                                     "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})
+    cfg = project.config
+    return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "now": time.time(),
+            "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}

@@ -62,6 +62,28 @@ def test_recover_stops_the_turns_process_and_marks_the_rest_idle(project):
     assert {e["session"] for e in cut} == {"worker-T-1", "coordinator"}
 
 
+def test_a_host_whose_control_port_is_taken_exits_without_touching_anything(project):
+    """Without the control endpoint the Supervisor cannot be reached and the web cannot see the
+    host, and a second host would not be refused: the host must not run as a ghost."""
+    import socket
+    taken = socket.socket()
+    taken.bind(("127.0.0.1", 0))
+    taken.listen(1)
+    toml = project.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text() + f"control_port = {taken.getsockname()[1]}\n")
+    project.reload_config()
+    store, events = AgentStore(project), Events.for_project(project)
+    store.set_session("worker-T-1", kind="worker", status="running", ticket_id="T-1", pid=None)
+    try:
+        host = AgentHost(project, store, events)
+        host.harness = FakeHarness(reply="ok")
+        assert host.run(once=True) == 1
+        assert "control" not in store.runtime() and store.find_session("worker-T-1")["status"] == "running"
+        assert not [e for e in events.read(0)[0] if e["type"] in ("turn.interrupted", "orchestra.machine.started")]
+    finally:
+        taken.close()
+
+
 def test_a_second_host_for_the_project_exits_without_touching_anything(project):
     store, events = AgentStore(project), Events.for_project(project)
     other = subprocess.Popen(["sleep", "60"], start_new_session=True)     # stands for the host already running

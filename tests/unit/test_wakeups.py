@@ -216,3 +216,39 @@ def test_an_unreachable_task_system_skips_a_scheduled_wake_up_and_is_named_in_an
     prompt = harness.sessions[-1].prompts[-1] if harness.sessions[-1].prompts else host.residents.procs["coordinator"].prompts[-1]
     assert "The task system did not answer" in prompt and "not because the project is empty" in prompt
     assert "DIAGNOSIS" not in prompt and "## Execution health" not in prompt
+
+
+def test_a_supervisor_chat_and_a_wake_up_take_turns(project, monkeypatch):
+    """One turn at a time on the Supervisor's session: a chat registers like a wake-up, so a
+    queued wake-up waits behind it, a restart waits for it, and a paused Supervisor refuses."""
+    from orchestra_agents.store import StoreError
+    monkeypatch.setattr(protocol, "WAIT_S", 0.3)                          # no task system here: the snapshot gives up quickly
+    host, store, events = host_with(project, FakeHarness())              # turns block until the session is killed
+    host._refresh_org(store.runtime()["agent_state"])
+    sup = host.residents.procs["supervisor"]
+    out: dict = {}
+    chat = threading.Thread(target=lambda: out.setdefault("r", host.prompt_supervisor("hello", lambda ev: None)), daemon=True)
+    chat.start()
+    end = time.time() + 10
+    while time.time() < end and (store.find_session("supervisor") or {}).get("status") != "running":
+        time.sleep(0.05)
+    assert "supervisor" in host.agent_threads                             # the chat stands where a wake-up would
+    store.set_agent_state("supervisor", restart_requested=True)
+    host.residents.stop_changed(host.agents, store.runtime()["agent_state"])
+    assert host.residents.procs["supervisor"] is sup and sup.alive()      # not closed mid-reply
+    store.set_agent_state("supervisor", restart_requested=False)
+    store.add_wakeup("supervisor", "escalation from the coordinator")
+    host.tick()
+    time.sleep(0.3)
+    assert len(wait_for(events, "session.started")) == 1                  # the wake-up waits for the chat
+    assert store.runtime()["wakeups"] and chat.is_alive()
+    sup.kill()                                                            # the chat's turn ends
+    chat.join(10)
+    assert not chat.is_alive() and "supervisor" not in host.agent_threads
+    host.tick()
+    host.agent_threads["supervisor"].join(10)
+    order = [e["type"] for e in events.read(0)[0] if e.get("session") == "supervisor" and e["type"] in ("session.started", "session.settled")]
+    assert order == ["session.started", "session.settled", "session.started", "session.settled"]
+    store.set_agent_state("supervisor", paused=True, crash_loop="3 crashes in 15 minutes")
+    with pytest.raises(StoreError, match="paused .3 crashes"):
+        host.prompt_supervisor("anyone there?", lambda ev: None)

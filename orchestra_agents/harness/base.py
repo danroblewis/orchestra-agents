@@ -26,6 +26,9 @@ Normalized events (dicts with ``type``):
 
 from __future__ import annotations
 
+import os
+import queue
+import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -33,6 +36,53 @@ from dataclasses import dataclass
 from pathlib import Path
 
 OnEvent = Callable[[dict], None]
+
+
+def resolve_binary(binary: str) -> str:
+    """The product's binary as configured: a bare name is found on PATH when a session starts;
+    a path is made absolute here, because every session runs in its own working directory
+    (the project, or a ticket's workspace), against which a relative path would be looked up."""
+    return str(Path(binary).resolve()) if os.sep in binary else binary
+
+
+class _LineReader:
+    """A harness's stdout, one line at a time with a timeout, so a turn's loop can keep its
+    deadlines while the process is silent. ``next`` returns "" when nothing arrived in time and
+    None at end of file."""
+
+    def __init__(self, stream):
+        self._q: queue.Queue[str | None] = queue.Queue()
+
+        def run():
+            for line in stream:
+                self._q.put(line.rstrip("\n"))
+            self._q.put(None)
+        threading.Thread(target=run, daemon=True).start()
+
+    def next(self, timeout: float) -> str | None:
+        try:
+            return self._q.get(timeout=timeout)
+        except queue.Empty:
+            return ""
+
+
+class _NormalizerBase:
+    """What every harness's normalizer shares: the listener, which never breaks the stream, the
+    turn's process once started, and the ``settled`` event that ends a turn. Each harness's
+    ``_Normalizer`` turns its own events into the normalized ones in ``__call__``."""
+
+    def __init__(self, on_event: OnEvent | None, pid: int | None = None):
+        self.on_event, self.pid = on_event, pid
+
+    def _emit(self, ev: dict) -> None:
+        if self.on_event:
+            try:
+                self.on_event(ev)
+            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
+                pass
+
+    def settled(self, text: str) -> None:
+        self._emit({"type": "settled", "text": text})
 
 
 @dataclass
@@ -137,7 +187,7 @@ class AgentSession(ABC):
 
     @abstractmethod
     def kill(self) -> None:
-        """Stop the running turn immediately (the operator's stop button)."""
+        """Stop the running turn immediately (a release by the task system, or shutdown)."""
 
     @abstractmethod
     def close(self) -> None:

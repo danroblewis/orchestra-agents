@@ -92,7 +92,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
     if command in REQUESTS or command in QUERIES:                 # the task system's
         if command in REQUESTS and not may_change_tickets(project, role):
             raise StoreError(f"role {role} may not change tickets or milestones ({command})")
-        got = TaskClient(store.events, role)(command, a, role)
+        got = TaskClient(store.events, role)(command, a)
         if got.get("ok") is False:                                # refused, or no answer: the tool failed
             raise StoreError(got.get("error") or "the task system refused")
         return got

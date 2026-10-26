@@ -10,6 +10,7 @@ import datetime as dt
 import json
 import threading
 import time
+import tomllib
 import urllib.request
 from pathlib import Path
 
@@ -19,30 +20,20 @@ from orchestra.plugins import Declared, Page, Plugin
 
 from . import tooling
 from .builtins import SYSTEM_BINDINGS
-from .config import load_project
+from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness import read_transcript
-from .host import alive
+from .org import EVENT_TYPES
 from .org_store import all_agents, all_teams
+from .org_views import agents_status, residents_of, session_alive
 from .protocol import Follower
-from .roles import EVENT_TYPES
-from .store import AgentStore, StoreError
+from .store import AgentStore, StoreError, alive
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
 OBSERVED_WINDOW_S = 24 * 3600
 OBSERVED_REFRESH_S = 60
 _observed: dict[str, dict] = {}   # project key -> what the event map saw on the bus (read once a minute, not per request)
-
-
-def session_alive(s: dict, host_alive: bool, residents: set[str]) -> bool:
-    """A session is alive while its turn's process is; a resident agent between turns (on a
-    harness that starts a process per turn there is none) is alive while its host is up."""
-    return alive(s.get("pid")) or (s["id"] in residents and s.get("status") != "running" and host_alive)
-
-
-def residents_of(project) -> set[str]:
-    return {a.session_id for a in all_agents(project).values() if a.resident}
 
 
 def plugin(orchestra_project) -> Plugin:
@@ -63,6 +54,16 @@ def declared(project) -> list[Declared]:
     return out
 
 
+def current(project: Project) -> Project:
+    """The project with ``[agents]`` as orchestra.toml says now: the host follows an edit within
+    a second, and so do the pages. A half-written or broken file keeps the last good config."""
+    try:
+        project.reload_config()
+    except (ConfigError, OSError, tomllib.TOMLDecodeError):
+        pass
+    return project
+
+
 def router(project) -> APIRouter:
     r = APIRouter()
     events = Events.for_project(project)
@@ -71,7 +72,7 @@ def router(project) -> APIRouter:
     @r.get("/roles/{name}")
     async def role_detail(name: str) -> dict:
         try:
-            return tooling.handle(project, store, "get_role", {"name": name})
+            return tooling.handle(current(project), store, "get_role", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
@@ -79,6 +80,7 @@ def router(project) -> APIRouter:
     async def org() -> dict:
         """The organisation in one read: roles (job descriptions), agents (what runs), teams (who
         owns what), and which of the task system's roles the agents here serve."""
+        current(project)
         return {"ok": True, "now": time.time(), "serves": project.config.serves,
                 "roles": tooling.handle(project, store, "list_roles", {})["roles"],
                 "agents": tooling.handle(project, store, "list_agents", {})["agents"],
@@ -87,20 +89,21 @@ def router(project) -> APIRouter:
     @r.get("/agents/{name}")
     async def agent_detail(name: str) -> dict:
         try:
-            return tooling.handle(project, store, "get_agent", {"name": name})
+            return tooling.handle(current(project), store, "get_agent", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
     @r.get("/teams/{name:path}")
     async def team_detail(name: str) -> dict:
         try:
-            return tooling.handle(project, store, "get_team", {"name": name})
+            return tooling.handle(current(project), store, "get_team", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
     @r.get("/state")
     async def state() -> dict:
         """The agents' sessions (alive or not) and the teams' probes, for the Agents page."""
+        current(project)
         rt = store.runtime()
         ctl = rt.get("control") or {}
         host_alive, residents = alive(ctl.get("pid")), residents_of(project)
@@ -113,12 +116,15 @@ def router(project) -> APIRouter:
 
     @r.get("/attention")
     async def attention() -> dict:
-        """A Supervisor message the human has not read (shown on every page, static/attention.js)."""
-        s = store.find_session("supervisor") or {}
-        seen = float(store.runtime().get("supervisor_seen_at") or 0)
+        """A Supervisor message the human has not read (shown on every page, static/attention.js),
+        and whether the host that answers the chat is up."""
+        rt = store.runtime()
+        s = rt["sessions"].get("supervisor") or {}
+        seen = float(rt.get("supervisor_seen_at") or 0)
         settled = float(s.get("settled_at") or 0)
         message = {"text": s.get("last_text") or "", "at": settled} if settled > seen and s.get("last_text") else None
-        return {"ok": True, "message": message, "working": s.get("status") == "running", "count": 1 if message else 0}
+        return {"ok": True, "message": message, "working": s.get("status") == "running", "count": 1 if message else 0,
+                "host": {"alive": alive((rt.get("control") or {}).get("pid"))}}
 
     @r.post("/attention/seen")
     async def attention_seen() -> dict:
@@ -129,6 +135,7 @@ def router(project) -> APIRouter:
         """The one write path in the UI: a human message to the resident Supervisor.
         Proxied to the control endpoint that `orchestra-agents run` serves; streams its NDJSON."""
         body = await request.json()
+        current(project)
         ctl = store.runtime().get("control") or {}
         if not ctl.get("port"):
             raise HTTPException(503, "the agents' host (orchestra-agents run) is not running; the Supervisor is only reachable while it is")
@@ -205,6 +212,7 @@ def router(project) -> APIRouter:
         """Who wakes whom through which events (the Agents page's map): the intended bindings
         (each agent's wake_on and emits, team emits, probes, the task system's and the host's)
         and what was observed on the bus over the last 24 hours, by the machine that sent it."""
+        current(project)
         agents_, teams = all_agents(project), all_teams(project)
         nodes: dict[str, dict] = {}
         edges: list[dict] = []
@@ -263,36 +271,17 @@ def router(project) -> APIRouter:
     @r.get("/agents")
     async def agents_view() -> dict:
         """Every agent, and every session as the machine instance it runs (or last ran) as, with
-        the ticket it is on (as its assignment named it): for the machine cards and the Agents page."""
-        rt = store.runtime()
-        sessions = list(rt["sessions"].values())
-        out = []
-        for a in all_agents(project).values():
-            st = rt["agent_state"].get(a.name) or {}
-            out.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team, "session_id": a.session_id,
-                        "resident": a.resident, "paused": bool(st.get("paused")), "next_scheduled_at": st.get("next_scheduled_at")})
-        ctl = rt.get("control") or {}
-        host_alive = alive(ctl.get("pid"))
-        residents = {a["session_id"] for a in out if a["resident"]}
-        insts = []
-        for x in sessions:
-            insts.append({**{k: v for k, v in x.items() if k not in ("partial_text", "last_text")},
-                          "session": x["id"], "instance": x.get("instance") or x.get("kind"), "role": x.get("kind"),
-                          "alive": session_alive(x, host_alive, residents),
-                          "tool": x.get("tool_name"), "last_text": (x.get("partial_text") or x.get("last_text") or "")[-300:],
-                          "ticket": ({"id": x["ticket_id"], "title": x.get("ticket_title") or "", "state": x.get("ticket_state") or "IN_PROGRESS",
-                                      "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})
-        cfg = project.config
-        return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": out, "sessions": insts, "now": time.time(),
-                "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
+        the ticket it is on: for the machine cards and the Agents page (org_views.agents_status)."""
+        return agents_status(current(project), store)
 
     return r
 
 
 def observed(key: str, events: Events) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     """What was on the bus in the last 24 hours, for the event map: counts by event type (and by
-    its variant, the transition target or the probe) and by the machine that sent each. The bus
-    is read from where the last read stopped, at most once a minute, whoever asks."""
+    its variant: the transition target, the role an attention event is addressed to, or the
+    probe) and by the machine that sent each. The bus is read from where the last read stopped,
+    at most once a minute, whoever asks."""
     now_t = time.time()
     c = _observed.get(key)
     if c is None:

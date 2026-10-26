@@ -16,10 +16,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from orchestra.config import ConfigError
+
+from .clock import parse_interval
 from .config import Project
 from .events import Events
 from .org import team_chain
-from .roles import RoleError, parse_interval
 from .store import AgentStore
 
 OUTPUT_TAIL = 2000
@@ -49,10 +51,10 @@ def team_probes(project: Project, teams: dict) -> list[ProbeSpec]:
     out = []
     for t in teams.values():
         dirs = tuple(str(x.space_dir(project) / "tools") for x in team_chain(teams, t.name))
-        for d in getattr(t, "probes", []) or []:
+        for d in t.probes:
             try:
                 out.append(_spec(d, project, t, dirs))
-            except (KeyError, RoleError, ValueError):
+            except (KeyError, ConfigError, ValueError):
                 continue
     return out
 

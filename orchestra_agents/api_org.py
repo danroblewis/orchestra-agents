@@ -10,9 +10,10 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from . import prompting as agents
+from . import prompting
 from .config import Project
 from .org import (
+    EVENT_TYPES,
     AgentDef,
     OrgError,
     TeamDef,
@@ -24,7 +25,7 @@ from .org import (
 )
 from .org_store import RepoOrgStore, all_agents, all_teams
 from .org_views import agent_definition, agent_view, role_definition, team_definition, team_view
-from .roles import EVENT_TYPES, RepoRoleStore, RoleDef, RoleError, all_roles
+from .roles import RepoRoleStore, RoleDef, RoleError, all_roles
 from .store import AgentStore, StoreError
 
 ORG_COMMANDS = frozenset({
@@ -40,6 +41,15 @@ MUTATIONS = frozenset({"create_role", "update_role", "delete_role", "create_agen
                        "create_team", "update_team", "delete_team"})
 
 
+def _restart_with_new_prompt(store: AgentStore, ag: AgentDef) -> None:
+    """A role's prompt and a team's responsibilities, members and access are part of the system
+    prompt an agent's session was started with. When they change, a resident session is started
+    over (after its current turn, residents.py) so it runs with the organisation as stored; an
+    agent whose team is created after its own record was is the common case."""
+    if ag.resident:
+        store.set_agent_state(ag.name, restart_requested=True)
+
+
 def handle_org(project: Project, store: AgentStore, command: str, a: dict[str, Any], author: str, role: str) -> dict:
     if command in MUTATIONS and role != "supervisor":
         raise StoreError("only the supervisor may create, change, or delete roles, agents, or teams")
@@ -53,7 +63,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
     rs, os_ = RepoRoleStore(project), RepoOrgStore(project)
 
     if command == "org_guide":
-        return {"ok": True, "guide": agents.org_guide() + "\n\n## Reference\n\n" + agents.org_reference()}
+        return {"ok": True, "guide": prompting.org_guide() + "\n\n## Reference\n\n" + prompting.org_reference()}
 
     if command == "list_roles":
         used: dict[str, list[str]] = {}
@@ -86,13 +96,13 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         for ag in all_agents(project).values():
             if r.name in ag.roles and not ag.builtin and command == "update_role":
                 store.add_wakeup(ag.name, f"your role {r.name} was updated; re-read your responsibilities")
+                _restart_with_new_prompt(store, ag)
         return {"ok": True, "role": r.to_dict(), "storage": rs.last_commit_note}
     if command == "delete_role":
-        users = [ag.name for ag in all_agents(project).values() if a["name"] in ag.roles and ag.source == "agent"]
+        users = [ag.name for ag in all_agents(project).values() if a["name"] in ag.roles and not ag.builtin]
         if users:
             raise StoreError(f"role {a['name']!r} is used by agents {users}; change or delete them first")
         rs.delete(a["name"])
-        store.set_agent_state(a["name"], deleted=True)   # an implicit agent of the same name stops too
         store.events.emit("role.deleted", role=a["name"], by=author)
         return {"ok": True, "storage": rs.last_commit_note}
 
@@ -114,7 +124,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
                 if k in a and a[k] is not None:
                     setattr(ag, k, a[k] or None if k in ("every", "at", "team") else a[k])
         else:
-            if a["name"] in existing and existing[a["name"]].source == "agent":
+            if a["name"] in existing:
                 raise StoreError(f"agent {a['name']!r} exists; use update_agent")
             ag = AgentDef(name=a["name"], roles=list(a.get("roles") or []), team=a.get("team") or None,
                           kind=a.get("kind") or "continuous", session=a.get("session") or "resident",
@@ -144,10 +154,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         leads = [t.name for t in all_teams(project).values() if t.lead == ag.name]
         if leads:
             raise StoreError(f"{ag.name} leads {leads}; give those teams another lead first")
-        if ag.source == "agent":
-            os_.delete_agent(ag.name)
-        else:
-            rs.delete(ag.name)   # a role record that was its own agent
+        os_.delete_agent(ag.name)
         store.set_agent_state(a["name"], deleted=True)
         store.events.emit("agent.deleted", agent=a["name"], by=author)
         return {"ok": True, "storage": os_.last_commit_note}
@@ -211,6 +218,10 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.events.emit("team.changed" if command == "update_team" else "team.created", team=t.name, by=author)
         if t.lead:
             store.add_wakeup(t.lead, f"team {t.name} was {'updated' if command == 'update_team' else 'created'}; re-read its responsibilities")
+        ags = all_agents(project)
+        for name in t.agents:
+            if name in ags:
+                _restart_with_new_prompt(store, ags[name])
         return {"ok": True, "team": t.to_dict(), "storage": os_.last_commit_note}
     if command == "emit_event":
         teams, ags = all_teams(project), all_agents(project)

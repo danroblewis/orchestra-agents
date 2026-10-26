@@ -20,7 +20,17 @@ import sys
 import threading
 from pathlib import Path
 
-from .base import AgentSession, Harness, OnEvent, SessionSpec, TurnResult, _Deadlines
+from .base import (
+    AgentSession,
+    Harness,
+    OnEvent,
+    SessionSpec,
+    TurnResult,
+    _Deadlines,
+    _LineReader,
+    _NormalizerBase,
+    resolve_binary,
+)
 
 MCP_SERVER = "orchestra"
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"      # how Codex names an MCP server's functions
@@ -64,7 +74,7 @@ def _item_tool(item: dict) -> tuple[str, dict] | None:
 class CodexSession(AgentSession):
     def __init__(self, spec: SessionSpec, binary: str | None = None):
         self.spec = spec
-        self.binary = binary or os.environ.get("CODEX_BINARY", "codex")
+        self.binary = resolve_binary(binary or os.environ.get("CODEX_BINARY", "codex"))
         self._dir = spec.session_dir / "codex"
         self._dir.mkdir(parents=True, exist_ok=True)
         self._meta_path = self._dir / f"{spec.session_id}.json"
@@ -225,42 +235,9 @@ class CodexSession(AgentSession):
         return old
 
 
-class _LineReader:
-    def __init__(self, stream):
-        import queue
-        self._q: queue.Queue[str | None] = queue.Queue()
-        self._queue_mod = queue
-
-        def run():
-            for line in stream:
-                self._q.put(line.rstrip("\n"))
-            self._q.put(None)
-        threading.Thread(target=run, daemon=True).start()
-
-    def next(self, timeout: float) -> str | None:
-        try:
-            return self._q.get(timeout=timeout)
-        except self._queue_mod.Empty:
-            return ""
-
-
-class _Normalizer:
+class _Normalizer(_NormalizerBase):
     """Codex ``--json`` events -> normalized events. Codex streams whole items, not tokens,
     so every item event counts as liveness (``token``)."""
-
-    def __init__(self, on_event: OnEvent | None):
-        self.on_event = on_event
-        self.pid: int | None = None          # the turn's process, once started
-
-    def _emit(self, ev: dict) -> None:
-        if self.on_event:
-            try:
-                self.on_event(ev)
-            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
-                pass
-
-    def settled(self, text: str) -> None:
-        self._emit({"type": "settled", "text": text})
 
     def __call__(self, ev: dict) -> None:
         t = ev.get("type")

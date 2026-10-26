@@ -31,6 +31,7 @@ def test_registry():
     assert get_harness("codex").name == "codex"
     with pytest.raises(ValueError):
         get_harness("opencode")
+    assert read_transcript({"harness": "opencode", "session_file": "/nowhere"}) == []   # a record from a harness this package does not know
 
 
 def test_tools_are_grouped_and_schema_shaped():

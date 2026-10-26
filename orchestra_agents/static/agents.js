@@ -173,7 +173,7 @@ function renderMarker(e) {
   else if (e.type === "agent.crash_loop") text = `✖ Crash loop: ${e.count} exits in fifteen minutes. The agent is paused after a crash loop and the Supervisor has been asked to look: ask the Supervisor to resume it once fixed.`;
   else if (e.type === "agent.compacted" && e.mode === "auto") text = `⇣ Context is bounded by the harness itself (${esc(e.reason || "")}); Orchestra leaves this session alone.`;
   else if (e.type === "agent.compacted") text = `⇣ Context compacted by the harness${e.tokens_before ? `: ${Number(e.tokens_before).toLocaleString()} → ${Number(e.tokens_after || 0).toLocaleString()} tokens` : ""} (${esc(e.reason || "")}). Older messages became a summary the agent keeps; the transcript is unchanged.`;
-  else if (e.type === "agent.reset") text = `⟲ Session started over by ${esc(e.by || "the operator")}${e.reason ? ` (${esc(e.reason)})` : ""}. The conversation before this point is archived as run <code>${esc(e.archived || "")}</code>; the agent keeps the project context and its team's space, not its memory of the chat.`;
+  else if (e.type === "agent.reset") text = `⟲ Session started over by ${esc(e.by || "the Supervisor")}${e.reason ? ` (${esc(e.reason)})` : ""}. The conversation before this point is archived as run <code>${esc(e.archived || "")}</code>; the agent keeps the project context and its team's space, not its memory of the chat.`;
   else if (e.type === "session.started") text = `▶ Turn started${e.ticket ? " on " + esc(e.ticket) : ""}.`;
   else text = esc(e.type);
   return `<div class="msg marker ${e.type}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;

@@ -8,10 +8,10 @@ import json
 from pathlib import Path
 
 from .builtins import ROLES as BUILTIN_ROLES
+from .clock import now
 from .config import Project
 from .org import BUILTIN_TEAMS, AgentDef, OrgError, TeamDef, built_in_agents
-from .roles import all_roles, commit_orchestra_files
-from .store import now
+from .roles import commit_orchestra_files
 
 
 class RepoOrgStore:
@@ -137,23 +137,14 @@ def all_teams(project: Project) -> dict[str, TeamDef]:
 def all_agents(project: Project) -> dict[str, AgentDef]:
     """Built-in agents (the per-ticket ones only for the roles these agents serve: a role another
     machine fills is not an agent here; the Coordinator on the project's schedule, if it sets
-    one), implicit agents for role records that carry wake rules and have no explicit agent, and
-    the project's own agents, by name."""
+    one) and the project's own agents, by name. A role record is never an agent: it runs only
+    through an agent that names it."""
     out = {n: a for n, a in built_in_agents().items() if a.resident or n in project.config.serves}
     if project.config.coordinator_every:
         out["coordinator"].every, out["coordinator"].kind = project.config.coordinator_every, "scheduled"
-    explicit = {a.name: a for a in RepoOrgStore(project).list_agents()}
-    for r in all_roles(project).values():
-        if r.builtin or r.name in explicit or not (r.wake_on or r.every or r.at):
-            continue   # a role without wake rules runs only through an agent
-        kind = "scheduled" if (r.every or r.at) else "continuous"
-        out[r.name] = AgentDef(name=r.name, roles=[r.name], kind=kind, session=r.session, wake_on=list(r.wake_on),
-                               every=r.every, at=r.at, description=r.description, created_by=r.created_by,
-                               created_at=r.created_at, updated_at=r.updated_at, source="role")
-    out.update(explicit)
+    out.update({a.name: a for a in RepoOrgStore(project).list_agents()})
     # A team's record is authoritative for who is in it: an agent it names as lead or member
-    # belongs to it even when the agent's own record (or a role record, which has no team
-    # field) says nothing, or says something older.
+    # belongs to it even when the agent's own record says nothing, or says something older.
     for t in all_teams(project).values():
         for name in t.agents:
             if name in out and not out[name].builtin and out[name].team != t.name:

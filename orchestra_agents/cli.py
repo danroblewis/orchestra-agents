@@ -1,5 +1,6 @@
-"""The `orchestra-agents` command line: the agents' host, the Supervisor chat, the agents' tool
-interface (what the Pi extension calls), their sessions and roles."""
+"""The `orchestra-agents` command line: the agents' host, the Supervisor chat, what the host and
+its agents are doing, the agents' tool interface (what the Pi extension calls), their sessions
+and roles."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from . import tooling
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness.base import assistant_text
+from .org_views import agents_status
 from .store import AgentStore, StoreError
 
 
@@ -31,7 +33,43 @@ def cmd_run(args) -> int:
     from .host import AgentHost
     project = _project(args)
     store, events = _store(project)
-    return AgentHost(project, store, events).run(once=args.once)
+    return AgentHost(project, store, events).run()
+
+
+def _ago(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s}s" if s < 60 else f"{s // 60}m" if s < 3600 else f"{s // 3600}h {(s % 3600) // 60}m"
+
+
+def cmd_status(args) -> int:
+    """One screen: the host, what it runs the agents on, every agent's state, the live ticket sessions."""
+    project = _project(args)
+    store, _ = _store(project)
+    d = agents_status(project, store)
+    host, now = d["host"], d["now"]
+    print(f"host:    {'running' if host['alive'] else 'not running'}" + (f" (pid {host.get('pid')}, control port {host.get('port')})" if host["alive"] else ""))
+    print(f"agents:  {d['harness']}{' · ' + d['model'] if d['model'] else ''} · fills {', '.join(d['serves']) or 'no task roles'}")
+    live = {s["role"]: s for s in d["sessions"] if s["status"] == "running"}
+    for a in d["agents"]:
+        if not a["resident"]:
+            continue
+        state = ("paused" if a["paused"] else "running" if a["name"] in live else "down" if not host["alive"] else "idle")
+        woken = f"last woken {_ago(now - a['last_woken'])} ago" if a.get("last_woken") else "never woken"
+        next_ = f", next wake-up in {_ago(a['next_scheduled_at'] - now)}" if a.get("next_scheduled_at") and a["next_scheduled_at"] > now else ""
+        print(f"  {a['name']:14} {state:8} {woken}{next_}")
+    tickets = [s for s in d["sessions"] if s["ticket"] and s["status"] == "running"]
+    print(f"on tickets: {len(tickets)}")
+    for s in tickets:
+        print(f"  {s['instance']:12} {s['ticket']['id']:10} since {_ago(now - (s.get('started_at') or now))}  {' '.join((s.get('last_text') or '').split())[:60]}")
+    return 0
+
+
+def _session_status(s: dict) -> str:
+    """What a session is: running; idle (a resident between turns); ended (a per-ticket session
+    whose one turn is over while its ticket is still open); archived (its ticket closed)."""
+    if s.get("status") in ("running", "archived"):
+        return s["status"]
+    return "ended" if s.get("ticket_id") else "idle"
 
 
 def cmd_sessions(args) -> int:
@@ -42,8 +80,7 @@ def cmd_sessions(args) -> int:
     if args.action == "list":
         print(f"{'session':28} {'status':8} {'ticket':10} last said")
         for s in store.sessions(include_archived=True):
-            status = "finished" if s.get("status") == "archived" else s.get("status", "?")
-            print(f"{s['id']:28} {status:8} {s.get('ticket_id') or '':10} {' '.join((s.get('last_text') or '').split())[:60]}")
+            print(f"{s['id']:28} {_session_status(s):8} {s.get('ticket_id') or '':10} {' '.join((s.get('last_text') or '').split())[:60]}")
         return 0
     s = store.find_session(args.id or "")
     if not s:
@@ -161,11 +198,8 @@ def cmd_roles(args) -> int:
     except StoreError as e:
         sys.exit(f"orchestra-agents: {e}")
     role = r["role"]
-    wakes = ", ".join(role.get("wake_on") or []) or "-"
-    print(f"{role['name']}: {'built in' if role['builtin'] else 'custom'}\nused by:    {', '.join(r.get('agents') or []) or '-'}\n"
-          f"tools:      {', '.join(role.get('tools') or []) or '-'}\nwake rules: {wakes}\n"
-          f"interval:   {role.get('every') or '-'}{(' · daily at ' + role['at']) if role.get('at') else ''}\n"
-          f"prompt:     {r.get('prompt_source') or '-'}\n\n{(r.get('prompt') or '').rstrip()}")
+    print(f"{role['name']}: {'built in' if role['builtin'] else 'custom'}\nused by: {', '.join(r.get('agents') or []) or '-'}\n"
+          f"tools:   {', '.join(role.get('tools') or []) or '-'}\nprompt:  {r.get('prompt_source') or '-'}\n\n{(r.get('prompt') or '').rstrip()}")
     return 0
 
 
@@ -177,11 +211,17 @@ def build_parser() -> argparse.ArgumentParser:
                        description="The agents' host, one per project: keeps the resident agents' sessions up, wakes them on "
                                    "the events they listen for and on their schedules, answers the task system's assignments "
                                    "for the roles in [agents] serves, and serves the Supervisor chat. Stop it with Ctrl-C.")
-    s.add_argument("--once", action="store_true", help="exit once every running turn has finished")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("chat", help="talk to the Supervisor")
     s.set_defaults(fn=cmd_chat)
-    s = sub.add_parser("sessions", help="the agents' sessions: list them, or show one's transcript")
+    s = sub.add_parser("status", help="is the agents' host up, and what are its agents doing",
+                       description="The host (alive, pid, control port), the harness and model it runs the agents on and the "
+                                   "task system's roles it fills, each resident agent's state (running, idle, paused, down) with its "
+                                   "last and next wake-up, and the sessions on tickets right now.")
+    s.set_defaults(fn=cmd_status)
+    s = sub.add_parser("sessions", help="the agents' sessions: list them, or show one's transcript",
+                       description="A session's status is running; idle (a resident agent between turns); ended (a per-ticket "
+                                   "session whose turn is over while its ticket is still open); archived (its ticket closed).")
     s.add_argument("action", choices=["list", "show"], help="list | show")
     s.add_argument("id", nargs="?", help="a session id from `sessions list`")
     s.set_defaults(fn=cmd_sessions)

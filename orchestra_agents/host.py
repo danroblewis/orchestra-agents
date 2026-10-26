@@ -18,8 +18,8 @@ from pathlib import Path
 
 import psutil
 
-from . import prompting as agents
-from . import tooling
+from . import prompting, tooling
+from .clock import due_at, parse_interval
 from .config import Project
 from .control import ControlServer
 from .events import Events
@@ -29,22 +29,14 @@ from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
 from .protocol import ASSIGNED, ATTENTION, RELEASED, TRANSITIONED, Follower
 from .residents import Residents
-from .roles import all_roles, due_at, parse_interval
+from .roles import all_roles
 from .runner import AgentRunner
-from .store import AgentStore
+from .store import AgentStore, StoreError, alive
 from .turns import Turns
 
 HOST_LOG: Path | None = None
 HOST_LOG_MAX = 5_000_000
 SHUTDOWN_REPORTS_S = 10.0    # how long shutdown waits for the open assignments' reports to go out
-
-
-def alive(pid) -> bool:
-    """Whether a process with this pid is up (a zombie is not)."""
-    try:
-        return bool(pid) and psutil.Process(int(pid)).status() != psutil.STATUS_ZOMBIE
-    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
-        return False
 
 
 def log(msg: str) -> None:
@@ -70,7 +62,8 @@ class AgentHost:
         self.cfg = project.config
         self.harness = get_harness(self.cfg.harness)
         self.stop = threading.Event()
-        self.agent_threads: dict[str, threading.Thread] = {}
+        self.agent_threads: dict[str, threading.Thread] = {}   # agent name -> the thread running its turn (a wake-up, or the Supervisor chat)
+        self._turn_locks: dict[str, threading.Lock] = {}        # agent name -> one turn at a time on its session
         self.live_procs: dict[str, AgentSession] = {}   # session id -> session, while a per-ticket turn runs
         self.agents: dict[str, AgentDef] = {}
         self.teams: dict = {}
@@ -100,10 +93,17 @@ class AgentHost:
 
     def run(self, once: bool = False) -> int:
         """The host until it is stopped. Returns the exit status: 1 when another host already
-        holds this project (two would kill each other's turns and both answer every assignment)."""
+        holds this project (two would kill each other's turns and both answer every assignment),
+        or when the control endpoint cannot be served (without it the Supervisor cannot be
+        reached and the web cannot see the host: it must not run as a ghost)."""
         other = (self.store.runtime().get("control") or {}).get("pid")
         if other and other != os.getpid() and alive(other):
             log(f"another orchestra-agents run holds this project (pid {other}); exiting")
+            return 1
+        try:
+            self._start_control()
+        except OSError as e:
+            log(f"control endpoint unavailable on port {self.cfg.control_port}: {e}; exiting")
             return 1
 
         def _stop(_sig, _frame):
@@ -120,7 +120,6 @@ class AgentHost:
                                                                   "assignments for the roles they fill"})
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
         self._refresh_org(self.store.runtime()["agent_state"])
-        self._start_control()
         try:
             while not self.stop.is_set():
                 try:
@@ -241,7 +240,7 @@ class AgentHost:
             dirs = [str(p) for p in tools_path(self.project, self.teams, agent)]
             extra["PATH"] = os.pathsep.join(dirs + [os.environ.get("PATH", "")])
             extra["ORCHESTRA_TEAM"] = team.name
-        return self._open_session(session_id, agent.name, agents.agent_prompt(self.project, agent, self.role_defs, self.teams),
+        return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, self.role_defs, self.teams),
                                   effective_tools(agent, self.role_defs, self.teams), cwd, extra_env=extra)
 
     def _open_session(self, session_id: str, role: str, system_prompt: str, tools: tuple[str, ...], cwd: Path,
@@ -292,8 +291,8 @@ class AgentHost:
         resident agent is continuous (its session is always up; a schedule is one of its wake
         rules), a per-ticket or ephemeral one ad hoc."""
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        mode = "continuous" if getattr(agent, "resident", False) else "ad hoc"
-        listens = sorted({w.split(":")[0] for w in (getattr(agent, "wake_on", None) or [])})
+        mode = "continuous" if agent is not None and agent.resident else "ad hoc"
+        listens = sorted({w.split(":")[0] for w in (agent.wake_on if agent is not None else [])})
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": listens, "kind": "agent", "role": role,
                                                           "harness": self.harness.name, "model": self.cfg.model},
                             source=source)
@@ -374,18 +373,35 @@ class AgentHost:
         return next((p for p in self.residents.procs.values() if p.session_id == sid), None)
 
     def _start_control(self) -> None:
+        """Serve the Supervisor chat; raises OSError when the port cannot be bound."""
         port = self.cfg.control_port                     # 0: any free port; it is recorded for the web
-        try:
-            self.control = ControlServer(port, self.prompt_supervisor)
-            self.control.start()
-            port = self.control.port
-            self.store.set_control(port, os.getpid())
-            log(f"control endpoint on 127.0.0.1:{port} (orchestra-agents chat and the web attach here)")
-        except OSError as e:
-            log(f"control endpoint unavailable on port {port}: {e}")
+        self.control = ControlServer(port, self.prompt_supervisor)
+        self.control.start()
+        self.store.set_control(self.control.port, os.getpid())
+        log(f"control endpoint on 127.0.0.1:{self.control.port} (orchestra-agents chat and the web attach here)")
+
+    def _turn_lock(self, name: str) -> threading.Lock:
+        """One turn at a time on an agent's session: a wake-up (tick) and the Supervisor chat
+        (the control endpoint's thread) both take it for the whole turn."""
+        return self._turn_locks.setdefault(name, threading.Lock())
 
     def prompt_supervisor(self, message: str, emit) -> dict:
-        """One supervisor turn on the resident session, with the event digest prefix."""
+        """One supervisor turn on the resident session, with the event digest prefix. While it
+        runs, the chat's thread stands in agent_threads like a wake-up's, so the tick queues
+        wake-ups behind it and a pause, restart or reset waits for it to end."""
+        st = self.store.agent_state("supervisor")
+        if st.get("paused") or st.get("deleted"):
+            why = st.get("crash_loop") or "by request"
+            raise StoreError(f"the Supervisor is {'deleted' if st.get('deleted') else 'paused'} ({why}); its messages wait until it is resumed")
+        with self._turn_lock("supervisor"):
+            self.agent_threads["supervisor"] = threading.current_thread()
+            try:
+                return self._supervisor_turn(message, emit)
+            finally:
+                if self.agent_threads.get("supervisor") is threading.current_thread():
+                    self.agent_threads.pop("supervisor")
+
+    def _supervisor_turn(self, message: str, emit) -> dict:
         self.residents.trim_if_large(self.residents.procs.get("supervisor"), "supervisor", "supervisor")
         proc = self.residents.procs.get("supervisor")
         if proc is None or not proc.alive():
@@ -393,7 +409,7 @@ class AgentHost:
             proc.open()
             self.residents.procs["supervisor"] = proc
         new = [e for e in self._digest.new() if e["type"] not in ("session.started", "session.settled")]
-        prefix = agents.supervisor_context(tooling.snapshot(self.project, self.store, "supervisor"), new, self.project, self.store)
+        prefix = prompting.supervisor_context(tooling.snapshot(self.project, self.store, "supervisor"), new, self.project, self.store)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -412,6 +428,10 @@ class AgentHost:
         agent = self.agents.get(target)
         if agent is None:
             return
+        with self._turn_lock(target):
+            self._wake_turn(agent, target, reasons)
+
+    def _wake_turn(self, agent: AgentDef, target: str, reasons: list[str]) -> None:
         sid = agent.session_id
         snap = tooling.snapshot(self.project, self.store, target)
         if snap.get("unavailable") and all(r.startswith(("scheduled check-in", "scheduled daily session")) for r in reasons):
@@ -430,11 +450,11 @@ class AgentHost:
         self.store.set_agent_state(target, last_woken=time.time(), turn_depth=self._pending_depth.pop(target, 0))
         log(f"{sid}: waking ({len(reasons)} reason(s))")
         self._session_running(sid, target, proc)
-        task = agents.wake_task(target, reasons, snap)
+        task = prompting.wake_task(target, reasons, snap)
         if target == "supervisor":
             task = ("[Orchestra: escalation from another agent; the human is not present for this turn. "
                     "Act with your tools if you can, otherwise leave a note the human will see.]\n\n"
-                    + agents.supervisor_context(snap, [], self.project, self.store) + task)
+                    + prompting.supervisor_context(snap, [], self.project, self.store) + task)
         res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)
         self._session_idle(sid, res.text, resident=not ephemeral)

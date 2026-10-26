@@ -23,7 +23,9 @@ from .base import (
     SessionSpec,
     TurnResult,
     _Deadlines,
+    _NormalizerBase,
     assistant_text,
+    resolve_binary,
 )
 
 EXTENSION_PATH = Path(__file__).parent / "pi_extension.ts"
@@ -36,7 +38,7 @@ class PiError(RuntimeError):
 class PiSession(AgentSession):
     def __init__(self, spec: SessionSpec, pi_binary: str | None = None):
         self.spec = spec
-        args = [pi_binary or os.environ.get("PI_BINARY", "pi"), "--mode", "rpc",
+        args = [resolve_binary(pi_binary or os.environ.get("PI_BINARY", "pi")), "--mode", "rpc",
                 "--session-dir", str(spec.session_dir), "--session-id", spec.session_id,
                 "--extension", str(EXTENSION_PATH)]
         if spec.provider:
@@ -234,21 +236,8 @@ def archive(session_file: str | None) -> str | None:
     return str(dest)
 
 
-class _Normalizer:
+class _Normalizer(_NormalizerBase):
     """Pi RPC events -> normalized events."""
-
-    def __init__(self, on_event: OnEvent | None, pid: int | None = None):
-        self.on_event, self.pid = on_event, pid
-
-    def _emit(self, ev: dict) -> None:
-        if self.on_event:
-            try:
-                self.on_event(ev)
-            except Exception:  # noqa: BLE001, S110 - a listener never breaks the stream
-                pass
-
-    def settled(self, text: str) -> None:
-        self._emit({"type": "settled", "text": text})
 
     def __call__(self, ev: dict) -> None:
         t = ev.get("type")

@@ -4,7 +4,9 @@ contract (orchestra-tasking: docs/proposals/agents-split.md); nothing is importe
 - Assignment: the task system offers a ticket to a role (``task.assigned``); a machine that
   fills the role accepts it (``task.accepted``), says it is still working (``task.working``, at
   least every HEARTBEAT_S, with ``text``: what it is doing now, for whoever shows the ticket)
-  and reports (``task.reported``); the task system may take it back (``task.released``).
+  and reports (``task.reported``); the task system may take it back (``task.released``). There is
+  no machine-sent release in the contract: a stop of the host reports every open assignment as
+  ``failed``, which the task system counts like a crash (against the ticket's crash budget).
 - Requests: a planner asks the task system to change tickets (``task.requested``,
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
   it); it answers ``request.done`` with the result or ``request.refused`` with why.
@@ -27,7 +29,9 @@ ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED = "task.assigned", "task.accepte
 ATTENTION = "task.attention_needed"
 HEARTBEAT_S = 30.0
 TRANSITIONED = "ticket.transitioned"
-TERMINAL = ("DONE", "CANCELLED")      # a transition to one of these ends the ticket: the runner archives its sessions
+# The task system's ticket states (its ``State``), copied by hand like the event names below.
+STATES = ("OPEN", "BLOCKED", "IN_PROGRESS", "READY_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED", "MERGING", "DONE", "CANCELLED")
+TERMINAL = STATES[-2:]                # DONE and CANCELLED: a transition to one of these ends the ticket; the runner archives its sessions
 
 # The task system's other event types, which an agent may wake on. Copied by hand; the truth is
 # orchestra-tasking's emit calls (nothing is imported from it); tests/unit/test_protocol_drift.py
@@ -76,12 +80,12 @@ class TaskClient:
     def __init__(self, events, role: str = ""):
         self.events, self.role = events, role
 
-    def __call__(self, op: str, args: dict | None = None, role: str | None = None) -> dict:
+    def __call__(self, op: str, args: dict | None = None) -> dict:
         args = dict(args or {})
         follow = Follower(self.events)
         rid = uuid.uuid4().hex[:12]
         subject = args.get("id") or args.get("milestone_id")
-        data = {"request": rid, "args": args, "by": role if role is not None else self.role}
+        data = {"request": rid, "args": args, "by": self.role}
         if op in QUERIES:
             self.events.publish(QUERY, {**data, "op": op}, **({"subject": str(subject)} if subject else {}))
         elif op in REQUESTS:

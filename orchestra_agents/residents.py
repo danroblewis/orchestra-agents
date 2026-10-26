@@ -1,7 +1,8 @@
 """The resident agents' process manager, inside the host (host.py): starts a resident session for
-every agent that should have one, closes the ones the operator or the Supervisor asked to stop,
-restart or reset, records a process that exited between turns as a crash (three in fifteen
-minutes pause the agent), and keeps every session's context bounded by compaction or rotation."""
+every agent that should have one, closes the ones the Supervisor asked to stop, restart or reset
+(and the ones a crash loop paused), records a process that exited between turns as a crash (three
+in fifteen minutes pause the agent), and keeps every session's context bounded by compaction or
+rotation."""
 
 from __future__ import annotations
 
@@ -67,7 +68,7 @@ class Residents:
             if st.get("reset_requested"):
                 archived = host.store.retire_session(sid, proc.retire())
                 host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0)
-                host._mark("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by") or "operator")
+                host._mark("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by"))
                 host.log(f"{name}: session reset by request; previous transcript archived as {archived}")
             elif st.get("restart_requested"):
                 host.store.set_agent_state(name, restart_requested=False)

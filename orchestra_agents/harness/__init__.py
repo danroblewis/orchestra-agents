@@ -29,12 +29,13 @@ def get_harness(name: str | None) -> Harness:
 
 
 def read_transcript(session: dict | None, session_file: str | Path | None = None) -> list[dict]:
-    """Messages of a session record (``{"harness": ..., "session_file": ...}``)."""
+    """Messages of a session record (``{"harness": ..., "session_file": ...}``); none for a
+    record without a file, or one written by a harness this package does not know."""
     harness = (session or {}).get("harness") or DEFAULT_HARNESS
     f = session_file or (session or {}).get("session_file")
-    if not f:
+    cls = HARNESSES.get(str(harness).replace("-", "_"))
+    if not f or cls is None:
         return []
-    cls = HARNESSES.get(str(harness).replace("-", "_"), PiHarness)
     return cls.read_transcript(f)
 
 

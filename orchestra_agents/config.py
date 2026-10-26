@@ -19,6 +19,7 @@ from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
 
 from .builtins import PER_TICKET_ROLES
+from .clock import parse_interval
 
 __all__ = ["Config", "ConfigError", "Project", "load_project", "parse_duration"]
 
@@ -43,9 +44,6 @@ class Config:
 
     @classmethod
     def from_toml(cls, text: str) -> Config:
-        # roles.py reads Project from this module, so the interval grammar is imported here at call time
-        from .roles import RoleError, parse_interval
-
         raw = tomllib.loads(text)
         a, p = raw.get("agents", {}) or {}, raw.get("project", {}) or {}
         serves = list(a.get("serves", ["worker", "reviewer"]))
@@ -56,7 +54,7 @@ class Config:
         if every:
             try:
                 parse_interval(every)
-            except RoleError as e:
+            except ConfigError as e:
                 raise ConfigError(f"[agents] coordinator_every: {e}") from e
         return cls(
             harness=(a.get("harness") or "pi").replace("-", "_"), provider=a.get("provider") or None,

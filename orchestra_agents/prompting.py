@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from .config import Project
-from .org import team_chain, tools_path
+from .org import EVENT_TYPES, team_chain, tools_path
 from .org_store import RepoOrgStore, all_teams
 from .protocol import TERMINAL
-from .roles import EVENT_TYPES, TOOL_GROUPS, RepoRoleStore, all_roles
+from .roles import TOOL_GROUPS, RepoRoleStore, all_roles
 
 
 class TicketView:

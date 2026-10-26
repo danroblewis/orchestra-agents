@@ -19,7 +19,7 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
 
 An AI reviewer (Claude Code, Haiku) and a program worker (a shell runner) work the same queue:
 fifteen tickets over about ten minutes, eight at once and then one every 30 s, five of them
-rejected once and three blocked for a planner, about twenty-five cents of Haiku; `--tickets 3` is a
+rejected once and three blocked for a planner, about ten cents of Haiku; `--tickets 3` is a
 two-minute look. `demo/README.md` says what you will see and where. Ctrl-C stops everything;
 remove `~/orchestra-agents-demo` first to run it again. With `CLAUDE_BINARY` set to
 `tests/e2e/fake_claude.py` it runs without a model.

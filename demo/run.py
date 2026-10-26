@@ -20,8 +20,8 @@ written to be rejected once and three to be blocked, so the rework and attention
 happen often enough to be counted (a counter needs five events to carry a stock's balance).
 ``--tickets 3`` is a two-minute look at the machines; more than fifteen repeats the list.
 
-The reviewer is an AI agent on Claude Code with Haiku, which costs money: about twenty-five
-cents for the twenty reviews and the planners' turns on the eight tickets that need them. The demo
+The reviewer is an AI agent on Claude Code with Haiku, which costs money: about ten cents for
+the twenty reviews and the planners' turns on the eight tickets that need them. The demo
 checks that ``claude`` (or CLAUDE_BINARY) is on the PATH before it starts anything, since
 without it the worker would finish every ticket and no review would ever come. CLAUDE_BINARY
 names another ``claude`` to run instead; the e2e tests set it to tests/e2e/fake_claude.py and

@@ -18,11 +18,10 @@ to start without one or the other.
 Ctrl-C stops everything. To start over, remove the target directory and run it again: `run.py`
 removes the state a previous run left for that path (under `~/.orchestrator/<name>-<hash>/`)
 before it starts. The default run (fifteen tickets: eight at once, then one every 30 s;
-`--tickets`, `--burst`, `--every`) costs about twenty-five cents in Haiku calls: twenty reviews
-(five tickets are reviewed twice), the Coordinator's turns on the five rejected and the three
-blocked tickets, and the Supervisor's on the three escalations (the twelve-ticket run of
-October 2026, with one of each, was 1.7 M tokens, nearly all cache reads, for about ten cents).
-While the demo is
+`--tickets`, `--burst`, `--every`) costs about ten cents in Haiku calls: twenty reviews (five
+tickets are reviewed twice), the Coordinator's turns on the five rejected and the three blocked
+tickets, and the Supervisor's on the three escalations (a run with these defaults on 26 October
+2026: 3.4 M tokens, 2.9 M of them cache reads, in four minutes of work). While the demo is
 up the Supervisor costs a call per chat message or escalation and the Coordinator one per
 attention event (it has no schedule here: `coordinator_every` is not set); Ctrl-C when done.
 

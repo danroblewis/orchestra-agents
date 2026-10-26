@@ -25,15 +25,9 @@ from .protocol import (
     ACCEPTED,
     ASSIGNED,
     ATTENTION,
-    DONE,
-    QUERY,
-    REFUSED,
     RELEASED,
     REPORTED,
     REQUESTS,
-    STATES,
-    TASK_EVENTS,
-    TRANSITIONED,
     WORKING,
 )
 
@@ -84,21 +78,3 @@ register(Role(name="reviewer", prompt="reviewer", tools=("report_review",), resi
               description="Reviews one ticket's result (a diff, or RESULT.md) and reports APPROVED or REJECTED."))
 
 PER_TICKET_ROLES = tuple(r.name for r in ROLES.values() if not r.resident)   # the task system's roles the agents can fill
-
-# Not agents, but parts of the same event graph (the Agents page's map, web.py eventmap):
-SYSTEM_BINDINGS = {
-    "task_scheduler": {"description": "The task system's scheduler: offers ready tickets to the roles, applies their reports, "
-                                      "keeps the ticket state machine and asks a planner for attention.",
-                       # the transitions and the attention events it emits are named by state and by addressee, so a
-                       # wake rule's filter finds its emitter on the map
-                       "emits": (ASSIGNED, RELEASED, f"{ATTENTION}:supervisor", f"{ATTENTION}:coordinator", DONE, REFUSED,
-                                 *(e for e in TASK_EVENTS if e != TRANSITIONED), *(f"{TRANSITIONED}:{s}" for s in STATES)),
-                       "wake_on": (ACCEPTED, WORKING, REPORTED, *REQUESTS.values(), QUERY)},
-    "probes": {"description": "A team's commands, run on an interval; an event on each change of result.",
-               "emits": ("probe.failed", "probe.recovered"), "wake_on": ()},
-    "agents": {"description": "The agents' host (orchestra-agents run): runs the sessions, cuts turns off at their limits, "
-                              "restarts crashed agents and answers the task system's assignments for the roles it serves.",
-               "emits": ("session.started", "session.settled", "turn.timed_out", "turn.error", "turn.interrupted",
-                         "agent.crashed", "agent.crash_loop", "agent.compacted", "agent.reset"),
-               "wake_on": (ASSIGNED, RELEASED, ATTENTION, TRANSITIONED)},
-}

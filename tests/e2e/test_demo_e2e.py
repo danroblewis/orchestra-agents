@@ -141,19 +141,21 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         return {"agents", "supervisor", "coordinator", "reviewer", "worker", "task_scheduler"} <= set(seen)
     wait_until("the machines", observed, timeout_s=60)
     host = seen["agents"]
-    assert host["package"] == "agents" and host["mode"] == "continuous" and host["about"]["kind"] == "program" and host["active"]
+    assert host["package"] == "agents" and host["mode"] == "continuous" and host["kind"] == "program" and host["active"]
     assert {"task.assigned", "task.released", "task.attention_needed"} <= set(host["subscribes"])
     log = get(url + "/api/machines/agents/log")
     assert log["ok"] and any("control endpoint" in line for line in log["lines"])
     for name in ("supervisor", "coordinator"):                                              # resident: continuous, whatever wakes them
         m = seen[name]
-        assert m["package"] == "agents" and m["mode"] == "continuous" and m["about"]["kind"] == "agent" and not m.get("unseen")
+        assert m["package"] == "agents" and m["mode"] == "continuous" and m["kind"] == "agent" and not m.get("unseen")
         assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == "haiku" and m["instances"] == []
     reviewer = seen["reviewer"]
-    assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["about"]["kind"] == "agent"
+    assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["kind"] == "agent"
+    announced = [e for e in get(url + "/api/events")["events"] if e["type"] == "orchestra.machine.started" and e["source"] == "reviewer/1"]
+    assert len(announced) == 1, "an instance announces itself once in the host's lifetime, not per review"
     assert [i["id"] for i in reviewer["instances"]] == ["1"] and {"task.accepted", "task.reported", "task.working"} <= {p["type"] for p in reviewer["publishes"]}
     worker = seen["worker"]
-    assert worker["package"] is None and worker["about"]["kind"] == "program" and worker["mode"] == "continuous"
+    assert worker["package"] is None and worker["kind"] == "program" and worker["mode"] == "continuous" and worker["logs"] == ["1"]
     assert [i["id"] for i in worker["instances"]] == ["1"]
     assert seen["task_scheduler"]["package"] == "tasks"
-    assert "task.attention_needed" in get(url + f"{AGENTS}/eventmap")["known_types"]
+    assert seen["planner"]["mode"] == "scheduled" and seen["planner"]["kind"] == "program"

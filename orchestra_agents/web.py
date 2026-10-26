@@ -6,7 +6,6 @@ Its API is at ``/api/plugins/agents``."""
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import json
 import threading
 import time
@@ -19,21 +18,15 @@ from fastapi.responses import StreamingResponse
 from orchestra.plugins import Declared, Page, Plugin
 
 from . import tooling
-from .builtins import SYSTEM_BINDINGS
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness import read_transcript
-from .org import EVENT_TYPES
-from .org_store import all_agents, all_teams
+from .org_store import all_agents
 from .org_views import agents_status, residents_of, session_alive
-from .protocol import Follower
 from .store import AgentStore, StoreError, alive
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
-OBSERVED_WINDOW_S = 24 * 3600
-OBSERVED_REFRESH_S = 60
-_observed: dict[str, dict] = {}   # project key -> what the event map saw on the bus (read once a minute, not per request)
 
 
 def plugin(orchestra_project) -> Plugin:
@@ -207,67 +200,6 @@ def router(project) -> APIRouter:
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
                 "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive}}
 
-    @r.get("/eventmap")
-    async def eventmap() -> dict:
-        """Who wakes whom through which events (the Agents page's map): the intended bindings
-        (each agent's wake_on and emits, team emits, probes, the task system's and the host's)
-        and what was observed on the bus over the last 24 hours, by the machine that sent it."""
-        current(project)
-        agents_, teams = all_agents(project), all_teams(project)
-        nodes: dict[str, dict] = {}
-        edges: list[dict] = []
-
-        def node(nid, kind, label=None, **extra):
-            nodes.setdefault(nid, {"id": nid, "kind": kind, "label": label or nid, **extra})
-
-        def split(w):
-            t, _, f = w.partition(":")
-            return t, f or None
-        for sid, sb in SYSTEM_BINDINGS.items():
-            node("sys:" + sid, "system", sid.replace("_", " "), description=sb["description"])
-            for e in sb["emits"]:
-                t, f = split(e)
-                node("ev:" + t, "event", t)
-                edges.append({"from": "sys:" + sid, "to": "ev:" + t, "kind": "emits", "filter": f})
-            for w in sb["wake_on"]:
-                t, f = split(w)
-                node("ev:" + t, "event", t)
-                edges.append({"from": "ev:" + t, "to": "sys:" + sid, "kind": "wakes", "filter": f})
-        for t in teams.values():
-            for e in t.emits:
-                node("ev:" + e, "event", e, custom=True, team=t.name)
-            for pr in t.probes or []:
-                node("probe:" + pr["name"], "probe", pr["name"], team=t.name)
-                for e in ("probe.failed", "probe.recovered"):
-                    node("ev:" + e, "event", e)
-                    edges.append({"from": "probe:" + pr["name"], "to": "ev:" + e, "kind": "emits", "filter": pr["name"]})
-        for ag in agents_.values():
-            node("agent:" + ag.name, "agent", ag.name, team=ag.team, builtin=ag.builtin, kind_of=ag.kind)
-            for w in ag.wake_on:
-                t, f = split(w)
-                node("ev:" + t, "event", t)
-                edges.append({"from": "ev:" + t, "to": "agent:" + ag.name, "kind": "wakes", "filter": f})
-            for e in ag.emits:
-                t, f = split(e)
-                node("ev:" + t, "event", t)
-                edges.append({"from": "agent:" + ag.name, "to": "ev:" + t, "kind": "emits", "filter": f})
-            if ag.team and ag.team in teams:
-                for e in teams[ag.team].emits:
-                    edges.append({"from": "agent:" + ag.name, "to": "ev:" + e, "kind": "may_emit", "filter": None})
-        counts, by = observed(project.key, events)
-        for who, ts_ in by.items():
-            if who in agents_:
-                for t, n in ts_.items():
-                    node("ev:" + t, "event", t)
-                    hits = [x for x in edges if x["from"] == "agent:" + who and x["to"] == "ev:" + t]
-                    if hits:
-                        for x in hits:
-                            x["seen"] = n                      # a declared edge that actually fired
-                    else:
-                        edges.append({"from": "agent:" + who, "to": "ev:" + t, "kind": "observed", "filter": None, "seen": n})
-        return {"ok": True, "nodes": list(nodes.values()), "edges": edges, "counts": counts, "by": by,
-                "known_types": list(EVENT_TYPES)}
-
     @r.get("/agents")
     async def agents_view() -> dict:
         """Every agent, and every session as the machine instance it runs (or last ran) as, with
@@ -275,30 +207,3 @@ def router(project) -> APIRouter:
         return agents_status(current(project), store)
 
     return r
-
-
-def observed(key: str, events: Events) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
-    """What was on the bus in the last 24 hours, for the event map: counts by event type (and by
-    its variant: the transition target, the role an attention event is addressed to, or the
-    probe) and by the machine that sent each. The bus is read from where the last read stopped,
-    at most once a minute, whoever asks."""
-    now_t = time.time()
-    c = _observed.get(key)
-    if c is None:
-        c = _observed[key] = {"follow": Follower(events, start=max(0, events.end() - 200000)), "recent": [], "at": 0.0}
-    if now_t - c["at"] >= OBSERVED_REFRESH_S:
-        c["at"] = now_t
-        c["recent"] += [(e.get("ts") or "", e["type"], e.get("to") or e.get("probe"), (e.get("source") or "").partition("/")[0])
-                        for e in c["follow"].new()]
-        since = (dt.datetime.now(dt.UTC) - dt.timedelta(seconds=OBSERVED_WINDOW_S)).isoformat(timespec="seconds")
-        c["recent"] = [x for x in c["recent"] if x[0] >= since]
-    counts: dict[str, int] = {}
-    by: dict[str, dict[str, int]] = {}
-    for _ts, type_, variant, who in c["recent"]:
-        counts[type_] = counts.get(type_, 0) + 1
-        if variant:
-            counts[f"{type_}:{variant}"] = counts.get(f"{type_}:{variant}", 0) + 1
-        if who:                                            # the machine that sent it (worker/1 is worker)
-            by.setdefault(who, {})
-            by[who][type_] = by[who].get(type_, 0) + 1
-    return counts, by

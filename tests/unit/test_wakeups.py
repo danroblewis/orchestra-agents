@@ -252,3 +252,15 @@ def test_a_supervisor_chat_and_a_wake_up_take_turns(project, monkeypatch):
     store.set_agent_state("supervisor", paused=True, crash_loop="3 crashes in 15 minutes")
     with pytest.raises(StoreError, match="paused .3 crashes"):
         host.prompt_supervisor("anyone there?", lambda ev: None)
+
+
+def test_a_per_ticket_instance_announces_itself_once_per_source_not_per_session(project, tmp_path):
+    host, _store, events = host_with(project, FakeHarness(reply="ok"))
+    for n in (1, 2):                                                  # two tickets, one after the other, on the same slot
+        (tmp_path / f"w{n}").mkdir()
+        assigned(events, f"a{n}", f"T-{n}", tmp_path / f"w{n}")
+        host.runner.tick()
+        host.runner.threads[f"a{n}"].join(20)
+    started = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"]
+    assert [e["source"] for e in started] == ["worker/1"]            # the slot is one machine instance, announced once
+    assert len([e for e in events.read(0)[0] if e["type"] == "task.reported"]) == 2

@@ -8,7 +8,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <link rel="stylesheet" href="/static/style.css?v={{v}}">
 <link rel="stylesheet" href="/plugins/agents/static/agents.css?v={{v}}">
 <style>
@@ -46,34 +45,19 @@
   .tl .next { color:var(--text2); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right }
   .tl .axis { display:grid; grid-template-columns:150px 1fr 150px; gap:10px; font-size:10.5px; color:var(--muted); margin-top:2px }
   .tl .axis .marks { display:flex; justify-content:space-between }
-  .evmap { background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; margin-bottom:6px }
-  .evmap svg { display:block; width:100%; height:560px; font-size:11px }
-  .evmap .n circle.body { fill:var(--rc, #94a3b8); stroke:var(--border2); stroke-width:1.5 }
-  .evmap .n text.initial { fill:#0b0d12; font-weight:800; font-size:15px } .evmap .n.system text.initial, .evmap .n.probe text.initial { fill:var(--text2) }
-  .evmap .n text.name { fill:var(--text); font-weight:600; font-size:11.5px; paint-order:stroke; stroke:var(--panel2); stroke-width:3px }
-  .evmap .n.resident circle.body { stroke:#22c55e; stroke-width:2.5 }
-  .evmap .n.system circle.body { fill:var(--panel3); stroke:#94a3b8; stroke-dasharray:4 2 } .evmap .n.probe circle.body { fill:var(--panel3); stroke:#c4b5fd }
-  .evmap .n .halo { fill:none; stroke:url(#halo); stroke-width:4; stroke-dasharray:14 10; stroke-linecap:round; filter:drop-shadow(0 0 5px #60a5fa); animation:halo 2.4s linear infinite; transform-box:fill-box; transform-origin:center }
   @keyframes halo { to { transform:rotate(360deg) } }
-  .evmap .n.cyc circle, .evmap .n.cyc rect { stroke-width:3 } .evmap .n.event rect { fill:#0b0e14; stroke:#6b5313 } .evmap .n text.ev { fill:#fcd34d; font-family:var(--mono); font-size:10px; font-weight:600 } .evmap .n text.ev.custom { fill:#c4b5fd } .evmap .n text { fill:var(--text); font-weight:600; pointer-events:none } .evmap .n .sub { fill:var(--muted); font-weight:400; font-size:9.5px }
-  .evmap .e { fill:none; stroke:#4b5563; stroke-width:1.4; opacity:.85 } .evmap .e.seen { stroke:#22c55e } .evmap .e.cyc { stroke:#fcd34d }
-  .evmap .lbl { fill:#fcd34d; font-family:var(--mono); font-size:9.5px; paint-order:stroke; stroke:var(--panel2); stroke-width:3px } .evmap .lbl.custom { fill:#c4b5fd }
-  .evmap .dim { opacity:.1 } .evmap .n { cursor:grab }
-  .evmap .legend { color:var(--muted); font-size:10.5px; margin-top:6px; display:flex; gap:14px; flex-wrap:wrap } .evmap .legend i { display:inline-block; width:18px; border-top:2px solid; margin-right:5px; vertical-align:middle }
-  .evmap .loops { font-size:12px; color:var(--text2); margin-top:8px } .evmap .loops b { color:#fcd34d } .evmap .loops code { font-size:10.5px }
   @media (max-width:640px) {
     .tl .row, .tl .axis { grid-template-columns:1fr; height:auto; gap:4px } .tl .row { padding:4px 0 } .tl .next { text-align:left }
     .tl .axis .marks span:not(:first-child):not(:last-child) { display:none }
     .arow { grid-template-columns:22px 1fr auto } .arow .name { white-space:normal } .arow .sched, .arow .ctls { grid-column:1 / -1 }
-    .evmap svg { height:auto } .def { grid-template-columns:1fr; gap:2px 0 } .def > div:nth-child(even) { margin-bottom:6px }
+    .def { grid-template-columns:1fr; gap:2px 0 } .def > div:nth-child(even) { margin-bottom:6px }
   }
 </style>
 </head>
 <body>
 <nav id="nav"><a href="/">Dashboard</a><a href="/machines">Machines</a><a href="/dynamics">Dynamics</a><a href="/core">Core</a><span class="muted" id="proj"></span><span class="muted" id="conn" style="margin-left:auto"></span></nav>
 <div class="org">
-  <p class="intro">Who is in this project and what they are for; the Dashboard shows what they are doing right now. A <b>role</b> is a job description. An <b>agent</b> is an instance of roles in a team and is what runs: <span class="tag k-continuous">continuous</span> agents are processes that are always up and wake on events, <span class="tag k-scheduled">scheduled</span> agents run on an interval or a daily time, <span class="tag k-ad_hoc">ad hoc</span> agents get a fresh session each time their lead briefs them or a subscribed event fires. A <b>team</b> has one lead, responsibilities it keeps true, access, and a space in the repository. All of it is created, paused, reset or removed in conversation with the Supervisor and stored under <code>.orchestra/</code>; this page reads.</p>
-  <div id="evmap-host"></div>
+  <p class="intro">Who is in this project and what they are for; the Dashboard shows what they are doing right now. A <b>role</b> is a job description. An <b>agent</b> is an instance of roles in a team and is what runs: <span class="tag k-continuous">continuous</span> agents are processes that are always up and wake on events, <span class="tag k-scheduled">scheduled</span> agents run on an interval or a daily time, <span class="tag k-ad_hoc">ad hoc</span> agents get a fresh session each time their lead briefs them or a subscribed event fires. A <b>team</b> has one lead, responsibilities it keeps true, access, and a space in the repository. All of it is created, paused, reset or removed in conversation with the Supervisor and stored under <code>.orchestra/</code>; this page reads. Each agent's row says what wakes it and what it emits; who publishes and who listens for what, as observed on the bus, is <a href="/machines">the Machines page</a>.</p>
   <div id="list"></div>
 </div>
 <div id="overlay" class="overlay" onclick="if(event.target===this)closeDrawer()"><div id="drawer" class="drawer"></div></div>
@@ -106,148 +90,6 @@ function upcoming(a, now) {
   return out.sort((x, y) => x.t - y.t);
 }
 const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-// Who wakes whom, as a directed graph with events as nodes: task_scheduler → IN_PROGRESS → worker →
-// READY_FOR_REVIEW → reviewer → REJECTED → worker. An event node is specific (type:filter) when
-// anyone names the filter; a subscriber to the bare type is linked from every variant of it.
-let EVSIM = null;
-function agentGraph(m) {
-  const nodes = Object.fromEntries(m.nodes.map((n) => [n.id, n]));
-  const evNodes = {}, links = {};
-  const evNode = (type, filter, custom) => { const id = "ev:" + type + (filter ? ":" + filter : "");
-    evNodes[id] = evNodes[id] || { id, kind: "event", label: filter ? type + " → " + filter : type, labels: filter ? [type, "→ " + filter] : undefined, type, filter, custom: !!custom, cnt: (filter ? m.counts[type + ":" + filter] : m.counts[type]) || 0 }; return id; };
-  const link = (a, b, extra) => { const k = a + ">" + b; links[k] = links[k] || { source: a, target: b, seen: 0 }; links[k].seen += extra.seen || 0; };
-  const emits = m.edges.filter((e) => e.to.startsWith("ev:")), wakes = m.edges.filter((e) => e.from.startsWith("ev:"));
-  const typeOf = (id) => nodes[id].label, isCustom = (id) => !!nodes[id].custom;
-  const filtered = new Set(wakes.filter((w) => w.filter).map((w) => typeOf(w.from) + ":" + w.filter));   // variants a wake rule names
-  for (const e of emits) link(e.from, evNode(typeOf(e.to), e.filter, isCustom(e.to)), e);
-  for (const w of wakes) {
-    const t = typeOf(w.from);
-    if (w.filter) link(evNode(t, w.filter, isCustom(w.from)), w.to, w);
-    else { const variants = Object.values(evNodes).filter((n) => n.type === t); if (!variants.length) evNode(t, null, isCustom(w.from)); for (const v of Object.values(evNodes).filter((n) => n.type === t)) link(v.id, w.to, w); }
-  }
-  // An event nobody is woken by is a dead end on the map; hide those unless asked, so the
-  // picture is the communication pattern rather than the catalogue of everything logged.
-  let ls = Object.values(links);
-  if (!window.EV_SHOW_ALL) { const watched = new Set(ls.filter((l) => l.source.startsWith("ev:")).map((l) => l.source)); ls = ls.filter((l) => !l.target.startsWith("ev:") || watched.has(l.target)); }
-  // Collapse the variants of one event type that connect to exactly the same emitters and the
-  // same subscribers into one box: its first line the type, then the variants that flowed, each
-  // with its count, and the variants a wake rule names even at zero (the hover title lists all).
-  // The map is about who talks to whom, not the catalogue of names. Different types stay apart.
-  const sig = {};
-  for (const n of Object.values(evNodes)) {
-    const ins = ls.filter((l) => l.target === n.id).map((l) => l.source).sort().join(","), outs = ls.filter((l) => l.source === n.id).map((l) => l.target).sort().join(",");
-    if (!ins && !outs) continue;
-    const k = n.type + "|" + ins + "|" + outs;
-    (sig[k] = sig[k] || []).push(n);
-  }
-  const alias = {};
-  for (const group of Object.values(sig)) {
-    if (group.length < 2) continue;
-    group.sort((a, b) => b.cnt - a.cnt || a.label.localeCompare(b.label));
-    const id = "ev:group:" + group.map((n) => n.id).join("+");
-    const shown = group.filter((n) => n.cnt || filtered.has(n.type + ":" + n.filter));
-    evNodes[id] = { id, kind: "event", label: group[0].type, labels: [group[0].type, ...shown.map((n) => `→ ${n.filter || "(any)"} ${n.cnt}`)], type: group[0].type, filter: null,
-                    custom: group.some((n) => n.custom), cnt: group.reduce((a, n) => a + n.cnt, 0), variants: group.map((n) => `${n.label}: ${n.cnt}/24h`) };
-    for (const n of group) { alias[n.id] = id; delete evNodes[n.id]; }
-  }
-  if (Object.keys(alias).length) {
-    const merged = {};
-    for (const l of ls) { const a = alias[l.source] || l.source, b = alias[l.target] || l.target, k = a + ">" + b;
-      merged[k] = merged[k] || { ...l, source: a, target: b, seen: 0 }; merged[k].seen += l.seen; }
-    ls = Object.values(merged);
-  }
-  const used = new Set(ls.flatMap((l) => [l.source, l.target]));
-  const ns = [...m.nodes.filter((n) => n.kind !== "event" && used.has(n.id)).map((n) => ({ ...n })), ...Object.values(evNodes).filter((n) => used.has(n.id))];
-  return { nodes: ns, links: ls };
-}
-function sccs(nodes, links) {   // Tarjan: the feedback loops
-  const adj = {}; nodes.forEach((n) => adj[n.id] = []); links.forEach((l) => adj[l.source].push(l.target));
-  let idx = 0; const index = {}, low = {}, on = new Set(), st = [], out = [];
-  const go = (v) => { index[v] = low[v] = idx++; st.push(v); on.add(v);
-    for (const w of adj[v]) { if (index[w] === undefined) { go(w); low[v] = Math.min(low[v], low[w]); } else if (on.has(w)) low[v] = Math.min(low[v], index[w]); }
-    if (low[v] === index[v]) { const c = []; let w; do { w = st.pop(); on.delete(w); c.push(w); } while (w !== v); if (c.length > 1 || adj[v].includes(v)) out.push(c); } };
-  nodes.forEach((n) => { if (index[n.id] === undefined) go(n.id); });
-  return out;
-}
-function eventMap(m) {
-  const g = agentGraph(m);
-  if (!g.nodes.length) return "";
-  const cycles = sccs(g.nodes, g.links);
-  const inCyc = new Set(cycles.flat());
-  const name = (id) => { const n = g.nodes.find((x) => x.id === id); return n ? (n.variants ? `${n.label} (${n.labels.slice(1).join(", ")})` : n.label) : id; };
-  const loops = cycles.map((c) => { const es = g.links.filter((l) => c.includes(l.source) && c.includes(l.target));
-    const agents = c.filter((id) => !id.startsWith("ev:")).map(name);
-    return `<div><b>${esc(agents.join(" ⇄ "))}</b>: ${es.map((l) => `${esc(name(l.source))} → ${esc(name(l.target))}`).join(", ")}</div>`; }).join("");
-  setTimeout(() => drawGraph(g, inCyc), 0);
-  return `<div class="evmap"><svg id="evsvg"></svg>
-    <div class="legend"><span><i style="border-color:#4b5563"></i>causes / is woken by</span><span><span style="color:#fcd34d">▭</span> event</span><span><span style="color:#22c55e">○</span> resident agent</span><span>halo: active now</span><span><i style="border-color:#22c55e"></i>seen in the log, last 24h</span><span><i style="border-color:#fcd34d"></i>part of a feedback loop</span><label style="cursor:pointer"><input type="checkbox" ${window.EV_SHOW_ALL ? "checked" : ""} onchange="window.EV_SHOW_ALL=this.checked;window.EVSIG=null;refresh()"> show events nobody is woken by</label><span>· drag nodes, hover to isolate, click an agent to open it</span></div>
-    <div class="loops">${loops ? "<div class='muted' style='margin-bottom:3px'>Feedback loops</div>" + loops : "<span class='muted'>No feedback loops: nothing any agent causes wakes an agent that can cause it back.</span>"}</div></div>`;
-}
-function drawGraph(g, inCyc) {
-  const svgEl = document.getElementById("evsvg"); if (!svgEl || typeof d3 === "undefined") return;
-  // On a narrow screen the map is laid out 480 wide and the svg scales it down: the boxes keep apart.
-  const W = Math.max(svgEl.clientWidth || 1000, 480), H = W < 640 ? 420 : 560;
-  const short = (l) => (l.length > 26 ? l.slice(0, 25) + "…" : l);
-  const svg = d3.select(svgEl).attr("viewBox", `0 0 ${W} ${H}`); svg.selectAll("*").remove();
-  const palette = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
-  const byName = Object.fromEntries((ORG ? ORG.agents : []).map((a) => [a.name, a]));
-  // An agent is active when a session of its kind is running: one resident process, or any of an ad hoc agent's per-ticket sessions.
-  const active = new Set((STATE ? STATE.sessions : []).filter((s) => s.status === "running" && s.kind).map((s) => "agent:" + s.kind));
-  svg.append("defs").html(`<linearGradient id="halo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="60" y2="60"><stop offset="0" stop-color="#60a5fa"/><stop offset=".5" stop-color="#c084fc"/><stop offset="1" stop-color="#22c55e"/></linearGradient><marker id="arr" viewBox="0 -4 8 8" refX="8" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L8,0L0,4" fill="#6b7280"></path></marker><marker id="arrc" viewBox="0 -4 8 8" refX="8" refY="0" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,-4L8,0L0,4" fill="#fcd34d"></path></marker>`);
-  const links = g.links.map((l) => ({ ...l })), nodes = g.nodes.map((n) => ({ ...n }));
-  const R = 22;
-  if (EVSIM) EVSIM.stop();
-  const sim = EVSIM = d3.forceSimulation(nodes).force("link", d3.forceLink(links).id((d) => d.id).distance(110)).force("charge", d3.forceManyBody().strength(-520))
-    .force("center", d3.forceCenter(W / 2, H / 2)).force("collide", d3.forceCollide((n) => n.kind === "event" ? Math.max(46, 10 + ((n.labels || [1]).length - 1) * 6.5 + 26, Math.max(...(n.labels || [n.label]).map((l) => Math.min(l.length, 26))) * 3.4 + 20) : R + 30));
-  const cyc = (l) => inCyc.has(l.source.id || l.source) && inCyc.has(l.target.id || l.target);
-  const path = svg.append("g").selectAll("path").data(links).join("path").attr("class", (l) => `e ${l.seen ? "seen" : ""} ${cyc(l) ? "cyc" : ""}`).attr("marker-end", (l) => cyc(l) ? "url(#arrc)" : "url(#arr)")
-    .attr("data-from", (l) => l.source.id || l.source).attr("data-to", (l) => l.target.id || l.target);
-  path.append("title").text((l) => `${(l.source.label || l.source)} → ${(l.target.label || l.target)}${l.seen ? ` · ${l.seen} in 24h` : ""}`);
-  const lbl = svg.append("g").selectAll("text").data([]).join("text");
-  const node = svg.append("g").selectAll("g").data(nodes).join("g")
-    .attr("class", (n) => `n ${n.kind} ${inCyc.has(n.id) ? "cyc" : ""} ${n.kind === "agent" && byName[n.label] && byName[n.label].resident ? "resident" : ""}`)
-    .attr("style", (n) => n.kind === "agent" ? `--rc:${palette[n.label] || "#94a3b8"}` : "").attr("data-id", (n) => n.id)
-    .on("mouseenter", (ev, n) => evHover(n.id)).on("mouseleave", () => evHover(null)).on("click", (ev, n) => { if (n.kind === "agent") openAgent(n.label); })
-    .call(d3.drag().on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; }).on("drag", (ev, d) => { d.fx = ev.x; d.fy = ev.y; }).on("end", (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = d.fy = null; }));
-  node.filter((n) => active.has(n.id)).append("circle").attr("class", "halo").attr("r", R + 7).append("title").text("active right now");
-  node.filter((n) => n.kind !== "event").append("circle").attr("class", "body").attr("r", R);
-  const evLines = (n) => (n.labels || [n.label]).map(short), evHW = (n) => Math.max(40, Math.max(...evLines(n).map((l) => l.length)) * 3.4 + 12), evHH = (n) => 10 + (evLines(n).length - 1) * 6.5;
-  node.filter((n) => n.kind === "event").append("rect").attr("x", (n) => -evHW(n)).attr("y", (n) => -evHH(n)).attr("width", (n) => 2 * evHW(n)).attr("height", (n) => 2 * evHH(n)).attr("rx", 5);
-  // Like the Dashboard avatars: the initial inside the colour, the name beneath it in text colour.
-  const evText = node.filter((n) => n.kind === "event").append("text").attr("text-anchor", "middle").attr("class", (n) => `ev ${n.custom ? "custom" : ""}`);
-  evText.selectAll("tspan").data((n) => evLines(n).map((l, i, arr) => ({ l, i, n: arr.length }))).join("tspan").attr("x", 0).attr("dy", (d) => d.i === 0 ? 3 - (d.n - 1) * 6.5 : 13).text((d) => d.l);
-  node.filter((n) => n.kind !== "event").append("text").attr("text-anchor", "middle").attr("dy", 5).attr("class", "initial").text((n) => n.label[0].toUpperCase());
-  node.filter((n) => n.kind !== "event").append("text").attr("text-anchor", "middle").attr("dy", R + 13).attr("class", "name").text((n) => n.label);
-  node.append("text").attr("class", "sub").attr("text-anchor", "middle").attr("dy", (n) => n.kind === "event" ? evHH(n) + 12 : R + 24).text((n) => n.kind === "event" ? (n.cnt ? n.cnt + "/24h" : "") : n.team || (n.kind === "system" ? "system" : ""));
-  node.append("title").text((n) => n.variants ? `${n.label}\n${n.variants.join("\n")}` : `${n.label}${n.description ? ": " + n.description : ""}${n.kind === "event" && n.cnt ? ` · ${n.cnt}/24h` : ""}`);
-  sim.on("tick", () => {
-    // every node stays inside the canvas: an event box by its half-width, an agent by its name
-    nodes.forEach((n) => { const hw = n.kind === "event" ? evHW(n) + 4 : Math.max(R + 4, n.label.length * 3.3); const hh = n.kind === "event" ? evHH(n) + 14 : R + 10; n.x = Math.max(hw, Math.min(W - hw, n.x)); n.y = Math.max(hh, Math.min(H - hh - 20, n.y)); });
-    path.attr("d", (l) => { const s = l.source, t = l.target;
-      if (s === t) return `M${s.x},${s.y - R} C${s.x + 50},${s.y - 70} ${s.x + 70},${s.y - 20} ${s.x + R},${s.y}`;
-      const dx = t.x - s.x, dy = t.y - s.y, dist = Math.hypot(dx, dy) || 1, nx = -dy / dist, ny = dx / dist;       // curve so a reverse edge takes the other side
-      const mx = (s.x + t.x) / 2 + nx * 28, my = (s.y + t.y) / 2 + ny * 28;
-      const tr = t.kind === "event" ? 10 + ((t.labels || [1]).length - 1) * 6.5 + 4 : R + 2;
-      const ex = t.x - (dx / dist) * tr, ey = t.y - (dy / dist) * tr;
-      return `M${s.x},${s.y} Q${mx},${my} ${ex},${ey}`; });
-    lbl.attr("x", (l) => { const s = l.source, t = l.target; if (s === t) return s.x + 55; const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy) || 1; return (s.x + t.x) / 2 - dy / d * 16; })
-       .attr("y", (l) => { const s = l.source, t = l.target; if (s === t) return s.y - 48; const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy) || 1; return (s.y + t.y) / 2 + dx / d * 16 + 3; });
-    node.attr("transform", (n) => `translate(${n.x},${n.y})`);
-  });
-}
-function evHover(id) {
-  const svg = document.querySelector(".evmap svg"); if (!svg) return;
-  const es = [...svg.querySelectorAll(".e")], ns = [...svg.querySelectorAll(".n")], ls = [...svg.querySelectorAll(".lbl")];
-  if (!id) { [...es, ...ns, ...ls].forEach((x) => x.classList.remove("dim")); return; }
-  // The node, its edges, the events on them, and then every edge of those events and the
-  // agents at their far ends: what this agent causes and who it reaches, and what reaches it.
-  const keep = new Set([id]), lit = new Set();
-  const touch = (nid) => es.forEach((e, i) => { if (e.dataset.from === nid || e.dataset.to === nid) { lit.add(i); keep.add(e.dataset.from); keep.add(e.dataset.to); } });
-  touch(id);
-  if (!id.startsWith("ev:")) [...keep].filter((n) => n.startsWith("ev:")).forEach(touch);
-  es.forEach((e, i) => { e.classList.toggle("dim", !lit.has(i)); if (ls[i]) ls[i].classList.toggle("dim", !lit.has(i)); });
-  ns.forEach((n) => n.classList.toggle("dim", !keep.has(n.dataset.id)));
-}
 function timeline(agents, now) {
   const rows = agents.filter((a) => a.kind !== "ad_hoc" && (a.every || a.at)).map((a) => ({ a, ticks: upcoming(a, now) }));
   if (!rows.length) return "";
@@ -287,7 +129,7 @@ const EVENT_HELP = {
   "task.assigned": "the task system offers a ticket to a role", "task.accepted": "a machine takes an offered ticket", "task.working": "the holder of a ticket says it is still at it",
   "task.reported": "the holder of a ticket reports", "task.released": "the task system takes an assignment back", "task.attention_needed": "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
   "request.done": "the task system answered a request", "request.refused": "the task system refused a request",
-  "agent.said": "an agent finishes a turn", "context.updated": "the project context changes", "scheduler.started": "the task system's scheduler starts", "scheduler.stopped": "the task system's scheduler stops",
+  "agent.said": "an agent finishes a turn", "context.updated": "the project context changes", "scheduler.stopped": "the task system's scheduler stops",
   "session.started": "any agent turn starts", "session.settled": "any agent turn ends", "role.created": "a role is created", "role.changed": "a role changes", "role.deleted": "a role is deleted",
   "agent.created": "an agent is created", "agent.changed": "an agent changes", "agent.deleted": "an agent is deleted", "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed", "agent.messaged": "an agent gets a message or brief",
   "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
@@ -428,7 +270,7 @@ async function openRole(name) {
 }
 async function refresh() {
   try {
-    const [st, org, evm] = await Promise.all([fetch(API + "/state").then((r) => r.json()), fetch(API + "/org").then((r) => r.json()), fetch(API + "/eventmap").then((r) => r.json())]);
+    const [st, org] = await Promise.all([fetch(API + "/state").then((r) => r.json()), fetch(API + "/org").then((r) => r.json())]);
     STATE = st; ORG = org; $("conn").textContent = "live";
     const byName = Object.fromEntries(org.agents.map((a) => [a.name, a]));
     const top = org.teams.filter((t) => !t.parent);
@@ -436,10 +278,6 @@ async function refresh() {
     // "Here" includes agents whose team does not exist yet (created before the team, which the
     // Supervisor's guide tells it to do), labelled as such.
     const loose = org.agents.filter((a) => (!a.team || a.team_exists === false) && !(a.builtin && !a.resident));
-    // The map lives in its own container and is redrawn only when the graph changes; the
-    // list below is re-rendered every refresh, which would otherwise wipe the drawn SVG.
-    const sig = JSON.stringify([evm.edges.map((e) => [e.from, e.to, e.kind, !!e.seen]), st.sessions.filter((s) => s.status === "running").map((s) => s.kind).sort(), !!window.EV_SHOW_ALL]);
-    if (window.EVSIG !== sig || !document.getElementById("evsvg")) { window.EVSIG = sig; $("evmap-host").innerHTML = `<h2>Event map</h2>` + eventMap(evm); }
     let html = timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');
     html += `<h2>Agents outside a team <span class="count">${loose.length}</span></h2>` + (loose.map((a) => agentRow(a, false, org.now)).join("") || '<div class="empty">none</div>');

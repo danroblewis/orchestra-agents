@@ -22,7 +22,8 @@ work = "tasks"           # a scratch folder per ticket, reviewed, nothing merged
 
 [tasks]
 workers = 2              # tickets offered to workers at once
-reviewers = 1
+reviewers = 1            # one reviewer: a queue forms in front of it after the burst
+tick = "1s"              # the scheduler's record follows a machine within a second (3 s by default would quantise every residence to 3 s)
 
 # ---- the agents (orchestra-agents) ----
 

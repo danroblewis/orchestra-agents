@@ -22,7 +22,7 @@
   const ROLE_C = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
   const RANK = { supervisor: 10, coordinator: 11, agents: 15, worker: 30, reviewer: 31 };
   const stateColor = (st) => (typeof color === "function" ? color(st) : "var(--muted)");
-  const kindOf = (m) => (m.about && m.about.kind) || (m.declared && m.declared.kind);
+  const kindOf = (m) => m.kind;
   const roleOf = (m) => (m.about && m.about.role) || m.id;
   const sessionsOf = (m) => (D ? D.sessions.filter((s) => s.role === roleOf(m)) : []);
   // what is known of the agent beyond its sessions, for its status (agents.js agentStatus)
@@ -43,13 +43,14 @@
   }
   function residentCard(m, compact) {
     const s = sessionsOf(m).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))[0];
-    // the stored text is a message's tail: start it at a sentence, not mid-word
-    const tail = s ? s.last_text || "" : "", cut = tail.search(/[.!?]\s+[A-Z*`(]/);
+    // the stored text is a message's tail, markdown and all: drop fence lines, emphasis markers and
+    // backticks (the words stay), then start it at a sentence, not mid-word
+    const tail = (s ? s.last_text || "" : "").replace(/^\s*```.*$/gm, "").replace(/\*\*|__|`|(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$)/g, "$1").trim(), cut = tail.search(/[.!?]\s+[A-Z(]/);
     const role = roleOf(m), say = tail.length >= 290 && cut >= 0 && cut < 160 ? tail.slice(cut + 1).trim() : tail;
     const a = agentOf(m), next = a.next_scheduled_at && !(s && s.status === "running") ? `next wake-up in ${ago(a.next_scheduled_at - D.now)}` : "";
     // with nothing said yet the status line already names the next wake-up
     const text = m.unseen ? "declared, not run yet" : say ? [say, next].filter(Boolean).join(" · ") : typeof agentStatus === "function" ? agentStatus(s, D.now, a).title : "";
-    return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_((m.declared || {}).description || role)}">
+    return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_(agentOf(m).description || role)}">
         <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${e_(m.id)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
   }
 

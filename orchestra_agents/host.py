@@ -73,6 +73,7 @@ class AgentHost:
         self._started_at = time.time()
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
+        self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
         self._wake_follow = Follower(events)           # events that wake agents: only those after startup
         self._digest = Follower(events)                # what the Supervisor is told happened since its last turn
         self.runner = AgentRunner(self)                # answers the task system's assignments
@@ -289,7 +290,13 @@ class AgentHost:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
         mode and what it listens for): an AI agent, on which harness and model, engaged how. A
         resident agent is continuous (its session is always up; a schedule is one of its wake
-        rules), a per-ticket or ephemeral one ad hoc."""
+        rules), a per-ticket or ephemeral one ad hoc. Once per source in the host's lifetime
+        (``reviewer/1`` is one machine instance however many tickets it reviews), again only when
+        the harness or the model changed."""
+        key = (source, self.harness.name, self.cfg.model)
+        if key in self._announced:
+            return
+        self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
         mode = "continuous" if agent is not None and agent.resident else "ad hoc"
         listens = sorted({w.split(":")[0] for w in (agent.wake_on if agent is not None else [])})

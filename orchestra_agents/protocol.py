@@ -13,6 +13,11 @@ contract (orchestra-tasking: docs/proposals/agents-split.md); nothing is importe
 - Attention: the task system asks a planner to look at something (``task.attention_needed``,
   to a role, with the reason).
 
+The names: ``task.*`` is the protocol between the task system and the machines that fill roles
+(assignment, requests, attention); ``ticket.*`` and ``milestone.*`` are the facts the task
+system records about its own objects (``TASK_EVENTS``). So a request to create a ticket is
+``task.requested`` and the fact is ``ticket.created``.
+
 The snapshot (the ``snapshot`` query's answer) is read by the prompts (prompting.py) in these
 fields and no others: ``counts``; ``tickets[]`` with ``id``, ``state``, ``title``, ``priority``,
 ``priority_info.effective``, ``milestone_id``, ``ready``, ``why_waiting``, ``blocked_reason``,
@@ -43,7 +48,7 @@ TASK_EVENTS = (
     "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
     "staging.deployed", "staging.failed", "staging.restarted",
     "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
-    "scheduler.started", "scheduler.stopped", "probe.failed", "probe.recovered",
+    "scheduler.stopped", "probe.failed", "probe.recovered",
 )
 
 REQUESTS = {"create_ticket": "task.requested", "update_ticket": "task.change_requested", "add_note": "task.note_requested",

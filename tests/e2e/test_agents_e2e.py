@@ -115,7 +115,7 @@ def env(tmp_path, monkeypatch, request):
     th.start()
     try:
         started, deadline = Follower(events, start=0), time.time() + 30
-        while not any(e["type"] == "scheduler.started" for e in started.new()):
+        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "task_scheduler" for e in started.new()):
             assert scheduler.poll() is None, "tasking run exited; see scheduler.log"
             assert time.time() < deadline, "the scheduler did not start"
             time.sleep(0.2)

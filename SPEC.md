@@ -210,8 +210,9 @@ Supervisor maintains. The organisation's custom records are in the repository un
 
 Mounted by Orchestra's web app (`orchestra/plugins.py`):
 
-- the **Agents page** (`/agents`): the event map (who wakes whom through which events, declared
-  and observed), upcoming scheduled wake-ups, the teams with their agents, agents outside a team,
+- the **Agents page** (`/agents`): upcoming scheduled wake-ups, the teams with their agents (each
+  with its wake rules and what it emits; who publishes and who listens is Orchestra's Machines
+  page, which observes it), agents outside a team,
   the teams' probes, the roles; a drawer for each agent, team and role (definition, tools,
   prompt, runs) and for each session (its transcript, newest first, with the host's markers for
   cut-off turns, and the Supervisor's chat);
@@ -225,7 +226,7 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
 API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
 (the organisation); `GET /agents` (every agent and every session as the instance it runs as,
 with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
-`GET /sessions/{id}/transcript` (paged, with the markers); `GET /eventmap`; `GET /attention`
+`GET /sessions/{id}/transcript` (paged, with the markers); `GET /attention`
 (the unread message, and whether the host that answers is up: with it down the banner and the
 button stop offering an answer) and `POST /attention/seen`; `POST /supervisor` (a message to the
 Supervisor, proxied to the host, streamed). Every read re-reads `[agents]` from `orchestra.toml`,

@@ -39,6 +39,14 @@ HOST_LOG_MAX = 5_000_000
 SHUTDOWN_REPORTS_S = 10.0    # how long shutdown waits for the open assignments' reports to go out
 
 
+def alive(pid) -> bool:
+    """Whether a process with this pid is up (a zombie is not)."""
+    try:
+        return bool(pid) and psutil.Process(int(pid)).status() != psutil.STATUS_ZOMBIE
+    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+        return False
+
+
 def log(msg: str) -> None:
     line = f"[agents {time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line, flush=True)
@@ -90,7 +98,14 @@ class AgentHost:
                            reason="the agents' host was not running (it crashed or was killed) during this turn")
             self.store.set_session(s["id"], status="idle", pid=None)
 
-    def run(self, once: bool = False) -> None:
+    def run(self, once: bool = False) -> int:
+        """The host until it is stopped. Returns the exit status: 1 when another host already
+        holds this project (two would kill each other's turns and both answer every assignment)."""
+        other = (self.store.runtime().get("control") or {}).get("pid")
+        if other and other != os.getpid() and alive(other):
+            log(f"another orchestra-agents run holds this project (pid {other}); exiting")
+            return 1
+
         def _stop(_sig, _frame):
             self.stop.set()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -131,6 +146,7 @@ class AgentHost:
                 if self.control:
                     self.control.stop()
                 self.store.clear_control(os.getpid())
+        return 0
 
     def _busy(self) -> bool:
         return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
@@ -238,21 +254,22 @@ class AgentHost:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")
         source = self._instance(session_id, role, ticket_id)
-        self._announce(source, role)
-        return self.harness.start(SessionSpec(
+        proc = self.harness.start(SessionSpec(
             session_id=session_id, session_dir=self.project.sessions_dir, cwd=cwd,
             system_prompt=system_prompt, role=role, tool_groups=tools,
             env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
                  "ORCHESTRA_SOURCE": source, **(extra_env or {})},
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=self.cfg.model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens))
+        self._announce(source, role)               # once it exists: a session that failed to start is no machine
+        return proc
 
     def _instance(self, session_id: str, role: str, ticket_id: str = "") -> str:
-        """The machine instance a session runs as, which is also the source of its events: a
-        resident agent is its role ("supervisor"); a worker or reviewer for one ticket takes the
-        lowest free slot of its role ("worker/1"), given back when its turn ends. Called on the
-        main thread (runner.tick) before a per-ticket turn starts, so two offers in one tick
-        cannot take the same slot."""
+        """The machine instance a session runs as, which is also the source of its events. A
+        worker or reviewer for one ticket takes the lowest free slot of its role ("worker/1"),
+        given back when its turn ends; numbered slots are taken only on the runner's tick (the
+        main thread), so two offers in one tick cannot take the same slot. A resident or an
+        ephemeral session is bound to its role name, from whichever thread opens it."""
         if session_id in self._slots:
             return self._slots[session_id]
         if not ticket_id:
@@ -265,15 +282,17 @@ class AgentHost:
         return source
 
     def _release(self, session_id: str) -> None:
-        source = self._slots.pop(session_id, None)
-        if source and "/" in source:
+        """The slot and the binding go together; releasing a session that never took one is nothing."""
+        if self._slots.pop(session_id, None) is not None:
             self.events.unbind(session_id)
 
     def _announce(self, source: str, role: str) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
-        mode and what it listens for): an AI agent, on which harness and model, engaged how."""
+        mode and what it listens for): an AI agent, on which harness and model, engaged how. A
+        resident agent is continuous (its session is always up; a schedule is one of its wake
+        rules), a per-ticket or ephemeral one ad hoc."""
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        mode = {"continuous": "continuous", "scheduled": "scheduled", "ad_hoc": "ad hoc"}.get(getattr(agent, "kind", ""), "ad hoc")
+        mode = "continuous" if getattr(agent, "resident", False) else "ad hoc"
         listens = sorted({w.split(":")[0] for w in (getattr(agent, "wake_on", None) or [])})
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": listens, "kind": "agent", "role": role,
                                                           "harness": self.harness.name, "model": self.cfg.model},
@@ -281,12 +300,10 @@ class AgentHost:
 
     @staticmethod
     def _pid(proc: AgentSession) -> int | None:
-        """The process that proves the session is alive: the harness's own process when it keeps
-        one between turns, otherwise this host, which holds the session open. A dead session has
-        no pid at all, so the UI can never mistake a dead agent for a running one."""
-        if not proc.alive():
-            return None
-        return proc.pid or os.getpid()
+        """The harness's own process, when it keeps one between turns; None otherwise (a harness
+        that starts a process per turn names it in ``turn_start``, turns.py). Never this host's
+        pid: a recorded pid is what a later host stops as an orphan."""
+        return proc.pid if proc.alive() else None
 
     def _wake_on_events(self) -> None:
         """Match new events against every agent's wake_on list and queue wake-ups. Workers and
@@ -340,7 +357,7 @@ class AgentHost:
 
     def _session_idle(self, sid: str, text: str, resident: bool = False) -> None:
         proc = self.live_procs.pop(sid, None) if not resident else self._proc_for(sid)
-        fields = {} if resident else {"pid": None}
+        fields = {"pid": self._pid(proc) if resident and proc is not None else None}   # the turn's process is gone; a resident's stays
         if proc is not None and proc.session_file:
             fields["session_file"] = proc.session_file   # some harnesses only name the transcript after the first turn
         self.store.set_session(sid, status="idle", last_text=(text or "")[-500:], settled_at=time.time(), phase="idle", tool_name=None,
@@ -388,6 +405,7 @@ class AgentHost:
         res = proc.prompt(prefix + message, self.cfg.turn_timeout or None, on_event=on_event, idle_timeout=self.cfg.silence_timeout)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
+        self.events.emit("agent.said", session="supervisor", summary=(res.text or "")[:500])
         return {"text": res.text, "error": res.error, "timed_out": res.timed_out}
 
     def _wake(self, target: str, reasons: list[str]) -> None:
@@ -395,6 +413,10 @@ class AgentHost:
         if agent is None:
             return
         sid = agent.session_id
+        snap = tooling.snapshot(self.project, self.store, target)
+        if snap.get("unavailable") and all(r.startswith(("scheduled check-in", "scheduled daily session")) for r in reasons):
+            log(f"{sid}: the task system did not answer; the scheduled wake-up is skipped")   # a check-in on no picture is a wasted turn
+            return
         ephemeral = agent.ephemeral
         if ephemeral:
             sid = f"{agent.session_id}-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -408,7 +430,6 @@ class AgentHost:
         self.store.set_agent_state(target, last_woken=time.time(), turn_depth=self._pending_depth.pop(target, 0))
         log(f"{sid}: waking ({len(reasons)} reason(s))")
         self._session_running(sid, target, proc)
-        snap = tooling.snapshot(self.project, self.store, target)
         task = agents.wake_task(target, reasons, snap)
         if target == "supervisor":
             task = ("[Orchestra: escalation from another agent; the human is not present for this turn. "

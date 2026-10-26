@@ -13,35 +13,36 @@ import time
 import urllib.request
 from pathlib import Path
 
-import psutil
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from orchestra.plugins import Declared, Page, Plugin
 
-from . import prompting, tooling
-from .api_org import handle_org
+from . import tooling
 from .builtins import SYSTEM_BINDINGS
 from .config import load_project
 from .events import Events
 from .harness import read_transcript
+from .host import alive
 from .org_store import all_agents, all_teams
 from .protocol import Follower
 from .roles import EVENT_TYPES
 from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
-WEB = "agents_web"       # the source of the operator's controls on the bus
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
 OBSERVED_WINDOW_S = 24 * 3600
 OBSERVED_REFRESH_S = 60
 _observed: dict[str, dict] = {}   # project key -> what the event map saw on the bus (read once a minute, not per request)
 
 
-def _alive(pid) -> bool:
-    try:
-        return bool(pid) and psutil.Process(int(pid)).status() != psutil.STATUS_ZOMBIE
-    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
-        return False
+def session_alive(s: dict, host_alive: bool, residents: set[str]) -> bool:
+    """A session is alive while its turn's process is; a resident agent between turns (on a
+    harness that starts a process per turn there is none) is alive while its host is up."""
+    return alive(s.get("pid")) or (s["id"] in residents and s.get("status") != "running" and host_alive)
+
+
+def residents_of(project) -> set[str]:
+    return {a.session_id for a in all_agents(project).values() if a.resident}
 
 
 def plugin(orchestra_project) -> Plugin:
@@ -57,21 +58,15 @@ def declared(project) -> list[Declared]:
     that machine's, not declared here)."""
     out = [Declared("agents", "program", "Runs the AI agents: their sessions, wake-ups, and the task system's assignments.", "continuous")]
     for a in all_agents(project).values():
-        if a.builtin and not a.resident and a.name not in project.config.serves:
-            continue
-        mode = {"continuous": "continuous", "scheduled": "scheduled", "ad_hoc": "ad hoc"}.get(a.kind, "ad hoc")
-        out.append(Declared(a.name, "agent", a.description, mode, sorted({w.split(":")[0] for w in a.wake_on})))
+        out.append(Declared(a.name, "agent", a.description, "continuous" if a.resident else "ad hoc",
+                            sorted({w.split(":")[0] for w in a.wake_on})))
     return out
 
 
 def router(project) -> APIRouter:
     r = APIRouter()
-    events = Events.for_project(project, source=WEB)
+    events = Events.for_project(project)
     store = AgentStore(project, events)
-
-    @r.get("/roles")
-    async def roles() -> dict:
-        return tooling.handle(project, store, "list_roles", {})
 
     @r.get("/roles/{name}")
     async def role_detail(name: str) -> dict:
@@ -106,26 +101,15 @@ def router(project) -> APIRouter:
     @r.get("/state")
     async def state() -> dict:
         """The agents' sessions (alive or not) and the teams' probes, for the Agents page."""
-        sessions = store.sessions()
+        rt = store.runtime()
+        ctl = rt.get("control") or {}
+        host_alive, residents = alive(ctl.get("pid")), residents_of(project)
+        sessions = list(rt["sessions"].values())
         for s in sessions:
-            s["alive"] = _alive(s.get("pid"))
-        probes = [{"name": n, **store.probe_state(n)} for n in store.probes() if not store.probe_state(n).get("removed")]
-        ctl = store.runtime().get("control") or {}
+            s["alive"] = session_alive(s, host_alive, residents)
+        probes = [{"name": n, **rt["probes"][n]} for n in rt["probes"] if not rt["probes"][n].get("removed")]
         return {"ok": True, "now": time.time(), "project": {"key": project.key}, "sessions": sessions, "probes": probes,
-                "control": {**ctl, "alive": _alive(ctl.get("pid"))}}
-
-    @r.post("/control")
-    async def control(request: Request) -> dict:
-        """The operator's controls on agents: pause, resume, restart, start over, delete. The
-        commands are the Supervisor's (the permission check), recorded as the operator's."""
-        body = await request.json()
-        action = body.get("action")
-        if action in ("pause_agent", "resume_agent", "restart_agent", "reset_agent", "delete_agent", "delete_role", "delete_team"):
-            try:
-                return handle_org(project, store, action, {"name": body.get("name") or ""}, author="operator", role="supervisor")
-            except StoreError as e:
-                raise HTTPException(409, str(e)) from e
-        raise HTTPException(400, "unknown action")
+                "control": {**ctl, "alive": host_alive}}
 
     @r.get("/attention")
     async def attention() -> dict:
@@ -186,10 +170,6 @@ def router(project) -> APIRouter:
 
         return StreamingResponse(gen(), media_type="application/x-ndjson")
 
-    @r.get("/context")
-    async def context() -> dict:
-        return {"text": prompting.read_context(project)}
-
     @r.get("/sessions/{session_id}/transcript")
     async def transcript(session_id: str, before: int = 0, limit: int = 30, after: int | None = None) -> dict:
         """A page of a session's transcript, newest first. `before` counts messages back from
@@ -209,15 +189,16 @@ def router(project) -> APIRouter:
             end = max(0, total - max(0, before))
             page = msgs[max(0, end - max(1, min(limit, 200))):end]
         page.reverse()
-        s = {**s, "alive": _alive(s.get("pid")), "file_exists": exists}
+        ctl = store.runtime().get("control") or {}
+        host_alive = alive(ctl.get("pid"))
+        s = {**s, "alive": session_alive(s, host_alive, residents_of(project)), "file_exists": exists}
         pf = project.logs_dir / "agents" / f"{session_id}.prompt.md"
         started_with = pf.read_text(encoding="utf-8") if pf.exists() else None
         # What the host did to this session (turn starts, cut-offs, errors, resets) is kept on
         # its record; the session file stays the only transcript, and the view overlays these.
-        ctl = store.runtime().get("control") or {}
         return {"session": s, "messages": page, "total": total, "before": before, "next_before": total - (end - len(page)) if page else before,
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
-                "markers": s.get("markers") or [], "host": {**ctl, "alive": _alive(ctl.get("pid"))}}
+                "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive}}
 
     @r.get("/eventmap")
     async def eventmap() -> dict:
@@ -287,22 +268,17 @@ def router(project) -> APIRouter:
         sessions = list(rt["sessions"].values())
         out = []
         for a in all_agents(project).values():
-            mine = [x for x in sessions if x["id"] == a.session_id or x.get("kind") == a.name or x["id"].startswith(a.name + "-")]
-            jobs = [{"session": x["id"], "ticket": x.get("ticket_id"), "text": (x.get("partial_text") or x.get("last_text") or "")[-160:]}
-                    for x in mine if x.get("status") == "running"]
             st = rt["agent_state"].get(a.name) or {}
             out.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team, "session_id": a.session_id,
-                        "resident": a.resident, "paused": bool(st.get("paused")), "next_scheduled_at": st.get("next_scheduled_at"),
-                        "status": "working" if jobs else ("waiting" if any(_alive(x.get("pid")) for x in mine) else "not running"), "jobs": jobs})
+                        "resident": a.resident, "paused": bool(st.get("paused")), "next_scheduled_at": st.get("next_scheduled_at")})
         ctl = rt.get("control") or {}
-        host_alive = _alive(ctl.get("pid"))
-        residents = {a["session_id"] for a in out if a.get("resident")}
+        host_alive = alive(ctl.get("pid"))
+        residents = {a["session_id"] for a in out if a["resident"]}
         insts = []
         for x in sessions:
             insts.append({**{k: v for k, v in x.items() if k not in ("partial_text", "last_text")},
                           "session": x["id"], "instance": x.get("instance") or x.get("kind"), "role": x.get("kind"),
-                          # a resident agent between turns has no process on Claude Code or Codex: it is up while its host is
-                          "alive": _alive(x.get("pid")) or (x["id"] in residents and x.get("status") != "running" and host_alive),
+                          "alive": session_alive(x, host_alive, residents),
                           "tool": x.get("tool_name"), "last_text": (x.get("partial_text") or x.get("last_text") or "")[-300:],
                           "ticket": ({"id": x["ticket_id"], "title": x.get("ticket_title") or "", "state": x.get("ticket_state") or "IN_PROGRESS",
                                       "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})

@@ -147,6 +147,7 @@ class CodexSession(AgentSession):
                 result.error = f"cannot start {self.binary}: {e}"
                 stderr.close()
                 return result
+            emit.pid = self.proc.pid
             try:
                 try:
                     self.proc.stdin.write(text)  # type: ignore[union-attr]
@@ -215,6 +216,14 @@ class CodexSession(AgentSession):
         self.kill()
         self._closed = True
 
+    def retire(self) -> str | None:
+        """Forget the thread: the next turn starts a new one. The rollout stays where Codex keeps it."""
+        old = self.session_file if self.session_file and Path(self.session_file).exists() else None
+        self.thread_id, self.session_file = None, None
+        if self._meta_path.exists():
+            self._meta_path.unlink()
+        return old
+
 
 class _LineReader:
     def __init__(self, stream):
@@ -241,6 +250,7 @@ class _Normalizer:
 
     def __init__(self, on_event: OnEvent | None):
         self.on_event = on_event
+        self.pid: int | None = None          # the turn's process, once started
 
     def _emit(self, ev: dict) -> None:
         if self.on_event:
@@ -256,7 +266,7 @@ class _Normalizer:
         t = ev.get("type")
         item = ev.get("item") or {}
         if t == "turn.started":
-            self._emit({"type": "turn_start"})
+            self._emit({"type": "turn_start", "pid": self.pid})
         elif t == "item.started":
             self._emit({"type": "token"})
             if tool := _item_tool(item):

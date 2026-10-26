@@ -78,8 +78,13 @@ class AgentStore:
             return dict(s)
         return self._mutate_runtime(fn)
 
-    def sessions(self) -> list[dict]:
-        return list(self.runtime()["sessions"].values())
+    def sessions(self, include_archived: bool = False) -> list[dict]:
+        """The live sessions, and with ``include_archived`` the archived ones after them, newest first."""
+        rt = self.runtime()
+        out = list(rt["sessions"].values())
+        if include_archived:
+            out += sorted(rt["archived_sessions"].values(), key=lambda s: s.get("started_at") or 0, reverse=True)
+        return out
 
     def find_session(self, session_id: str) -> dict | None:
         r = self.runtime()
@@ -104,9 +109,10 @@ class AgentStore:
                     data["archived_sessions"][sid] = rec
         self._mutate_runtime(fn)
 
-    def retire_session(self, session_id: str) -> str | None:
-        """Start a resident agent over: its transcript moves to sessions/archive/ and its record is
-        kept under an archived id, so the old conversation stays readable as a run."""
+    def retire_session(self, session_id: str, archived_file: str | None) -> str | None:
+        """Start a resident agent over: its record is kept under an archived id, naming where the
+        harness left the old transcript (``AgentSession.retire``), so the old conversation stays
+        readable as a run; the live record starts empty."""
         archived_id = f"{session_id}-reset-{now().replace(':', '-')[:19]}"
 
         def fn(data):
@@ -114,13 +120,7 @@ class AgentStore:
             if not rec:
                 return None
             old = dict(rec)
-            f = old.get("session_file")
-            if f and Path(f).exists():
-                dest = Path(f).parent / "archive"
-                dest.mkdir(parents=True, exist_ok=True)
-                Path(f).rename(dest / Path(f).name)
-                old["session_file"] = str(dest / Path(f).name)
-            old.update({"id": archived_id, "status": "archived", "pid": None, "reset_at": now()})
+            old.update({"id": archived_id, "status": "archived", "pid": None, "reset_at": now(), "session_file": archived_file})
             data["archived_sessions"][archived_id] = old
             rec.update({"session_file": None, "status": "idle", "pid": None, "last_text": "", "phase": "idle", "tool_name": None,
                         "markers": []})

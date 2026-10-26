@@ -1,8 +1,7 @@
 """Organisation commands: roles, agents, and teams. Called from ``orchestra_agents.tooling.handle``.
 
-Creating, changing, and deleting any of the three is the Supervisor's alone (the operator's
-controls on the Agents page, web.py, pass the Supervisor's role with their own name as author).
-Reading is open to any agent with the `team` or `roles` tool group. Messages and briefs follow
+Creating, changing, and deleting any of the three, and pausing, resuming, restarting or resetting
+an agent, is the Supervisor's alone, through its tools; the human asks it in the chat. Reading is open to any agent with the `team` or `roles` tool group. Messages and briefs follow
 the tree enforced by ``orchestra_agents.org.may_message``. The views the commands and the web
 plugin return are in ``org_views.py``."""
 

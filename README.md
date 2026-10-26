@@ -24,23 +24,21 @@ everything; remove `~/orchestra-agents-demo` first to run it again. With `CLAUDE
 
 ## Use it on a repository
 
-The task system must be set up first (`tasking init`, `tasking run`; see its README). Then, from
-this repository's environment:
+The task system must be set up first (`tasking init`, `tasking run`; see its README). Add to the
+repository's `orchestra.toml`:
 
-    cd <repo> && uv run --project <this repo> orchestra-agents --help
-    # add to orchestra.toml:
-    #   [agents]
-    #   harness = "claude_code"      # pi | claude_code | codex
-    #   model = "haiku"
-    #   serves = ["worker", "reviewer"]   # the task system's roles these agents fill
-    uv run --project <this repo> --extra dev orchestra web     # Orchestra's UI with both plugins' pages
-    uv run --project <this repo> orchestra-agents run          # the host
-    uv run --project <this repo> orchestra-agents chat         # the Supervisor, in the terminal
+    [agents]
+    harness = "claude_code"      # pi | claude_code | codex
+    model = "haiku"
+    serves = ["worker", "reviewer"]   # the task system's roles these agents fill
 
-`orchestra web` must run from an environment that has both plugins installed, or the Agents
-page's ticket links and the Supervisor's banner open nothing: this repository's `dev` extra has
-the task system, and a project environment that depends on both `orchestra-tasking` and
-`orchestra-agents` does too.
+Then run `orchestra web` (Orchestra's UI with both plugins' pages), `orchestra-agents run` (the
+host) and `orchestra-agents chat` (the Supervisor, in the terminal) from a project environment
+that depends on both `orchestra-tasking` and `orchestra-agents`: a `pyproject.toml` naming both
+as dependencies, then `uv sync`. From this checkout alone, the `dev` extra is what has the task
+system (`uv sync --extra dev`). Without the task plugin in the same `orchestra web`, the agents
+still run, but a ticket link on the Agents page opens no ticket drawer and no banner says a
+ticket is blocked.
 
 State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in the repository
 under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page

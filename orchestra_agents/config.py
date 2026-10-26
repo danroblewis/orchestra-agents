@@ -1,7 +1,7 @@
 """The agents' settings and where they keep their state.
 
 The settings are ``[agents]`` in the repository's ``orchestra.toml`` (which product runs them,
-the model, time limits, which roles they fill), and three of the task system's ``[project]``
+the model, time limits, which roles they fill, the Coordinator's schedule if any), and three of the task system's ``[project]``
 settings their prompts are filled with (the base branch, the ticket prefix, whether work is tasks
 or code). The bus and the metrics store are Orchestra's, reached through the Orchestra project
 (``Project.orchestra``). State lives in ``~/.orchestrator/<key>/agents/``; the project key is
@@ -18,6 +18,8 @@ from orchestra.config import ConfigError, home, parse_duration
 from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
 
+from .builtins import PER_TICKET_ROLES
+
 __all__ = ["Config", "ConfigError", "Project", "load_project", "parse_duration"]
 
 
@@ -28,6 +30,7 @@ class Config:
     model: str | None = None
     thinking: str | None = None
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
+    coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
     turn_timeout: float = 0.0           # hard cap per turn; 0 = none
     silence_timeout: float = 1200.0     # end a turn after this long with nothing from the harness
     session_max_bytes: int = 300_000    # transcript growth since the last compaction that triggers one
@@ -40,12 +43,25 @@ class Config:
 
     @classmethod
     def from_toml(cls, text: str) -> Config:
+        # roles.py reads Project from this module, so the interval grammar is imported here at call time
+        from .roles import RoleError, parse_interval
+
         raw = tomllib.loads(text)
         a, p = raw.get("agents", {}) or {}, raw.get("project", {}) or {}
+        serves = list(a.get("serves", ["worker", "reviewer"]))
+        bad = [r for r in serves if r not in PER_TICKET_ROLES]
+        if bad:
+            raise ConfigError(f"[agents] serves names {bad}; the task system's roles the agents can fill are {', '.join(PER_TICKET_ROLES)}")
+        every = a.get("coordinator_every") or None
+        if every:
+            try:
+                parse_interval(every)
+            except RoleError as e:
+                raise ConfigError(f"[agents] coordinator_every: {e}") from e
         return cls(
             harness=(a.get("harness") or "pi").replace("-", "_"), provider=a.get("provider") or None,
             model=a.get("model") or None, thinking=a.get("thinking"),
-            serves=list(a.get("serves", ["worker", "reviewer"])),
+            serves=serves, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             session_max_bytes=int(a.get("session_max_bytes", 300_000)), compact_tokens=int(a.get("compact_tokens", 100_000)),

@@ -136,9 +136,12 @@ def all_teams(project: Project) -> dict[str, TeamDef]:
 
 def all_agents(project: Project) -> dict[str, AgentDef]:
     """Built-in agents (the per-ticket ones only for the roles these agents serve: a role another
-    machine fills is not an agent here), implicit agents for role records that carry wake rules
-    and have no explicit agent, and the project's own agents, by name."""
+    machine fills is not an agent here; the Coordinator on the project's schedule, if it sets
+    one), implicit agents for role records that carry wake rules and have no explicit agent, and
+    the project's own agents, by name."""
     out = {n: a for n, a in built_in_agents().items() if a.resident or n in project.config.serves}
+    if project.config.coordinator_every:
+        out["coordinator"].every, out["coordinator"].kind = project.config.coordinator_every, "scheduled"
     explicit = {a.name: a for a in RepoOrgStore(project).list_agents()}
     for r in all_roles(project).values():
         if r.builtin or r.name in explicit or not (r.wake_on or r.every or r.at):

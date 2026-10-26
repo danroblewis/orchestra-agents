@@ -58,9 +58,9 @@ class RoleDef:
     wake_on: list[str] = field(default_factory=list)   # event types, optionally "ticket.transitioned:DONE"
     every: str | None = None             # interval like "30m", "6h", "1d"
     at: str | None = None                # daily time "HH:MM" (local)
-    created_by: str = "supervisor"
-    created_at: str = field(default_factory=now)
-    updated_at: str = field(default_factory=now)
+    created_by: str | None = "supervisor"      # None for a built-in role: nobody created it
+    created_at: str | None = field(default_factory=now)
+    updated_at: str | None = field(default_factory=now)
     builtin: bool = False
 
     @property
@@ -195,7 +195,7 @@ def all_roles(project: Project) -> dict[str, RoleDef]:
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
         out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), session="resident" if b.resident else "ephemeral",
-                              wake_on=list(b.wake_on), every=(f"{int(b.every // 60)}m" if b.every else None), builtin=True)
+                              wake_on=list(b.wake_on), created_by=None, created_at=None, updated_at=None, builtin=True)
     for r in RepoRoleStore(project).list():
         out[r.name] = r
     return out

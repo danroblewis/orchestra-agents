@@ -69,7 +69,8 @@ def test_get_role_explains_what_the_role_is(project):
 
     store = AgentStore(project)
     r = api.handle(project, store, "get_role", {"name": "coordinator"})
-    assert r["role"]["builtin"] and "Coordinator" in r["prompt"] and r["prompt_source"].endswith("prompts/coordinator.md")
+    assert r["role"]["builtin"] and "Coordinator" in r["prompt"] and r["prompt_source"].endswith("prompts/coordinator.tasks.md")   # the project's work is tasks
+    assert r["role"]["created_by"] is None and r["role"]["created_at"] is None                 # nobody created a built-in role
     assert "create_ticket" in r["tool_names"]["tickets"] and "set_capacity" in r["tool_names"]["capacity"]
     assert r["agents"] == ["coordinator"]
     RepoRoleStore(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"],
@@ -82,3 +83,15 @@ def test_get_role_explains_what_the_role_is(project):
     assert "## Your role: product_owner" in a["prompt"] and "Be opinionated about main." in a["prompt"]
     assert r["prompt_source"].endswith(".orchestra/roles/product_owner.md")
     assert r["tool_names"] == {"tickets": r["tool_names"]["tickets"], "escalate": ["escalate_to_supervisor"]}
+
+
+def test_the_prompt_file_named_is_the_one_read(project):
+    """A built-in role's prompt comes from the variant for the project's kind of work when there
+    is one; the drawer names that file, not the plain one."""
+    from orchestra_agents.org_views import role_definition
+    from orchestra_agents.prompting import prompt_path
+
+    assert project.config.work == "tasks"
+    d = role_definition(project, all_roles(project)["worker"])
+    assert d["prompt_source"].endswith("prompts/worker.tasks.md") and d["prompt_source"] == str(prompt_path(project, "worker"))
+    assert prompt_path(project, "nobody") is None

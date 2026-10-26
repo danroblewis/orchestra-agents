@@ -7,7 +7,7 @@ name = "orchestra-agents"
 version = "0.1.0"
 description = "AI agents as Orchestra machines: harnesses (Pi, Claude Code, Codex), sessions, prompts, roles and teams; they fill a task system's roles over Orchestra's bus."
 requires-python = ">=3.12"
-dependencies = ["orchestra"]
+dependencies = ["orchestra", "psutil", "fastapi"]   # the host reads processes, the web plugin is a FastAPI router
 
 [project.optional-dependencies]
 # orchestra-tasking: the e2e tests and the demo run the real task system beside the agents;

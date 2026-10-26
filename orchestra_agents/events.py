@@ -10,7 +10,6 @@ ORCHESTRA_EVENTS_URL), so one place decides where the events go.
 The source is the machine that emitted the event:
 
 - the agents' host (``orchestra-agents run``) is ``agents``, a program: it starts the agents;
-- the web plugin's operator controls (web.py) are ``agents_web``;
 - an event about an agent's session (its turn starting, settling, timing out) is the agent's own,
   sent as the instance the host bound to that session (``bind``): ``supervisor``, ``coordinator``,
   or a slot of a per-ticket role, ``worker/1``;

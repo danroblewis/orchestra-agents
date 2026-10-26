@@ -52,8 +52,8 @@ prompt. The prompt a session was started with is kept beside its log, so a trans
 what the agent was told whatever the harness records.
 
 The Supervisor designs the organisation in conversation with the human (`prompts/org_guide.md`,
-the `roles` tool group); the human can pause, resume, restart, reset and delete agents from the
-Agents page. Writes under `.orchestra/` are committed to the base branch when the checkout is on
+the `roles` tool group), and pauses, resumes, restarts, resets and deletes agents the same way;
+the Agents page shows it. Writes under `.orchestra/` are committed to the base branch when the checkout is on
 it and otherwise clean, and left for the human to commit when not.
 
 ## 3. Meeting the task system on the bus (`protocol.py`, `runner.py`, `tooling.py`)
@@ -93,7 +93,8 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
 
 - announces itself with `orchestra.machine.started` (package `agents`, continuous, what it
   listens for, its log), and announces every agent instance it starts (an AI agent, on which
-  harness and model, engaged how), so Orchestra's Machines page shows each agent as a machine;
+  harness and model; a resident agent is continuous, its session always up, a per-ticket or
+  ephemeral one ad hoc), so Orchestra's Machines page shows each agent as a machine;
 - opens the resident sessions up front and keeps them up: a process that exits between turns is
   recorded (`agent.crashed`) and restarted; three exits in fifteen minutes pause the agent
   (`agent.crash_loop`) and wake the Supervisor;
@@ -101,7 +102,9 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   `wake_on` (a filter after the colon matches the transition target, a status, a probe name,
   the role an attention event is addressed to, or an agent-raised event's subject), queues
   scheduled wake-ups, runs the teams' probes, answers assignments, and runs one turn per woken
-  agent in a thread with the reasons and a snapshot of the project (a query to the task system);
+  agent in a thread with the reasons and a snapshot of the project (a query to the task system).
+  When the task system does not answer, the prompt says so instead of showing an empty project,
+  and a wake-up that was only a schedule is skipped without a turn;
 - bounds every turn: it ends when the agent settles, after `silence_timeout` with nothing from
   the harness, or at `turn_timeout` when set (`turn.timed_out`, with what the agent was doing);
   a harness failure is `turn.error`; a restart mid-turn is `turn.interrupted`;
@@ -110,10 +113,12 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   the harness cannot (`agent.reset`, the old transcript archived as a run); the events that
   concern one session are also kept on its record, so its transcript shows them without a read
   of the bus;
-- on start, stops any turn the previous host left running (no orphans) and marks the cut. After a
-  host crash the task system re-offers the assignment the dead host held when its lease runs
-  out: the host reports nothing it did not see end. At a clean stop it waits briefly for each
-  open assignment's `task.reported` (`failed`) to go out;
+- on start, refuses to run beside another host of the same project, then stops any turn the
+  previous host left running (no orphans: every turn's process is recorded on its session from
+  the harness's `turn_start`) and marks the cut. After a host crash the task system re-offers
+  the assignment the dead host held when its lease runs out: the host reports nothing it did
+  not see end. At a clean stop it waits briefly for each open assignment's `task.reported`
+  (`failed`) to go out;
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
   recorded in the runtime record): one turn on the resident session per message, prefixed with
   the project context when it changed and the events since the last turn, streamed as NDJSON.
@@ -125,8 +130,7 @@ Events the host and the agents publish: `session.started`, `session.settled`, `a
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, and a team's own declared types raised with `emit_event` (rate-limited, and
 refused when the cause chain is three deep). The source of a session's events is the agent's
-instance; the host's own are `agents`; the web plugin's operator controls publish as
-`agents_web`.
+instance; the host's own are `agents`. The web plugin publishes nothing.
 
 Metrics (`measures.py`, Orchestra's metrics store): `agents_working{role}` and the counters
 `agent_turns_started_total{role}`, `agent_turns_finished_total{role}`, named for what they
@@ -164,9 +168,10 @@ caller's role (from the environment the session was started in, never from the a
 
 `[agents]` in the project's `orchestra.toml`: `harness` (pi | claude_code | codex), `model`,
 `provider`, `thinking`, `serves` (the task system's roles these agents fill; default worker and
-reviewer), `turn_timeout` (default none), `silence_timeout` (default 20m), `session_max_bytes`,
-`compact_tokens`, `prompts` (per-role prompt file overrides, relative to the repository),
-`control_port` (default any free port). The task system's `[project]` `base_branch`,
+reviewer), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
+the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
+(default 20m), `session_max_bytes`, `compact_tokens`, `prompts` (per-role prompt file overrides,
+relative to the repository), `control_port` (default any free port). The task system's `[project]` `base_branch`,
 `ticket_prefix` and `work` are read for the prompts. The bus and the metrics store are
 Orchestra's, found through the Orchestra project.
 
@@ -174,8 +179,9 @@ State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions and archiv
 with the host's markers for its transcript; the reports an agent's tool handed to the host;
 queued wake-ups; each agent's state; probe states; the control endpoint; the metric counters,
 `metric_counts`; and `supervisor_seen_at`, when the human last read the Supervisor), behind one
-file lock and written only by `store.py`; `sessions/` (the
-harnesses' own session data and the archive); `logs/` (the host's log and, under `agents/`, each
+file lock and written only by `store.py`; `sessions/` (the harnesses' session records and, for a
+harness that keeps its transcript here, the archive; a reset keeps the old transcript where its
+harness keeps it and records the path on the archived run); `logs/` (the host's log and, under `agents/`, each
 session's stderr and the prompt it was started with); `PROJECT.md`, the project context the
 Supervisor maintains. The organisation's custom records are in the repository under `.orchestra/`.
 
@@ -195,21 +201,18 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
   resident agent is a row with what it last said; a worker or reviewer role is the tickets its
   instances are on, with what each is saying now; the host is a line.
 
-API at `/api/plugins/agents`: `GET /org`, `/roles`, `/roles/{name}`, `/agents/{name}`,
-`/teams/{name}` (the organisation); `GET /agents` (every agent and every session as the instance
-it runs as, with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
-`GET /sessions/{id}/transcript` (paged, with the markers); `GET /eventmap`; `GET /context`;
-`GET /attention` and `POST /attention/seen`; `POST /supervisor` (a message to the Supervisor,
-proxied to the host, streamed); `POST /control` (pause, resume, restart, reset, delete an agent;
-delete a role or a team; recorded as the operator's, with the Supervisor's permission). The UI is
-read-only for humans except these operator controls on the agents and the Supervisor chat: a
-ticket is changed only by telling the Supervisor. This is wider than Orchestra's rule 9
-(read-only except the task plugin's operator controls) and awaits the owner's decision; deleting
-a role or team is otherwise the Supervisor's, through its roles tools.
+API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
+(the organisation); `GET /agents` (every agent and every session as the instance it runs as,
+with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
+`GET /sessions/{id}/transcript` (paged, with the markers); `GET /eventmap`; `GET /attention` and
+`POST /attention/seen`; `POST /supervisor` (a message to the Supervisor, proxied to the host,
+streamed). The UI is read-only for humans except the Supervisor chat (Orchestra's rule 9): an
+agent, a role, a team or a ticket is changed only by telling the Supervisor.
 
 ## 9. Cost
 
 Every turn is a model call. The demo uses Claude Code with Haiku, the cheapest model that can
-review a result; a resident Coordinator on a ten-minute schedule costs a call every ten minutes
-even when nothing changed. Everywhere a real model is not needed, the tests use the fakes in
-`tests/e2e/` (one per harness, speaking the product's real protocol).
+review a result. The Supervisor costs a call per chat message or escalation; the Coordinator one
+per attention event and, only when `coordinator_every` is set, one per interval whether or not
+anything changed. Everywhere a real model is not needed, the tests use the fakes in `tests/e2e/`
+(one per harness, speaking the product's real protocol).

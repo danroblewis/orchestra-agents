@@ -26,7 +26,8 @@ class Turns:
             t = ev.get("type")
             now_t = time.time()
             if t == "turn_start":
-                store.set_session(sid, phase="prompting", phase_since=now_t, tool_name=None)
+                # the process running this turn, which is what proves the turn alive and what a later host stops if this one dies
+                store.set_session(sid, phase="prompting", phase_since=now_t, tool_name=None, pid=ev.get("pid"))
             elif t == "assistant_start":
                 store.set_session(sid, phase="generating", phase_since=now_t, last_token_at=now_t)
             elif t == "token":
@@ -91,13 +92,22 @@ class Turns:
     def prompt_with_retry(self, proc: AgentSession, ticket_id: str, task: str, nudge: str,
                           released: Callable[[], str | None] | None = None) -> tuple[dict | None, str, bool]:
         """A worker's or reviewer's turn: the task, and one nudge when it stopped without its
-        report. Returns the report (or None), the agent's last text, and whether the turn failed."""
+        report. Returns the report (or None), the agent's last text, and whether the turn failed.
+        An assignment the task system has taken back gets no further prompt: on a harness that
+        starts a process per turn there is nothing to kill between two prompts."""
         cfg = self.host.cfg
-        res = proc.prompt(task, cfg.turn_timeout or None, on_event=self.on_event(proc.session_id), idle_timeout=cfg.silence_timeout)
-        self.note(proc.session_id, res, released=released)
+
+        def turn(text: str, cap: float | None) -> TurnResult:
+            reason = released() if released else None
+            if reason:
+                res = TurnResult(error=f"released before the prompt: {reason}")
+            else:
+                res = proc.prompt(text, cap, on_event=self.on_event(proc.session_id), idle_timeout=cfg.silence_timeout)
+            self.note(proc.session_id, res, released=released)
+            return res
+        res = turn(task, cfg.turn_timeout or None)
         report = self.host.store.pop_report(ticket_id)
         if report or res.timed_out or res.error:
             return report, res.text, res.timed_out or bool(res.error)
-        res = proc.prompt(nudge, 300, on_event=self.on_event(proc.session_id), idle_timeout=cfg.silence_timeout)
-        self.note(proc.session_id, res, released=released)
+        res = turn(nudge, 300)
         return self.host.store.pop_report(ticket_id), res.text, res.timed_out or bool(res.error)

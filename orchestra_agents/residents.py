@@ -65,7 +65,7 @@ class Residents:
             sid = _session_id(name)
             host.store.set_session(sid, status="idle", pid=None)
             if st.get("reset_requested"):
-                archived = host.store.retire_session(sid)
+                archived = host.store.retire_session(sid, proc.retire())
                 host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0)
                 host._mark("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by") or "operator")
                 host.log(f"{name}: session reset by request; previous transcript archived as {archived}")
@@ -140,7 +140,7 @@ class Residents:
         if proc is not None and proc.alive():
             res = proc.compact()
             if res and res.get("mode") == "auto":
-                # The harness bounds its own context (Claude Code's --autocompact); nothing to do but note it.
+                # A harness that bounds its own context; nothing to do but note it.
                 host.store.set_session(sid, compacted_at_bytes=Path(f).stat().st_size)
                 host._mark("agent.compacted", session=sid, agent=agent, mode="auto", limit=res.get("limit"),
                            reason=f"the harness compacts itself past {int(res.get('limit') or 0):,} tokens")
@@ -153,11 +153,12 @@ class Residents:
                 return "compacted"
         # no compaction on this harness, or it failed: rotate
         owned = self.procs.get(agent)
-        if owned is not None and owned.session_id == sid:
-            self.procs.pop(agent).close()
-        elif proc is not None:
-            proc.close()
-        archived = host.store.retire_session(sid)
+        victim = self.procs.pop(agent) if owned is not None and owned.session_id == sid else proc
+        archived_file = None
+        if victim is not None:
+            victim.close()
+            archived_file = victim.retire()
+        archived = host.store.retire_session(sid, archived_file)
         host.store.set_agent_state(agent, context_hash=None)
         host._mark("agent.reset", session=sid, agent=agent, archived=archived, by="orchestra",
                    reason=f"transcript reached {size // 1000} KB and the harness could not compact it")

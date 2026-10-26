@@ -1,6 +1,5 @@
 """The command line says what each command and argument is, and its listings read as tables."""
 
-import json
 import subprocess
 
 import pytest
@@ -40,8 +39,11 @@ def test_roles_list_and_show(project, capsys):
         assert name in out
     assert "built-in" in out and "report_ticket" in out
     assert main(["--repo", str(project.repo_root), "roles", "show", "worker"]) == 0
-    shown = json.loads(capsys.readouterr().out)
-    assert shown["role"]["name"] == "worker" and shown["role"]["builtin"] and "report_ticket" in shown["prompt_source"] or shown["prompt"]
+    shown = capsys.readouterr().out
+    lines = shown.splitlines()
+    assert lines[0] == "worker: built in" and lines[1].startswith("used by:") and "report_ticket" in lines[2]
+    assert any(ln.startswith("prompt:") and ln.endswith("worker.tasks.md") for ln in lines) and "# You are a Worker" in shown
+    assert "created" not in shown and not shown.lstrip().startswith("{")                    # text, and no invented creation record
     with pytest.raises(SystemExit):
         main(["--repo", str(project.repo_root), "roles", "show", "nobody"])
 
@@ -56,3 +58,22 @@ def test_sessions_list_has_a_header_and_show_says_when_there_are_no_turns(projec
     assert capsys.readouterr().out.strip() == "supervisor: no turns yet"
     with pytest.raises(SystemExit):
         main(["--repo", str(project.repo_root), "sessions", "show", "nobody"])
+
+
+def test_sessions_list_includes_finished_ticket_sessions(project, capsys):
+    """A finished ticket's sessions are archived; the list still names them, so `sessions show`
+    has an id to be given."""
+    store = AgentStore(project)
+    store.set_session("reviewer-T-1", kind="reviewer", status="idle", ticket_id="T-1", last_text="Approved.", started_at=2)
+    store.set_session("worker-T-1", kind="worker", status="idle", ticket_id="T-1", last_text="Done.", started_at=1)
+    store.purge_ticket_sessions("T-1")
+    assert main(["--repo", str(project.repo_root), "sessions", "list"]) == 0
+    rows = [ln.split() for ln in capsys.readouterr().out.splitlines()[1:]]
+    assert rows == [["reviewer-T-1", "finished", "T-1", "Approved."], ["worker-T-1", "finished", "T-1", "Done."]]   # newest first
+
+
+def test_tools_has_a_header_and_whole_descriptions(capsys):
+    assert main(["tools", "--groups", "report_ticket"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("tool") and out[1].startswith("report_ticket") and len(out) == 2
+    assert out[1].rstrip().endswith((".", ")")) and len(out[1]) > 110                           # not cut at 80 characters

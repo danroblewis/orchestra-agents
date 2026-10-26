@@ -341,3 +341,41 @@ def test_claude_transcript_folder_is_named_as_claude_names_it(tmp_path, monkeypa
     key = "".join(c if c.isascii() and c.isalnum() else "-" for c in str(cwd.resolve()))
     assert transcript_path(cwd, "u") == tmp_path / "claude" / "projects" / key / "u.jsonl"
     assert "--orchestrator-tasks-1-TK-1" in key
+
+
+def test_retire_forgets_the_session_and_leaves_the_transcript_where_the_harness_keeps_it(tmp_path, monkeypatch):
+    """A reset is a reset: after retire the next open is a new session on every harness, and the
+    old transcript stays readable at the path retire returned."""
+    from orchestra_agents.harness.pi import archive
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    (tmp_path / "wt").mkdir()
+    # Claude Code: a new uuid in the meta file; Claude's own transcript untouched
+    c = ClaudeCodeSession(spec(tmp_path))
+    c.open()
+    old = Path(c.session_file)
+    old.parent.mkdir(parents=True)
+    old.write_text("{}\n")
+    c.close()
+    assert c.retire() == str(old) and old.exists() and c.session_file != str(old) and c.uuid != old.stem
+    again = ClaudeCodeSession(spec(tmp_path))
+    again.open()
+    assert again.uuid == c.uuid != old.stem and "--session-id" in again._args()
+    # Codex: the thread id forgotten; the rollout untouched
+    x = CodexSession(spec(tmp_path))
+    rollout = tmp_path / "codex" / "sessions" / "2026" / "10" / "11" / "rollout-2026-10-11T12-00-00-abc.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text("{}\n")
+    x._remember("abc")
+    x.close()
+    assert x.retire() == str(rollout) and rollout.exists() and x.thread_id is None
+    again = CodexSession(spec(tmp_path))
+    again.open()
+    assert again.thread_id is None and again._args()[-1] == "-" and "resume" not in again._args()
+    # Pi: the session file moves under archive/ beside its siblings
+    f = tmp_path / "sessions" / "2026_worker-T-1.jsonl"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("old\n")
+    moved = archive(str(f))
+    assert moved == str(tmp_path / "sessions" / "archive" / f.name) and Path(moved).read_text() == "old\n" and not f.exists()
+    assert archive(None) is None and archive(str(f)) is None

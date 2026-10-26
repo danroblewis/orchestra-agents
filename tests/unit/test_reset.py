@@ -1,10 +1,10 @@
-"""A resident agent can be started over: its transcript is archived as a run and the next
-process begins with an empty one."""
+"""A resident agent can be started over: its transcript is archived as a run, where its harness
+leaves it, and the next process begins with an empty one."""
 
 import subprocess
 
 import pytest
-from conftest import FakeHarness, agents_project
+from conftest import FakeHarness, agents_project, archive
 
 from orchestra_agents import tooling as api
 from orchestra_agents.events import Events
@@ -13,8 +13,8 @@ from orchestra_agents.store import AgentStore, StoreError
 
 
 class FakeProc:
-    def __init__(self, sid):
-        self.session_id, self._alive, self.session_file, self.harness_name = sid, True, None, "fake"
+    def __init__(self, sid, session_file=None):
+        self.session_id, self._alive, self.session_file, self.harness_name = sid, True, session_file, "fake"
     def compact(self):
         return None
     def alive(self):
@@ -24,6 +24,8 @@ class FakeProc:
         return 4242 if self._alive else None
     def close(self):
         self._alive = False
+    def retire(self):
+        return archive(self.session_file)
 
 
 @pytest.fixture
@@ -84,7 +86,7 @@ def test_large_sessions_rotate_only_when_the_harness_cannot_compact(project):
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("x" * (project.config.session_max_bytes + 1))
     store.set_session("worker-T-2", kind="worker", status="idle", session_file=str(f))
-    assert host.residents.trim_if_large(FakeProc("worker-T-2"), "worker-T-2", "worker") == "rotated"   # base compact() returns None
+    assert host.residents.trim_if_large(FakeProc("worker-T-2", str(f)), "worker-T-2", "worker") == "rotated"   # base compact() returns None
     assert not f.exists() and (project.sessions_dir / "archive" / f.name).exists()
     assert store.find_session("worker-T-2")["session_file"] is None
     ev = [e for e in events.read(0)[0] if e["type"] == "agent.reset"][-1]
@@ -103,7 +105,7 @@ def test_reset_archives_the_transcript_and_starts_over(project):
     api.handle(project, store, "reset_agent", {"name": "supervisor"}, role="supervisor")
     host = AgentHost(project, store, events)
     host.harness = FakeHarness()
-    host.residents.procs["supervisor"] = proc = FakeProc("supervisor")
+    host.residents.procs["supervisor"] = proc = FakeProc("supervisor", str(f))
     host._refresh_org(store.runtime()["agent_state"])
     assert not proc.alive() and host.residents.procs["supervisor"] is not proc                  # closed, and started over
     live = store.find_session("supervisor")

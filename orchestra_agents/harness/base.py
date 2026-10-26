@@ -11,10 +11,11 @@ and nothing else:
 3. ``session.session_file`` names the harness's own transcript, which is the only one
    the host keeps (it never writes a parallel log); ``harness.read_transcript`` parses
    it into a common message list.
-4. ``kill()`` / ``close()`` end a turn or the session.
+4. ``kill()`` / ``close()`` end a turn or the session; ``retire()`` forgets it, so the next
+   open starts a new one, and says where the old transcript remains.
 
 Normalized events (dicts with ``type``):
-  turn_start                 the prompt was accepted
+  turn_start {pid}           the prompt was accepted; pid is the process running the turn
   assistant_start            the model began a message
   token                      output is streaming (may be coalesced; used for liveness)
   tool_start {name, args}    a tool call began
@@ -141,6 +142,12 @@ class AgentSession(ABC):
     @abstractmethod
     def close(self) -> None:
         """Release the session's resources. The transcript stays; the session is resumable."""
+
+    @abstractmethod
+    def retire(self) -> str | None:
+        """Forget this session, after ``close``, so the next ``open`` of the same id starts a new
+        one. Returns the path where the old transcript remains (the harness decides where), or
+        None when no turn ever ran."""
 
 
 class Harness(ABC):

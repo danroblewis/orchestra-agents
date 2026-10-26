@@ -120,6 +120,7 @@ class ClaudeCodeSession(AgentSession):
                 result.error = f"cannot start {self.binary}: {e}"
                 stderr.close()
                 return result
+            emit.pid = self.proc.pid
             try:
                 try:
                     self.proc.stdin.write(text)  # type: ignore[union-attr]
@@ -186,6 +187,15 @@ class ClaudeCodeSession(AgentSession):
         self.kill()
         self._closed = True
 
+    def retire(self) -> str | None:
+        """A new uuid for the next turn; the transcript stays where Claude keeps it."""
+        old = self.session_file if self.session_file and Path(self.session_file).exists() else None
+        self.uuid = str(uuid.uuid4())
+        self._meta_path.write_text(json.dumps({"uuid": self.uuid, "cwd": str(self.spec.cwd),
+                                               "session_id": self.spec.session_id}) + "\n", encoding="utf-8")
+        self.session_file = str(transcript_path(self.spec.cwd, self.uuid))
+        return old
+
 
 class _LineReader:
     def __init__(self, stream):
@@ -215,6 +225,7 @@ class _Normalizer:
 
     def __init__(self, on_event: OnEvent | None):
         self.on_event = on_event
+        self.pid: int | None = None          # the turn's process, once started
         self._pending: dict[str, str] = {}   # tool_use id -> name
 
     def _emit(self, ev: dict) -> None:
@@ -230,7 +241,7 @@ class _Normalizer:
     def __call__(self, ev: dict) -> None:
         t = ev.get("type")
         if t == "system" and ev.get("subtype") == "init":
-            self._emit({"type": "turn_start"})
+            self._emit({"type": "turn_start", "pid": self.pid})
         elif t == "stream_event":
             inner = (ev.get("event") or {}).get("type")
             if inner == "message_start":

@@ -35,17 +35,15 @@ broken without updating the spec and saying so in the commit.
    `CLAUDE_BINARY` so a test can stand a fake in.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
    `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
-   each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host, the
-   harnesses and the Supervisor's context tool respectively. The organisation's custom records
-   are in the repository under `.orchestra/`. Nothing else touches a backend or those files
-   directly.
-10. **Humans talk only to the Supervisor.** The pages and CLI read; the writes a person has are
-    the Supervisor chat and the operator controls on agents (pause, resume, restart, reset,
-    delete). Operator controls on tickets are the task system's. This is wider than Orchestra's
-    rule 9 (read-only except the task plugin's operator controls) and awaits the owner's
-    decision; deleting a role or team is otherwise the Supervisor's, through its roles tools.
-    `orchestra-agents api` runs only inside an agent's session (`ORCHESTRA_ROLE`); without a role
-    the tool interface reads and changes nothing.
+   each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host and
+   the harnesses, and `PROJECT.md` is seeded by the first read and written by the Supervisor's
+   context tool. The organisation's custom records are in the repository under `.orchestra/`.
+   Nothing else touches a backend or those files directly.
+10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
+    write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or
+    deleting an agent, role or team is the Supervisor's, through its tools; operator controls on
+    tickets are the task system's. `orchestra-agents api` runs only inside an agent's session
+    (`ORCHESTRA_ROLE`); without a role the tool interface reads and changes nothing.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
     is a template project and its runner, not a package. No `sys.path` manipulation; the one
     exception is pytest's `pythonpath` in `pyproject.toml`, so the tests can import `conftest`,
@@ -82,9 +80,10 @@ broken without updating the spec and saying so in the commit.
 - Python 3.12+, `uv` for everything, `pytest` (`uv run python -m pytest -q`), `ruff` for lint
   (`uv run ruff check orchestra_agents tests demo`, never `ruff format`).
 - `tests/unit` is fast and in-process (a fake task system answers requests on the bus,
-  `tests/fake_tasks.py`). `tests/e2e/test_agents_e2e.py` drives the real task system's
-  scheduler in-process with the host beside it, once per harness fake;
-  `tests/e2e/test_demo_e2e.py` runs the demo as processes through a real `orchestra run` and
-  `orchestra web`, with the fake Claude Code. Run the tests before every commit.
+  `tests/fake_tasks.py`). `tests/e2e/test_agents_e2e.py` runs the real task system (`tasking
+  run`) as a separate process and talks to it only on the bus, with the host beside it, once per
+  harness fake; `tests/e2e/test_demo_e2e.py` runs the demo as processes through a real
+  `orchestra run` and `orchestra web`, with the fake Claude Code. Run the tests before every
+  commit.
 - Keep modules small and single-purpose. If a file needs a section divider comment, it should
   be two files. Comments and docs in plain language, honest about limits.

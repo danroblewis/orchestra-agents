@@ -229,11 +229,10 @@ def built_in_agents() -> dict[str, AgentDef]:
     for b in BUILTIN_ROLES.values():
         team = {"supervisor": None, "coordinator": "engineering", "worker": "engineering",
                 "reviewer": "engineering"}.get(b.name)
-        kind = "ad_hoc" if not b.resident else "scheduled" if b.every else "continuous"
-        out[b.name] = AgentDef(name=b.name, roles=[b.name], team=team, kind=kind,
-                               session="ephemeral" if not b.resident else "resident", wake_on=list(b.wake_on),
-                               every=(f"{int(b.every // 60)}m" if b.every else None), description=b.description,
-                               created_by="orchestra", builtin=True, triggers=list(b.triggers), emits=list(b.emits))
+        out[b.name] = AgentDef(name=b.name, roles=[b.name], team=team, kind="continuous" if b.resident else "ad_hoc",
+                               session="resident" if b.resident else "ephemeral", wake_on=list(b.wake_on),
+                               description=b.description, created_by="orchestra", builtin=True,
+                               triggers=list(b.triggers), emits=list(b.emits))
     return out
 
 

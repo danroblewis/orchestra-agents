@@ -31,8 +31,7 @@ def cmd_run(args) -> int:
     from .host import AgentHost
     project = _project(args)
     store, events = _store(project)
-    AgentHost(project, store, events).run(once=args.once)
-    return 0
+    return AgentHost(project, store, events).run(once=args.once)
 
 
 def cmd_sessions(args) -> int:
@@ -42,8 +41,9 @@ def cmd_sessions(args) -> int:
     store, _ = _store(project)
     if args.action == "list":
         print(f"{'session':28} {'status':8} {'ticket':10} last said")
-        for s in store.sessions():
-            print(f"{s['id']:28} {s.get('status', '?'):8} {s.get('ticket_id') or '':10} {' '.join((s.get('last_text') or '').split())[:60]}")
+        for s in store.sessions(include_archived=True):
+            status = "finished" if s.get("status") == "archived" else s.get("status", "?")
+            print(f"{s['id']:28} {status:8} {s.get('ticket_id') or '':10} {' '.join((s.get('last_text') or '').split())[:60]}")
         return 0
     s = store.find_session(args.id or "")
     if not s:
@@ -66,8 +66,9 @@ def cmd_tools(args) -> int:
     if args.json:
         print(json.dumps([t.to_dict() for t in tools]))
         return 0
+    print(f"{'tool':26} {'group':14} what it does")
     for t in tools:
-        print(f"{t.name:26} {t.group:14} {t.description[:80]}")
+        print(f"{t.name:26} {t.group:14} {t.description}")
     return 0
 
 
@@ -105,6 +106,7 @@ def _chat_attached(project: Project, port: int) -> int:
         try:
             line = input("you> ").strip()
         except EOFError:
+            print()
             break
         if line in ("exit", "quit"):
             break
@@ -155,9 +157,15 @@ def cmd_roles(args) -> int:
             print(f"{r['name']:20} {kind:9} {', '.join(r.get('agents') or []) or '-':24} {', '.join(r.get('tools') or []) or '-'}")
         return 0
     try:
-        print(json.dumps(tooling.handle(project, store, "get_role", {"name": args.name or ""}), indent=2))
+        r = tooling.handle(project, store, "get_role", {"name": args.name or ""})
     except StoreError as e:
         sys.exit(f"orchestra-agents: {e}")
+    role = r["role"]
+    wakes = ", ".join(role.get("wake_on") or []) or "-"
+    print(f"{role['name']}: {'built in' if role['builtin'] else 'custom'}\nused by:    {', '.join(r.get('agents') or []) or '-'}\n"
+          f"tools:      {', '.join(role.get('tools') or []) or '-'}\nwake rules: {wakes}\n"
+          f"interval:   {role.get('every') or '-'}{(' · daily at ' + role['at']) if role.get('at') else ''}\n"
+          f"prompt:     {r.get('prompt_source') or '-'}\n\n{(r.get('prompt') or '').rstrip()}")
     return 0
 
 
@@ -165,7 +173,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="orchestra-agents", description="AI agents as Orchestra machines: they fill a task system's roles over the bus")
     p.add_argument("--repo", help="repository root (default: ORCHESTRA_REPO or cwd)")
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("run", help="run the agents' host: resident agents, wake-ups, assignments for the roles they fill")
+    s = sub.add_parser("run", help="run the agents' host: resident agents, wake-ups, assignments for the roles they fill",
+                       description="The agents' host, one per project: keeps the resident agents' sessions up, wakes them on "
+                                   "the events they listen for and on their schedules, answers the task system's assignments "
+                                   "for the roles in [agents] serves, and serves the Supervisor chat. Stop it with Ctrl-C.")
     s.add_argument("--once", action="store_true", help="exit once every running turn has finished")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("chat", help="talk to the Supervisor")

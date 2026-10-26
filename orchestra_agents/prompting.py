@@ -34,13 +34,24 @@ class TicketView:
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
+def prompt_path(project: Project, role: str) -> Path | None:
+    """The file a built-in role's prompt is read from: the project's override, else the variant
+    for the project's kind of work (``worker.tasks.md``: no git, no merge gate), else
+    ``<role>.md``; None for a custom role, whose prompt is in ``.orchestra/roles/``."""
+    override = project.config.prompt_overrides.get(role)
+    if override:
+        return project.repo_root / override
+    for p in (PROMPTS_DIR / f"{role}.{project.config.work}.md", PROMPTS_DIR / f"{role}.md"):
+        if p.exists():
+            return p
+    return None
+
+
 def role_prompt(project: Project, role: str) -> str:
     """A role's own prompt, placeholders resolved: the job description. Built-in roles ship with
     this package (overridable per project); custom roles come from ``.orchestra/roles/``."""
-    override = project.config.prompt_overrides.get(role)
-    variant = PROMPTS_DIR / f"{role}.{project.config.work}.md"         # e.g. worker.tasks.md: no git, no merge gate
-    path = (project.repo_root / override) if override else variant if variant.exists() else (PROMPTS_DIR / f"{role}.md")
-    if path.exists():
+    path = prompt_path(project, role)
+    if path is not None and path.exists():
         text = path.read_text(encoding="utf-8")
     else:
         text = RepoRoleStore(project).prompt(role)
@@ -188,11 +199,12 @@ def worker_task(project: Project, t: TicketView, unit_command: str | None) -> st
             "that test is part of the work. Verify, commit on your branch, then call `report_ticket`.\n")
 
 
-def worker_task_tasks(t: TicketView) -> str:
+def worker_task_tasks(project: Project, t: TicketView) -> str:
     """A task (not a code change): the worker works in its own scratch folder and reports a result."""
     head = f"# Your assignment\n\n{_ticket_block(t)}\n"
     env = ("## Environment\nYour working directory is this ticket's scratch folder. Put your result in "
-           "`RESULT.md` there, with any supporting files beside it.\n\n")
+           "`RESULT.md` there, with any supporting files beside it. The repository, when the task is about it, "
+           f"is at $ORCHESTRA_REPO ({project.repo_root}): read it there; do not change it.\n\n")
     if t.feedback and t.rejected_by:
         return (head + env + f"## This ticket was REJECTED by the {t.rejected_by} (round {t.review_rounds})\n"
                 f"Address every point below, update `RESULT.md`, then call `report_ticket`.\n\n{t.feedback.strip()}\n")
@@ -236,7 +248,11 @@ def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:
     lines += [f"- {r}" for r in shown]
     if len(reasons) > len(shown):
         lines.append(f"- ...and {len(reasons) - len(shown)} more of the same kinds; the snapshot below is current")
-    lines += ["", "## Execution health"] + execution_health(snapshot)
+    if snapshot.get("unavailable"):
+        lines += ["", (f"The task system did not answer: {snapshot['unavailable']}. The snapshot below is empty for that "
+                       "reason, not because the project is empty; do not act on ticket counts this turn.")]
+    else:
+        lines += ["", "## Execution health"] + execution_health(snapshot)
     lines += ["", "## Project snapshot", f"Ticket counts: {counts or 'none'}",
               f"Pipeline: {'PAUSED: ' + str(snapshot['pipeline'].get('reason')) if snapshot['pipeline'].get('paused') else 'running'}",
               "", "Milestones:"]
@@ -316,5 +332,8 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
                 parts.append(f"{k}={e[k]}")
         lines.append("- " + " ".join(str(p) for p in parts))
     counts = ", ".join(f"{k}={v}" for k, v in snapshot["counts"].items() if v)
-    lines.append(f"[Orchestra: ticket counts now: {counts or 'none'}]")
+    if snapshot.get("unavailable"):
+        lines.append(f"[Orchestra: the task system did not answer: {snapshot['unavailable']}; ticket counts unknown]")
+    else:
+        lines.append(f"[Orchestra: ticket counts now: {counts or 'none'}]")
     return out + "\n".join(lines) + "\n\n"

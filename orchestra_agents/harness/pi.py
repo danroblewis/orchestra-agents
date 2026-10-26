@@ -123,7 +123,7 @@ class PiSession(AgentSession):
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
             result = TurnResult()
-            emit = _Normalizer(on_event)
+            emit = _Normalizer(on_event, self.proc.pid)
             self._send({"type": "prompt", "message": text})
             clock = _Deadlines(timeout, idle_timeout)
             last_text = ""
@@ -218,12 +218,27 @@ class PiSession(AgentSession):
         except OSError:
             pass
 
+    def retire(self) -> str | None:
+        """The session file moves to ``<session_dir>/archive/``; Pi starts a new one for the id."""
+        return archive(self.session_file)
+
+
+def archive(session_file: str | None) -> str | None:
+    """Move a Pi session file beside its siblings under ``archive/``; the new path, or None."""
+    if not session_file or not Path(session_file).exists():
+        return None
+    f = Path(session_file)
+    dest = f.parent / "archive" / f.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    f.rename(dest)
+    return str(dest)
+
 
 class _Normalizer:
     """Pi RPC events -> normalized events."""
 
-    def __init__(self, on_event: OnEvent | None):
-        self.on_event = on_event
+    def __init__(self, on_event: OnEvent | None, pid: int | None = None):
+        self.on_event, self.pid = on_event, pid
 
     def _emit(self, ev: dict) -> None:
         if self.on_event:
@@ -239,7 +254,7 @@ class _Normalizer:
         t = ev.get("type")
         msg = ev.get("message") or {}
         if t == "response" and ev.get("command") == "prompt" and ev.get("success", True):
-            self._emit({"type": "turn_start"})
+            self._emit({"type": "turn_start", "pid": self.pid})
         elif t == "message_start" and msg.get("role") == "assistant":
             self._emit({"type": "assistant_start"})
         elif t == "message_update":

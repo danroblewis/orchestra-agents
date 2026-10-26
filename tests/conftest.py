@@ -45,6 +45,7 @@ class FakeSession(AgentSession):
     def __init__(self, spec: SessionSpec, reply: str | None):
         self.spec, self.reply = spec, reply
         self.session_file = None
+        self.prompts: list[str] = []          # what each turn was given
         self._stopped = threading.Event()
         self._closed = False
 
@@ -59,6 +60,7 @@ class FakeSession(AgentSession):
         self.session_file = str(f)
 
     def prompt(self, text: str, timeout: float | None, on_event=None, idle_timeout: float | None = None) -> TurnResult:
+        self.prompts.append(text)
         if self.reply is not None:
             return TurnResult(text=self.reply)
         self._stopped.wait()
@@ -77,6 +79,20 @@ class FakeSession(AgentSession):
     def close(self) -> None:
         self._closed = True
         self._stopped.set()
+
+    def retire(self) -> str | None:
+        return archive(self.session_file)
+
+
+def archive(session_file: str | None) -> str | None:
+    """As the Pi harness retires a session: the file moves under archive/ beside its siblings."""
+    if not session_file or not Path(session_file).exists():
+        return None
+    f = Path(session_file)
+    dest = f.parent / "archive" / f.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    f.rename(dest)
+    return str(dest)
 
 
 class FakeHarness(Harness):

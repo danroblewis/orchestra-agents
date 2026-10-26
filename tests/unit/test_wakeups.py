@@ -11,6 +11,8 @@ import time
 import pytest
 from conftest import FakeHarness, agents_project
 
+from orchestra_agents import protocol
+from orchestra_agents.config import ConfigError
 from orchestra_agents.events import Events
 from orchestra_agents.host import AgentHost
 from orchestra_agents.org_store import all_agents
@@ -132,3 +134,85 @@ def test_shutdown_reports_every_open_assignment_as_failed(project, tmp_path):
     assert len(reported) == 1 and reported[0]["assignment"] == "a1" and reported[0]["failed"] is True
     assert store.runtime().get("control") is None
     assert all(s["status"] == "idle" and s["pid"] is None for s in store.sessions())
+
+
+def test_a_session_that_fails_to_start_keeps_no_slot_and_announces_no_machine(project, tmp_path):
+    class NoHarness(FakeHarness):
+        def start(self, spec):
+            raise RuntimeError("no such binary")
+    host, _store, events = host_with(project, NoHarness())
+    for n in (1, 2):
+        (tmp_path / f"w{n}").mkdir()
+        assigned(events, f"a{n}", f"T-{n}", tmp_path / f"w{n}")
+        host.runner.tick()
+        host.runner.threads[f"a{n}"].join(20)
+    evs = events.read(0)[0]
+    reported = [e for e in evs if e["type"] == "task.reported"]
+    assert [(e["assignment"], e["source"], e["failed"]) for e in reported] == [("a1", "worker/1", True), ("a2", "worker/1", True)]
+    assert "no such binary" in reported[0]["text"]
+    assert host._slots == {} and events._bound == {}
+    assert not [e for e in evs if e["type"] == "orchestra.machine.started"]     # a session that never opened is no machine
+
+
+def test_a_rotated_ticket_session_starts_its_turn_once(project, tmp_path):
+    """When the session file of a re-engaged ticket session is too large to keep, the session
+    is rotated and started fresh: one turn start, one started counter, not two."""
+    host, store, events = host_with(project, FakeHarness(reply="done"))
+    big = project.sessions_dir / "worker-T-1.jsonl"
+    big.parent.mkdir(parents=True, exist_ok=True)
+    big.write_text("x" * (project.config.session_max_bytes + 1))
+    store.set_session("worker-T-1", kind="worker", status="idle", ticket_id="T-1", session_file=str(big))
+    (tmp_path / "w").mkdir()
+    assigned(events, "a1", "T-1", tmp_path / "w")
+    host.runner.tick()
+    host.runner.threads["a1"].join(20)
+    assert [e["type"] for e in events.read(0)[0] if e["type"] == "agent.reset"]      # it was rotated
+    rec = store.find_session("worker-T-1")
+    assert [m["type"] for m in rec["markers"]] == ["agent.reset", "session.started"]      # the fresh record: its reset, then one turn start
+    counts = store.runtime()["metric_counts"]
+    assert counts["agent_turns_started_total|machine=worker|role=worker"] == 1 == counts["agent_turns_finished_total|machine=worker|role=worker"]
+
+
+def test_the_coordinators_schedule_is_the_projects(project):
+    """Without `coordinator_every` the Coordinator is woken by events only; with it, it is a
+    scheduled agent on that interval."""
+    host, store, _events = host_with(project, FakeHarness(reply="ok"))
+    host._refresh_org(store.runtime()["agent_state"])
+    c = host.agents["coordinator"]
+    assert c.kind == "continuous" and c.every is None
+    host._started_at -= 3600 * 24                              # however long ago the host started
+    host._schedule_wakeups(store.runtime()["agent_state"])
+    assert not [w for w in store.runtime()["wakeups"] if w["reason"].startswith("scheduled check-in")]
+    toml = project.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text() + 'coordinator_every = "5m"\n')
+    project.reload_config()
+    c = all_agents(project)["coordinator"]
+    assert c.kind == "scheduled" and c.every == "5m"
+    toml.write_text(toml.read_text().replace('coordinator_every = "5m"', 'coordinator_every = "soon"'))
+    with pytest.raises(ConfigError, match="coordinator_every"):
+        project.reload_config()
+
+
+def test_serves_must_name_roles_the_agents_can_fill(project):
+    toml = project.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text().replace('serves = ["worker", "reviewer"]', 'serves = ["reviewr", "planner"]'))
+    with pytest.raises(ConfigError, match="reviewr.*worker, reviewer"):
+        project.reload_config()
+
+
+def test_an_unreachable_task_system_skips_a_scheduled_wake_up_and_is_named_in_an_event_one(project, monkeypatch, capsys):
+    """A wake-up's snapshot is a query to the task system. With no answer, a wake-up that was
+    only a schedule costs no turn; one caused by an event runs, told that the picture is empty
+    because nothing answered, not because the project is."""
+    monkeypatch.setattr(protocol, "WAIT_S", 0.3)
+    harness = FakeHarness(reply="ok")
+    host, store, events = host_with(project, harness)
+    host._refresh_org(store.runtime()["agent_state"])
+    host._wake("coordinator", ["scheduled check-in (every 5m)"])
+    assert not [e for e in events.read(0)[0] if e["type"] == "session.started"]
+    assert "coordinator: the task system did not answer; the scheduled wake-up is skipped" in capsys.readouterr().out
+    host._wake("coordinator", ["event task.attention_needed reason=DEMO-3 is blocked"])
+    assert [e["session"] for e in events.read(0)[0] if e["type"] == "session.started"] == ["coordinator"]
+    prompt = harness.sessions[-1].prompts[-1] if harness.sessions[-1].prompts else host.residents.procs["coordinator"].prompts[-1]
+    assert "The task system did not answer" in prompt and "not because the project is empty" in prompt
+    assert "DIAGNOSIS" not in prompt and "## Execution health" not in prompt

@@ -14,11 +14,7 @@ from .store import AgentStore
 
 def role_definition(project: Project, role: RoleDef) -> dict:
     """What makes a role that role: its prompt, where it comes from, the tools behind its groups."""
-    override = project.config.prompt_overrides.get(role.name)
-    if role.builtin:
-        source = str(project.repo_root / override) if override else str(agents.PROMPTS_DIR / f"{role.name}.md")
-    else:
-        source = str(project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
+    source = str(agents.prompt_path(project, role.name) if role.builtin else project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
     return {"prompt": agents.role_prompt(project, role.name), "prompt_source": source,
             "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
 

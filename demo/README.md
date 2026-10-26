@@ -14,8 +14,8 @@ removes the state a previous run left for that path (under `~/.orchestrator/<nam
 before it starts. The reviews cost a few cents. While the demo is up the Supervisor costs a
 Haiku call per chat message or escalation and the Coordinator one per attention event (it has
 no schedule here: `coordinator_every` is not set); Ctrl-C when done.
-`CLAUDE_BINARY=tests/e2e/fake_claude.py` runs the demo with a fake reviewer that checks the
-acceptance criteria against the workspace, as the e2e tests do.
+`CLAUDE_BINARY=$PWD/tests/e2e/fake_claude.py uv run demo/run.py` runs the demo with a fake
+reviewer that checks the acceptance criteria against the workspace, as the e2e tests do.
 
 ## What runs
 
@@ -43,10 +43,13 @@ prose) reports the ticket BLOCKED and a banner says it waits for a decision.
 Where to look, at http://127.0.0.1:8072:
 
 - **Dashboard**: the Machines panel lists the Supervisor and the Coordinator (AI agents, resident),
-  the host `agents`, the worker (a program) and the task system's scheduler, and, only while a
-  reviewer is on a ticket, the reviewer with the ticket and what it is saying; the Tasks panel
-  shows each ticket in flight with the instance that holds it, since when, and its last words.
-  The Supervisor button in the navigation opens the chat.
+  the host `agents` (`running · fills reviewer`), the worker (a program) and the task system's
+  scheduler. Orchestra lists an ad hoc machine while it is active and for two minutes after its
+  last event: the reviewer appears with the ticket and what it is saying while it holds one, and
+  stays listed (with an idle chip) for two minutes after a review; `run.py`'s one-shot `planner`
+  is listed for two minutes after it ran. The Tasks panel shows each ticket in flight with the
+  instance that holds it, since when, and its last words. The Supervisor button in the navigation
+  opens the chat.
 - **Agents**: the event map (the task system's scheduler offers `task.assigned`, the reviewer
   answers `task.accepted` and `task.reported`, attention events wake the planners), the
   `engineering` team with the Coordinator and the reviewer, the Supervisor outside a team, the
@@ -61,9 +64,13 @@ Where to look, at http://127.0.0.1:8072:
   `planner` (run.py's one-shot requests), `orchestra-host`; and the event map between them.
 - **Tickets**: the task system's page; click a ticket for its description, acceptance, notes
   (the worker's summary, the reviewer's verdict with its reasons).
-- **Dynamics**: no model yet: three tickets in a minute give discovery nothing to balance. The
-  agents' series `agents_working{role="reviewer"}` and the turn counters are in the metrics for
-  a longer run.
+- **Dynamics**: nothing at first. A shell ticket's whole life (offered, worked, reviewed, done)
+  fits inside one 30 s discovery step, so the demo sets `step = "5s"` with a 60 m window in
+  `orchestra.toml` (`[discovery]`): at 5 s the ticket levels move across several steps and can
+  be stocks. Three tickets in a minute still give discovery nothing to balance; a run of twenty
+  minutes or more with more tickets is what lets the ticket levels (OPEN, READY_FOR_REVIEW,
+  IN_REVIEW) and `agents_working{role="reviewer"}` become stocks, with the turn counters as
+  their flows.
 
 Logs: `run/host.log`, `run/web.log`, `run/scheduler.log`, `run/agents.log`, `run/worker.log` in
 the target; the agents' own under `~/.orchestrator/<name>-<hash>/agents/logs/` (the host's

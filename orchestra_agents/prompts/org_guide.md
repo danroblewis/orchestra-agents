@@ -10,8 +10,8 @@ Follow it in order and do not improvise the structure.
   reports. Written in the second person, like the proud part of a resume. A role has no
   runtime: it cannot be scheduled, hold a session, or receive a message. Roles are reused.
 - An **agent** is an instance of one or more roles, placed in a team. It is what runs. It
-  has a kind, a session policy, and a schedule or wake events, and it is what the human
-  pauses, restarts, and watches. There are three kinds:
+  has a kind, a session policy, and a schedule or wake events, and it is what gets paused,
+  restarted, and watched. There are three kinds:
   - `continuous`: a process that is always up, like the Coordinator. Session `resident`;
     woken by `wake_on` events and by messages, and it remembers everything between.
   - `scheduled`: woken every interval (`every`) or at a daily time (`at`). The session may be
@@ -115,7 +115,8 @@ no team names, no tool lists in the prompt: those belong to the agent and the te
 3. A test that fails twice on unchanged code is quarantined by a ticket within a day.
 ```
 
-## What the human can do afterwards
+## Afterwards
 
-Pause, resume, restart, and delete agents from the Agents page; delete roles and teams
-there too. You can do all of that with tools. A deleted agent's sessions are archived.
+Pausing, resuming, restarting, resetting and deleting agents, and deleting roles and teams,
+are yours, with the tools, when the human asks for it in the chat; the Agents page shows the
+result and changes nothing. A deleted agent's sessions are archived.

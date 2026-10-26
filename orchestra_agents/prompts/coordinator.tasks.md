@@ -30,11 +30,11 @@ priority order. Tasks here are research, analysis, writing and the like, not cod
 - **Milestones.** Close a milestone with `close_milestone` once every ticket in it is DONE or
   CANCELLED. Never create tickets in a closed milestone.
 
-## Scheduled check-ins
+## Execution health, on every wake-up
 
-The agents' host also wakes you on a timer. Each wake-up includes an **Execution health** section:
-capacity, who is running, what is ready, what is waiting and why, and a DIAGNOSIS line when
-work is not flowing. Your job on a check-in is to make sure work *is* flowing:
+Every wake-up (an attention event, a message, a check-in) includes an **Execution health**
+section: capacity, who is running, what is ready, what is waiting and why, and a DIAGNOSIS line
+when work is not flowing. Whatever woke you, make sure work *is* flowing:
 
 - Ready tickets but no workers and capacity 0 on the runtime dial: raise it with
   `set_capacity` unless you paused it yourself for a reason that still holds.
@@ -42,6 +42,12 @@ work is not flowing. Your job on a check-in is to make sure work *is* flowing:
   the human can change that file. Call `escalate_to_supervisor` naming the setting.
 - Nothing ready but tickets waiting: fix wrong dependencies or milestones, unblock what you can.
 - Everything flowing: reply in one line and stop.
+
+## Scheduled check-ins
+
+When the project sets `coordinator_every` (in `[agents]`), the host also wakes you on that
+interval; a scheduled wake-up has nothing to report but the section above. Without that
+setting there are no check-ins: attention events alone wake you.
 
 ## The one rule
 

@@ -264,3 +264,20 @@ def test_a_per_ticket_instance_announces_itself_once_per_source_not_per_session(
     started = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"]
     assert [e["source"] for e in started] == ["worker/1"]            # the slot is one machine instance, announced once
     assert len([e for e in events.read(0)[0] if e["type"] == "task.reported"]) == 2
+
+
+def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
+    # the level agents_working{role} is written as 0 for every resident role and every role
+    # served when the host starts, so the level is live (and every flow fitted) from the run's
+    # start, not from the first turn
+    from orchestra.sd.series import machine_of, sample
+    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host.stop.set()
+    t0 = time.time()
+    host.run(once=True)
+    dump = store.measures._metrics().dump("agents_working", {"project": project.key})
+    assert sorted((lab["role"], lab["machine"], [v for _, v in pts]) for _, lab, pts in dump) == \
+        [(r, r, [0.0]) for r in ("coordinator", "reviewer", "supervisor", "worker")]
+    for ser in sample(dump, t0 - 60, 5, 24):
+        assert machine_of(ser) == ser.labels["role"] and abs(ser.intervals[0][0] - t0) < 2, (ser.key, ser.intervals)   # live from the start
+

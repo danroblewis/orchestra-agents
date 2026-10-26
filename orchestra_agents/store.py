@@ -134,6 +134,9 @@ class AgentStore:
             return archived_id
         return self._mutate_runtime(fn)
 
+    def measure_idle(self, roles: list[str]) -> None:
+        self.measures.write(self.measures.idle_points(roles))
+
     def measure_turn(self, role: str, source: str, started: bool) -> None:
         points = self._mutate_runtime(lambda d: self.measures.turn_points(
             list(d["sessions"].values()), d.setdefault("metric_counts", {}), role=role, source=source, started=started))

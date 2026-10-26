@@ -53,6 +53,14 @@ class Measures:
         counts[key] = counts.get(key, 0) + 1
         return counts[key]
 
+    def idle_points(self, roles: list[str]) -> list[Point]:
+        """The points that say no agent of these roles is in a turn, written when the host starts:
+        a gauge is live from its first write, so without them the level would be live, and every
+        flow fitted, only from the first turn, and a run's opening burst would be cut from every
+        equation. The machine is the role, as ``turn_points`` labels it."""
+        t = time.time()
+        return [Point("agents_working", 0.0, t, self._labels(role=role, machine=role)) for role in roles]
+
     def turn_points(self, sessions: list[dict], counts: dict, *, role: str, source: str, started: bool) -> list[Point]:
         """The points for an agent turn starting or finishing."""
         t = time.time()

@@ -121,6 +121,7 @@ class AgentHost:
         self._refresh_org(self.store.runtime()["agent_state"])
         try:
             while not self.stop.is_set():
+        self.store.measure_idle(self.measured_roles())           # no agent is in a turn at the start: the level is live from here
                 try:
                     self.tick()
                 except Exception as e:  # noqa: BLE001 - keep the host alive
@@ -148,6 +149,11 @@ class AgentHost:
 
     def _busy(self) -> bool:
         return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
+    def measured_roles(self) -> list[str]:
+        """The roles whose sessions are measured (``agents_working{role}``): the resident agents
+        and the task system's roles this host serves."""
+        return sorted({name for name, a in self.agents.items() if a.resident} | set(self.cfg.serves))
+
 
     def idle(self, up_to: int) -> bool:
         """Nothing left to do for the bus as it stood at ``up_to``: both followers have passed it,

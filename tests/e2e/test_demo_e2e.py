@@ -68,7 +68,7 @@ def chat(url: str, message: str) -> list[dict]:
 
 def test_a_program_worker_and_an_ai_reviewer_work_the_same_queue(demo):
     url, target = demo
-    ids = plan(target)
+    ids = plan(target, 3)
     assert ids == ["DEMO-1", "DEMO-2", "DEMO-3"]
 
     # while the reviewer holds a ticket: the agents' sessions name it, and the task system's board
@@ -129,7 +129,7 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     assert [t["name"] for t in org["teams"]] == ["engineering"]
     assert get(url + f"{AGENTS}/state")["probes"] == []
 
-    plan(target)
+    plan(target, 3)
     wait_until("the tickets", lambda: settled(url), timeout_s=180)
     seen = {}
 

@@ -55,7 +55,6 @@
 
   function ticketsCard(m, compact) {
     const role = roleOf(m), live = sessionsOf(m).filter((s) => s.status === "running");
-    const plural = role === "reviewer" ? "Reviewers" : "Workers";
     const cards = live.map((s) => {
       const t = s.ticket || { id: s.session, title: "", state: "IN_PROGRESS" };
       return `<div class="awork" style="--c:${stateColor(t.state)}" onclick="event.stopPropagation();AgentCards.transcript('${e_(s.session)}')" title="Open the running agent's transcript; the ticket id opens the ticket">
@@ -65,7 +64,7 @@
     }).join("");
     const empty = m.unseen ? `<div class="empty">Declared, not run yet: ${e_(role)}s start when a ticket is ready${role === "reviewer" ? " for review" : ""}.</div>`
       : `<div class="empty">No ${e_(role)} is on a ticket right now.${role === "worker" ? " Ready tickets start as soon as a worker slot is free." : ""}</div>`;
-    return `<h2><span>${plural} on tickets</span><span class="hctl"><span class="count">${live.length}</span></span></h2>${cards || empty}${more(m, compact)}`;
+    return `<h2><span>${e_(m.id)} <span class="muted">· on tickets</span></span><span class="hctl"><span class="count">${live.length}</span></span></h2>${cards || empty}${more(m, compact)}`;
   }
 
   function hostCard(m, compact) {

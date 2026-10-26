@@ -10,9 +10,11 @@ ORCHESTRA_EVENTS_URL), so one place decides where the events go.
 The source is the machine that emitted the event:
 
 - the agents' host (``orchestra-agents run``) is ``agents``, a program: it starts the agents;
-- an event about an agent's session (its turn starting, settling, timing out) is the agent's own,
+- an event about an agent's session (``session.started``, ``session.settled``, and a turn's bad
+  ends: ``session.timed_out``, ``session.error``, ``session.interrupted``) is the agent's own,
   sent as the instance the host bound to that session (``bind``): ``supervisor``, ``coordinator``,
-  or a slot of a per-ticket role, ``worker/1``;
+  or a slot of a per-ticket role, ``worker/1``; so is ``agent.*``, about the agent as a whole
+  (``agent.said``, ``agent.compacted``, ``agent.crashed``, ``agent.crash_loop``, ``agent.reset``);
 - an agent's own tool call (``orchestra-agents api`` or the MCP server, in the agent's
   environment) is ``ORCHESTRA_SOURCE``, which the host sets to the same instance."""
 

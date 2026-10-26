@@ -49,7 +49,7 @@ ACCESS_MODES = ("read", "write")
 TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, *TASK_EVENTS)
 AGENT_EVENT_TYPES = (
     "agent.said", "context.updated", "session.started", "session.settled",
-    "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
+    "session.timed_out", "session.error", "session.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
     "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
 )

@@ -71,19 +71,19 @@ class Turns:
         if res.error:
             reason = released() if released else None
             if reason:
-                host._mark("turn.interrupted", session=sid, agent=agent, ticket=ticket, reason=f"released by the task system: {reason}")
+                host._mark("session.interrupted", session=sid, agent=agent, ticket=ticket, reason=f"released by the task system: {reason}")
                 return
             if host.stop.is_set():
                 # The harness "failed" because the host is shutting down and closed it.
-                host._mark("turn.interrupted", session=sid, agent=agent, ticket=ticket, reason="orchestra shut down (restart or stop) during this turn")
+                host._mark("session.interrupted", session=sid, agent=agent, ticket=ticket, reason="orchestra shut down (restart or stop) during this turn")
                 return
-            host._mark("turn.error", session=sid, agent=agent, ticket=ticket, error=str(res.error)[:500])
+            host._mark("session.error", session=sid, agent=agent, ticket=ticket, error=str(res.error)[:500])
             return
         phase = s.get("phase") or "working"
         doing = f"running `{s['tool_name']}`" if phase == "tool" and s.get("tool_name") else \
             "generating a reply" if phase == "generating" else "waiting for the model to start replying" if phase == "prompting" else phase
         by = res.stopped_by or "limit"
-        host._mark("turn.timed_out", session=sid, agent=agent, ticket=ticket, stopped_by=by,
+        host._mark("session.timed_out", session=sid, agent=agent, ticket=ticket, stopped_by=by,
                    limit=host.cfg.silence_timeout if by == "silence" else host.cfg.turn_timeout, doing=doing,
                    phase_for=round(now_t - s["phase_since"]) if s.get("phase_since") else None,
                    silent_for=round(now_t - s["last_output_at"]) if s.get("last_output_at") else None,

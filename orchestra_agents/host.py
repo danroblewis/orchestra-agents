@@ -88,7 +88,7 @@ class AgentHost:
             if s.get("status") == "running" and s.get("pid"):
                 self._kill_orphan(int(s["pid"]), s["id"])
             if s.get("status") == "running":
-                self._mark("turn.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
+                self._mark("session.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
                            reason="the agents' host was not running (it crashed or was killed) during this turn")
             self.store.set_session(s["id"], status="idle", pid=None)
 
@@ -209,7 +209,7 @@ class AgentHost:
         event log, so the transcript does not look like the agent stopped on its own."""
         for s in self.store.sessions():
             if s.get("status") == "running":
-                self._mark("turn.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
+                self._mark("session.interrupted", session=s["id"], agent=s.get("kind"), ticket=s.get("ticket_id") or None,
                            reason="orchestra shut down (restart or stop) during this turn")
 
     def _refresh_org(self, states: dict) -> None:

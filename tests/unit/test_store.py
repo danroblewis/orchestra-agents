@@ -30,7 +30,7 @@ def test_draining_no_wakeups_writes_nothing(project):
 
 def test_markers_are_kept_on_the_session_and_bounded(project):
     store = AgentStore(project)
-    store.add_marker("nobody", {"type": "turn.error"})                        # no such session: nothing to attach to
+    store.add_marker("nobody", {"type": "session.error"})                        # no such session: nothing to attach to
     assert store.find_session("nobody") is None
     store.set_session("supervisor", kind="supervisor")
     for n in range(MARKERS_KEPT + 5):

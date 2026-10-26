@@ -163,12 +163,12 @@ const tsOf = (m) => { const t = typeof m.ts === "number" ? (m.ts > 1e12 ? m.ts :
 function fmtDur(s) { return s == null ? "" : s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s` : `${Math.round(s)}s`; }
 function renderMarker(e) {
   let text;
-  if (e.type === "turn.timed_out" && e.stopped_by === "silence") text = `⏱ Orchestra stopped this turn: nothing came from the agent for ${fmtDur(e.limit)} (silence_timeout) while it was ${esc(e.doing || "working")}` +
+  if (e.type === "session.timed_out" && e.stopped_by === "silence") text = `⏱ Orchestra stopped this turn: nothing came from the agent for ${fmtDur(e.limit)} (silence_timeout) while it was ${esc(e.doing || "working")}` +
     (e.phase_for != null ? `, ${fmtDur(e.phase_for)} into that` : "") + ". Orchestra took that as stuck. If the model was only slow, raise silence_timeout in orchestra.toml.";
-  else if (e.type === "turn.timed_out") text = `⏱ Orchestra stopped this turn: the ${fmtDur(e.limit)} hard turn limit (turn_timeout in orchestra.toml) ran out while the agent was ${esc(e.doing || "working")}` +
+  else if (e.type === "session.timed_out") text = `⏱ Orchestra stopped this turn: the ${fmtDur(e.limit)} hard turn limit (turn_timeout in orchestra.toml) ran out while the agent was ${esc(e.doing || "working")}` +
     (e.phase_for != null ? ` (${fmtDur(e.phase_for)} into that)` : "") + (e.silent_for != null ? `, last output ${fmtDur(e.silent_for)} earlier` : "") + ". Nothing after this point was the agent's decision.";
-  else if (e.type === "turn.error") text = `✖ Orchestra ended this turn: ${esc(e.error || "harness error")}`;
-  else if (e.type === "turn.interrupted") text = `■ Orchestra was restarted or stopped during this turn, which cut it off. ${esc(e.reason || "")}`;
+  else if (e.type === "session.error") text = `✖ Orchestra ended this turn: ${esc(e.error || "harness error")}`;
+  else if (e.type === "session.interrupted") text = `■ Orchestra was restarted or stopped during this turn, which cut it off. ${esc(e.reason || "")}`;
   else if (e.type === "agent.crashed") text = `✖ The agent's process exited on its own between turns (crash ${e.count || 1}); Orchestra is restarting it.${e.stderr ? ` Last stderr: <code>${esc(e.stderr.trim().split("\n").slice(-1)[0].slice(0, 160))}</code>` : ""}`;
   else if (e.type === "agent.crash_loop") text = `✖ Crash loop: ${e.count} exits in fifteen minutes. The agent is paused after a crash loop and the Supervisor has been asked to look: ask the Supervisor to resume it once fixed.`;
   else if (e.type === "agent.compacted" && e.mode === "auto") text = `⇣ Context is bounded by the harness itself (${esc(e.reason || "")}); Orchestra leaves this session alone.`;

@@ -58,7 +58,7 @@ def test_recover_stops_the_turns_process_and_marks_the_rest_idle(project):
     turn.wait(timeout=5)
     assert turn.returncode is not None
     assert {s["id"]: (s["status"], s["pid"]) for s in store.sessions()} == {"worker-T-1": ("idle", None), "coordinator": ("idle", None)}
-    cut = [e for e in events.read(0)[0] if e["type"] == "turn.interrupted"]
+    cut = [e for e in events.read(0)[0] if e["type"] == "session.interrupted"]
     assert {e["session"] for e in cut} == {"worker-T-1", "coordinator"}
 
 
@@ -79,7 +79,7 @@ def test_a_host_whose_control_port_is_taken_exits_without_touching_anything(proj
         host.harness = FakeHarness(reply="ok")
         assert host.run(once=True) == 1
         assert "control" not in store.runtime() and store.find_session("worker-T-1")["status"] == "running"
-        assert not [e for e in events.read(0)[0] if e["type"] in ("turn.interrupted", "orchestra.machine.started")]
+        assert not [e for e in events.read(0)[0] if e["type"] in ("session.interrupted", "orchestra.machine.started")]
     finally:
         taken.close()
 
@@ -95,6 +95,6 @@ def test_a_second_host_for_the_project_exits_without_touching_anything(project):
         assert host.run(once=True) == 1
         assert other.poll() is None                                       # not killed as an orphan
         assert store.find_session("worker-T-1")["status"] == "running" and store.runtime()["control"]["pid"] == other.pid
-        assert not [e for e in events.read(0)[0] if e["type"] in ("turn.interrupted", "orchestra.machine.started")]
+        assert not [e for e in events.read(0)[0] if e["type"] in ("session.interrupted", "orchestra.machine.started")]
     finally:
         other.kill()

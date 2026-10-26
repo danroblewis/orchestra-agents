@@ -76,7 +76,7 @@ when what the agent is saying has changed (the heartbeat's `text`: a line for th
 Tasks panel), runs the turn, and reports `task.reported` with the agent's report (a worker's
 `report_ticket`: READY_FOR_REVIEW or BLOCKED with a reason; a reviewer's `report_review`:
 APPROVED or REJECTED with feedback), or `failed` when the turn ended without one. A
-`task.released` for its assignment kills the turn (`turn.interrupted`, with the reason; nothing is
+`task.released` for its assignment kills the turn (`session.interrupted`, with the reason; nothing is
 reported for an assignment the instance no longer holds). A finished ticket's sessions (its
 `ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable. A reviewer
 served here is offered the ticket again after every worker report, including every round of a
@@ -114,8 +114,8 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   When the task system does not answer, the prompt says so instead of showing an empty project,
   and a wake-up that was only a schedule is skipped without a turn;
 - bounds every turn: it ends when the agent settles, after `silence_timeout` with nothing from
-  the harness, or at `turn_timeout` when set (`turn.timed_out`, with what the agent was doing);
-  a harness failure is `turn.error`; a restart mid-turn is `turn.interrupted`;
+  the harness, or at `turn_timeout` when set (`session.timed_out`, with what the agent was doing);
+  a harness failure is `session.error`; a restart mid-turn is `session.interrupted`;
 - bounds every session's context: past `session_max_bytes` of transcript since the last
   compaction it asks the harness to compact (`agent.compacted`), and rotates the session when
   the harness cannot (`agent.reset`, the old transcript archived as a run); the events that
@@ -141,7 +141,7 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   resident agent's state and wake-ups, and the sessions on tickets.
 
 Events the host and the agents publish: `session.started`, `session.settled`, `agent.said`,
-`turn.timed_out`, `turn.error`, `turn.interrupted`, `agent.crashed`, `agent.crash_loop`,
+`session.timed_out`, `session.error`, `session.interrupted`, `agent.crashed`, `agent.crash_loop`,
 `agent.compacted`, `agent.reset`, `agent.paused`, `agent.resumed`, `agent.messaged`,
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, and a team's own declared types raised with `emit_event` (rate-limited, and

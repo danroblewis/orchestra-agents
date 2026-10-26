@@ -9,7 +9,7 @@
   --r-supervisor:#c084fc; --r-coordinator:#38bdf8; --r-worker:#60a5fa; --r-reviewer:#e879f9;
 }
 .msg.inprogress { border:1px dashed #1d4ed8; opacity:.9 }
-.msg.marker { background:#1a1a22; border:1px dashed var(--border2); color:var(--text2); font-size:12px } .msg.marker.turn_timed_out, .msg.marker.turn_error { border-color:#92400e; color:#fcd34d } .msg.marker.turn_interrupted, .msg.marker.agent_crashed, .msg.marker.agent_crash_loop { border-color:#7f1d1d; color:#fca5a5 }
+.msg.marker { background:#1a1a22; border:1px dashed var(--border2); color:var(--text2); font-size:12px } .msg.marker.session_timed_out, .msg.marker.session_error { border-color:#92400e; color:#fcd34d } .msg.marker.session_interrupted, .msg.marker.agent_crashed, .msg.marker.agent_crash_loop { border-color:#7f1d1d; color:#fca5a5 }
 details.started { margin:10px 0 } details.started summary { cursor:pointer; font-size:12px; color:var(--text2) } details.started .prompt { border:1px solid var(--border); border-radius:8px; padding:10px 14px; background:#0b0e14; max-height:50vh; overflow:auto; margin-top:6px }
 /* ---- agents ---- */
 .agent { display:grid; grid-template-columns:22px auto 1fr auto; gap:8px; align-items:center; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; margin-bottom:4px; cursor:pointer }

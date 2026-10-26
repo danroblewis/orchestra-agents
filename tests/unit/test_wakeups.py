@@ -114,9 +114,9 @@ def test_a_released_assignment_is_an_interruption_not_a_failure(project, tmp_pat
     host.runner.tick()
     host.runner.threads["a1"].join(20)
     evs = events.read(0)[0]
-    cut = [e for e in evs if e["type"] == "turn.interrupted"]
+    cut = [e for e in evs if e["type"] == "session.interrupted"]
     assert cut and cut[-1]["reason"] == "released by the task system: operator stopped it" and cut[-1]["session"] == "worker-T-1"
-    assert not [e for e in evs if e["type"] in ("task.reported", "turn.error")]
+    assert not [e for e in evs if e["type"] in ("task.reported", "session.error")]
     assert host.runner.released == {}
 
 

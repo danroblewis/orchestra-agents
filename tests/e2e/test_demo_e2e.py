@@ -124,6 +124,8 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     assert set(plugins["scripts"]) == {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js", "/plugins/tasks/static/tasks-boot.js"}
     html = get_text(url + "/agents")
     assert "<title>Agents</title>" in html and "/plugins/agents/static/agents.js" in html
+    head = get_text(url + "/").split("</head>")[0]                # each plugin's look, linked on every page
+    assert "/plugins/agents/static/agents.css" in head and "/plugins/tasks/static/tasks.css" in head
     org = get(url + f"{AGENTS}/org")
     assert [a["name"] for a in org["agents"]] == ["supervisor", "coordinator", "reviewer"]        # the worker role is the shell worker's
     assert [t["name"] for t in org["teams"]] == ["engineering"]

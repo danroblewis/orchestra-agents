@@ -7,7 +7,7 @@ from __future__ import annotations
 import threading
 
 from orchestra_agents.events import Events
-from orchestra_agents.protocol import DONE, QUERY, REFUSED, REQUESTS, Follower
+from orchestra_agents.protocol import DONE, QUERY, REFUSED, REQUESTS
 
 OPS = {v: k for k, v in REQUESTS.items()}
 
@@ -19,7 +19,7 @@ class FakeTasks:
         self.tickets: dict[str, dict] = {}
         self.seen: list[dict] = []
         self._stop = threading.Event()
-        self._follow = Follower(self.events)
+        self._offset = self.events.end()
         self._t = threading.Thread(target=self._run, daemon=True)
 
     def __enter__(self):
@@ -32,7 +32,8 @@ class FakeTasks:
 
     def _run(self):
         while not self._stop.wait(0.05):
-            for ev in self._follow.new():
+            evs, self._offset = self.events.after(self._offset)
+            for ev in evs:
                 op = ev.get("op") if ev.get("type") == QUERY else OPS.get(ev.get("type"))
                 if not op:
                     continue

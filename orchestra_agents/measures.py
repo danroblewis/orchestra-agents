@@ -13,16 +13,12 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
+from orchestra.events import machine_and_instance
 from orchestra.metrics import Point
 from orchestra.metrics import for_project as metrics_for
 
 if TYPE_CHECKING:
     from .config import Project
-
-
-def machine_of(source: str | None) -> str:
-    """``worker/1`` is the machine ``worker``."""
-    return (source or "unknown").partition("/")[0]
 
 
 class Measures:
@@ -64,8 +60,8 @@ class Measures:
     def turn_points(self, sessions: list[dict], counts: dict, *, role: str, source: str, started: bool) -> list[Point]:
         """The points for an agent turn starting or finishing."""
         t = time.time()
-        labels = {"role": role, "machine": machine_of(source)}   # role names the series (discovery reads machine as attribution only)
+        labels = {"role": role, "machine": machine_and_instance(source)[0] or "unknown"}   # role names the series (discovery reads machine as attribution only)
         name = "agent_turns_started_total" if started else "agent_turns_finished_total"
         working = sum(1 for s in sessions if s.get("kind") == role and s.get("status") == "running")
         return [Point(name, float(self.count(counts, name, labels)), t, self._labels(**labels)),
-                Point("agents_working", float(working), t, self._labels(role=role, machine=machine_of(source)))]
+                Point("agents_working", float(working), t, self._labels(role=role, machine=machine_and_instance(source)[0] or "unknown"))]

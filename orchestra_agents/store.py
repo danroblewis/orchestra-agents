@@ -16,8 +16,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import psutil
-
 from .clock import now
 from .config import Project
 from .events import Events
@@ -30,15 +28,6 @@ class StoreError(Exception):
 
 EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}}
 MARKERS_KEPT = 50         # the host's markers kept per session, newest last
-
-
-def alive(pid) -> bool:
-    """Whether a process with this pid is up (a zombie is not): the host behind the control
-    record, or the process behind a session's turn."""
-    try:
-        return bool(pid) and psutil.Process(int(pid)).status() != psutil.STATUS_ZOMBIE
-    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
-        return False
 
 
 def _write(path: Path, data: dict) -> None:

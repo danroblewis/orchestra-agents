@@ -16,6 +16,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from orchestra.plugins import Declared, Page, Plugin
+from orchestra.runtime import alive
 
 from . import tooling
 from .config import ConfigError, Project, load_project
@@ -24,7 +25,7 @@ from .harness import read_transcript
 from .org import EVENT_HELP
 from .org_store import all_agents
 from .org_views import agents_status, residents_of, session_alive
-from .store import AgentStore, StoreError, alive
+from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
@@ -34,7 +35,8 @@ def plugin(orchestra_project) -> Plugin:
     """The plugin for the repository Orchestra serves (its entry point, in pyproject.toml)."""
     project = load_project(orchestra_project.repo_root)
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
-                  scripts=["attention.js", "machine-cards.js"], machines=declared(project))
+                  scripts=["attention.js", "machine-cards.js"], stylesheets=["agents.css"],
+                  machines=declared(project))
 
 
 def declared(project) -> list[Declared]:

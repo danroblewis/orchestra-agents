@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import time
 
+from orchestra.runtime import alive
+
 from . import prompting
 from .clock import parse_interval
 from .config import Project
@@ -12,7 +14,7 @@ from .harness.tools import tools_for
 from .org import AgentDef, TeamDef, effective_tools, members_of, team_chain
 from .org_store import RepoOrgStore, all_agents, all_teams
 from .roles import RoleDef, all_roles
-from .store import AgentStore, alive
+from .store import AgentStore
 
 
 def role_definition(project: Project, role: RoleDef) -> dict:

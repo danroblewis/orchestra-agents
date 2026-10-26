@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 import psutil
+from orchestra.runtime import alive
 
 from . import prompting, tooling
 from .clock import due_at, parse_interval
@@ -27,11 +28,11 @@ from .harness import AgentSession, SessionSpec, get_harness
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
-from .protocol import TRANSITIONED, Follower
+from .protocol import TRANSITIONED
 from .residents import Residents
 from .roles import all_roles
 from .runner import AgentRunner
-from .store import AgentStore, StoreError, alive
+from .store import AgentStore, StoreError
 from .turns import Turns
 
 HOST_LOG: Path | None = None
@@ -74,8 +75,8 @@ class AgentHost:
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
         self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
-        self._wake_follow = Follower(events)           # events that wake agents: only those after startup
-        self._digest = Follower(events)                # what the Supervisor is told happened since its last turn
+        self._wake_at = events.end()                   # events that wake agents: only those after startup
+        self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self.runner = AgentRunner(self)                # answers the task system's assignments
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
@@ -158,9 +159,9 @@ class AgentHost:
         return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
 
     def idle(self, up_to: int) -> bool:
-        """Nothing left to do for the bus as it stood at ``up_to``: both followers have passed it,
+        """Nothing left to do for the bus as it stood at ``up_to``: both readers of the bus have passed it,
         no turn or assignment thread is alive, and no wake-up is queued."""
-        return (self._wake_follow.offset >= up_to and self.runner.follow.offset >= up_to and not self._busy()
+        return (self._wake_at >= up_to and self.runner.offset >= up_to and not self._busy()
                 and not self.store.runtime()["wakeups"])
 
     def tick(self) -> None:
@@ -320,7 +321,8 @@ class AgentHost:
     def _wake_on_events(self) -> None:
         """Match new events against every agent's wake_on list and queue wake-ups. Workers and
         reviewers are not woken: their events are assignments, answered by the runner."""
-        for ev in self._wake_follow.new():
+        evs, self._wake_at = self.events.after(self._wake_at)
+        for ev in evs:
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
@@ -421,7 +423,8 @@ class AgentHost:
             proc = self._session_for(self.agents.get("supervisor") or built_in_agents()["supervisor"], "supervisor")
             proc.open()
             self.residents.procs["supervisor"] = proc
-        new = [e for e in self._digest.new() if e["type"] not in ("session.started", "session.settled")]
+        evs, self._digest_at = self.events.after(self._digest_at)
+        new = [e for e in evs if e["type"] not in ("session.started", "session.settled")]
         prefix = prompting.supervisor_context(tooling.snapshot(self.store, "supervisor"), new, self.project, self.store)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")

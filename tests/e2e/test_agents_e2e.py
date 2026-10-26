@@ -30,7 +30,7 @@ from orchestra_agents.config import Project
 from orchestra_agents.events import Events
 from orchestra_agents.harness import read_transcript
 from orchestra_agents.host import AgentHost
-from orchestra_agents.protocol import Follower, TaskClient
+from orchestra_agents.protocol import TaskClient
 from orchestra_agents.store import AgentStore
 
 FAKES = {"pi": Path(__file__).parent / "fake_pi.py", "claude_code": Path(__file__).parent / "fake_claude.py",
@@ -114,8 +114,8 @@ def env(tmp_path, monkeypatch, request):
     th = threading.Thread(target=host.run, daemon=True)
     th.start()
     try:
-        started, deadline = Follower(events, start=0), time.time() + 30
-        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "task_scheduler" for e in started.new()):
+        deadline = time.time() + 30
+        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "task_scheduler" for e in events.after(0)[0]):
             assert scheduler.poll() is None, "tasking run exited; see scheduler.log"
             assert time.time() < deadline, "the scheduler did not start"
             time.sleep(0.2)

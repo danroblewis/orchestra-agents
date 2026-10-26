@@ -12,11 +12,9 @@
   const POLL_MS = 5000;
   const load = (src) => new Promise((ok, bad) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
 
-  // what the chat drawer needs: agents.js (transcripts, the chat, markdown rendering) and the agents' look
+  // what the chat drawer needs: agents.js (transcripts, the chat, markdown rendering); the agents'
+  // look, agents.css, is a stylesheet the plugin declares, linked by Orchestra in every page's head
   async function ready() {
-    if (!document.querySelector('link[href^="/plugins/agents/static/agents.css"]')) {
-      const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/plugins/agents/static/agents.css"; document.head.appendChild(l);
-    }
     window.__agentsJs = window.__agentsJs || (typeof window.openTranscript === "function" ? Promise.resolve() : load("/plugins/agents/static/agents.js").catch(() => {}));
     await window.__agentsJs;                         // loaded once, whichever of the agents' scripts asks first
     if (typeof agentsLibs !== "undefined") await agentsLibs;   // agents.js's markdown libraries

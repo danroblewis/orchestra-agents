@@ -11,9 +11,6 @@
 (async function () {
   if (!window.Orchestra || !Orchestra.machineCards) return;
   const API = "/api/plugins/agents";
-  if (!document.querySelector('link[href^="/plugins/agents/static/agents.css"]')) {      // the agents' look
-    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/plugins/agents/static/agents.css"; document.head.appendChild(l);
-  }
   window.__agentsJs = window.__agentsJs || (typeof window.sessionChip === "function" ? Promise.resolve()   // transcripts, chat, chips
     : new Promise((ok) => { const s = document.createElement("script"); s.src = "/plugins/agents/static/agents.js"; s.onload = ok; s.onerror = ok; document.head.appendChild(s); }));
   await window.__agentsJs;

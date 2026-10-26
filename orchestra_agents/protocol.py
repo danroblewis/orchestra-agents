@@ -69,22 +69,6 @@ DONE, REFUSED = "request.done", "request.refused"
 WAIT_S = 30.0
 
 
-class Follower:
-    """Every event on the bus after an offset, in order (a bus read returns the last ``limit``
-    events after ``since``, so it is asked for all of them)."""
-
-    def __init__(self, events, start: int | None = None):
-        self.events = events
-        self.offset = events.end() if start is None else start
-
-    def new(self) -> list[dict]:
-        end = self.events.end()
-        if end <= self.offset:
-            return []
-        evs, self.offset = self.events.read(self.offset, limit=end - self.offset)
-        return evs
-
-
 class TaskClient:
     """The task system, as an agent's tools reach it: a request on the bus and its answer."""
 
@@ -93,7 +77,7 @@ class TaskClient:
 
     def __call__(self, op: str, args: dict | None = None) -> dict:
         args = dict(args or {})
-        follow = Follower(self.events)
+        offset = self.events.end()                  # from now: the answer comes after the request
         rid = uuid.uuid4().hex[:12]
         subject = args.get("id") or args.get("milestone_id")
         data = {"request": rid, "args": args, "by": self.role}
@@ -105,7 +89,8 @@ class TaskClient:
             return {"ok": False, "error": f"the task system has no operation {op!r}"}
         end = time.time() + WAIT_S
         while time.time() < end:
-            for ev in follow.new():
+            evs, offset = self.events.after(offset)
+            for ev in evs:
                 if ev.get("request") != rid:
                     continue
                 if ev.get("type") == DONE:

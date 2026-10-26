@@ -26,7 +26,6 @@ from .protocol import (
     TERMINAL,
     TRANSITIONED,
     WORKING,
-    Follower,
 )
 
 SAY_S = 2.0            # a heartbeat goes out early when what the agent is saying has changed, at most this often
@@ -36,7 +35,7 @@ class AgentRunner:
     def __init__(self, host):
         self.host = host
         self.events = host.events
-        self.follow = Follower(host.events)
+        self.offset = host.events.end()                      # assignments offered from now on
         self.threads: dict[str, threading.Thread] = {}      # assignment -> the thread running it
         self.sessions: dict[str, str] = {}                   # assignment -> its session id
         self.instances: dict[str, str] = {}                  # assignment -> the instance it runs as
@@ -49,7 +48,8 @@ class AgentRunner:
     def tick(self) -> None:
         for aid in [a for a, th in self.threads.items() if not th.is_alive()]:
             self.threads.pop(aid)
-        for ev in self.follow.new():
+        evs, self.offset = self.events.after(self.offset)
+        for ev in evs:
             serves = [r for r in PER_TICKET_ROLES if r in (self.host.cfg.serves or [])]   # [agents] serves: another machine may take a role
             if ev.get("type") == ASSIGNED and ev.get("role") in serves and ev.get("assignment") not in self.threads:
                 aid, role, tid = ev["assignment"], ev["role"], ev["ticket"]

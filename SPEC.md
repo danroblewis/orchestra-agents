@@ -233,6 +233,10 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
   resident agent is a row with what it last said; a worker or reviewer role is the tickets its
   instances are on, with what each is saying now; the host is a line.
 
+The agents' look, `agents.css`, is a stylesheet the plugin declares, which Orchestra links in every
+page's head. `agents.js` renders markdown itself (marked and DOMPurify, code coloured by
+highlight.js, each loaded once from cdnjs); Orchestra renders none.
+
 API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
 (the organisation); `GET /agents` (every agent and every session as the instance it runs as,
 with the ticket it is on; the cards read this); `GET /state` (sessions and probes);

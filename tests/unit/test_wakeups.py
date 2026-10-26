@@ -271,7 +271,7 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
     # served when the host starts, so the level is live (and every flow fitted) from the run's
     # start, not from the first turn
     from orchestra.sd.series import machine_of, sample
-    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host, store, _events = host_with(project, FakeHarness(reply="ok"))
     host.stop.set()
     t0 = time.time()
     host.run(once=True)
@@ -285,7 +285,7 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
 def test_the_host_announces_only_what_it_acts_on_as_itself(project):
     # a finished ticket's sessions are archived on ticket.transitioned; assignments, releases and
     # attention are the agents', which announce their own
-    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host, _store, events = host_with(project, FakeHarness(reply="ok"))
     host.stop.set()
     host.run(once=True)
     [ann] = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started" and e["source"] == "agents"]

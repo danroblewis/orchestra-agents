@@ -18,7 +18,8 @@ class RepoOrgStore:
     """Agents and teams in the target repository: ``.orchestra/agents/<name>.json``,
     ``.orchestra/teams/<team>.json`` with ``<team>.md`` for the responsibilities, and
     ``.orchestra/spaces/<team>/`` for the team's working space. Writes are committed to
-    the base branch when the checkout allows it, like roles."""
+    the base branch when the checkout is on it and otherwise clean, and otherwise left
+    uncommitted (the checkout dirty until a human commits them), like roles."""
 
     def __init__(self, project: Project):
         self.project = project

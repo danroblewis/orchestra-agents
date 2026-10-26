@@ -25,9 +25,11 @@ from .protocol import (
     ACCEPTED,
     ASSIGNED,
     ATTENTION,
+    COORDINATOR,
     RELEASED,
     REPORTED,
     REQUESTS,
+    SUPERVISOR,
     WORKING,
 )
 
@@ -55,7 +57,7 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "context", "pipeline", "roles", "team", "events"),
-    wake_on=(f"{ATTENTION}:supervisor",),
+    wake_on=(f"{ATTENTION}:{SUPERVISOR}",),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent"),
     emits=(REQUESTS["create_ticket"], REQUESTS["update_ticket"], REQUESTS["create_milestone"], REQUESTS["close_milestone"],
            "context.updated", "role.created", "agent.created", "team.created", "agent.messaged"),
@@ -64,7 +66,7 @@ register(Role(
 register(Role(
     name="coordinator", prompt="coordinator",
     tools=("tickets", "capacity", "escalate"),
-    wake_on=(f"{ATTENTION}:coordinator",),
+    wake_on=(f"{ATTENTION}:{COORDINATOR}",),
     emits=(REQUESTS["update_ticket"], REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"],
            REQUESTS["set_capacity"]),
     description="Keeps the plan executable: clarity, size, order, dependencies. Never changes intent.",

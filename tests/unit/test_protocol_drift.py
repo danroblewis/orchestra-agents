@@ -14,6 +14,7 @@ from orchestra_agents.protocol import (
     ASSIGNED,
     ATTENTION,
     DONE,
+    PLANNER_ROLES,
     QUERY,
     REFUSED,
     RELEASED,
@@ -56,3 +57,10 @@ def test_the_copied_event_names_and_states_match_the_task_systems_source():
         assert f"State.{state}" in source or f'"{state}"' in source, f"{state} is in protocol.STATES but not a State in orchestra-tasking"
     members = re.findall(r"^\s+([A-Z_]+) = \"[A-Z_]+\"$", source[source.index("class State"):], re.MULTILINE)[:len(STATES) + 1]
     assert set(members) == set(STATES)                                                 # and no eleventh state
+
+
+def test_the_planner_role_names_match_the_task_systems():
+    tasking = pytest.importorskip("tasking")
+    source = (Path(tasking.__file__).parent / "events.py").read_text(encoding="utf-8")
+    for role in PLANNER_ROLES:
+        assert f'"{role}"' in source, f"{role} is in protocol.PLANNER_ROLES but not a name in tasking/events.py"

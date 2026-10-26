@@ -8,7 +8,6 @@ from orchestra.config import ConfigError
 
 from orchestra_agents.clock import due_at, parse_interval
 from orchestra_agents.org import event_matches
-from orchestra_agents.org_store import all_agents
 from orchestra_agents.roles import RepoRoleStore, RoleDef, RoleError, all_roles
 
 
@@ -43,18 +42,13 @@ def test_repo_store_saves_commits_and_deletes(project):
         rs.get("product_owner")
 
 
-def test_a_role_record_carries_no_runtime(project):
-    """A role is a job description: a record from before the move, with a schedule and wake
-    rules, still loads as a plain role, and no agent comes of it."""
-    d = (project.repo_root / ".orchestra" / "roles")
+def test_a_role_record_ignores_unknown_keys(project):
+    d = project.repo_root / ".orchestra" / "roles"
     d.mkdir(parents=True)
-    (d / "product_owner.json").write_text(json.dumps({"name": "product_owner", "description": "keeps the backlog full", "tools": ["tickets"],
-                                                      "wake_on": ["ticket.transitioned:DONE"], "every": "45m", "at": "09:00", "session": "resident"}))
-    (d / "product_owner.md").write_text("# You own the product\n")
-    r = all_roles(project)["product_owner"]
-    assert r.tools == ["tickets"] and not hasattr(r, "wake_on") and not hasattr(r, "every")
-    assert "product_owner" not in all_agents(project)
-    assert "wake_on" not in r.to_dict() and "every" not in r.to_dict()
+    (d / "analyst.json").write_text(json.dumps({"name": "analyst", "description": "reads data", "tools": ["tickets"], "colour": "blue"}))
+    (d / "analyst.md").write_text("# You read data\n")
+    r = all_roles(project)["analyst"]
+    assert r.tools == ["tickets"] and "colour" not in r.to_dict()
 
 
 def test_validation():

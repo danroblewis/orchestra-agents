@@ -142,8 +142,8 @@ def on_the_bus(events, ticket):
 
 
 def check_protocol(events, ticket, *rounds):
-    """Each round is (role, report shape): the instance accepted, reported from the same instance
-    and session, with the report the role owes, and every heartbeat between carried its text (a
+    """Each round is (role, report shape): the instance accepted and reported from the same
+    instance, with the report the role owes, and every heartbeat between carried its text (a
     turn shorter than the heartbeat interval sends none)."""
     seen = on_the_bus(events, ticket)
     reports = [x for x in seen if x[0] == "task.reported"]
@@ -154,9 +154,9 @@ def check_protocol(events, ticket, *rounds):
         assert mine[0][0] == "task.accepted" and mine[-1][0] == "task.reported"
         assert all(isinstance(e.get("text"), str) for t, _, e in mine if t == "task.working")
         accepted = mine[0][2]
-        assert source == f"{role}/1" and accepted["instance"] == source and accepted["session"] == f"{role}-{ticket}"
+        assert source == f"{role}/1" and accepted["instance"] == source
         assert all(s == source for _, s, _ in mine)
-        assert rep["failed"] is False and rep["report"]["kind"] == role
+        assert rep["failed"] is False and set(rep["report"]) == ({"state", "summary", "blocked_reason"} if role == "worker" else {"verdict", "summary", "feedback"})
         for k, v in shape.items():
             assert rep["report"].get(k) == v, (k, rep["report"])
         if role == "reviewer" and rep.get("commit") is not None:

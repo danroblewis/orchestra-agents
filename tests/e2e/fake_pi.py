@@ -2,7 +2,9 @@
 """A fake `pi --mode rpc` for end-to-end tests.
 
 Speaks just enough of the RPC protocol for orchestra_agents.harness.pi: `get_state`, `prompt`,
-`abort`. On `prompt` it plays the role given by ORCHESTRA_ROLE:
+`compact`, `abort`. With FAKE_MODE set it never finishes a prompt, for the turn limits: `silent`
+emits nothing after accepting it, `chatty` streams a token every 0.2 s; `abort` settles it.
+Otherwise, on `prompt` it plays the role given by ORCHESTRA_ROLE:
 
 - worker: edits a file in the cwd (its worktree), commits, then calls
   `orchestra-agents api report_ticket` exactly like the real extension tool would.
@@ -21,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -48,6 +51,13 @@ def main() -> None:
     session_file = session_dir / f"{session_id}.jsonl"
     role = os.environ.get("ORCHESTRA_ROLE", "")
     ticket = os.environ.get("ORCHESTRA_TICKET", "")
+    mode = os.environ.get("FAKE_MODE")
+    busy = threading.Event()                  # a FAKE_MODE prompt is running until aborted
+
+    def chat() -> None:
+        while busy.is_set():
+            emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "."}})
+            time.sleep(0.2)
 
     def record(role_: str, text: str, tool: str | None = None) -> None:
         content = [{"type": "text", "text": text}]
@@ -68,6 +78,19 @@ def main() -> None:
                   "data": {"sessionFile": str(session_file), "sessionId": session_id}})
         elif t == "abort":
             emit({"type": "response", "command": "abort", "success": True})
+            if busy.is_set():
+                busy.clear()
+                emit({"type": "agent_settled"})
+        elif t == "compact":
+            emit({"type": "compaction_start", "reason": "manual"})
+            emit({"type": "response", "command": "compact", "success": True,
+                  "data": {"tokensBefore": 150000, "estimatedTokensAfter": 32000}})
+        elif t == "prompt" and mode in ("silent", "chatty"):
+            emit({"type": "response", "command": "prompt", "success": True})
+            record("user", cmd.get("message", ""))
+            busy.set()
+            if mode == "chatty":
+                threading.Thread(target=chat, daemon=True).start()
         elif t == "prompt":
             emit({"type": "response", "command": "prompt", "success": True})
             record("user", cmd.get("message", ""))

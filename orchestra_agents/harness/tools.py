@@ -175,13 +175,14 @@ TOOLS: list[ToolDef] = [
             "not the project context or the team's space.", {"name": S("Agent name")}, ("name",)),
     ToolDef("create_team", "roles",
             "Create a team: one lead agent, members, responsibilities (standing conditions as a numbered markdown list), "
-            "access (tool groups and repository paths), capacity. Nest with 'parent/child'. Prefer update_team on an "
+            "access (tool groups, which decide the tools its agents get, and repository paths, which are written into "
+            "their prompts as instructions and are not enforced). Nest with 'parent/child'. Prefer update_team on an "
             "existing team; a project rarely needs more than four or five.",
             {"name": S("Team name, e.g. product or product/qa"), "description": S("One line"), "lead": S("Lead agent name"),
              "members": A("Member agent names"), "responsibilities": S("Markdown: what this team keeps true"),
              "access": {"type": "array", "items": {"type": "object"},
-                        "description": "Entries like {\"tools\": [\"tickets\", \"events\"]} or {\"path\": \"src\", \"access\": \"read\"}"},
-             "capacity": I("Member sessions that may run at once, default 1"),
+                        "description": "Entries like {\"tools\": [\"tickets\", \"events\"]} or {\"path\": \"src\", \"access\": \"read\"}; "
+                                       "a path entry is an instruction in the agents' prompts, not a permission check"},
              "tracked": {"type": "boolean", "description": "Commit the team's space with the code (default false: ignored by git)"},
              "emits": A("Event types this team's agents may raise with emit_event, e.g. lesson_proposed"),
              "probes": {"type": "array", "items": {"type": "object"},
@@ -189,9 +190,9 @@ TOOLS: list[ToolDef] = [
                                        "[{\"name\": \"docs_budget\", \"command\": \"tools/doc-budget\", \"every\": \"30m\"}]. "
                                        "Exit 0 = holds; probe.failed:<name> / probe.recovered:<name> fire on the transition."}},
             ("name", "lead", "responsibilities")),
-    ToolDef("update_team", "roles", "Change a team: lead, members, responsibilities, access, capacity, tracking.",
+    ToolDef("update_team", "roles", "Change a team: lead, members, responsibilities, access, tracking.",
             {"name": S("Team name"), "description": S(""), "lead": S(""), "members": A(), "responsibilities": S("Full new markdown"),
-             "access": {"type": "array", "items": {"type": "object"}}, "capacity": I(), "tracked": {"type": "boolean"},
+             "access": {"type": "array", "items": {"type": "object"}}, "tracked": {"type": "boolean"},
              "emits": A(), "probes": {"type": "array", "items": {"type": "object"}}}, ("name",)),
     ToolDef("delete_team", "roles", "Delete a custom team that has no agents and no sub-teams.", {"name": S("Team name")}, ("name",)),
     # escalate

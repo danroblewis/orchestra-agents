@@ -51,8 +51,7 @@ class RoleDef:
 
     @classmethod
     def from_dict(cls, d: dict) -> RoleDef:
-        """A record's known fields; anything else in it (the schedule and wake rules an older
-        record carried, which are an agent's now) is ignored."""
+        """A record's known fields; unknown keys are ignored."""
         known = cls.__dataclass_fields__
         return cls(**{k: v for k, v in d.items() if k in known})
 
@@ -60,10 +59,10 @@ class RoleDef:
 class RepoRoleStore:
     """Roles in the target repository: ``.orchestra/roles/<name>.json`` and ``<name>.md``.
 
-    Writes are committed to the base branch when the checkout is on it and otherwise clean,
-    so a role change never leaves the tree dirty (in code mode the task system's gate merges
-    into that checkout). If the checkout is elsewhere or dirty, the files are written and left
-    for the human to commit; `last_commit_note` says which happened."""
+    Writes are committed to the base branch when the checkout is on it and otherwise clean.
+    Otherwise (another branch, or other changes) the files are written and left uncommitted,
+    and the checkout is dirty until a human commits them; `last_commit_note` says which
+    happened."""
 
     def __init__(self, project: Project):
         self.project = project
@@ -119,8 +118,9 @@ class RepoRoleStore:
 
 def commit_orchestra_files(project: Project, message: str) -> str:
     """Commit everything under .orchestra/ to the base branch when the checkout is on it
-    and otherwise clean, so a file the agents own never leaves the tree dirty. Returns a
-    note saying what happened. Shared by the role and org stores."""
+    and otherwise clean. Otherwise nothing is committed: the files stay written and the
+    checkout is dirty until a human commits them. Returns a note saying which happened.
+    Shared by the role and org stores."""
     root = project.repo_root
     base = project.config.base_branch
     run = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, check=False)

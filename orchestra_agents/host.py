@@ -201,7 +201,7 @@ class AgentHost:
             try:
                 os.killpg(pid, signal.SIGTERM)            # each turn runs in a process group of its own
             except ProcessLookupError:
-                os.kill(pid, signal.SIGTERM)              # not a group leader (an older session): the process itself
+                os.kill(pid, signal.SIGTERM)              # a pid that is not a group leader: the process itself
             log(f"{session_id}: stopped its orphaned process {pid}")
         except (psutil.NoSuchProcess, ProcessLookupError, PermissionError, OSError):
             pass

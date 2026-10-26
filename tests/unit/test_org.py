@@ -8,7 +8,15 @@ from conftest import agents_project
 
 from orchestra_agents import tooling as api
 from orchestra_agents.cli import main
-from orchestra_agents.org import AgentDef, OrgError, TeamDef, effective_tools, may_message
+from orchestra_agents.org import (
+    EVENT_HELP,
+    EVENT_TYPES,
+    AgentDef,
+    OrgError,
+    TeamDef,
+    effective_tools,
+    may_message,
+)
 from orchestra_agents.org_store import RepoOrgStore, all_agents, all_teams
 from orchestra_agents.roles import RepoRoleStore, RoleDef
 from orchestra_agents.store import AgentStore, StoreError
@@ -40,7 +48,10 @@ def test_builtins_are_agents_in_teams(project):
     assert ags["worker"].kind == "ad_hoc" and not ags["worker"].resident
     assert ags["supervisor"].team is None
     assert teams["engineering"].lead == "coordinator" and teams["engineering"].agents == ["coordinator", "worker", "reviewer"]
-    assert "pipeline" not in teams                                   # no Pipeline Manager: the Supervisor handles the gate and staging
+
+
+def test_every_event_an_agent_may_wake_on_says_what_it_means():
+    assert set(EVENT_HELP) == set(EVENT_TYPES) and all(EVENT_HELP.values())
 
 
 def test_validation():
@@ -90,21 +101,6 @@ def test_store_round_trip_nesting_space_and_commits(project):
         os_.delete_team("product")                                                  # has a sub-team
     assert [a.name for a in os_.list_agents()] == ["qa_lead"]
     assert all_teams(project)["product/qa"].lead == "qa_lead"
-
-
-def test_a_role_record_with_wake_rules_is_a_role_and_no_agent(project):
-    """A role has no runtime. A record from before the move, carrying wake rules and a schedule,
-    loads as a plain role; the agent that runs it is an agent record."""
-    d = project.repo_root / ".orchestra" / "roles"
-    d.mkdir(parents=True)
-    (d / "product_owner.json").write_text(json.dumps({"name": "product_owner", "description": "keeps the backlog full", "tools": ["tickets", "escalate"],
-                                                      "wake_on": ["ticket.transitioned:DONE"], "every": "45m"}))
-    (d / "product_owner.md").write_text("# You own the product\n\nKeep the backlog full.\n")
-    assert RepoRoleStore(project).get("product_owner").tools == ["tickets", "escalate"]
-    assert "product_owner" not in all_agents(project)
-    RepoOrgStore(project).save_agent(AgentDef(name="product_owner", roles=["product_owner"], kind="continuous", wake_on=["milestone.closed"]))
-    a = all_agents(project)["product_owner"]
-    assert a.kind == "continuous" and a.resident and a.wake_on == ["milestone.closed"]
 
 
 def test_team_record_decides_membership(project):
@@ -177,8 +173,8 @@ def test_agent_prompt_is_roles_then_responsibilities_then_access(project):
     assert p.index("Every milestone has an e2e test") < p.index("## Team `product` (the team above `product/qa`)")
     assert "The backlog is never empty" in p
     assert "read: `src` (granted to team `product`)" in p and ".orchestra/spaces/product/qa" in p
-    assert "## Your access" in p and p.index("## Your access") > p.index("## Team `product`")
-    # built-in agents outside a custom team get exactly their role prompt, as before teams existed
+    assert "## Where you work" in p and p.index("## Where you work") > p.index("## Team `product`")
+    # built-in agents outside a custom team get exactly their role prompt
     assert agents.agent_prompt(project, all_agents(project)["coordinator"]) == agents.role_prompt(project, "coordinator")
 
 
@@ -234,8 +230,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     with pytest.raises(StoreError, match="leads"):
         api.handle(project, store, "delete_agent", {"name": "po"}, role="supervisor")
     api.handle(project, store, "pause_agent", {"name": "po"}, role="supervisor")
-    assert api.handle(project, store, "list_agents", {})["agents"][-2]["paused"] is True or any(
-        x["name"] == "po" and x["paused"] for x in api.handle(project, store, "list_agents", {})["agents"])
+    assert any(x["name"] == "po" and x["paused"] for x in api.handle(project, store, "list_agents", {})["agents"])
     org = api.handle(project, store, "list_roles", {})
     assert next(r for r in org["roles"] if r["name"] == "owner")["agents"] == ["po", "writer"]
     rec = json.loads((project.repo_root / ".orchestra" / "agents" / "po.json").read_text())

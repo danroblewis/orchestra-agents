@@ -143,8 +143,7 @@ class AgentStore:
         self.measures.write(points)
 
     def set_report(self, ticket_id: str, report: dict) -> None:
-        """What an agent's exit tool hands to the session that runs it."""
-        report["ts"] = now()
+        """What an agent's exit tool hands to the session that runs it; it goes on the bus as is."""
         self._mutate_runtime(lambda d: d["reports"].__setitem__(ticket_id, report))
 
     def pop_report(self, ticket_id: str) -> dict | None:

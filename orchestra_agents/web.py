@@ -21,6 +21,7 @@ from . import tooling
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness import read_transcript
+from .org import EVENT_HELP
 from .org_store import all_agents
 from .org_views import agents_status, residents_of, session_alive
 from .store import AgentStore, StoreError, alive
@@ -71,9 +72,10 @@ def router(project) -> APIRouter:
     @r.get("/org")
     async def org() -> dict:
         """The organisation in one read: roles (job descriptions), agents (what runs), teams (who
-        owns what), and which of the task system's roles the agents here serve."""
+        owns what), which of the task system's roles the agents here serve, and what each event
+        an agent may wake on means."""
         current(project)
-        return {"ok": True, "now": time.time(), "serves": project.config.serves,
+        return {"ok": True, "now": time.time(), "serves": project.config.serves, "event_help": EVENT_HELP,
                 "roles": tooling.handle(project, store, "list_roles", {})["roles"],
                 "agents": tooling.handle(project, store, "list_agents", {})["agents"],
                 "teams": tooling.handle(project, store, "list_teams", {})["teams"]}
@@ -103,7 +105,7 @@ def router(project) -> APIRouter:
         for s in sessions:
             s["alive"] = session_alive(s, host_alive, residents)
         probes = [{"name": n, **rt["probes"][n]} for n in rt["probes"] if not rt["probes"][n].get("removed")]
-        return {"ok": True, "now": time.time(), "project": {"key": project.key}, "sessions": sessions, "probes": probes,
+        return {"ok": True, "now": time.time(), "sessions": sessions, "probes": probes,
                 "control": {**ctl, "alive": host_alive}}
 
     @r.get("/attention")

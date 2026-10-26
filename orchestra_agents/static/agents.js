@@ -3,11 +3,46 @@
 // every-page scripts. Its names do not clash with the task system's tasks.js (which has the ticket
 // drawers): a page may load both, and each calls the other's functions only when they are there.
 const AGENTS_API = "/api/plugins/agents";
-const kindColor = (k) => ({ supervisor: "#bc8cff", coordinator: "#58a6ff", worker: "#3fb950", reviewer: "#f85149" }[k] || "#8a90a3");
 
-// opening any drawer ends the paging of a transcript that was open in it
+// Agent prose and human input are markdown: marked renders it, DOMPurify sanitizes it, highlight.js
+// colours the code blocks. They come from cdnjs, each loaded once by whichever page loads this
+// file; until they arrive md() shows the plain text. `agentsLibs` settles when they have loaded or failed.
+function agentsLoad(src) {
+  return new Promise((ok, bad) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+}
+const AGENTS_CDN = "https://cdnjs.cloudflare.com/ajax/libs";
+if (!document.querySelector(`link[href^="${AGENTS_CDN}/highlight.js/"]`)) {
+  const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${AGENTS_CDN}/highlight.js/11.9.0/styles/github-dark.min.css`; document.head.appendChild(l);
+}
+const agentsLibs = Promise.all([
+  window.marked || agentsLoad(`${AGENTS_CDN}/marked/12.0.2/marked.min.js`).catch(() => {}),
+  window.DOMPurify || agentsLoad(`${AGENTS_CDN}/dompurify/3.1.6/purify.min.js`).catch(() => {}),
+  window.hljs || agentsLoad(`${AGENTS_CDN}/highlight.js/11.9.0/highlight.min.js`).catch(() => {}),
+]);
+
+function md(text) {
+  if (!text) return "";
+  if (!(window.marked && window.DOMPurify)) return `<pre>${esc(text)}</pre>`;
+  return `<div class="md">${DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: true }))}</div>`;
+}
+// Highlights code blocks, guessing the language when the fence does not name one.
+function highlightCode(root) {
+  if (!window.hljs) return;
+  root.querySelectorAll("pre code").forEach((el) => {
+    if (el.dataset.highlighted) return;
+    const named = [...el.classList].find((c) => c.startsWith("language-"));
+    if (named && hljs.getLanguage(named.slice(9))) hljs.highlightElement(el);
+    else {
+      const r = hljs.highlightAuto(el.textContent);
+      el.innerHTML = r.value; el.classList.add("hljs", `language-${r.language || "plaintext"}`);
+      el.dataset.highlighted = "yes";
+    }
+  });
+}
+
+// opening any drawer ends the paging of a transcript that was open in it, and highlights its code
 const orchestraOpenDrawer = openDrawer;
-openDrawer = function (html) { transcriptPaging = null; orchestraOpenDrawer(html); };   // eslint-disable-line no-func-assign
+openDrawer = function (html) { transcriptPaging = null; orchestraOpenDrawer(html); highlightCode($("drawer")); };   // eslint-disable-line no-func-assign
 
 let transcriptPaging = null;   // {id, nextBefore, hasMore, loading}
 
@@ -16,7 +51,7 @@ async function openTranscript(id) {
   if (!r.ok) {
     const perTicket = /^(worker|reviewer)-/.test(id);
     return openDrawer(`<h3>${esc(id)}</h3><div class="empty">${perTicket
-      ? "No record of this session: it has not run yet, or it finished before transcripts were kept (" + esc(id) + ")."
+      ? "No record of this session (" + esc(id) + "): it never ran, or it was removed."
       : "This session has not been started. It comes up with <code>orchestra-agents run</code>."}</div>`);
   }
   const d = await r.json(); const s = d.session;
@@ -27,8 +62,8 @@ async function openTranscript(id) {
       <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
       ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while <code>orchestra-agents run</code> is up.</div>'}
     </form><div id="live"></div>`;
-  if (d.started_with) html += `<details class="started"><summary>The prompt this session was started with <span class="muted">(${d.started_with.length.toLocaleString()} chars; roles, team responsibilities, access)</span></summary><div class="prompt md">${md(d.started_with)}</div></details>`;
-  else if (!perTicket) html += `<div class="empty">The prompt this session was started with was not recorded (started before Orchestra kept them). The agent's current prompt is on the Agents page.</div>`;
+  if (d.started_with) html += `<details class="started"><summary>The prompt this session was started with <span class="muted">(${d.started_with.length.toLocaleString()} chars; roles, team responsibilities, where it works)</span></summary><div class="prompt md">${md(d.started_with)}</div></details>`;
+  else if (!perTicket) html += `<div class="empty">The prompt file this session was started with is missing: the agents' state directory was cleaned since. The agent's current prompt is on the Agents page.</div>`;
   html += `<h2>Transcript · newest first</h2><div id="transcript">`;
   // Only markers at least as new as the oldest message on this page are placed; older ones belong to older pages.
   const oldest = d.messages.length ? Math.min(...d.messages.map(tsOf)) : 0;

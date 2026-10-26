@@ -54,6 +54,41 @@ AGENT_EVENT_TYPES = (
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
 )
 EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
+# What each of them means, in one line, for the Agents page's triggers (served in /org).
+EVENT_HELP = {
+    "ticket.created": "a ticket is created", "ticket.updated": "a ticket's fields change",
+    "ticket.transitioned": "a ticket changes state (filter with :STATE, e.g. :DONE or :REJECTED)",
+    "ticket.note_added": "a note is added to a ticket", "milestone.created": "a milestone is created",
+    "milestone.updated": "a milestone changes", "milestone.closed": "a milestone closes",
+    "gate.started": "a merge gate run starts", "gate.landed": "the gate lands a ticket on the base branch",
+    "gate.rejected": "the gate's tests fail for a ticket", "gate.conflict": "a branch conflicts with the base branch at the gate",
+    "gate.error": "the gate itself fails to run", "gate.base_broken": "the base branch fails the gate's tests",
+    "staging.deployed": "a build is deployed to staging", "staging.failed": "staging failed to come up",
+    "staging.restarted": "staging was restarted", "pipeline.paused": "the pipeline is paused",
+    "pipeline.resumed": "the pipeline is resumed", "pickup.paused": "new workers are paused",
+    "pickup.resumed": "new workers are resumed", "capacity.changed": "the worker dial changes",
+    "kill.requested": "the operator stops a ticket's work", "scheduler.stopped": "the task system's scheduler stops",
+    "probe.failed": "a probe's condition stops holding (filter with :probe_name)",
+    "probe.recovered": "a probe's condition holds again (filter with :probe_name)",
+    ASSIGNED: "the task system offers a ticket to a role", ACCEPTED: "a machine takes an offered ticket",
+    WORKING: "the holder of a ticket says it is still at it", REPORTED: "the holder of a ticket reports",
+    RELEASED: "the task system takes an assignment back",
+    ATTENTION: "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
+    DONE: "the task system answered a request", REFUSED: "the task system refused a request",
+    "agent.said": "an agent finishes a turn", "context.updated": "the project context changes",
+    "session.started": "any agent turn starts", "session.settled": "any agent turn ends",
+    "session.timed_out": "the agents' host cuts a turn off at the time limit",
+    "session.error": "a harness fails during a turn", "session.interrupted": "a turn is cut off by a restart or crash",
+    "agent.crashed": "a resident agent's process exits between turns",
+    "agent.crash_loop": "an agent is paused after repeated crashes",
+    "agent.reset": "an agent's session is started over by the Supervisor",
+    "agent.compacted": "the harness compacts an agent's context",
+    "role.created": "a role is created", "role.changed": "a role changes", "role.deleted": "a role is deleted",
+    "agent.created": "an agent is created", "agent.changed": "an agent changes", "agent.deleted": "an agent is deleted",
+    "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed",
+    "agent.messaged": "an agent gets a message or brief",
+    "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
+}
 # Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
 # those are validated against the teams, not this list.
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
@@ -168,7 +203,6 @@ class TeamDef:
     members: list[str] = field(default_factory=list)   # agent names, lead excluded
     tracked: bool = False                 # is the space committed with the code?
     access: list[dict] = field(default_factory=list)   # {"path", "access"} or {"tools": [...]}
-    capacity: int = 1                     # member sessions that may run at once
     emits: list[str] = field(default_factory=list)     # event types this team's agents may raise with emit_event
     probes: list[dict] = field(default_factory=list)   # {"name", "command", "every", "timeout"?}, run in the space
     created_by: str = "supervisor"
@@ -212,8 +246,6 @@ class TeamDef:
             raise OrgError("a team needs a lead agent")
         if self.lead in self.members:
             raise OrgError("the lead is not also a member")
-        if self.capacity < 0:
-            raise OrgError("capacity must be 0 or more")
         for e in self.emits:
             if not _CUSTOM_TYPE.match(e) or e in EVENT_TYPES:
                 raise OrgError(f"emits entry {e!r} must be a new lowercase_name, not one of Orchestra's own event types")

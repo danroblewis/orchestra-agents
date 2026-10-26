@@ -200,7 +200,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
     if command in ("create_team", "update_team"):
         if command == "update_team":
             t = os_.get_team(a["name"])
-            for k in ("description", "lead", "members", "tracked", "access", "capacity", "emits", "probes"):
+            for k in ("description", "lead", "members", "tracked", "access", "emits", "probes"):
                 if k in a and a[k] is not None:
                     setattr(t, k, a[k])
             resp = a["responsibilities"] if a.get("responsibilities") else os_.responsibilities(t.name)
@@ -209,7 +209,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
                 raise StoreError(f"team {a['name']!r} exists; use update_team")
             t = TeamDef(name=a["name"], description=a.get("description", ""), lead=a.get("lead") or "",
                         members=list(a.get("members") or []), tracked=bool(a.get("tracked")),
-                        access=list(a.get("access") or []), capacity=int(a.get("capacity") or 1), created_by=author,
+                        access=list(a.get("access") or []), created_by=author,
                         emits=list(a.get("emits") or []), probes=list(a.get("probes") or []))
             resp = a.get("responsibilities") or ""
             if len(resp.strip()) < 20:

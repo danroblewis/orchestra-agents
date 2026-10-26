@@ -80,7 +80,7 @@ class AgentRunner:
         path = Path(a["workspace"])
         say = lambda kind, **data: self.events.publish(kind, {"assignment": aid, "ticket": tid, "role": role, **data},
                                                        source=instance, subject=tid)
-        say(ACCEPTED, instance=instance, session=sid)
+        say(ACCEPTED, instance=instance)
         done = threading.Event()
 
         def beat():
@@ -146,9 +146,11 @@ class AgentRunner:
             result = (path / "RESULT.md").read_text(encoding="utf-8", errors="replace") if (path / "RESULT.md").exists() else ""
             return prompting.reviewer_task_tasks(t, review.get("summary") or "", files, result), nudge, None
         # code: the task system ran the tests (verifying is its job) and names the commit; the diff is read here
-        base, commit = self.host.cfg.base_branch, review.get("commit") or "HEAD"
+        # (an offer that names no commit is reviewed at the workspace's head, and the report names none)
+        base, commit = self.host.cfg.base_branch, review.get("commit")
+        head = commit or "HEAD"
         git = lambda *args: subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=False).stdout
-        task = prompting.reviewer_task(self.host.project, t, commit, git("diff", f"{base}...{commit}"),
-                                    git("diff", "--name-only", f"{base}...{commit}").split(), git("log", "--oneline", f"{base}..{commit}"),
+        task = prompting.reviewer_task(self.host.project, t, head, git("diff", f"{base}...{head}"),
+                                    git("diff", "--name-only", f"{base}...{head}").split(), git("log", "--oneline", f"{base}..{head}"),
                                     review.get("test_output"))
         return task, nudge, commit

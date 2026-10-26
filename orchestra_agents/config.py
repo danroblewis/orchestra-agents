@@ -21,7 +21,7 @@ from orchestra.config import load_project as load_orchestra_project
 from .builtins import PER_TICKET_ROLES
 from .clock import parse_interval
 
-__all__ = ["Config", "ConfigError", "Project", "load_project", "parse_duration"]
+__all__ = ["Config", "ConfigError", "Project", "load_project"]
 
 
 @dataclass

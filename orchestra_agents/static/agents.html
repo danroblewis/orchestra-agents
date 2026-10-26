@@ -4,10 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agents</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <link rel="stylesheet" href="/static/style.css?v={{v}}">
 <link rel="stylesheet" href="/plugins/agents/static/agents.css?v={{v}}">
 <style>
@@ -119,29 +115,11 @@ function schedule(a) {
   if (a.name === "supervisor") parts.push("on human messages and escalations");
   return parts.join(" · ") || "only on messages from its lead";
 }
-// What each event type means, for the triggers section of the agent view.
-const EVENT_HELP = {
-  "ticket.created": "a ticket is created", "ticket.updated": "a ticket's fields change", "ticket.transitioned": "a ticket changes state (filter with :STATE, e.g. :DONE or :REJECTED)",
-  "ticket.note_added": "a note is added to a ticket", "milestone.created": "a milestone is created", "milestone.updated": "a milestone changes", "milestone.closed": "a milestone closes",
-  "gate.started": "a merge gate run starts", "gate.landed": "the gate lands a ticket on the base branch", "gate.rejected": "the gate's tests fail for a ticket", "gate.conflict": "a branch conflicts with the base branch at the gate",
-  "gate.error": "the gate itself fails to run", "gate.base_broken": "the base branch fails the gate's tests", "staging.deployed": "a build is deployed to staging", "staging.failed": "staging failed to come up", "staging.restarted": "staging was restarted",
-  "pipeline.paused": "the pipeline is paused", "pipeline.resumed": "the pipeline is resumed", "pickup.paused": "new workers are paused", "pickup.resumed": "new workers are resumed", "capacity.changed": "the worker dial changes", "kill.requested": "the operator stops a ticket's work",
-  "task.assigned": "the task system offers a ticket to a role", "task.accepted": "a machine takes an offered ticket", "task.working": "the holder of a ticket says it is still at it",
-  "task.reported": "the holder of a ticket reports", "task.released": "the task system takes an assignment back", "task.attention_needed": "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
-  "request.done": "the task system answered a request", "request.refused": "the task system refused a request",
-  "agent.said": "an agent finishes a turn", "context.updated": "the project context changes", "scheduler.stopped": "the task system's scheduler stops",
-  "session.started": "any agent turn starts", "session.settled": "any agent turn ends", "role.created": "a role is created", "role.changed": "a role changes", "role.deleted": "a role is deleted",
-  "agent.created": "an agent is created", "agent.changed": "an agent changes", "agent.deleted": "an agent is deleted", "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed", "agent.messaged": "an agent gets a message or brief",
-  "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
-  "probe.failed": "a probe's condition stops holding (filter with :probe_name)", "probe.recovered": "a probe's condition holds again (filter with :probe_name)",
-  "session.timed_out": "the agents' host cuts a turn off at the time limit", "session.error": "a harness fails during a turn", "session.interrupted": "a turn is cut off by a restart or crash",
-  "agent.crashed": "a resident agent's process exits between turns", "agent.crash_loop": "an agent is paused after repeated crashes",
-};
 function triggerRows(a) {
   const declared = Object.fromEntries((ORG ? ORG.teams : []).flatMap((t) => (t.emits || []).map((e) => [e, t.name])));
   const rows = (a.wake_on || []).map((w) => {
     const [type, filter] = w.split(/:(.*)/);
-    let what = EVENT_HELP[type];
+    let what = ((ORG && ORG.event_help) || {})[type];
     if (!what && declared[type]) what = `an agent of team ${declared[type]} raises it with emit_event`;
     if (!what) what = "not an event the task system or the agents emit";
     return `<div><code>${esc(w)}</code> <span class="muted">${esc(what)}${filter ? ` · only when it is ${esc(filter)}` : ""}</span></div>`;
@@ -163,7 +141,7 @@ function probeRow(p, now) {
     <span class="name">${esc(p.name)}${p.team ? ` <span class="tag">${esc(p.team)}</span>` : ""}</span><span class="tag">every ${p.every >= 3600 ? Math.round(p.every / 3600) + "h" : Math.round(p.every / 60) + "m"}</span>
     <span class="sched"><code>${esc(p.command || "")}</code> · ${[since, last].filter(Boolean).join(" · ")}${p.status === "failed" && p.output ? ` · <span class="muted">${esc(p.output.trim().split("\n").slice(-1)[0].slice(0, 120))}</span>` : ""}</span>${st}</div>`;
 }
-function nextWake(a, st, now) {
+function nextWake(a, now) {
   if (a.paused) return "paused: wake-ups are queued until resumed";
   if (a.kind === "ad_hoc") return a.builtin ? "when the task system assigns a ticket to this role" : "when its lead calls run_agent with a brief";
   const parts = [];
@@ -198,20 +176,20 @@ function agentRow(a, lead, now) {
 function teamCard(t, byName, now, sub) {
   const agents = t.agents.map((a) => agentRow(byName[a.name] || a, a.name === t.lead, now)).join("") || '<div class="empty">no agents yet</div>';
   const subs = ORG.teams.filter((x) => x.parent === t.name).map((x) => teamCard(x, byName, now, true)).join("");
-  const access = (t.access || []).map((g) => g.tools ? `tools: ${g.tools.map((x) => `<code>${esc(x)}</code>`).join(" ")}` : `${esc(g.access)} <code>${esc(g.path)}</code>`).join(" · ");
+  const access = (t.access || []).map((g) => g.tools ? `tools: ${g.tools.map((x) => `<code>${esc(x)}</code>`).join(" ")}` : `${esc(g.access)} <code>${esc(g.path)}</code> <span title="written into the agents' prompts; nothing enforces it">(by instruction)</span>`).join(" · ");
   const extra = [(t.emits || []).length ? `emits ${t.emits.map((e) => `<code>${esc(e)}</code>`).join(" ")}` : "", (t.probes || []).length ? `probes ${t.probes.map((p) => `<code>${esc(p.name)}</code>`).join(" ")}` : ""].filter(Boolean).join(" · ");
   return `<div class="team ${sub ? "sub" : ""}"><div class="head"><h3><a href="#" onclick="openTeam('${t.name}');return false">${esc(t.name)}</a></h3>
       ${t.builtin ? '<span class="tag">built-in</span>' : `<span class="tag">${t.tracked ? "space tracked" : "space untracked"}</span>`}
       <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTeam('${t.name}')">team</button></span></div>
     <div class="desc">${esc(t.description || "")}</div>
-    <div class="meta">${access ? "access: " + access : "access: only what its agents' roles carry"} · space <code>${esc(t.space)}</code> · capacity ${t.capacity}${extra ? " · " + extra : ""}</div>
+    <div class="meta">${access ? "access: " + access : "access: only what its agents' roles carry"} · space <code>${esc(t.space)}</code>${extra ? " · " + extra : ""}</div>
     ${agents}${subs}</div>`;
 }
 async function openTeam(name) {
   const r = await fetch(`${API}/teams/${name}`).then((x) => x.json());
   if (!r.ok) { alert(r.error || "cannot load team"); return; }
   const t = r.team, now = ORG ? ORG.now : Date.now() / 1000, byName = Object.fromEntries(ORG.agents.map((a) => [a.name, a]));
-  const access = (t.access || []).map((g) => g.tools ? `<div>tool groups: ${g.tools.map((x) => `<code>${esc(x)}</code>`).join(" ")}</div>` : `<div>${esc(g.access)}: <code>${esc(g.path)}</code></div>`).join("") || "only what its agents' roles carry";
+  const access = (t.access || []).map((g) => g.tools ? `<div>tool groups: ${g.tools.map((x) => `<code>${esc(x)}</code>`).join(" ")}</div>` : `<div>${esc(g.access)}: <code>${esc(g.path)}</code> <span class="muted">(an instruction in the prompt, not enforced)</span></div>`).join("") || "only what its agents' roles carry";
   const inherited = (r.inherited || []).filter((x) => x.responsibilities).map((x) => `<h4 class="muted" style="margin:10px 0 4px">Inherited from <code>${esc(x.team)}</code></h4><div class="md">${md(x.responsibilities)}</div>`).join("");
   openDrawer(`<h3>team ${esc(t.name)} ${t.builtin ? '<span class="tag">built-in</span>' : ""}<span style="margin-left:auto"><button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(t.description || "")}</div>
@@ -222,7 +200,6 @@ async function openTeam(name) {
       ${t.parent ? `<div>parent</div><div><a href="#" onclick="openTeam('${t.parent}');return false">${esc(t.parent)}</a></div>` : ""}
       <div>access</div><div>${access}</div>
       <div>space</div><div><code>${esc(r.space_dir || t.space)}</code> ${t.tracked ? "(committed with the code)" : "(ignored by git)"}; tools on members' PATH from <code>${esc(r.tools_dir || "")}</code></div>
-      <div>capacity</div><div>${t.capacity} member session${t.capacity === 1 ? "" : "s"} at once</div>
       <div>defined by</div><div>${t.builtin ? "the agents package (built in)" : `${esc(t.created_by || "supervisor")} on ${esc((t.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
     </div>
     <div class="prompt-head"><h4>Responsibilities</h4><span class="muted">Standing conditions the lead checks on every wake-up. Every agent in the team sees these, and those inherited from the teams above.</span></div>
@@ -241,7 +218,7 @@ async function openAgent(name) {
       <div>roles</div><div>${(r.roles || []).map((x) => `<a href="#" onclick="openRole('${x.name}');return false">${esc(x.name)}</a>${x.description ? ` <span class="muted">${esc(x.description)}</span>` : ""}`).join("<br>") || "none"}</div>
       <div>team</div><div>${a.team ? ((r.team_chain || []).length ? r.team_chain.map((t) => `<a href="#" onclick="openTeam('${t}');return false">${esc(t)}</a>`).join(" ← ") : `<code>${esc(a.team)}</code> is not created yet; the agent runs without team responsibilities until it is`) : "none (reports to the Supervisor)"}${(r.leads || []).length ? ` · leads ${r.leads.map((t) => `<code>${esc(t)}</code>`).join(", ")}` : ""}</div>
       <div>triggers</div><div class="tools">${triggerRows(a)}</div>
-      <div>next wake-up</div><div>${nextWake(a, st, now)}</div>
+      <div>next wake-up</div><div>${nextWake(a, now)}</div>
       ${a.resident ? `<div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
       <div>session</div><div>${a.resident ? "resident: one conversation that continues across wake-ups (a process only while a turn runs, on harnesses that start one per turn); it shows on the Dashboard while the host is up" : "a new session for each run; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
@@ -249,7 +226,7 @@ async function openAgent(name) {
     </div>
     ${!a.resident ? `<div class="prompt-head"><h4>Runs</h4><span class="muted">Each run is its own session and transcript; nothing is forgotten, it is just not carried into the next run.</span></div>
     ${(r.runs || []).map((x) => `<div class="arow" style="grid-template-columns:auto 1fr auto auto"><span class="name"><code>${esc(x.id)}</code></span><span class="sched">${esc(x.last_text || "")}</span><span class="muted">${x.started_at ? ago(now - x.started_at) + " ago" : ""}${x.status === "running" ? " · running" : ""}</span><button class="ctl" onclick="openTranscript('${x.id}')">transcript</button></div>`).join("") || '<div class="empty">no runs yet</div>'}` : ""}
-    <div class="prompt-head"><h4>The prompt it is started with</h4><span class="muted">Its roles, then its team's responsibilities and the teams above, then its access. Each wake-up or brief is appended to this.</span></div>
+    <div class="prompt-head"><h4>The prompt it is started with</h4><span class="muted">Its roles, then its team's responsibilities and the teams above, then where it works. Each wake-up or brief is appended to this.</span></div>
     <div class="prompt md">${md(r.prompt || "(empty)")}</div>`);
 }
 async function openRole(name) {
@@ -292,8 +269,10 @@ async function refresh() {
   } catch (e) { if ($("conn")) $("conn").textContent = "disconnected"; }
 }
 refresh(); setInterval(refresh, 4000);
-const h = location.hash;
-if (h.startsWith("#agent=")) openAgent(decodeURIComponent(h.slice(7))); else if (h.startsWith("#team=")) openTeam(decodeURIComponent(h.slice(6))); else if (h.startsWith("#role=")) openRole(decodeURIComponent(h.slice(6))); else agentsFromHash();
+agentsLibs.then(() => {   // a drawer opened from the address renders its markdown
+  const h = location.hash;
+  if (h.startsWith("#agent=")) openAgent(decodeURIComponent(h.slice(7))); else if (h.startsWith("#team=")) openTeam(decodeURIComponent(h.slice(6))); else if (h.startsWith("#role=")) openRole(decodeURIComponent(h.slice(6))); else agentsFromHash();
+});
 </script>
 </body>
 </html>

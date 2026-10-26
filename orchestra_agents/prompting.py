@@ -19,8 +19,7 @@ class TicketView:
     """A ticket as the task system described it, with the fields the prompts read."""
 
     FIELDS: ClassVar[dict[str, object]] = {"id": "", "title": "", "priority": 5, "depends_on": [], "objective": "", "description": "", "acceptance": "",
-              "verification": "", "feedback": None, "rejected_by": None, "review_rounds": 0, "branch": None,
-              "reviewed_commit": None, "milestone_id": None, "state": None, "worker_turns": 0}
+              "verification": "", "feedback": None, "rejected_by": None, "review_rounds": 0, "branch": None}
 
     def __init__(self, d: dict):
         for k, v in self.FIELDS.items():
@@ -66,8 +65,9 @@ def _fill(project: Project, text: str) -> str:
 
 def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict | None = None) -> str:
     """The system prompt an agent is started with: its roles' prompts, then its team's
-    responsibilities and those of the teams above it, then its access. Built-in agents
-    outside a custom team get exactly their role prompt, as before teams existed."""
+    responsibilities and those of the teams above it, then where it works (its space, its tools
+    and its teams' path grants, which are instructions here and enforced nowhere). Built-in
+    agents outside a custom team get exactly their role prompt."""
     roles = roles if roles is not None else all_roles(project)
     teams = teams if teams is not None else all_teams(project)
     chain = team_chain(teams, agent.team)
@@ -115,8 +115,8 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
         for t in chain:
             for g in t.paths:
                 lines.append(f"- {g['access']}: `{g['path']}`" + (f" (granted to team `{t.name}`)" if t.name != team.name else ""))
-        lines.append("- Everything else in the repository is read-only to you. Changes to the product happen only through tickets.")
-        parts.append("## Your access\n\n" + "\n".join(lines) + "\n")
+        lines.append("- Treat everything else in the repository as read-only. Changes to the product happen only through tickets.")
+        parts.append("## Where you work\n\n" + "\n".join(lines) + "\n")
     return "\n".join(parts)
 
 

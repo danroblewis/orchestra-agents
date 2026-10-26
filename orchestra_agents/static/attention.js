@@ -12,15 +12,14 @@
   const POLL_MS = 5000;
   const load = (src) => new Promise((ok, bad) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
 
-  // what the chat drawer needs: agents.js (transcripts, the chat), the agents' look, and markdown rendering
+  // what the chat drawer needs: agents.js (transcripts, the chat, markdown rendering) and the agents' look
   async function ready() {
-    if (!window.marked) await load("https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js").catch(() => {});
-    if (!window.DOMPurify) await load("https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js").catch(() => {});
     if (!document.querySelector('link[href^="/plugins/agents/static/agents.css"]')) {
       const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/plugins/agents/static/agents.css"; document.head.appendChild(l);
     }
     window.__agentsJs = window.__agentsJs || (typeof window.openTranscript === "function" ? Promise.resolve() : load("/plugins/agents/static/agents.js").catch(() => {}));
     await window.__agentsJs;                         // loaded once, whichever of the agents' scripts asks first
+    if (typeof agentsLibs !== "undefined") await agentsLibs;   // agents.js's markdown libraries
   }
 
   const css = document.createElement("style");

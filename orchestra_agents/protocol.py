@@ -1,12 +1,15 @@
 """What the agents and a task system say to each other on Orchestra's bus. The names are the
-contract (orchestra-tasking: docs/proposals/agents-split.md); nothing is imported from it.
+contract: the table in orchestra-tasking's tasking/assignments.py and the request names in
+tasking/requests.py; nothing is imported from it.
 
 - Assignment: the task system offers a ticket to a role (``task.assigned``); a machine that
   fills the role accepts it (``task.accepted``), says it is still working (``task.working``, at
   least every HEARTBEAT_S, with ``text``: what it is doing now, for whoever shows the ticket)
   and reports (``task.reported``); the task system may take it back (``task.released``). There is
   no machine-sent release in the contract: a stop of the host reports every open assignment as
-  ``failed``, which the task system counts like a crash (against the ticket's crash budget).
+  ``failed``. The task system counts a worker's failed report against the ticket's crash budget
+  (the ticket goes back to OPEN); a reviewer's is a review that ended without a verdict (the
+  review is redone, up to its no-verdict budget).
 - Requests: a planner asks the task system to change tickets (``task.requested``,
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
   it); it answers ``request.done`` with the result or ``request.refused`` with why.
@@ -32,6 +35,9 @@ import uuid
 
 ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED = "task.assigned", "task.accepted", "task.working", "task.reported", "task.released"
 ATTENTION = "task.attention_needed"
+# The task system's planner role names, the ``to`` of an attention event (its tasking/events.py).
+COORDINATOR, SUPERVISOR = "coordinator", "supervisor"
+PLANNER_ROLES = (COORDINATOR, SUPERVISOR)
 HEARTBEAT_S = 30.0
 TRANSITIONED = "ticket.transitioned"
 # The task system's ticket states (its ``State``), copied by hand like the event names below.

@@ -19,7 +19,7 @@ from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
 from .org_store import all_agents, all_teams
-from .protocol import QUERIES, REQUESTS, TaskClient
+from .protocol import PLANNER_ROLES, QUERIES, REQUESTS, TaskClient
 from .roles import all_roles
 from .store import AgentStore, StoreError
 
@@ -36,7 +36,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
             raise StoreError("state must be READY_FOR_REVIEW or BLOCKED")
         if state == "BLOCKED" and not (a.get("blocked_reason") or "").strip():
             raise StoreError("BLOCKED requires blocked_reason")
-        store.set_report(ticket_env, {"kind": "worker", "state": state, "summary": a.get("summary", ""),
+        store.set_report(ticket_env, {"state": state, "summary": a.get("summary", ""),
                                       "blocked_reason": a.get("blocked_reason")})
         return {"ok": True, "message": "Report recorded. You may stop now."}
 
@@ -48,7 +48,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
             raise StoreError("verdict must be APPROVED or REJECTED")
         if verdict == "REJECTED" and not (a.get("feedback") or "").strip():
             raise StoreError("REJECTED requires feedback")
-        store.set_report(ticket_env, {"kind": "reviewer", "verdict": verdict, "summary": a.get("summary", ""),
+        store.set_report(ticket_env, {"verdict": verdict, "summary": a.get("summary", ""),
                                       "feedback": a.get("feedback")})
         return {"ok": True, "message": "Verdict recorded. You may stop now."}
 
@@ -100,7 +100,7 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
     raise StoreError(f"unknown command {command!r}")
 
 
-PLANNERS = {"supervisor", "coordinator"}
+PLANNERS = set(PLANNER_ROLES)
 
 
 def may_change_tickets(project: Project, role: str) -> bool:

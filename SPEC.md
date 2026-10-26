@@ -32,15 +32,19 @@ Three things, kept apart:
   `<role>.tasks.md` variant is used when the project's work is tasks, not code); custom roles
   are JSON and markdown under `.orchestra/roles/` in the project repository. A role record
   carries no schedule, wake rules or session: it is a job description, and an agent is what
-  runs it (an older record that still carries those keys loads as a plain role; they are ignored).
+  runs it.
 - An **agent** is an instance of one or more roles in a team, and is what runs. Its kind says
   how it is engaged: `continuous` (a resident session, always up, woken by events), `scheduled`
   (every interval or at a daily time; resident or ephemeral), `ad_hoc` (a fresh session each
   time it is briefed or a subscribed event fires). Custom agents live under `.orchestra/agents/`.
 - A **team** has one lead agent, members, responsibilities (standing conditions the lead checks),
-  access grants (tool groups and repository paths), probes (commands on an interval, section 5),
+  access grants, probes (commands on an interval, section 5),
   and a space under `.orchestra/spaces/<team>/` whose `tools/` is on its agents' PATH. Custom
-  teams live under `.orchestra/teams/`.
+  teams live under `.orchestra/teams/`. Of the access grants, tool groups are enforced: an agent
+  gets only the tools of its groups (`ORCHESTRA_TOOLS`, read by every harness). Path grants are
+  not: they are written into the agent's prompt ("Where you work") as instructions, and the
+  harnesses run with their own permission checks off, so nothing stops an agent from reading or
+  writing elsewhere in the checkout.
 
 The built-in organisation is the Supervisor (no team; it talks to the human) and the
 `engineering` team: the Coordinator leads it, the worker and the reviewer are its members. The
@@ -48,8 +52,8 @@ worker and the reviewer are not resident: a session of each is started per ticke
 system's assignment, for the roles this package serves (`[agents] serves`). A role served by
 another machine (the demo's shell worker) is not an agent here.
 
-Every agent's prompt is its roles' prompts, then its team chain's responsibilities, then its
-access (`prompting.agent_prompt`). A built-in agent outside a custom team gets exactly its role
+Every agent's prompt is its roles' prompts, then its team chain's responsibilities, then where
+it works (`prompting.agent_prompt`). A built-in agent outside a custom team gets exactly its role
 prompt. The prompt a session was started with is kept beside its log, so a transcript can show
 what the agent was told whatever the harness records.
 
@@ -58,7 +62,9 @@ the `roles` tool group), and pauses, resumes, restarts, resets and deletes agent
 the Agents page shows it. A change to a role or a team restarts the resident sessions of the
 agents whose prompt it is part of (after their current turn), so a session always runs with
 the organisation as stored, including a lead whose team was created after its own record. Writes under `.orchestra/` are committed to the base branch when the checkout is on
-it and otherwise clean, and left for the human to commit when not.
+it and otherwise clean. When it is not (another branch, or other changes), the files are written
+and left uncommitted, so the checkout is dirty until a human commits them; the tool's answer says
+which happened.
 
 ## 3. Meeting the task system on the bus (`protocol.py`, `runner.py`, `tooling.py`)
 
@@ -74,8 +80,10 @@ or `reviewer-<id>`) as the lowest free instance of the role (`worker/1`), answer
 `task.accepted` from that instance, sends `task.working` at least every `HEARTBEAT_S` and sooner
 when what the agent is saying has changed (the heartbeat's `text`: a line for the task system's
 Tasks panel), runs the turn, and reports `task.reported` with the agent's report (a worker's
-`report_ticket`: READY_FOR_REVIEW or BLOCKED with a reason; a reviewer's `report_review`:
-APPROVED or REJECTED with feedback), or `failed` when the turn ended without one. A
+`report_ticket`, exactly {state, summary, blocked_reason}: READY_FOR_REVIEW or BLOCKED with a
+reason; a reviewer's `report_review`, exactly {verdict, summary, feedback}: APPROVED or REJECTED
+with feedback; a code review's report also names the commit the offer named, or none), or
+`failed` when the turn ended without one. A
 `task.released` for its assignment kills the turn (`session.interrupted`, with the reason; nothing is
 reported for an assignment the instance no longer holds). A finished ticket's sessions (its
 `ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable. A reviewer
@@ -126,9 +134,11 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   the harness's `turn_start`) and marks the cut. After a host crash the task system re-offers
   the assignment the dead host held when its lease runs out: the host reports nothing it did
   not see end. At a clean stop (Ctrl-C, a deploy restart) it closes every live turn and waits
-  briefly for each open assignment's `task.reported` (`failed`) to go out; the task system
-  counts such a report like a crash, against the ticket's crash budget, because the contract
-  has no machine-sent release (`task.released` is the scheduler's verb only);
+  briefly for each open assignment's `task.reported` (`failed`) to go out, because the
+  contract has no machine-sent release (`task.released` is the scheduler's verb only). The task
+  system counts a worker's failed report against the ticket's crash budget (the ticket goes
+  back to OPEN) and a reviewer's as a review that ended without a verdict (the review is
+  redone, up to its no-verdict budget; `tasking/reports.py`);
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
   recorded in the runtime record): one turn on the resident session per message, prefixed with
   the project context when it changed and the events since the last turn, streamed as NDJSON.

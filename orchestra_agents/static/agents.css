@@ -1,6 +1,6 @@
 /* The agents' look: role colours, the agent rows and the ticket cards they work on (.awork: the task
    system's cards are .work, with a lane of their own), session chips,
-   transcripts and the chat. Loaded by the Agents page and the agents' scripts on Orchestra's
+   transcripts, the chat and rendered markdown. Loaded by the Agents page and the agents' scripts on Orchestra's
    pages. The ticket-state colours are the task system's names, kept here so an agent's card is
    coloured without the task system's stylesheet. */
 :root {
@@ -45,3 +45,9 @@ details.started { margin:10px 0 } details.started summary { cursor:pointer; font
 .chip.archived { color:var(--muted) }
 .msg .r { font-size:11px; color:var(--muted) }
 .agent, .agent > *, .awork, .awork > *, .awork .lane > * { min-width:0 }
+/* ---- markdown (md() in agents.js) ---- */
+.md { font-size:13px; line-height:1.5 } .md p { margin:6px 0 } .md h1,.md h2,.md h3 { font-size:13px; text-transform:none; letter-spacing:0; color:var(--text); margin:10px 0 4px; display:block }
+.md ul,.md ol { padding-left:20px; margin:4px 0 } .md li { margin:2px 0 } .md code { background:#07090d; border:1px solid var(--border); border-radius:4px; padding:0 4px; font-size:12px }
+.md pre { padding:0; border:1px solid var(--border); background:#07090d } .md pre code { display:block; padding:8px; border:0; background:#0d1117; font-size:12px; overflow:auto }
+.md blockquote { border-left:3px solid var(--border); margin:6px 0; padding:2px 10px; color:var(--muted) } .md table { border-collapse:collapse } .md td,.md th { border:1px solid var(--border); padding:3px 8px }
+.md strong { color:#fff }

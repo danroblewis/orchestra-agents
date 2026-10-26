@@ -44,9 +44,9 @@ are written to go wrong:
 
 - **DEMO-4 Record the SHA-256 of the README** computes a CRC. The reviewer rejects it; the
   worker (a program, which cannot act on prose) reports it BLOCKED with the reviewer's words;
-  the attention event wakes the Coordinator, which changes the command to `shasum -a 256`,
-  notes why and unblocks it; the worker runs it again and the reviewer approves. The banner
-  shows for the ten or so seconds the ticket is blocked.
+  the attention event wakes the Coordinator, which changes the command to `shasum -a 256` and
+  unblocks it; the worker runs it again and the reviewer approves. The banner shows for the
+  ten or so seconds the ticket is blocked.
 - **DEMO-5 Describe the event bus in prose** has no commands. The worker reports it BLOCKED;
   the Coordinator finds nothing a command would fix and escalates to the Supervisor, which
   leaves you a message: the banner and the count on the Supervisor button stay until you read

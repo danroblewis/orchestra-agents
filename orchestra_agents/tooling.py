@@ -24,6 +24,24 @@ from .roles import all_roles
 from .store import AgentStore, StoreError
 
 
+def check_args(command: str, args: dict[str, Any]) -> None:
+    """A model's tool call against the tool's own schema (harness/tools.py), checked where a model's
+    call comes in (the MCP server, `orchestra-agents api`), not in handle(): a model that
+    names an argument the tool does not have, or leaves out a required one, is told so, rather
+    than the call going through with what it meant to say dropped."""
+    from .harness.tools import BY_NAME
+    tool = BY_NAME.get(command)
+    if tool is None:
+        return
+    unknown = sorted(set(args) - set(tool.properties))
+    missing = [k for k in tool.required if args.get(k) in (None, "")]
+    if unknown or missing:
+        expected = ", ".join(f"{k}{' (required)' if k in tool.required else ''}" for k in tool.properties)
+        raise StoreError(f"{command}: " + "; ".join(
+            ([f"no argument {', '.join(unknown)}"] if unknown else []) + ([f"missing {', '.join(missing)}"] if missing else []))
+            + f". It takes: {expected or 'no arguments'}.")
+
+
 def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
     a = args or {}
     author = role or "agents"

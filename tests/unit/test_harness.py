@@ -314,7 +314,10 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
             r = c.rpc("tools/call", {"name": "report_ticket", "arguments": {}})["result"]   # not granted
             assert r["isError"]
             r = c.rpc("tools/call", {"name": "create_ticket", "arguments": {"title": "x", "milestone_id": "M9"}})["result"]
-            assert r["isError"] and "M9" in r["content"][0]["text"]                           # the refusal surfaces as text
+            assert r["isError"] and "missing objective" in r["content"][0]["text"]            # the schema's required fields
+            full = {"title": "x", "objective": "o", "description": "d", "acceptance": "a", "verification": "v", "milestone_id": "M9"}
+            r = c.rpc("tools/call", {"name": "create_ticket", "arguments": full})["result"]
+            assert r["isError"] and "M9" in r["content"][0]["text"]                           # the task system's refusal surfaces as text
             assert "error" in c.rpc("nonsense")
         finally:
             c.close()
@@ -380,3 +383,17 @@ def test_retire_forgets_the_session_and_leaves_the_transcript_where_the_harness_
     moved = archive(str(f))
     assert moved == str(tmp_path / "sessions" / "archive" / f.name) and Path(moved).read_text() == "old\n" and not f.exists()
     assert archive(None) is None and archive(str(f)) is None
+
+
+def test_a_tool_call_with_arguments_the_tool_does_not_have_is_refused_with_what_it_takes():
+    """The Haiku Coordinator called escalate_to_supervisor with {ticket_id, decision}; the tool
+    takes {note}, and the call went through with an empty note. It is refused now, naming what
+    the tool takes, so the model can call it again."""
+    import pytest
+
+    from orchestra_agents.store import StoreError
+    from orchestra_agents.tooling import check_args
+    with pytest.raises(StoreError, match=r"no argument decision, ticket_id; missing note\. It takes: note \(required\)"):
+        check_args("escalate_to_supervisor", {"ticket_id": "T-1", "decision": "split it"})
+    check_args("escalate_to_supervisor", {"note": "T-1 needs a decision: split it or narrow it"})
+    check_args("not_a_tool", {"anything": 1})

@@ -117,6 +117,7 @@ def cmd_api(args) -> int:
     store, _ = _store(project)
     try:
         payload = json.loads(args.args) if args.args else {}
+        tooling.check_args(args.command, payload)
         out = tooling.handle(project, store, args.command, payload, role=role, ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
     except (StoreError, KeyError, ValueError) as e:
         print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}))

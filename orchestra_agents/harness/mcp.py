@@ -56,6 +56,7 @@ class Server:
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": f"unknown tool {name}"})}], "isError": True}
         try:
             from .. import tooling
+            tooling.check_args(tool.name, dict(args or {}))
             project, store = self._ctx()
             result = tooling.handle(project, store, tool.name, dict(args or {}), role=self.role,
                                     ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))

@@ -1,4 +1,4 @@
-"""The tools an agent uses to talk to Orchestra, defined once as data.
+"""The tools an agent gets, defined once as data.
 
 Every harness exposes these to its model in its own way: the Pi extension registers them
 as Pi tools, the MCP server (``orchestra_agents.harness.mcp``) serves them to Claude Code and any
@@ -51,21 +51,21 @@ def A(d: str = "") -> dict:
 TOOLS: list[ToolDef] = [
     ToolDef("report_ticket", "report_ticket",
             "Report the outcome of your work on this ticket. Call exactly once when you are finished. "
-            "READY_FOR_REVIEW means your changes are committed on your branch and ready for a reviewer. "
+            "READY_FOR_REVIEW means your result is ready for a reviewer (committed on your branch, or in RESULT.md). "
             "BLOCKED means you cannot proceed; blocked_reason is required and must say what you need.",
             {"state": {"type": "string", "enum": ["READY_FOR_REVIEW", "BLOCKED"]},
              "summary": S("What you changed and why, in a few sentences"),
              "blocked_reason": S("Required when state is BLOCKED")}, ("state", "summary")),
     ToolDef("report_review", "report_review",
-            "Report your review verdict. Call exactly once when you are finished reading the change. "
-            "APPROVED means the code is correct, complete against the acceptance criteria, and consistent "
-            "with the repository. REJECTED must include specific, actionable feedback the worker can act on.",
+            "Report your review verdict. Call exactly once when you are finished reading the result. "
+            "APPROVED means it is correct, complete against the acceptance criteria, and consistent with "
+            "the repository. REJECTED must include specific, actionable feedback the worker can act on.",
             {"verdict": {"type": "string", "enum": ["APPROVED", "REJECTED"]},
              "summary": S("Short summary of the review"),
              "feedback": S("Required when REJECTED: concrete problems, with file and line where possible")},
             ("verdict", "summary")),
     # tickets
-    ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, active sessions, pipeline state."),
+    ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, capacity, pipeline state."),
     ToolDef("list_milestones", "tickets", "List all milestones with id, name, status, and ticket counts."),
     ToolDef("create_milestone", "tickets", "Create a milestone to group tickets. Returns its id (M1, M2, ...).",
             {"name": S("Short name"), "description": S("What this milestone is for")}, ("name",)),
@@ -79,14 +79,14 @@ TOOLS: list[ToolDef] = [
     ToolDef("get_ticket", "tickets", "Full detail of one ticket including its notes.", {"id": S("Ticket id like ORC-12")}, ("id",)),
     ToolDef("create_ticket", "tickets",
             "Create a ticket in an open milestone. objective says why (which project objective it serves); "
-            "description is a self-contained brief a worker can implement without asking; acceptance is what a "
-            "reviewer checks in the diff; verification is how the merge gate's acceptance tests prove it, "
-            "including any test that must be added.",
+            "description is a self-contained brief a worker can do without asking; acceptance is what a "
+            "reviewer checks in the result; verification is how it is proved: the merge gate's tests for code "
+            "(including any test that must be added), what the reviewer checks for a task.",
             {"title": S("Short imperative title"),
              "objective": S("Why this ticket exists and which objective it serves"),
              "description": S("Self-contained implementation brief"),
              "acceptance": S("Acceptance criteria, one per line"),
-             "verification": S("How the gate proves it: existing acceptance test(s) or the test to add"),
+             "verification": S("How it is proved: existing acceptance test(s) or the test to add; for a task, what the reviewer checks"),
              "milestone_id": S("Milestone id, e.g. M1"),
              "priority": I("1 (first) .. 9 (last); default 5"),
              "depends_on": A("Ticket ids that must be DONE first")},
@@ -111,7 +111,6 @@ TOOLS: list[ToolDef] = [
     ToolDef("get_gate_run", "pipeline", "Detail and logs of one merge gate run.", {"id": S("Gate run id")}, ("id",)),
     ToolDef("list_gate_runs", "pipeline", "Recent merge gate runs."),
     ToolDef("get_staging_status", "pipeline", "Status and recent log of the staging environment."),
-    ToolDef("restart_staging", "pipeline", "Restart the staging process on its current build."),
     ToolDef("resume_pipeline", "pipeline", "Resume the merge pipeline after a base-branch failure has been fixed.",
             {"note": S("What was fixed")}, ("note",)),
     # capacity
@@ -128,7 +127,7 @@ TOOLS: list[ToolDef] = [
             {"type": S("Declared event type, lowercase_name"), "subject": S("What it is about, e.g. a ticket id or test name"),
              "note": S("One or two sentences")}, ("type",)),
     ToolDef("read_events", "events",
-            "Recent Orchestra events (ticket changes, gate runs, staging, agents). Use to look back over what happened.",
+            "Recent events on the bus (tickets, assignments, gate runs, staging, agents). Use to look back over what happened.",
             {"minutes": I("How far back, default 60"), "types": A("Event types to include; empty for all")}),
     # team: reading the organisation, and talking down or up the tree (leads and the supervisor)
     ToolDef("list_teams", "team", "All teams: lead, agents, sub-teams, access, paused state."),

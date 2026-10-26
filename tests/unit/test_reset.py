@@ -41,7 +41,7 @@ class CompactingProc(FakeProc):
 
 
 def test_large_sessions_are_compacted_in_place_when_the_harness_can(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-1.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +65,7 @@ def test_a_self_compacting_harness_is_left_alone(project):
     class AutoProc(FakeProc):
         def compact(self):
             return {"mode": "auto", "limit": 100000}
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-3.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -78,7 +78,7 @@ def test_a_self_compacting_harness_is_left_alone(project):
 
 
 def test_large_sessions_rotate_only_when_the_harness_cannot_compact(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     f = project.sessions_dir / "2026_worker-T-2.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +92,7 @@ def test_large_sessions_rotate_only_when_the_harness_cannot_compact(project):
 
 
 def test_reset_archives_the_transcript_and_starts_over(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     f = project.sessions_dir / "2026_supervisor.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("old conversation\n")

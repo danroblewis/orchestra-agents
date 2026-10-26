@@ -3,7 +3,7 @@
 Claude Code has no resident process: each turn is ``claude -p`` reading the prompt from
 stdin, streaming ``--output-format stream-json`` events, and exiting. The session is the
 transcript Claude keeps under its own config directory, resumed with ``--resume``.
-Orchestra's tools reach the model through the MCP server in ``mcp.py``."""
+The agents' tools reach the model through the MCP server in ``mcp.py``."""
 
 from __future__ import annotations
 

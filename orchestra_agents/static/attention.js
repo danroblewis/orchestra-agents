@@ -4,7 +4,9 @@
 // - a banner under the navigation that says what waits, with a way to answer;
 // - "(n)" in the tab's title.
 // The button opens the Supervisor's chat (agents.js) with the list of what waits above it. The
-// Supervisor is the human's one way in: blocked work is answered by telling it what to do.
+// Supervisor is the human's one way in: blocked work is answered by telling it what to do. The
+// task system's own banner (its attention.js) shows the same blocked tickets; it is asked to stand
+// aside once it is on the page, so there is one banner.
 (function () {
   const API = "/api/plugins/agents", TASKS = "/api/plugins/tasks";      // blocked tickets: the task system's, when it is installed
   const POLL_MS = 5000;
@@ -86,7 +88,7 @@
     const show = parts.length && sig() !== dismissed;
     bar.classList.toggle("on", !!show);
     if (show) bar.innerHTML = `<span>⚠</span><span class="att-what">${parts.join(" · ")}</span>
-      <button onclick="window.TaskAttention.open()">Review &amp; answer</button><button class="att-x" title="hide until something changes" onclick="window.TaskAttention.dismiss()">✕</button>`;
+      <button onclick="window.SupervisorAttention.open()">Review &amp; answer</button><button class="att-x" title="hide until something changes" onclick="window.SupervisorAttention.dismiss()">✕</button>`;
     const panel = document.getElementById("att-panel");
     if (panel) panel.outerHTML = panelHtml();
   }
@@ -96,7 +98,7 @@
     const items = A.blocked.map((b) => `<div class="att-item">
         <div class="att-t"><code>${e_(b.id)}</code> ${e_(b.title)} <span class="muted" style="font-weight:400">· blocked ${since(b.since)}</span></div>
         <div class="att-r">${e_(b.reason) || "(no reason recorded)"}</div>
-        <div class="att-acts"><button class="primary" onclick="window.TaskAttention.answer('${e_(b.id)}')">Answer</button>
+        <div class="att-acts"><button class="primary" onclick="window.SupervisorAttention.answer('${e_(b.id)}')">Answer</button>
           <button onclick="window.openTicket ? openTicket('${e_(b.id)}') : (location.href='/tickets#ticket=${e_(b.id)}')">Ticket</button></div></div>`);
     if (A.message) items.unshift(`<div class="att-item">
         <div class="att-t">The Supervisor wrote to you <span class="muted" style="font-weight:400">· ${ago_(A.message.at)} ago</span></div>
@@ -142,7 +144,7 @@
     window.sendToSupervisor.__att = true;
   };
 
-  window.TaskAttention = {
+  window.SupervisorAttention = {
     open: () => openSupervisor(),
     dismiss: () => { dismissed = sig(); render(); },
     answer: (id) => {
@@ -150,6 +152,9 @@
       openSupervisor(`About ${id}${b ? ` ("${b.title}")` : ""}, which is blocked: `);
     },
   };
+
+  const aside = () => { const t = window.TaskAttention; if (!t || !t.standAside) return false; t.standAside(); return true; };
+  if (!aside()) { const t = setInterval(() => { if (aside()) clearInterval(t); }, 500); setTimeout(() => clearInterval(t), 30000); }
 
   refresh();
   setInterval(() => { wrapSend(); refresh(); }, POLL_MS);

@@ -1,7 +1,7 @@
 // The agents' shared page code: session transcripts (paged, live), the Supervisor chat, session
-// chips and phases, agent machine cards. Loaded after Orchestra's /static/app.js. Its names do not
-// clash with the task system's tasks.js (which has the ticket drawers): a page may load both, and
-// each calls the other's functions only when they are there.
+// chips and phases. Loaded after Orchestra's /static/app.js by the Agents page and by the agents'
+// every-page scripts. Its names do not clash with the task system's tasks.js (which has the ticket
+// drawers): a page may load both, and each calls the other's functions only when they are there.
 const AGENTS_API = "/api/plugins/agents";
 const kindColor = (k) => ({ supervisor: "#bc8cff", coordinator: "#58a6ff", worker: "#3fb950", reviewer: "#f85149" }[k] || "#8a90a3");
 
@@ -33,7 +33,7 @@ async function openTranscript(id) {
   // Only markers at least as new as the oldest message on this page are placed; older ones belong to older pages.
   const oldest = d.messages.length ? Math.min(...d.messages.map(tsOf)) : 0;
   const first = withMarkers(d.messages, d.markers, d.has_more ? oldest - 1 : 0);
-  html += first.length ? first.map(renderMessage).join("") : `<div class="empty">${s.file_exists ? "No messages yet." : "No turns yet: Pi creates the session file on the first prompt. This agent is woken by events or, for the supervisor, by a message."}</div>`;
+  html += first.length ? first.map(renderMessage).join("") : `<div class="empty">${s.file_exists ? "No messages yet." : "No turns yet: the harness creates the session file on the first prompt. This agent is woken by events or, for the Supervisor, by a message."}</div>`;
   html += `</div><div id="transcript-more" class="empty" style="margin-top:8px">${d.has_more ? "scroll for older messages…" : "beginning of session"}</div>`;
   openDrawer(html);
   transcriptPaging = { id, nextBefore: d.next_before, hasMore: d.has_more, loading: false, total: d.total,
@@ -46,10 +46,8 @@ function transcriptHead(id, s, d) {
   const state = s.status === "running" ? "working" : s.status === "archived" ? "finished (ticket closed)" : s.alive ? "resident, waiting for work" : "not running";
   const when = (t) => (t ? new Date(t * 1000).toLocaleString() : "—");
   const perTicket = /^(worker|reviewer)-/.test(id);
-  const stopBtn = perTicket && s.status === "running" && s.alive && s.ticket_id
-    ? `<button class="ctl kill" style="margin-left:auto" onclick="stopAgent('${esc(s.ticket_id)}','${esc(id)}')">■ stop this agent</button>` : "";
   const agentLink = s.kind && !perTicket ? `<a href="/agents#agent=${encodeURIComponent(s.kind)}" class="muted" style="margin-left:auto;font-size:11px" title="The agent's definition, schedule, and every run it has made">↩ ${esc(s.kind)}: definition and all runs</a>` : "";
-  return `<h3>${esc(id)} <span class="muted">${state}</span>${agentLink}${stopBtn}</h3>
+  return `<h3>${esc(id)} <span class="muted">${state}</span>${agentLink}</h3>
     <div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${s.alive ? "pid " + s.pid : "none"}</div>
     ${s.ticket_id ? `<div>ticket</div><div><a href="#" onclick="(window.openTicket ? openTicket('${esc(s.ticket_id)}') : (location.href='/tickets#ticket=${esc(s.ticket_id)}'));return false">${esc(s.ticket_id)}</a></div>` : ""}
     <div>last started</div><div>${when(s.started_at)}${s.status === "running" ? ` <span class="muted">(turn running ${ago((Date.now() / 1000) - s.started_at)})</span>` : ""}</div>
@@ -174,7 +172,6 @@ function renderMarker(e) {
   else if (e.type === "agent.compacted" && e.mode === "auto") text = `⇣ Context is bounded by the harness itself (${esc(e.reason || "")}); Orchestra leaves this session alone.`;
   else if (e.type === "agent.compacted") text = `⇣ Context compacted by the harness${e.tokens_before ? `: ${Number(e.tokens_before).toLocaleString()} → ${Number(e.tokens_after || 0).toLocaleString()} tokens` : ""} (${esc(e.reason || "")}). Older messages became a summary the agent keeps; the transcript is unchanged.`;
   else if (e.type === "agent.reset") text = `⟲ Session started over by ${esc(e.by || "the operator")}${e.reason ? ` (${esc(e.reason)})` : ""}. The conversation before this point is archived as run <code>${esc(e.archived || "")}</code>; the agent keeps the project context and its team's space, not its memory of the chat.`;
-  else if (e.type === "agent.killed") text = "■ Stopped by the operator.";
   else if (e.type === "session.started") text = `▶ Turn started${e.ticket ? " on " + esc(e.ticket) : ""}.`;
   else text = esc(e.type);
   return `<div class="msg marker ${e.type}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
@@ -203,13 +200,6 @@ function agentsFromHash() {
 }
 window.addEventListener("hashchange", agentsFromHash);
 
-// stop the agent working a ticket: the task system's operator control (it releases the assignment)
-async function stopAgent(ticket, sessionId) {
-  if (!confirm(`Stop ${sessionId}? Its ticket ${ticket} goes back to waiting; the session is kept.`)) return;
-  const r = await fetch("/api/plugins/tasks/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "kill", ticket }) });
-  if (!r.ok) alert(await r.text()); else closeDrawer();
-}
-
 function sessionPhase(s, now) {
   if (!s) return { cls: "down", text: "down", title: "" };
   if (s.status === "archived") return { cls: "archived", text: "finished", title: "" };
@@ -230,22 +220,4 @@ function sessionPhase(s, now) {
 function sessionChip(s, now) {
   const p = sessionPhase(s, now);
   return `<span class="chip ${p.cls}" title="${esc(p.title)}"><span class="dot"></span>${esc(p.text)}</span>`;
-}
-
-// ---- machines: AI agents and programs from the factory model (dashboard and Machines page) ----
-const MACHINE_COLOR = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)",
-  worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
-const MACHINE_STATUS_CHIP = { running: "resident", working: "working", waiting: "resident", idle: "", stopped: "down", "not running": "down", observed: "" };
-const MACHINE_STOPPED = ["stopped", "not running"];
-function machineCard(m, { detail = false, controls = "" } = {}) {
-  const agent = m.kind === "agent", rc = MACHINE_COLOR[m.id] || (agent ? "#c4b5fd" : "#94a3b8");
-  const eng = m.engagement.map((e) => `${e.mode.replace("_", " ")} · ${e.driver}`).join(", ") || "observed only";
-  const jobs = m.jobs.map((j) => `<div class="job" onclick="event.stopPropagation();openTranscript('${esc(j.session)}')"><span class="id">${esc(j.ticket || j.session)}</span><span class="msg">${esc(j.text || "working")}</span></div>`).join("");
-  const desc = detail && m.description ? `<div class="mdesc">${esc(m.description)}</div>` : "";
-  const flows = "";                // the factory model's attributed flows are gone (Orchestra discovers the model)
-  return `<div class="machine ${detail ? "detail" : ""}" style="--rc:${rc}" title="${esc(m.description)}">
-    <div class="mhead"><div class="av ${agent ? "" : "prog"}">${agent ? esc(m.name[0]) : "⚙"}</div>
-      <div class="mname">${esc(m.name)}${m.bootstrap ? ' <span class="tag">bootstrap</span>' : ""}<div class="msub">${agent ? "AI agent" : "program"} · ${esc(eng)}${detail ? ` · <span class="num">${esc(m.id)}</span>` : ""}</div></div>
-      <span class="chip ${MACHINE_STATUS_CHIP[m.status] ?? ""}"><span class="dot"></span>${esc(m.status)}</span></div>
-    ${desc}${jobs}${flows}${controls}</div>`;
 }

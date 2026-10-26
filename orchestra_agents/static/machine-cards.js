@@ -31,21 +31,13 @@
   const css = document.createElement("style");
   css.textContent = `
     .tkc-more { text-align:right; font-size:10.5px; color:var(--muted); text-decoration:underline dotted; cursor:pointer; margin:6px 2px 0 }
-    .tkc-q { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 6px }
-    .tkc-q .pill { cursor:default } .tkc-q b { font-family:var(--mono); font-size:12px; margin-left:4px }
     .agent.unseen-agent { opacity:.6; border-style:dashed }`;
   document.head.appendChild(css);
 
-  // how many times the worker has been re-engaged on a ticket, and why (as the old Dashboard)
+  // how many times a worker has taken the ticket (the assignment's brief says; the ticket says why)
   function turns(t) {
     if (!t || !t.worker_turns || t.worker_turns < 2) return "";
-    const other = t.worker_turns - 1 - (t.reviewer_rejections || 0) - (t.gate_rejections || 0);
-    const bits = [`↺${t.worker_turns}`];
-    if (t.reviewer_rejections) bits.push(`✗${t.reviewer_rejections}`);
-    if (t.gate_rejections) bits.push(`⛔${t.gate_rejections}`);
-    if (other > 0) bits.push(`⟳${other}`);
-    const title = `worker opened ${t.worker_turns} times: ${t.reviewer_rejections || 0} after a reviewer rejection` + (other > 0 ? `, ${other} after a crash, timeout, or operator stop` : "");
-    return `<span class="turns" title="${e_(title)}">${bits.join(" ")}</span>`;
+    return `<span class="turns" title="a worker took this ticket ${t.worker_turns} times; the ticket says why">↺${t.worker_turns}</span>`;
   }
   function residentCard(m, compact) {
     const s = sessionsOf(m).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))[0];
@@ -62,7 +54,7 @@
     const plural = role === "reviewer" ? "Reviewers" : "Workers";
     const cards = live.map((s) => {
       const t = s.ticket || { id: s.session, title: "", state: "IN_PROGRESS" };
-      return `<div class="work" style="--c:${stateColor(t.state)}" onclick="event.stopPropagation();AgentCards.transcript('${e_(s.session)}')" title="Open the running agent's transcript; the ticket id opens the ticket">
+      return `<div class="awork" style="--c:${stateColor(t.state)}" onclick="event.stopPropagation();AgentCards.transcript('${e_(s.session)}')" title="Open the running agent's transcript; the ticket id opens the ticket">
         <div class="top"><span><span class="id" onclick="event.stopPropagation();AgentCards.ticket('${e_(t.id)}')" title="Open the ticket">${e_(t.id)}</span> <span class="title">${e_(t.title)}</span></span>
         <span class="right">${turns(t)}<span class="pill">${e_(t.state.replace(/_/g, " "))}</span></span></div>
         <div class="lane"><span class="who">${e_(s.instance || role)}</span><span class="msg">${e_(s.last_text || "")}</span>${chip(s)}</div></div>`;

@@ -1,9 +1,9 @@
-"""Roles as data, behind a store interface. SPEC.md section 4.3 and the Stage 1 proposal.
+"""Roles as data, behind a store interface (SPEC.md: the organisation).
 
-A role is a JSON record plus a prompt file. Built-in roles live in
-``orchestra/agents/roles.py``; custom roles come from a RoleStore. The default store is
-the project repository under ``.orchestra/roles/``, versioned with the code. Other
-stores (an external git repository, an object store) implement the same interface."""
+A role is a JSON record plus a prompt file. Built-in roles live in ``builtins.py``; custom
+roles come from a RoleStore. The default store is the project repository under
+``.orchestra/roles/``, versioned with the code. Other stores (an external git repository, an
+object store) implement the same interface."""
 
 from __future__ import annotations
 
@@ -16,21 +16,24 @@ from typing import Protocol
 
 from .builtins import ROLES as BUILTIN
 from .config import Project
+from .protocol import ACCEPTED, ASSIGNED, ATTENTION, DONE, REFUSED, RELEASED, REPORTED, WORKING
 from .store import now
 
 TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team")
-# The task system's event names, copied by hand: the truth is orchestra-tasking's tasking/events.py
-# and its emit() calls (nothing is imported from it). The rest are the agents' own.
+# The event types an agent may wake on. The task system's, beyond the contract in protocol.py,
+# are copied by hand: the truth is orchestra-tasking's `git grep 'emit("'` (nothing is imported
+# from it). The rest are the agents' own (host.py, api_org.py, probes.py).
 TASK_EVENT_TYPES = (
+    ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED,
     "ticket.created", "ticket.updated", "ticket.transitioned", "ticket.note_added",
     "milestone.created", "milestone.updated", "milestone.closed",
     "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
     "staging.deployed", "staging.failed", "staging.restarted",
     "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
-    "scheduler.started", "scheduler.stopped", "probe.failed", "probe.recovered",
+    "scheduler.started", "scheduler.stopped",
 )
 AGENT_EVENT_TYPES = (
-    "agent.said", "agent.killed", "context.updated", "session.started", "session.settled",
+    "agent.said", "context.updated", "session.started", "session.settled", "probe.failed", "probe.recovered",
     "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
     "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
@@ -130,10 +133,10 @@ class RoleStore(Protocol):
 class RepoRoleStore:
     """Roles in the target repository: ``.orchestra/roles/<name>.json`` and ``<name>.md``.
 
-    Writes are committed to the base branch when the checkout is on it and otherwise
-    clean, so a role change never leaves the tree dirty for the merge gate. If the
-    checkout is elsewhere or dirty, the files are written and left for the human to
-    commit; `last_commit_note` says which happened."""
+    Writes are committed to the base branch when the checkout is on it and otherwise clean,
+    so a role change never leaves the tree dirty (in code mode the task system's gate merges
+    into that checkout). If the checkout is elsewhere or dirty, the files are written and left
+    for the human to commit; `last_commit_note` says which happened."""
 
     def __init__(self, project: Project):
         self.project = project
@@ -189,8 +192,8 @@ class RepoRoleStore:
 
 def commit_orchestra_files(project: Project, message: str) -> str:
     """Commit everything under .orchestra/ to the base branch when the checkout is on it
-    and otherwise clean, so an Orchestra-owned file never leaves the tree dirty for the
-    merge gate. Returns a note saying what happened. Shared by the role and org stores."""
+    and otherwise clean, so a file the agents own never leaves the tree dirty. Returns a
+    note saying what happened. Shared by the role and org stores."""
     root = project.repo_root
     base = project.config.base_branch
     run = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, check=False)
@@ -214,9 +217,7 @@ def all_roles(project: Project) -> dict[str, RoleDef]:
     """Built-in roles plus the project's custom roles, by name."""
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
-        if not b.resident:
-            continue
-        out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), session="resident",
+        out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), session="resident" if b.resident else "ephemeral",
                               wake_on=list(b.wake_on), every=(f"{int(b.every // 60)}m" if b.every else None), builtin=True)
     for r in role_store(project).list():
         out[r.name] = r

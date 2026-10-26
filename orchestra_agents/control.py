@@ -1,7 +1,7 @@
 """Local control endpoint served by `orchestra-agents run`.
 
-`orchestra-agents chat` attaches here to talk to the supervisor session that the loop keeps
-resident, so there is exactly one Pi process per project agent. Bound to 127.0.0.1 only.
+`orchestra-agents chat` attaches here to talk to the Supervisor session that the host keeps
+resident, so there is exactly one session per project agent. Bound to 127.0.0.1 only.
 
 POST /supervisor  body {"message": "..."}  -> NDJSON stream of Pi events, then {"type": "done"}
 GET  /health                                -> {"ok": true}

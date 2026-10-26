@@ -21,7 +21,7 @@ def project(tmp_path, monkeypatch):
 
 
 def test_partial_reply_is_recorded_and_cleared(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     store.set_session("supervisor", kind="supervisor", status="running")
     fn = loop._on_event("supervisor")

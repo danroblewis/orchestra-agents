@@ -1,4 +1,4 @@
-"""Roles, agents, and teams as three things (docs/proposals/teams-and-roles.md, Stage 2)."""
+"""Roles, agents, and teams as three things."""
 
 import json
 import subprocess
@@ -99,7 +99,7 @@ def test_store_round_trip_nesting_space_and_commits(project):
     assert all_teams(project)["product/qa"].lead == "qa_lead"
 
 
-def test_stage1_roles_become_implicit_agents(project):
+def test_roles_with_wake_rules_become_implicit_agents(project):
     role_store(project).save(RoleDef(name="product_owner", description="keeps the backlog full", tools=["tickets", "escalate"],
                                      wake_on=["ticket.transitioned:DONE"], every="45m"), "# You own the product\n\nKeep the backlog full.")
     a = all_agents(project)["product_owner"]
@@ -108,15 +108,10 @@ def test_stage1_roles_become_implicit_agents(project):
     RepoOrgStore(project).save_agent(AgentDef(name="product_owner", roles=["product_owner"], kind="continuous", wake_on=["milestone.closed"]))
     a = all_agents(project)["product_owner"]
     assert a.source == "agent" and a.kind == "continuous" and a.resident          # an explicit record wins
-    # a record from before the kinds were pinned down reads as what it is
-    (project.repo_root / ".orchestra" / "agents" / "old.json").write_text(
-        json.dumps({"name": "old", "roles": ["product_owner"], "kind": "continuous", "session": "ephemeral", "wake_on": ["gate.conflict"]}))
-    old = all_agents(project)["old"]
-    assert old.kind == "ad_hoc" and not old.resident and old.matches_event({"type": "gate.conflict"})
 
 
 def test_team_record_decides_membership(project):
-    """A Stage 1 role record (no team field) named by a team belongs to it; an agent whose
+    """A role record (no team field) named by a team belongs to it; an agent whose
     own record names the team belongs to it even before the team lists it."""
     from orchestra_agents.org import members_of
     rs, os_ = role_store(project), RepoOrgStore(project)

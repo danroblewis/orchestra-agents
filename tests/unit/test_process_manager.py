@@ -39,7 +39,7 @@ def test_dead_process_has_no_pid(project):
 
 
 def test_crashed_resident_is_recorded_restarted_and_crash_looped(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     (project.logs_dir / "agents").mkdir(parents=True, exist_ok=True)
     (project.logs_dir / "agents" / "retro.stderr.log").write_text("boom: model not found\n")

@@ -1,14 +1,15 @@
-/* The agents' look: role colours, the agent rows and the ticket cards they work on, session chips,
-   transcripts, the chat, and the agent machine cards. Loaded by the Agents page and the agents'
-   scripts on Orchestra's pages. The ticket-state colours are the task system's names, kept here
-   so an agent's card is coloured without the task system's stylesheet. */
+/* The agents' look: role colours, the agent rows and the ticket cards they work on (.awork: the task
+   system's cards are .work, with a lane of their own), session chips,
+   transcripts and the chat. Loaded by the Agents page and the agents' scripts on Orchestra's
+   pages. The ticket-state colours are the task system's names, kept here so an agent's card is
+   coloured without the task system's stylesheet. */
 :root {
   --OPEN:#6b7280; --BLOCKED:#f0883e; --IN_PROGRESS:#3b82f6; --READY_FOR_REVIEW:#7c3aed; --IN_REVIEW:#a855f7; --REJECTED:#ef4444;
   --APPROVED:#d97706; --MERGING:#f59e0b; --DONE:#16a34a; --CANCELLED:#374151;
-  --r-supervisor:#c084fc; --r-coordinator:#38bdf8; --r-pipeline:#fbbf24; --r-worker:#60a5fa; --r-reviewer:#e879f9;
+  --r-supervisor:#c084fc; --r-coordinator:#38bdf8; --r-worker:#60a5fa; --r-reviewer:#e879f9;
 }
 .msg.inprogress { border:1px dashed #1d4ed8; opacity:.9 }
-.msg.marker { background:#1a1a22; border:1px dashed var(--border2); color:var(--text2); font-size:12px } .msg.marker.turn_timed_out, .msg.marker.turn_error { border-color:#92400e; color:#fcd34d } .msg.marker.agent_killed, .msg.marker.turn_interrupted, .msg.marker.agent_crashed, .msg.marker.agent_crash_loop { border-color:#7f1d1d; color:#fca5a5 }
+.msg.marker { background:#1a1a22; border:1px dashed var(--border2); color:var(--text2); font-size:12px } .msg.marker.turn_timed_out, .msg.marker.turn_error { border-color:#92400e; color:#fcd34d } .msg.marker.turn_interrupted, .msg.marker.agent_crashed, .msg.marker.agent_crash_loop { border-color:#7f1d1d; color:#fca5a5 }
 details.started { margin:10px 0 } details.started summary { cursor:pointer; font-size:12px; color:var(--text2) } details.started .prompt { border:1px solid var(--border); border-radius:8px; padding:10px 14px; background:#0b0e14; max-height:50vh; overflow:auto; margin-top:6px }
 /* ---- agents ---- */
 .agent { display:grid; grid-template-columns:22px auto 1fr auto; gap:8px; align-items:center; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; margin-bottom:4px; cursor:pointer }
@@ -22,22 +23,19 @@ details.started { margin:10px 0 } details.started summary { cursor:pointer; font
 .chip.resident { color:#bbf7d0; border-color:#166534 } .chip.resident .dot { background:#22c55e }
 .chip.down { color:#fecaca; border-color:#7f1d1d } .chip.down .dot { background:#ef4444 }
 @keyframes pulse { 50% { opacity:.3 } }
-.work { background:var(--panel2); border:1px solid var(--border); border-left:4px solid var(--c); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer }
-.work:hover { background:var(--panel3) } .work .top { display:flex; justify-content:space-between; gap:8px; align-items:center; min-width:0 }
-.work .top > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-.work .id { font-family:var(--mono); font-weight:700; color:var(--c); text-decoration:underline dotted; text-underline-offset:3px } .work .title { font-weight:600 }
-.work .right { display:flex; align-items:center; gap:8px; flex:none; white-space:nowrap }
-.work .turns { font-family:var(--mono); font-size:11px; color:#fcd34d; background:#3a2e0a; border:1px solid #6b5313; border-radius:999px; padding:1px 7px; cursor:help; white-space:nowrap; flex:none }
-.work .top > span:first-child { flex:1 1 auto }
-.work .lane { display:grid; grid-template-columns:62px 1fr auto; gap:8px; align-items:center; margin-top:6px; font-size:12px; color:var(--text2) }
-.work .lane .who { color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em } .work .lane .msg { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-.pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.04em; color:#0b0d12; background:var(--c); white-space:nowrap }
-/* ---- merge gate ---- */
+.awork { background:var(--panel2); border:1px solid var(--border); border-left:4px solid var(--c); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer }
+.awork:hover { background:var(--panel3) } .awork .top { display:flex; justify-content:space-between; gap:8px; align-items:center; min-width:0 }
+.awork .top > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.awork .id { font-family:var(--mono); font-weight:700; color:var(--c); text-decoration:underline dotted; text-underline-offset:3px } .awork .title { font-weight:600 }
+.awork .right { display:flex; align-items:center; gap:8px; flex:none; white-space:nowrap }
+.awork .turns { font-family:var(--mono); font-size:11px; color:#fcd34d; background:#3a2e0a; border:1px solid #6b5313; border-radius:999px; padding:1px 7px; cursor:help; white-space:nowrap; flex:none }
+.awork .top > span:first-child { flex:1 1 auto }
+.awork .lane { display:grid; grid-template-columns:62px 1fr auto; gap:8px; align-items:center; margin-top:6px; font-size:12px; color:var(--text2) }
+.awork .lane .who { color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em } .awork .lane .msg { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.awork .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.04em; color:#0b0d12; background:var(--c); white-space:nowrap }
+/* ---- transcripts and the chat ---- */
 .msg { border-left:3px solid var(--border); padding:4px 10px; margin:8px 0 } .msg.user { border-color:var(--accent) } .msg.assistant { border-color:#22c55e } .msg.toolResult { border-color:#4b5563; color:var(--text2) }
 .tc { margin:6px 0 } .tc .r { color:var(--muted); font-size:11px } .tc pre { margin:2px 0 } .msg.toolResult.err { border-color:#ef4444 } .msg pre.term { max-height:40vh; min-height:0 }
-.alert { border-radius:10px; padding:12px 14px; margin:0 0 14px; border:1px solid } .alert h4 { margin:0 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.08em }
-.alert.blocked { background:#2a1a0e; border-color:#c2410c; color:#fed7aa } .alert.rejected { background:#2a1215; border-color:#b91c1c; color:#fecaca }
-.alert.waiting { background:#141a26; border-color:#1e3a8a; color:#bfdbfe } .alert .md { color:inherit }
 .chat { position:sticky; bottom:-18px; background:var(--panel2); padding:10px 0 4px; margin-top:12px; border-top:1px solid var(--border); display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap }
 .chat textarea { flex:1; min-width:0; background:var(--bg); color:var(--text); border:1px solid var(--border2); border-radius:8px; padding:8px; font:13px/1.4 inherit; resize:vertical }
 .chat button { background:var(--accent); color:#000; border:0; border-radius:8px; padding:8px 14px; font-weight:700; cursor:pointer } .chat button:disabled,.chat textarea:disabled { opacity:.5 }
@@ -45,23 +43,5 @@ details.started { margin:10px 0 } details.started summary { cursor:pointer; font
 .chat.top { position:static; border-top:0; border-bottom:1px solid var(--border); padding:4px 0 10px; margin:10px 0 }
 .chip.waiting { color:#fde68a; border-color:#92400e } .chip.waiting .dot { background:#f59e0b; animation:pulse 2.4s infinite }
 .chip.archived { color:var(--muted) }
-/* machines */
-.machine { background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--rc); border-radius:10px; padding:8px 10px; margin-bottom:8px }
-.machine .mhead { display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center }
-.machine .av { width:24px; height:24px; border-radius:6px; display:grid; place-items:center; font-weight:800; font-size:11.5px; color:#0b0d12; background:var(--rc) }
-.machine .av.prog { background:var(--panel3); color:var(--rc); border:1px solid var(--rc) }
-.machine .mname { font-weight:700; font-size:12.5px; min-width:0 } .machine .msub { font-weight:400; font-size:11px; color:var(--muted) }
-.machine .tag { font-size:9.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#fde68a; border:1px solid #92400e; border-radius:4px; padding:0 4px; margin-left:4px }
-.machine .job { display:grid; grid-template-columns:auto 1fr; gap:8px; font-size:11.5px; margin-top:6px; padding:3px 6px; border-radius:6px; background:var(--panel3); cursor:pointer }
-.machine .job .id { font-family:var(--mono); font-weight:700; color:var(--rc) } .machine .job .msg { color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-style:italic }
-.machine .mflows { margin-top:6px; font-size:11px; display:grid; gap:1px }
-.machine .mflows > div { display:flex; justify-content:space-between; gap:8px; color:var(--text2) } .machine .mflows .fl { color:var(--muted) }
-.machine .mctl { margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:11px; color:var(--text2) }
-.machine .mdesc { font-size:12px; color:var(--text2); margin-top:6px }
-.machine .mfh { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:2px }
-.machine.detail .mflows > div:not(.mfh) { display:grid; grid-template-columns:170px 1fr; gap:8px; align-items:baseline } .machine.detail .mflows .num { text-align:left }
-.mgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:8px; margin-bottom:8px } .mgrid .machine { margin-bottom:0 }
-h3.subh { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:12px 0 6px; font-weight:700 }
 .msg .r { font-size:11px; color:var(--muted) }
-.lg-ticket { color:#bc8cff; font-weight:600 }
-.agent, .agent > *, .work, .work > *, .work .lane > *, .qitem, .qitem > *, .step > * { min-width:0 }
+.agent, .agent > *, .awork, .awork > *, .awork .lane > * { min-width:0 }

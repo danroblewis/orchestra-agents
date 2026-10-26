@@ -47,7 +47,7 @@ def run_probe(prober, spec):
 
 
 def test_team_probe_runs_in_the_space_with_tools_on_path(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     os_ = RepoOrgStore(project)
     role_store(project).save(RoleDef(name="owner", tools=["tickets"]), "# You own\n\nThings, carefully and well.")
     os_.save_agent(AgentDef(name="po", roles=["owner"], team="product", kind="scheduled", every="1d"))

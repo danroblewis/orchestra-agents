@@ -22,7 +22,7 @@ def project(tmp_path, monkeypatch):
 
 
 def test_timed_out_turn_is_recorded_with_what_the_agent_was_doing(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     loop = AgentHost(project, store, events)
     now_t = time.time()
     store.set_session("retro-1", kind="retrospective", status="running", phase="tool", tool_name="bash",
@@ -44,7 +44,7 @@ def test_timed_out_turn_is_recorded_with_what_the_agent_was_doing(project):
 
 
 def test_shutdown_marks_every_running_turn(project):
-    store, events = AgentStore(project), Events(project.events_file)
+    store, events = AgentStore(project), Events.for_project(project)
     store.set_session("worker-T-1", kind="worker", status="running", ticket_id="T-1")
     store.set_session("po", kind="po", status="idle")
     loop = AgentHost(project, store, events)

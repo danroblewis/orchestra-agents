@@ -1,10 +1,11 @@
 """The agents' events, published on Orchestra's bus with the CloudEvents envelope.
 
-The lifted code calls ``emit(type, **fields)`` and reads events as flat dicts (``ev["ticket"]``),
-as it did inside Orchestra. Here ``emit`` publishes a CloudEvent: the fields are its ``data``,
-the ticket (or milestone) it is about is its ``subject``, and its ``source`` is the machine that
-emitted it. Subscribers in this process, and ``read``, get the flat shape the old code expects:
-the data's fields beside ``type``, ``ts`` and ``source``.
+The code here calls ``emit(type, **fields)`` and reads events as flat dicts (``ev["ticket"]``).
+``emit`` publishes a CloudEvent: the fields are its ``data``, the ticket (or milestone, or
+session) it is about is its ``subject``, and its ``source`` is the machine that emitted it.
+Subscribers in this process, and ``read``, get the flat shape back: the data's fields beside
+``type``, ``ts`` and ``source``. The bus is opened as Orchestra opens it (``[events] url`` or
+ORCHESTRA_EVENTS_URL), so one place decides where the events go.
 
 The source is the machine that emitted the event:
 
@@ -19,17 +20,14 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from orchestra.bus import EventBus, open_bus
 from orchestra.events import Events as OrchestraEvents
-from orchestra.events import event_time
 
 if TYPE_CHECKING:
     from .config import Project
 
-LOOP = "agents"
+HOST = "agents"
 
 
 def default_source() -> str:
@@ -37,31 +35,27 @@ def default_source() -> str:
         return os.environ["ORCHESTRA_SOURCE"]
     role, ticket = os.environ.get("ORCHESTRA_ROLE"), os.environ.get("ORCHESTRA_TICKET")
     if not role:
-        return LOOP
+        return HOST
     return f"{role}/{ticket}" if ticket else role
 
 
 def flat(ev: dict) -> dict:
-    """An event as the lifted code reads it: its data's fields, with ``type``, ``ts``, ``source``."""
+    """An event as this package reads it: its data's fields, with ``type``, ``ts``, ``source``."""
     data = ev.get("data")
-    if "specversion" not in ev:
-        return ev                                                   # already flat (an old event)
     out = dict(data) if isinstance(data, dict) else {"data": data}
     out.update(type=ev.get("type"), ts=ev.get("time"), source=ev.get("source"), id=ev.get("id"))
     return out
 
 
 class Events(OrchestraEvents):
-    def __init__(self, path: Path | None = None, *, bus: EventBus | None = None, source: str | None = None):
-        super().__init__(path, bus=bus, source=source or default_source())
+    def __init__(self, *args, source: str | None = None, **kwargs):
+        super().__init__(*args, source=source or default_source(), **kwargs)
         self._flat_subs: list[Callable[[dict], None]] = []
         self._bound: dict[str, str] = {}             # session id -> the instance its events come from
 
     @classmethod
     def for_project(cls, project: Project, source: str | None = None) -> Events:
-        url = os.environ.get("ORCHESTRA_EVENTS_URL") or project.config.events_url
-        return cls(project.events_file, bus=open_bus(url, project_key=project.key, file_path=project.events_file),
-                   source=source)
+        return super().for_project(project.orchestra, source=source or default_source())
 
     def subscribe(self, fn: Callable[[dict], None]) -> None:
         self._flat_subs.append(fn)
@@ -89,4 +83,4 @@ class Events(OrchestraEvents):
         return [flat(e) for e in evs], nxt
 
 
-__all__ = ["LOOP", "Events", "event_time", "flat"]
+__all__ = ["HOST", "Events", "flat"]

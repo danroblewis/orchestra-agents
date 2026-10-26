@@ -66,7 +66,7 @@ def env(tmp_path, monkeypatch, request):
     git("add", "-A", cwd=repo)
     git("commit", "-qm", "orchestra config", cwd=repo)
     monkeypatch.setenv("ORCHESTRA_REPO", str(repo))
-    events = Events(project.events_file, source="task_scheduler")
+    events = Events.for_project(project, source="task_scheduler")
     store = LocalStore(project, events)
     ms = store.create_milestone(name="m")
     return project, store, events, ms, repo
@@ -74,7 +74,7 @@ def env(tmp_path, monkeypatch, request):
 
 def agents_of(project):
     a = init_agents(project.repo_root)
-    return a, AgentStore(a, AgentEvents(a.events_file))
+    return a, AgentStore(a, AgentEvents.for_project(a))
 
 
 def run_loop(project, store, events):
@@ -84,7 +84,7 @@ def run_loop(project, store, events):
     system would; then both stop."""
     from tasking.requests import Desk
     a = init_agents(project.repo_root)
-    ev = AgentEvents(a.events_file)
+    ev = AgentEvents.for_project(a)
     host = AgentHost(a, AgentStore(a, ev), ev)
     th = threading.Thread(target=host.run, daemon=True)
     th.start()
@@ -172,7 +172,7 @@ def test_gate_rejection_reengages_worker_then_lands(env, monkeypatch):
     assert t.worker_turns == 2 and t.gate_rejections == 1 and t.reviewer_rejections == 0   # re-engaged once, by the gate
     runs = store.gate_runs()
     assert [r["status"] for r in runs] == ["rejected", "landed"]
-    assert runs[0]["rejected"] == [t.id] and runs[1]["merged"] == [t.id]
+    assert [r["ticket"] for r in runs] == [t.id, t.id]
     kinds = [(n["author"], n["kind"]) for n in store.notes(t.id)]
     assert kinds.count(("merge_gate", "gate")) == 2   # the rejection and the landing
     assert kinds.count(("reviewer", "review")) == 2   # reviewed before each gate run
@@ -194,7 +194,7 @@ def test_gate_rejection_reengages_worker_then_lands(env, monkeypatch):
 
 
 def test_team_lead_is_woken_in_its_space(env):
-    """A custom team (Stage 2): the lead is a scheduled agent that also wakes on landings.
+    """A custom team: the lead is a scheduled agent that also wakes on landings.
     When a ticket lands, the loop wakes it in the team's space with a prompt made of its
     role, the team's responsibilities, and its access."""
     from orchestra_agents import tooling as api

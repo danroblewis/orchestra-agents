@@ -1,4 +1,4 @@
-"""Agent harnesses: the products that run Orchestra's agents (SPEC.md section 5).
+"""Agent harnesses: the products that run the agents (SPEC.md section 6).
 
 ``get_harness(name)`` returns the configured one. ``read_transcript(session)`` parses a
 session record's transcript with the harness that wrote it, so the UI and CLI never

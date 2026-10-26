@@ -8,7 +8,9 @@ tool call goes through the real MCP server named in that config (JSON-RPC over s
 so the server is exercised end to end. It appends a Claude-format transcript under
 CLAUDE_CONFIG_DIR/projects/<cwd>/<uuid>.jsonl, where the harness expects it.
 
-Env knobs shared with fake_pi: FAKE_PI_WORKER_BLOCK, FAKE_PI_REJECT_FIRST, FAKE_PI_BREAK_FIRST."""
+Env knobs shared with fake_pi: FAKE_PI_WORKER_BLOCK, FAKE_PI_REJECT_FIRST, FAKE_PI_BREAK_FIRST.
+FAKE_CLAUDE_SLOW=<seconds>: a reviewer says what it is reading, then takes that long before its
+verdict, so what it is doing can be seen while it holds the ticket."""
 
 from __future__ import annotations
 
@@ -127,6 +129,11 @@ def main() -> None:
             use_tool("report_ticket", {"state": "READY_FOR_REVIEW", "summary": "added WORK.md line"})
             text = "Done, reported ready."
     elif role == "reviewer":
+        if os.environ.get("FAKE_CLAUDE_SLOW"):
+            said = "Reading RESULT.md against the acceptance criteria."
+            emit({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": said}]}, "session_id": sid})
+            record("assistant", [{"type": "text", "text": said}])
+            time.sleep(float(os.environ["FAKE_CLAUDE_SLOW"]))
         marker = cwd / ".fake_reviewed"
         if os.environ.get("FAKE_PI_REJECT_FIRST") and not marker.exists():
             marker.write_text("1")

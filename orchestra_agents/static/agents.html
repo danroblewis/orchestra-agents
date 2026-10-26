@@ -58,7 +58,7 @@
   .evmap .n .halo { fill:none; stroke:url(#halo); stroke-width:4; stroke-dasharray:14 10; stroke-linecap:round; filter:drop-shadow(0 0 5px #60a5fa); animation:halo 2.4s linear infinite; transform-box:fill-box; transform-origin:center }
   @keyframes halo { to { transform:rotate(360deg) } }
   .evmap .n.cyc circle, .evmap .n.cyc rect { stroke-width:3 } .evmap .n.event rect { fill:#0b0e14; stroke:#6b5313 } .evmap .n text.ev { fill:#fcd34d; font-family:var(--mono); font-size:10px; font-weight:600 } .evmap .n text.ev.custom { fill:#c4b5fd } .evmap .n text { fill:var(--text); font-weight:600; pointer-events:none } .evmap .n .sub { fill:var(--muted); font-weight:400; font-size:9.5px }
-  .evmap .e { fill:none; stroke:#4b5563; stroke-width:1.4; opacity:.85 } .evmap .e.loop { stroke-dasharray:5 3 } .evmap .e.seen { stroke:#22c55e } .evmap .e.cyc { stroke:#fcd34d }
+  .evmap .e { fill:none; stroke:#4b5563; stroke-width:1.4; opacity:.85 } .evmap .e.seen { stroke:#22c55e } .evmap .e.cyc { stroke:#fcd34d }
   .evmap .lbl { fill:#fcd34d; font-family:var(--mono); font-size:9.5px; paint-order:stroke; stroke:var(--panel2); stroke-width:3px } .evmap .lbl.custom { fill:#c4b5fd }
   .evmap .dim { opacity:.1 } .evmap .n { cursor:grab }
   .evmap .legend { color:var(--muted); font-size:10.5px; margin-top:6px; display:flex; gap:14px; flex-wrap:wrap } .evmap .legend i { display:inline-block; width:18px; border-top:2px solid; margin-right:5px; vertical-align:middle }
@@ -76,9 +76,8 @@
 <script src="/static/app.js?v={{v}}"></script>
 <script src="/plugins/agents/static/agents.js?v={{v}}"></script>
 <script>
-// The agents, their teams and roles, and who wakes whom through which events: Orchestra's old
-// Agents page, now the agents' plugin's (AGENTS_API, /api/plugins/agents). The probes are the task
-// system's, shown when its plugin is installed.
+// The agents, their teams and roles, the teams' probes, and who wakes whom through which events
+// (AGENTS_API, /api/plugins/agents).
 const API = AGENTS_API;
 function renderNav() {}                                     // the navigation is Orchestra's now
 let STATE = null, ORG = null;
@@ -94,7 +93,7 @@ const sessionOf = (a) => STATE && STATE.sessions.find((x) => x.id === a.session_
 let HORIZON = 8 * 3600;
 try { HORIZON = Number(localStorage.getItem("orchestra.tl.horizon")) || HORIZON; } catch (e) {}
 function setHorizon(h) { HORIZON = Number(h); try { localStorage.setItem("orchestra.tl.horizon", String(HORIZON)); } catch (e) {} refresh(); }
-// Upcoming scheduled wake-ups within the horizon. The loop records next_scheduled_at, so the
+// Upcoming scheduled wake-ups within the horizon. The host records next_scheduled_at, so the
 // interval ticks are the real ones; before the first tick is recorded the first is "due now".
 function upcoming(a, now) {
   const out = [];
@@ -121,7 +120,7 @@ function agentGraph(m) {
   const evNodes = {}, links = {};
   const evNode = (type, filter, custom) => { const id = "ev:" + type + (filter ? ":" + filter : "");
     evNodes[id] = evNodes[id] || { id, kind: "event", label: filter && type === "ticket.transitioned" ? filter : filter ? type + ":" + filter : type, type, filter, custom: !!custom, cnt: (filter ? m.counts[type + ":" + filter] : m.counts[type]) || 0 }; return id; };
-  const link = (a, b, extra) => { const k = a + ">" + b; links[k] = links[k] || { source: a, target: b, seen: 0, loop: false }; Object.assign(links[k], { seen: links[k].seen + (extra.seen || 0), loop: links[k].loop || !!extra.loop }); };
+  const link = (a, b, extra) => { const k = a + ">" + b; links[k] = links[k] || { source: a, target: b, seen: 0 }; links[k].seen += extra.seen || 0; };
   const emits = m.edges.filter((e) => e.to.startsWith("ev:")), wakes = m.edges.filter((e) => e.from.startsWith("ev:"));
   const typeOf = (id) => nodes[id].label, isCustom = (id) => !!nodes[id].custom;
   for (const e of emits) link(e.from, evNode(typeOf(e.to), e.filter, isCustom(e.to)), e);
@@ -154,7 +153,7 @@ function agentGraph(m) {
   if (Object.keys(alias).length) {
     const merged = {};
     for (const l of ls) { const a = alias[l.source] || l.source, b = alias[l.target] || l.target, k = a + ">" + b;
-      merged[k] = merged[k] || { ...l, source: a, target: b, seen: 0 }; merged[k].seen += l.seen; merged[k].loop = merged[k].loop || l.loop; }
+      merged[k] = merged[k] || { ...l, source: a, target: b, seen: 0 }; merged[k].seen += l.seen; }
     ls = Object.values(merged);
   }
   const used = new Set(ls.flatMap((l) => [l.source, l.target]));
@@ -181,14 +180,14 @@ function eventMap(m) {
     return `<div><b>${esc(agents.join(" ⇄ "))}</b>: ${es.map((l) => `${esc(name(l.source))} → ${esc(name(l.target))}`).join(", ")}</div>`; }).join("");
   setTimeout(() => drawGraph(g, inCyc), 0);
   return `<div class="evmap"><svg id="evsvg"></svg>
-    <div class="legend"><span><i style="border-color:#4b5563"></i>causes / is woken by</span><span><span style="color:#fcd34d">▭</span> event</span><span><span style="color:#22c55e">○</span> resident agent</span><span>halo: active now</span><span><i style="border-color:#4b5563;border-top-style:dashed"></i>the loop wakes it in code</span><span><i style="border-color:#22c55e"></i>seen in the log, last 24h</span><span><i style="border-color:#fcd34d"></i>part of a feedback loop</span><label style="cursor:pointer"><input type="checkbox" ${window.EV_SHOW_ALL ? "checked" : ""} onchange="window.EV_SHOW_ALL=this.checked;window.EVSIG=null;refresh()"> show events nobody is woken by</label><span>· drag nodes, hover to isolate, click an agent to open it</span></div>
+    <div class="legend"><span><i style="border-color:#4b5563"></i>causes / is woken by</span><span><span style="color:#fcd34d">▭</span> event</span><span><span style="color:#22c55e">○</span> resident agent</span><span>halo: active now</span><span><i style="border-color:#22c55e"></i>seen in the log, last 24h</span><span><i style="border-color:#fcd34d"></i>part of a feedback loop</span><label style="cursor:pointer"><input type="checkbox" ${window.EV_SHOW_ALL ? "checked" : ""} onchange="window.EV_SHOW_ALL=this.checked;window.EVSIG=null;refresh()"> show events nobody is woken by</label><span>· drag nodes, hover to isolate, click an agent to open it</span></div>
     <div class="loops">${loops ? "<div class='muted' style='margin-bottom:3px'>Feedback loops</div>" + loops : "<span class='muted'>No feedback loops: nothing any agent causes wakes an agent that can cause it back.</span>"}</div></div>`;
 }
 function drawGraph(g, inCyc) {
   const svgEl = document.getElementById("evsvg"); if (!svgEl || typeof d3 === "undefined") return;
   const W = svgEl.clientWidth || 1000, H = 560;
   const svg = d3.select(svgEl).attr("viewBox", `0 0 ${W} ${H}`); svg.selectAll("*").remove();
-  const palette = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", pipeline_manager: "var(--r-pipeline)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
+  const palette = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
   const byName = Object.fromEntries((ORG ? ORG.agents : []).map((a) => [a.name, a]));
   // An agent is active when a session of its kind is running: one resident process, or any of an ad hoc agent's per-ticket sessions.
   const active = new Set((STATE ? STATE.sessions : []).filter((s) => s.status === "running" && s.kind).map((s) => "agent:" + s.kind));
@@ -199,7 +198,7 @@ function drawGraph(g, inCyc) {
   const sim = EVSIM = d3.forceSimulation(nodes).force("link", d3.forceLink(links).id((d) => d.id).distance(110)).force("charge", d3.forceManyBody().strength(-520))
     .force("center", d3.forceCenter(W / 2, H / 2)).force("collide", d3.forceCollide((n) => n.kind === "event" ? Math.max(46, 10 + ((n.labels || [1]).length - 1) * 6.5 + 26, Math.max(...(n.labels || [n.label]).map((l) => l.length)) * 3.4 + 20) : R + 30));
   const cyc = (l) => inCyc.has(l.source.id || l.source) && inCyc.has(l.target.id || l.target);
-  const path = svg.append("g").selectAll("path").data(links).join("path").attr("class", (l) => `e ${l.loop ? "loop" : ""} ${l.seen ? "seen" : ""} ${cyc(l) ? "cyc" : ""}`).attr("marker-end", (l) => cyc(l) ? "url(#arrc)" : "url(#arr)")
+  const path = svg.append("g").selectAll("path").data(links).join("path").attr("class", (l) => `e ${l.seen ? "seen" : ""} ${cyc(l) ? "cyc" : ""}`).attr("marker-end", (l) => cyc(l) ? "url(#arrc)" : "url(#arr)")
     .attr("data-from", (l) => l.source.id || l.source).attr("data-to", (l) => l.target.id || l.target);
   path.append("title").text((l) => `${(l.source.label || l.source)} → ${(l.target.label || l.target)}${l.seen ? ` · ${l.seen} in 24h` : ""}`);
   const lbl = svg.append("g").selectAll("text").data([]).join("text");
@@ -264,16 +263,13 @@ function timeline(agents, now) {
   return `<div class="tl">${html}<div class="axis"><span>scheduled wake-ups · <select onchange="setHorizon(this.value)">${pick}</select></span><div class="marks">${marks}</div><span></span></div></div>`;
 }
 function schedule(a) {
-  if (a.kind === "ad_hoc" && a.builtin) return "started by the scheduler per ticket, in that ticket's folder";
+  if (a.kind === "ad_hoc" && a.builtin) return "started per ticket when the task system assigns one, in that ticket's workspace";
   const parts = [];
   if (a.kind === "ad_hoc") parts.push("fresh session when its lead briefs it");
   if (a.every) parts.push(`every ${esc(a.every)}`);
   if (a.at) parts.push(`daily at ${esc(a.at)}`);
   if ((a.wake_on || []).length) {
-    // Built-in agents are woken by the loop's own code when these conditions occur (it
-    // detects them and calls the wake-up); custom agents subscribe to event types in the log.
-    const list = a.wake_on.map((w) => a.builtin ? esc(w.replace(/[_.]/g, " ")) : `<code>${esc(w)}</code>`).join(", ");
-    parts.push(a.builtin ? `<span title="Detected by Orchestra's own code, which wakes this agent directly">when the scheduler sees ${list}</span>` : `subscribed to ${list}`);
+    parts.push(`subscribed to ${a.wake_on.map((w) => `<code>${esc(w)}</code>`).join(", ")}`);
   }
   if (a.name === "supervisor") parts.push("on human messages and escalations");
   return parts.join(" · ") || "only on messages from its lead";
@@ -285,7 +281,10 @@ const EVENT_HELP = {
   "gate.started": "a merge gate run starts", "gate.landed": "the gate lands a ticket on the base branch", "gate.rejected": "the gate's tests fail for a ticket", "gate.conflict": "a branch conflicts with the base branch at the gate",
   "gate.error": "the gate itself fails to run", "gate.base_broken": "the base branch fails the gate's tests", "staging.deployed": "a build is deployed to staging", "staging.failed": "staging failed to come up", "staging.restarted": "staging was restarted",
   "pipeline.paused": "the pipeline is paused", "pipeline.resumed": "the pipeline is resumed", "pickup.paused": "new workers are paused", "pickup.resumed": "new workers are resumed", "capacity.changed": "the worker dial changes", "kill.requested": "the operator stops a ticket's work",
-  "agent.said": "an agent finishes a turn", "agent.killed": "the operator stops an agent", "context.updated": "the project context changes", "scheduler.started": "the task system's scheduler starts", "scheduler.stopped": "the task system's scheduler stops",
+  "task.assigned": "the task system offers a ticket to a role", "task.accepted": "a machine takes an offered ticket", "task.working": "the holder of a ticket says it is still at it",
+  "task.reported": "the holder of a ticket reports", "task.released": "the task system takes an assignment back", "task.attention_needed": "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
+  "request.done": "the task system answered a request", "request.refused": "the task system refused a request",
+  "agent.said": "an agent finishes a turn", "context.updated": "the project context changes", "scheduler.started": "the task system's scheduler starts", "scheduler.stopped": "the task system's scheduler stops",
   "session.started": "any agent turn starts", "session.settled": "any agent turn ends", "role.created": "a role is created", "role.changed": "a role changes", "role.deleted": "a role is deleted",
   "agent.created": "an agent is created", "agent.changed": "an agent changes", "agent.deleted": "an agent is deleted", "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed", "agent.messaged": "an agent gets a message or brief",
   "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
@@ -299,14 +298,14 @@ function triggerRows(a) {
     const [type, filter] = w.split(/:(.*)/);
     let what = EVENT_HELP[type];
     if (!what && declared[type]) what = `an agent of team ${declared[type]} raises it with emit_event`;
-    if (!what) what = a.builtin ? "a condition the loop detects in its own code" : "not an event the task system emits";
+    if (!what) what = "not an event the task system or the agents emit";
     return `<div><code>${esc(w)}</code> <span class="muted">${esc(what)}${filter ? ` · only when it is ${esc(filter)}` : ""}</span></div>`;
   });
   if (a.every) rows.push(`<div><code>every ${esc(a.every)}</code> <span class="muted">a scheduled check-in</span></div>`);
   if (a.at) rows.push(`<div><code>daily at ${esc(a.at)}</code> <span class="muted">a scheduled daily session</span></div>`);
   if (a.kind === "ad_hoc" && !a.builtin) rows.push(`<div><code>run_agent</code> <span class="muted">a brief from its lead</span></div>`);
   if (a.kind !== "ad_hoc" && !a.builtin) rows.push(`<div><code>message_agent</code> <span class="muted">a note from its lead, or from a member if it leads</span></div>`);
-  for (const t of a.triggers || []) rows.push(`<div><code>loop</code> <span class="muted">${esc(t)}</span></div>`);
+  for (const t of a.triggers || []) rows.push(`<div><code>host</code> <span class="muted">${esc(t)}</span></div>`);
   if (a.name === "supervisor" && !(a.triggers || []).length) rows.push(`<div><code>human</code> <span class="muted">a message from you, and escalations from any agent</span></div>`);
   if ((a.emits || []).length) rows.push(`<div class="muted" style="margin-top:4px">causes: ${a.emits.map((e) => `<code>${esc(e)}</code>`).join(" ")}</div>`);
   return rows.join("") || "<span class='muted'>nothing wakes it</span>";
@@ -321,7 +320,7 @@ function probeRow(p, now) {
 }
 function nextWake(a, st, now) {
   if (a.paused) return "paused: wake-ups are queued until resumed";
-  if (a.kind === "ad_hoc") return "when its lead calls run_agent with a brief";
+  if (a.kind === "ad_hoc") return a.builtin ? "when the task system assigns a ticket to this role" : "when its lead calls run_agent with a brief";
   const parts = [];
   const up = upcoming(a, now);
   if (a.every && up.length) parts.push(`scheduled in ${ago(up[0].t - now)} (${clock(up[0].t)}), then every ${esc(a.every)}`);
@@ -345,7 +344,7 @@ function agentRow(a, lead, now) {
   return `<div class="arow"><div class="av ${lead ? "lead" : ""}" title="${lead ? "lead" : "member"}">${letter}</div>
     <span class="name"><a href="#" onclick="openAgent('${a.name}');return false">${esc(a.name)}</a>${lead ? ' <span class="tag">lead</span>' : ""}</span>
     <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span>
-    <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.source === "role" ? ' <span class="tag" title="A Stage 1 role record that is its own agent">from role</span>' : ""}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
+    <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.source === "role" ? ' <span class="tag" title="A role record that is its own agent">from role</span>' : ""}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
     ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one long-lived transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button>${ctls}</span></div>`;
 }
 function teamCard(t, byName, now, sub) {
@@ -377,7 +376,7 @@ async function openTeam(name) {
       <div>access</div><div>${access}</div>
       <div>space</div><div><code>${esc(r.space_dir || t.space)}</code> ${t.tracked ? "(committed with the code)" : "(ignored by git)"}; tools on members' PATH from <code>${esc(r.tools_dir || "")}</code></div>
       <div>capacity</div><div>${t.capacity} member session${t.capacity === 1 ? "" : "s"} at once</div>
-      <div>defined by</div><div>${t.builtin ? "the task system" : `${esc(t.created_by || "supervisor")} on ${esc((t.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
+      <div>defined by</div><div>${t.builtin ? "the agents package (built in)" : `${esc(t.created_by || "supervisor")} on ${esc((t.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
     </div>
     <div class="prompt-head"><h4>Responsibilities</h4><span class="muted">Standing conditions the lead checks on every wake-up. Every agent in the team sees these, and those inherited from the teams above.</span></div>
     <div class="prompt md">${md(r.responsibilities || "(none written)")}${inherited}</div>
@@ -395,12 +394,12 @@ async function openAgent(name) {
     <div class="def">
       <div>roles</div><div>${(r.roles || []).map((x) => `<a href="#" onclick="openRole('${x.name}');return false">${esc(x.name)}</a>${x.description ? ` <span class="muted">${esc(x.description)}</span>` : ""}`).join("<br>") || "none"}</div>
       <div>team</div><div>${a.team ? ((r.team_chain || []).length ? r.team_chain.map((t) => `<a href="#" onclick="openTeam('${t}');return false">${esc(t)}</a>`).join(" ← ") : `<code>${esc(a.team)}</code> is not created yet; the agent runs without team responsibilities until it is`) : "none (reports to the Supervisor)"}${(r.leads || []).length ? ` · leads ${r.leads.map((t) => `<code>${esc(t)}</code>`).join(", ")}` : ""}</div>
-      <div>triggers</div><div class="tools">${triggerRows(a)}${a.builtin && (a.wake_on || []).length ? '<div class="muted" style="margin-top:4px">Built-in: these are conditions the loop detects in its own code and wakes this agent for directly; they are not subscriptions to the event log.</div>' : ""}</div>
+      <div>triggers</div><div class="tools">${triggerRows(a)}</div>
       <div>next wake-up</div><div>${nextWake(a, st, now)}</div>
       <div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>
       <div>session</div><div>${a.resident ? "resident: one long-lived process; earlier wake-ups stay in its memory and it shows on the Dashboard while up" : "ephemeral: a fresh process and conversation every time it runs; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
-      <div>defined by</div><div>${a.builtin ? "the task system" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}${a.source === "role" ? " (a Stage 1 role record acting as its own agent)" : ""}`}</div>
+      <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}${a.source === "role" ? " (a role record acting as its own agent)" : ""}`}</div>
     </div>
     ${!a.resident ? `<div class="prompt-head"><h4>Runs</h4><span class="muted">Each run is its own session and transcript; nothing is forgotten, it is just not carried into the next run.</span></div>
     ${(r.runs || []).map((x) => `<div class="arow" style="grid-template-columns:auto 1fr auto auto"><span class="name"><code>${esc(x.id)}</code></span><span class="sched">${esc(x.last_text || "")}</span><span class="muted">${x.started_at ? ago(now - x.started_at) + " ago" : ""}${x.status === "running" ? " · running" : ""}</span><button class="ctl" onclick="openTranscript('${x.id}')">transcript</button></div>`).join("") || '<div class="empty">no runs yet</div>'}` : ""}
@@ -440,8 +439,8 @@ async function refresh() {
     let html = timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');
     html += `<h2>Agents outside a team <span class="count">${loose.length}</span></h2>` + (loose.map((a) => agentRow(a, false, org.now)).join("") || '<div class="empty">none</div>');
-    const probes = await fetch("/api/plugins/tasks/state").then((r) => (r.ok ? r.json() : {})).then((d) => d.probes || []).catch(() => []);
-    html += `<h2>Probes <span class="count">${probes.length}</span></h2>` + (probes.map((p) => probeRow(p, org.now)).join("") || '<div class="empty">No probes. A probe is a command Orchestra runs on an interval, from <code>[[probes]]</code> in orchestra.toml or a team\'s <code>probes</code>; it emits <code>probe.failed</code> and <code>probe.recovered</code> when the result changes, and agents subscribe to those.</div>');
+    const probes = st.probes || [];
+    html += `<h2>Probes <span class="count">${probes.length}</span></h2>` + (probes.map((p) => probeRow(p, org.now)).join("") || '<div class="empty">No probes. A probe is a command the agents\' host runs on an interval, from a team\'s <code>probes</code>; it emits <code>probe.failed</code> and <code>probe.recovered</code> when the result changes, and agents subscribe to those.</div>');
     html += `<h2>Roles <span class="count">${org.roles.length}</span></h2>` + org.roles.map((r) => `<div class="rolecard"><div>
         <h3><a href="#" onclick="openRole('${r.name}');return false">${esc(r.name)}</a> ${r.builtin ? '<span class="tag">built-in</span>' : '<span class="tag">custom</span>'}</h3>
         <div class="desc">${esc(r.description || "")}</div>

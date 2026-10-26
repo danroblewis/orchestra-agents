@@ -2,8 +2,9 @@
 contract (orchestra-tasking: docs/proposals/agents-split.md); nothing is imported from it.
 
 - Assignment: the task system offers a ticket to a role (``task.assigned``); a machine that
-  fills the role accepts it (``task.accepted``), says it is still working (``task.working``) and
-  reports (``task.reported``); the task system may take it back (``task.released``).
+  fills the role accepts it (``task.accepted``), says it is still working (``task.working``, at
+  least every HEARTBEAT_S, with ``text``: what it is doing now, for whoever shows the ticket)
+  and reports (``task.reported``); the task system may take it back (``task.released``).
 - Requests: a planner asks the task system to change tickets (``task.requested``,
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
   it); it answers ``request.done`` with the result or ``request.refused`` with why.

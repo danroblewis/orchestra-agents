@@ -76,7 +76,7 @@ def test_get_role_explains_what_the_role_is(project):
                                      wake_on=["ticket.transitioned:DONE"], every="45m"), "Be opinionated about {base_branch}.")
     r = api.handle(project, store, "get_role", {"name": "product_owner"})
     assert not r["role"]["builtin"] and r["prompt"].strip() == "Be opinionated about main."   # the job description, placeholders resolved
-    a = api.handle(project, store, "get_agent", {"name": "product_owner"})                 # a Stage 1 role is its own agent
+    a = api.handle(project, store, "get_agent", {"name": "product_owner"})                 # a role with wake rules is its own agent
     assert a["agent"]["source"] == "role" and a["agent"]["every_seconds"] == 45 * 60 and a["agent"]["kind"] == "scheduled"
     assert a["prompt"].startswith("# You are the `product_owner` agent of Orchestra")     # Orchestra's preamble
     assert "## Your role: product_owner" in a["prompt"] and "Be opinionated about main." in a["prompt"]

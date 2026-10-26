@@ -95,7 +95,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         if users:
             raise StoreError(f"role {a['name']!r} is used by agents {users}; change or delete them first")
         rs.delete(a["name"])
-        store.set_agent_state(a["name"], deleted=True)   # an implicit Stage 1 agent of the same name stops too
+        store.set_agent_state(a["name"], deleted=True)   # an implicit agent of the same name stops too
         store.events.emit("role.deleted", role=a["name"], by=author)
         return {"ok": True, "storage": rs.last_commit_note}
 
@@ -151,7 +151,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         if ag.source == "agent":
             os_.delete_agent(ag.name)
         else:
-            rs.delete(ag.name)   # a Stage 1 role record that was its own agent
+            rs.delete(ag.name)   # a role record that was its own agent
         store.set_agent_state(a["name"], deleted=True)
         store.events.emit("agent.deleted", agent=a["name"], by=author)
         return {"ok": True, "storage": os_.last_commit_note}
@@ -285,7 +285,6 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
             "triggers": list(ag.triggers), "emits": list(ag.emits),
             "last_run_id": runs[0]["id"] if runs else ag.session_id, "run_count": len(runs),
             "team_exists": ag.team is None or ag.team in teams,   # an agent may be created before its team (the guide's order)
-            "wake_kind": "orchestra" if ag.builtin else "events",   # built-ins: the loop calls them; custom: they subscribe
             "resident": ag.resident, "paused": bool(st.get("paused")), "deleted": bool(st.get("deleted")),
             "crash_loop": st.get("crash_loop") if st.get("paused") else None,
             "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"),

@@ -1,10 +1,10 @@
 """The agents' host (``orchestra-agents run``): the process that runs the AI agents as machines.
 
 It keeps the resident agents (the Supervisor, the Coordinator, any custom continuous ones) up,
-wakes agents on the events they listen for, on their schedules, and when the task system asks a
-planner for attention (``task.attention_needed``); answers the task system's assignments for the
-roles it serves (runner.py) by running a worker's or reviewer's session on the ticket; and serves
-the Supervisor chat (control.py). Sessions, transcripts, compaction and crash handling are here;
+wakes agents on the events they listen for (the task system's ``task.attention_needed`` to a
+planner among them) and on their schedules; answers the task system's assignments for the roles
+it serves (runner.py) by running a worker's or reviewer's session on the ticket; and serves the
+Supervisor chat (control.py). Sessions, transcripts, compaction and crash handling are here;
 which product runs a session is invisible past ``harness``. Tickets are the task system's: the
 agents reach them only over the bus (protocol.py)."""
 
@@ -100,7 +100,7 @@ class AgentHost:
                 pass
         self.recover()
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",
-                                                          "listens_for": [ASSIGNED, RELEASED, ATTENTION],
+                                                          "listens_for": [ASSIGNED, RELEASED, ATTENTION], "log": str(HOST_LOG),
                                                           "does": "runs the AI agents: their sessions, wake-ups, and the task system's "
                                                                   "assignments for the roles they fill"})
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
@@ -163,7 +163,7 @@ class AgentHost:
 
     @staticmethod
     def _kill_orphan(pid: int, session_id: str) -> None:
-        """A turn's process outlived the loop that started it (the loop was killed): stop it, so
+        """A turn's process outlived the host that started it (the host was killed): stop it, so
         it neither keeps working unseen nor holds its session against the retry."""
         import signal
         try:
@@ -247,7 +247,7 @@ class AgentHost:
     def _open_session(self, session_id: str, role: str, system_prompt: str, tools: tuple[str, ...], cwd: Path,
                       ticket_id: str = "", extra_env: dict[str, str] | None = None) -> AgentSession:
         """Start a session on the configured harness. Which product runs the agent is
-        invisible past this point: the loop only sees the AgentSession interface. The
+        invisible past this point: the host only sees the AgentSession interface. The
         prompt the session starts with is kept beside its stderr log, so a transcript can
         show what the agent was told, whatever the harness records."""
         prompt_file = self.project.logs_dir / "agents" / f"{session_id}.prompt.md"
@@ -305,15 +305,13 @@ class AgentHost:
         return proc.pid or os.getpid()
 
     def _wake_on_events(self) -> None:
-        """Match new events against every agent's wake_on list and queue wake-ups."""
+        """Match new events against every agent's wake_on list and queue wake-ups. Workers and
+        reviewers are not woken: their events are assignments, answered by the runner."""
         for ev in self._wake_follow.new():
-            if ev.get("type") == ATTENTION and ev.get("to"):           # the task system asks a planner to look
-                self.store.add_wakeup(ev["to"], ev.get("reason") or "the task system needs your attention")
-                continue
             for name, agent in self.agents.items():
-                if name == "supervisor" or not agent.wake_on or not agent.matches_event(ev):
+                if (agent.builtin and not agent.resident) or not agent.matches_event(ev):
                     continue
-                bits = [f"{k}={ev[k]}" for k in ("ticket", "milestone", "from", "to", "gate_run", "reason", "by", "probe", "subject", "note", "output") if ev.get(k)]
+                bits = [f"{k}={ev[k]}" for k in ("ticket", "milestone", "from", "to", "reason", "by", "probe", "subject", "note", "output") if ev.get(k)]
                 self.store.add_wakeup(name, f"event {ev['type']}" + (" " + " ".join(str(b)[:300] for b in bits) if bits else ""))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
 

@@ -3,15 +3,15 @@
 The settings are ``[agents]`` in the repository's ``orchestra.toml`` (which product runs them,
 the model, time limits, which roles they fill), and three of the task system's ``[project]``
 settings their prompts are filled with (the base branch, the ticket prefix, whether work is tasks
-or code). ``[events]`` and ``[metrics]`` are Orchestra's, read to reach the same bus and metrics
-store. State lives in ``~/.orchestrator/<key>/agents/``; the project key is Orchestra's."""
+or code). The bus and the metrics store are Orchestra's, reached through the Orchestra project
+(``Project.orchestra``). State lives in ``~/.orchestrator/<key>/agents/``; the project key is
+Orchestra's."""
 
 from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from orchestra.config import Config as OrchestraConfig
 from orchestra.config import ConfigError, home, parse_duration
@@ -37,9 +37,6 @@ class Config:
     base_branch: str = "main"           # from the task system's [project], for the prompts
     ticket_prefix: str = "ORC"
     work: str = "tasks"
-    events_url: str | None = None
-    metrics_url: str | None = None
-    raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_toml(cls, text: str) -> Config:
@@ -53,8 +50,7 @@ class Config:
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             session_max_bytes=int(a.get("session_max_bytes", 300_000)), compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
-            base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"),
-            events_url=(raw.get("events", {}) or {}).get("url"), metrics_url=(raw.get("metrics", {}) or {}).get("url"), raw=raw)
+            base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 
 
 @dataclass
@@ -70,10 +66,6 @@ class Project:
     @property
     def state_dir(self) -> Path:
         return home() / self.key / "agents"
-
-    @property
-    def events_file(self) -> Path:
-        return home() / self.key / "events.jsonl"      # Orchestra's (the file bus)
 
     @property
     def runtime_file(self) -> Path:

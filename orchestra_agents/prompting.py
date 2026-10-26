@@ -107,7 +107,7 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
         for t in chain:
             for g in t.paths:
                 lines.append(f"- {g['access']}: `{g['path']}`" + (f" (granted to team `{t.name}`)" if t.name != team.name else ""))
-        lines.append("- Everything else in the repository is read-only to you. Code changes land only through tickets and the merge gate.")
+        lines.append("- Everything else in the repository is read-only to you. Changes to the product happen only through tickets.")
         parts.append("## Your access\n\n" + "\n".join(lines) + "\n")
     return "\n".join(parts)
 
@@ -131,7 +131,8 @@ _Maintained by the Supervisor. Every Supervisor turn starts with this document._
 (What we deliberately will not do.)
 
 ## Definition of done
-A ticket is DONE when its branch has landed on the base branch through the merge gate.
+A ticket is DONE when its review is approved and, for code, its branch has landed on the base
+branch through the merge gate.
 
 ## Verification
 (Which acceptance tests exist, what they cover, and what a new feature must add.)
@@ -171,7 +172,7 @@ def _ticket_block(t: Ticket) -> str:
             f"## Objective (why)\n{t.objective.strip() or '(not stated)'}\n\n"
             f"## Description\n{t.description.strip() or '(none)'}\n\n"
             f"## Acceptance criteria\n{t.acceptance.strip() or '(none given; use the description)'}\n\n"
-            f"## Verification (how the merge gate proves it)\n{t.verification.strip() or '(none stated; existing tests must keep passing)'}\n")
+            f"## Verification (how it is proved)\n{t.verification.strip() or '(none stated; existing tests must keep passing)'}\n")
 
 
 def worker_task(project: Project, t: Ticket, unit_command: str | None) -> str:
@@ -277,14 +278,14 @@ def execution_health(snapshot: dict) -> list[str]:
            f"Pipeline: {'PAUSED: ' + str(snapshot['pipeline'].get('reason')) if snapshot['pipeline'].get('paused') else 'running'}"]
     if ready and not workers:
         if cap.get("workers", 0) == 0 and cap.get("max_workers", 0) == 0:
-            out.append("DIAGNOSIS: work is stalled because [agents].workers = 0 in orchestra.toml. Only the human "
+            out.append("DIAGNOSIS: work is stalled because [tasks] workers = 0 in orchestra.toml. Only the human "
                        "can change that file: escalate_to_supervisor asking for it to be raised.")
         elif cap.get("workers", 0) == 0:
             out.append("DIAGNOSIS: work is stalled because the runtime worker capacity dial is 0. "
                        "Raise it with set_capacity if there is no reason to keep it paused.")
         else:
-            out.append("DIAGNOSIS: tickets are ready and capacity exists but no worker is running; the loop should "
-                       "pick them up within a tick. If this persists across check-ins, escalate_to_supervisor.")
+            out.append("DIAGNOSIS: tickets are ready and capacity exists but no worker is running; the task system "
+                       "offers them within a tick. If this persists across check-ins, escalate_to_supervisor.")
     elif not ready and not workers and waiting:
         out.append("DIAGNOSIS: nothing is ready. Check whether the waiting tickets' dependencies or milestones are "
                    "wrong and fix them; unblock BLOCKED tickets you can resolve.")

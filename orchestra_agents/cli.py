@@ -1,5 +1,5 @@
 """The `orchestra-agents` command line: the agents' host, the Supervisor chat, the agents' tool
-interface (for the Pi extension), their sessions and roles."""
+interface (what the Pi extension calls), their sessions and roles."""
 
 from __future__ import annotations
 
@@ -7,11 +7,8 @@ import argparse
 import json
 import os
 import sys
-import time
 
-from . import prompting as agents
 from . import tooling
-from .builtins import ROLES
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness.base import assistant_text
@@ -125,60 +122,20 @@ def _chat_attached(project: Project, store: AgentStore, port: int) -> int:
 
 
 def cmd_chat(args) -> int:
-    from .harness import SessionSpec, get_harness
+    """Talk to the Supervisor through the host's control endpoint (control.py)."""
+    import urllib.request
 
     project = _project(args)
-    store, events = _store(project)
-    cfg = project.config
+    store, _ = _store(project)
     ctl = store.runtime().get("control") or {}
     if ctl.get("port"):
-        import urllib.request
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{ctl['port']}/health", timeout=3)
             return _chat_attached(project, store, int(ctl["port"]))
         except OSError:
             print(f"[agents] the host's control endpoint on port {ctl['port']} is not answering.")
-    print("[agents] `orchestra-agents run` is not running; starting a temporary supervisor session for this chat.")
-    sid = "supervisor"
-    role = ROLES["supervisor"]
-    proc = get_harness(cfg.harness).start(SessionSpec(
-        session_id=sid, session_dir=project.sessions_dir, cwd=project.repo_root,
-        system_prompt=agents.role_prompt(project, "supervisor"), role="supervisor", tool_groups=tuple(role.tools),
-        env={"ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_REPO": str(project.repo_root), "ORCHESTRA_TICKET": ""},
-        log_path=project.logs_dir / "agents" / "supervisor.stderr.log",
-        model=cfg.model, provider=cfg.provider, thinking=cfg.thinking))
-    try:
-        proc.open()
-    except Exception as e:  # noqa: BLE001 - a session that will not open still gets its turn; say what happened
-        print(f"[agents] could not open the session yet: {e}")
-    store.set_session(sid, kind="supervisor", status="idle", pid=proc.pid or os.getpid(),
-                      session_file=proc.session_file, harness=proc.harness_name)
-    _, offset = events.read(0, limit=1)
-    print(f"Supervisor for {project.key} ({cfg.harness}: {cfg.provider or ''}/{cfg.model or 'default'}). Ctrl-D or 'exit' to leave.\n")
-    try:
-        while True:
-            try:
-                line = input("you> ").strip()
-            except EOFError:
-                break
-            if line in ("exit", "quit"):
-                break
-            if not line:
-                continue
-            new, offset = events.read(offset)
-            new = [e for e in new if e["type"] not in ("session.started", "session.settled")]
-            prefix = agents.supervisor_context(tooling.snapshot(project, store, "supervisor"), new, project, store)
-            store.set_session(sid, status="running", started_at=time.time())
-            events.emit("session.started", session=sid, kind="supervisor")
-            res = proc.prompt(prefix + line, cfg.turn_timeout or None, on_event=_print_event, idle_timeout=cfg.silence_timeout)
-            store.set_session(sid, status="idle", last_text=(res.text or "")[-500:], settled_at=time.time())
-            events.emit("session.settled", session=sid)
-            if res.error or res.timed_out:
-                print(f"[agents] turn ended: {res.error or 'timed out'}")
-    finally:
-        proc.close()
-        store.set_session(sid, status="idle", pid=None)
-    return 0
+    print("[agents] the Supervisor is reachable while `orchestra-agents run` is up; start it first.")
+    return 1
 
 
 def cmd_roles(args) -> int:

@@ -22,7 +22,7 @@ from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
-MARKER_TYPES = ("session.started", "turn.timed_out", "turn.error", "turn.interrupted", "agent.killed", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted")
+MARKER_TYPES = ("session.started", "turn.timed_out", "turn.error", "turn.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted")
 
 
 def _alive(pid) -> bool:
@@ -40,10 +40,14 @@ def plugin(orchestra_project) -> Plugin:
 
 
 def declared(project) -> list[Declared]:
-    """The agents, for Orchestra's Machines page before they run: one AI agent each, and the host."""
+    """The agents, for Orchestra's Machines page before they run: the host, the resident and
+    custom agents, and the per-ticket roles the agents serve (a role another machine fills is
+    that machine's, not declared here)."""
     from .org import all_agents
     out = [Declared("agents", "program", "Runs the AI agents: their sessions, wake-ups, and the task system's assignments.", "continuous")]
     for a in all_agents(project).values():
+        if a.builtin and not a.resident and a.name not in project.config.serves:
+            continue
         mode = {"continuous": "continuous", "scheduled": "scheduled", "ad_hoc": "ad hoc"}.get(a.kind, "ad hoc")
         out.append(Declared(a.name, "agent", a.description, mode, sorted({w.split(":")[0] for w in a.wake_on})))
     return out
@@ -94,11 +98,12 @@ def router(project) -> APIRouter:
 
     @r.get("/state")
     async def state() -> dict:
-        """The agents' sessions (alive or not), for the Agents page."""
+        """The agents' sessions (alive or not) and the teams' probes, for the Agents page."""
         sessions = store.sessions()
         for s in sessions:
             s["alive"] = _alive(s.get("pid"))
-        return {"ok": True, "now": time.time(), "project": {"key": project.key}, "sessions": sessions,
+        probes = [{"name": n, **store.probe_state(n)} for n in store.probes() if not store.probe_state(n).get("removed")]
+        return {"ok": True, "now": time.time(), "project": {"key": project.key}, "sessions": sessions, "probes": probes,
                 "control": store.runtime().get("control") or {}}
 
     @r.post("/control")
@@ -215,7 +220,7 @@ def router(project) -> APIRouter:
     @r.get("/eventmap")
     async def eventmap() -> dict:
         """Who wakes whom through which events (the Agents page's map): the intended bindings
-        (each agent's wake_on and emits, team emits, probes, the built-in loop's own conditions)
+        (each agent's wake_on and emits, team emits, probes, the task system's and the host's)
         and what was observed on the bus over the last 24 hours, by the machine that sent it."""
         import datetime as _dt
 
@@ -233,8 +238,6 @@ def router(project) -> APIRouter:
             t, _, f = w.partition(":")
             return t, f or None
         for sid, sb in SYSTEM_BINDINGS.items():
-            if sid == "merge_gate" and project.config.work != "code":
-                continue                                          # tasks: nothing is merged
             node("sys:" + sid, "system", sid.replace("_", " "), description=sb["description"])
             for e in sb["emits"]:
                 t, f = split(e)
@@ -257,7 +260,7 @@ def router(project) -> APIRouter:
             for w in ag.wake_on:
                 t, f = split(w)
                 node("ev:" + t, "event", t)
-                edges.append({"from": "ev:" + t, "to": "agent:" + ag.name, "kind": "wakes", "filter": f, "loop": ag.builtin})
+                edges.append({"from": "ev:" + t, "to": "agent:" + ag.name, "kind": "wakes", "filter": f})
             for e in ag.emits:
                 t, f = split(e)
                 node("ev:" + t, "event", t)

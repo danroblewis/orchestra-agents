@@ -1,9 +1,8 @@
-"""Agents and teams as data, behind a store. SPEC.md section 4.3 and
-docs/proposals/teams-and-roles.md (Stage 2).
+"""Agents and teams as data, behind a store (SPEC.md: the organisation).
 
 Three things, kept apart on purpose:
 
-- a **role** (``orchestra/roles.py``) describes a capability, like a job description. It
+- a **role** (``roles.py``) describes a capability, like a job description. It
   has no runtime: it cannot be scheduled, hold a session, or receive a message;
 - an **agent** is an instance of one or more roles placed in a team. It is what runs: it
   has a kind and a session policy, and it is what gets paused, restarted, messaged, and
@@ -16,9 +15,8 @@ Three things, kept apart on purpose:
 
 Built-in agents and teams are declared here from the built-in roles. Custom ones live in
 the repository under ``.orchestra/agents/`` and ``.orchestra/teams/``; a team's working
-space is ``.orchestra/spaces/<team>/``. Stage 1 custom roles that carry their own wake
-rules are exposed as implicit agents of the same name, so nothing created before teams
-existed stops running."""
+space is ``.orchestra/spaces/<team>/``. A custom role record that carries its own wake
+rules is exposed as an implicit agent of the same name."""
 
 from __future__ import annotations
 
@@ -52,8 +50,9 @@ _CUSTOM_TYPE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
 
 def event_matches(wake_on: list[str], ev: dict) -> bool:
-    """`type` matches the event type; `type:x` also needs x to be the transition target,
-    the status, the probe name, or the subject of an agent-emitted event."""
+    """`type` matches the event type; `type:x` also needs x to be the transition target, the
+    status, the probe name, the role an attention event is addressed to, or the subject of an
+    agent-emitted event."""
     for w in wake_on:
         t, _, suffix = w.partition(":")
         if ev.get("type") != t:
@@ -85,8 +84,8 @@ class AgentDef:
     created_at: str = field(default_factory=now)
     updated_at: str = field(default_factory=now)
     builtin: bool = False
-    source: str = "agent"                 # agent | role (implicit, from a Stage 1 role record)
-    triggers: list[str] = field(default_factory=list)   # built-ins: conditions the loop detects that are not events
+    source: str = "agent"                 # agent | role (implicit, from a role record with wake rules)
+    triggers: list[str] = field(default_factory=list)   # built-ins: what else wakes them, which is not an event on the bus
     emits: list[str] = field(default_factory=list)      # built-ins: event types their actions cause
 
     @property
@@ -134,9 +133,7 @@ class AgentDef:
             raise OrgError("a scheduled agent needs `every` or `at`")
 
     def matches_event(self, ev: dict) -> bool:
-        """Built-in agents' wake lists describe what the loop does for them (it calls their
-        wake-ups directly); only custom agents subscribe to the event log."""
-        return not self.builtin and event_matches(self.wake_on, ev)
+        return event_matches(self.wake_on, ev)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -388,26 +385,22 @@ def all_teams(project: Project) -> dict[str, TeamDef]:
 
 
 def all_agents(project: Project) -> dict[str, AgentDef]:
-    """Built-in agents, implicit agents for Stage 1 roles that carry wake rules and have
-    no explicit agent, and the project's own agents, by name."""
-    out = built_in_agents()
+    """Built-in agents (the per-ticket ones only for the roles these agents serve: a role another
+    machine fills is not an agent here), implicit agents for role records that carry wake rules
+    and have no explicit agent, and the project's own agents, by name."""
+    out = {n: a for n, a in built_in_agents().items() if a.resident or n in project.config.serves}
     explicit = {a.name: a for a in org_store(project).list_agents()}
-    for a in explicit.values():
-        # A record from before the kinds were pinned down: "continuous" with an ephemeral
-        # session is an ad hoc agent on events. Read it as that; update_agent fixes the file.
-        if a.kind == "continuous" and a.session == "ephemeral":
-            a.kind = "ad_hoc"
     for r in all_roles(project).values():
         if r.builtin or r.name in explicit or not (r.wake_on or r.every or r.at):
-            continue   # a role created under Stage 2 carries no wake rules: it runs only through an agent
+            continue   # a role without wake rules runs only through an agent
         kind = "scheduled" if (r.every or r.at) else "continuous"
         out[r.name] = AgentDef(name=r.name, roles=[r.name], kind=kind, session=r.session, wake_on=list(r.wake_on),
                                every=r.every, at=r.at, description=r.description, created_by=r.created_by,
                                created_at=r.created_at, updated_at=r.updated_at, source="role")
     out.update(explicit)
     # A team's record is authoritative for who is in it: an agent it names as lead or member
-    # belongs to it even when the agent's own record (or a Stage 1 role record, which has no
-    # team field) says nothing, or says something older.
+    # belongs to it even when the agent's own record (or a role record, which has no team
+    # field) says nothing, or says something older.
     for t in all_teams(project).values():
         for name in t.agents:
             if name in out and not out[name].builtin and out[name].team != t.name:
@@ -440,12 +433,15 @@ def effective_tools(agent: AgentDef, roles: dict, teams: dict[str, TeamDef]) -> 
     """Tool groups an agent runs with: its roles' groups, its team chain's granted groups,
     and `team` for every agent in a team, so a member can reach its lead with
     message_agent and read the organisation. Who may message whom is enforced in the
-    API by the tree, not by the grant."""
+    API by the tree, not by the grant. A worker or reviewer on a ticket gets its role's
+    exit tool and nothing else."""
     out: list[str] = []
     for r in agent.roles:
         for g in (roles[r].tools if r in roles else ()):
             if g not in out:
                 out.append(g)
+    if agent.builtin and not agent.resident:
+        return tuple(out)
     for t in team_chain(teams, agent.team):
         for g in t.tool_groups:
             if g not in out:

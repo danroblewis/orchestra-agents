@@ -10,7 +10,7 @@ cannot be expressed that way yet, say so and find out what is missing before cre
 
 ## The system around you
 
-- A programmatic scheduler picks OPEN tickets whose dependencies are DONE and gives each to a
+- The task system's scheduler offers OPEN tickets whose dependencies are DONE, each to a
   **worker**, an AI agent with its own scratch folder, which does the task (research, analysis,
   writing, calculation) and reports a result. A **reviewer** then checks the result; an approved
   ticket is DONE, a rejected one goes back to its worker with the feedback. Tasks here are not

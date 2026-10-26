@@ -3,7 +3,7 @@
 Codex has no resident process either: each turn is ``codex exec`` reading the prompt from
 stdin, streaming ``--json`` events (``thread.started``, ``turn.started``, ``item.*``,
 ``turn.completed`` / ``turn.failed``), and exiting. Codex assigns the thread id on the first
-turn; later turns are ``codex exec resume <thread_id>``. Orchestra's tools reach the model
+turn; later turns are ``codex exec resume <thread_id>``. The agents' tools reach the model
 through the MCP server in ``mcp.py``, declared with a ``-c mcp_servers.orchestra=...``
 override, and the role prompt rides along as ``developer_instructions``. The transcript is
 Codex's own rollout file under ``$CODEX_HOME/sessions/``."""

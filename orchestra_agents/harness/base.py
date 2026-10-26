@@ -1,15 +1,15 @@
-"""The harness interface: how Orchestra drives an agent session, whichever product runs it.
+"""The harness interface: how the host drives an agent session, whichever product runs it.
 
-A *harness* is an agent runner (Pi, Claude Code, Codex, OpenCode). Orchestra needs four
-things from one, and nothing else:
+A *harness* is an agent runner (Pi, Claude Code, Codex). The host needs four things from one,
+and nothing else:
 
 1. ``start(spec)`` opens a named, resumable session with a system prompt, a working
-   directory, and a set of Orchestra tool groups.
+   directory, and a set of tool groups.
 2. ``session.prompt(text, timeout, on_event)`` runs one turn to completion and returns
-   its final text; events arrive in the **normalized** vocabulary below so the loop and
+   its final text; events arrive in the **normalized** vocabulary below so the host and
    the UI never see harness-specific shapes.
 3. ``session.session_file`` names the harness's own transcript, which is the only one
-   Orchestra keeps (it never writes a parallel log); ``harness.read_transcript`` parses
+   the host keeps (it never writes a parallel log); ``harness.read_transcript`` parses
    it into a common message list.
 4. ``kill()`` / ``close()`` end a turn or the session.
 
@@ -81,7 +81,7 @@ class _Deadlines:
 @dataclass
 class SessionSpec:
     """Everything a harness needs to open a session. ``env`` carries the ORCHESTRA_*
-    variables the Orchestra tools read (repo, role, ticket, tool groups)."""
+    variables the agents' tools read (repo, role, ticket, tool groups)."""
 
     session_id: str
     session_dir: Path          # Orchestra's per-project sessions directory
@@ -126,7 +126,7 @@ class AgentSession(ABC):
     def compact(self) -> dict | None:
         """Ask the harness to summarise the older part of this session's context in place,
         keeping the transcript. Returns the harness's result (tokens before and after) or
-        None when this harness cannot compact; the loop then falls back to rotation."""
+        None when this harness cannot compact; the host then falls back to rotation."""
         return None
 
     @property

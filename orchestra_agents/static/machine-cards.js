@@ -46,7 +46,9 @@
     // the stored text is a message's tail: start it at a sentence, not mid-word
     const tail = s ? s.last_text || "" : "", cut = tail.search(/[.!?]\s+[A-Z*`(]/);
     const role = roleOf(m), say = tail.length >= 290 && cut >= 0 && cut < 160 ? tail.slice(cut + 1).trim() : tail;
-    const text = m.unseen ? "declared, not run yet" : say || (typeof agentStatus === "function" ? agentStatus(s, D.now, agentOf(m)).title : "");
+    const a = agentOf(m), next = a.next_scheduled_at && !(s && s.status === "running") ? `next wake-up in ${ago(a.next_scheduled_at - D.now)}` : "";
+    // with nothing said yet the status line already names the next wake-up
+    const text = m.unseen ? "declared, not run yet" : say ? [say, next].filter(Boolean).join(" · ") : typeof agentStatus === "function" ? agentStatus(s, D.now, a).title : "";
     return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_((m.declared || {}).description || role)}">
         <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${e_(m.id)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
   }

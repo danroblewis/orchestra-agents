@@ -44,20 +44,19 @@ async function openTranscript(id) {
 
 function transcriptHead(id, s, d) {
   const st = agentStatus(s, Date.now() / 1000, { host_alive: d.host && d.host.alive });
-  const state = st.text + (st.title ? " · " + st.title : "");
   const when = (t) => (t ? new Date(t * 1000).toLocaleString() : "—");
   const perTicket = /^(worker|reviewer)-/.test(id);
   const agentLink = s.kind && !perTicket ? `<a href="/agents#agent=${encodeURIComponent(s.kind)}" class="muted" style="margin-left:auto;font-size:11px" title="The agent's definition, schedule, and every run it has made">↩ ${esc(s.kind)}: definition and all runs</a>` : "";
-  // a harness that keeps a process between turns (Pi) has its own pid; otherwise the host holds the session open
-  const process = !s.alive ? "none" : d.host && s.pid === d.host.pid ? `kept by orchestra-agents run (pid ${s.pid})` : `pid ${s.pid} (the harness's own process)`;
-  return `<h3>${esc(id)} <span class="muted">${esc(state)}</span>${agentLink}</h3>
-    <div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${esc(process)}</div>
+  // a harness that keeps a process between turns has its own pid; one that starts a process per turn has none between them
+  const process = s.pid ? `pid ${s.pid} (the turn's process)` : s.alive ? "none between turns; the session is kept by orchestra-agents run" : "none";
+  const kv = `<div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${esc(process)}</div>
     ${s.ticket_id ? `<div>ticket</div><div><a href="#" onclick="(window.openTicket ? openTicket('${esc(s.ticket_id)}') : (location.href='/tickets#ticket=${esc(s.ticket_id)}'));return false">${esc(s.ticket_id)}</a></div>` : ""}
     <div>last started</div><div>${when(s.started_at)}${s.status === "running" ? ` <span class="muted">(turn running ${ago((Date.now() / 1000) - s.started_at)})</span>` : ""}</div>
-    <div>doing now</div><div>${sessionChip(s, Date.now() / 1000)}</div>
     <div>last output</div><div>${s.last_output_at ? ago((Date.now() / 1000) - s.last_output_at) + " ago" : "—"}</div>
-    <div>last settled</div><div>${when(s.settled_at)}</div>
-    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>
+    <div>last turn ended</div><div>${when(s.settled_at)}</div>
+    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>`;
+  return `<h3>${esc(id)} <span class="chip ${st.cls}" title="${esc(st.title)}"><span class="dot"></span>${esc(st.text)}</span>${agentLink}</h3>
+    ${id === "supervisor" ? `<details class="started"><summary class="muted">session details</summary>${kv}</details>` : kv}
     ${s.status === "running" && (s.partial_text || s.thinking_chars) ? `<div class="msg assistant inprogress"><div class="r">reply in progress <span class="muted">· not in the transcript until the message completes${s.thinking_chars ? ` · ${Number(s.thinking_chars).toLocaleString()} chars of thinking so far` : ""}</span></div>${s.partial_text ? md(s.partial_text) : '<span class="muted">(thinking; no reply text yet)</span>'}</div>` : ""}`;
 }
 
@@ -155,7 +154,7 @@ function renderToolCall(t) {
 
 function msgTime(m) {
   if (!m.ts) return "";
-  // Pi records entry timestamps as ISO strings; some message bodies carry epoch millis.
+  // a harness may record timestamps as ISO strings or epoch millis (or seconds).
   const t = typeof m.ts === "number" ? (m.ts > 1e12 ? m.ts : m.ts * 1000) : Date.parse(m.ts);
   if (!isFinite(t)) return "";
   return `<span class="muted num" style="margin-left:8px">${new Date(t).toLocaleTimeString()} · ${ago((Date.now() - t) / 1000)} ago</span>`;
@@ -171,7 +170,7 @@ function renderMarker(e) {
   else if (e.type === "turn.error") text = `✖ Orchestra ended this turn: ${esc(e.error || "harness error")}`;
   else if (e.type === "turn.interrupted") text = `■ Orchestra was restarted or stopped during this turn, which cut it off. ${esc(e.reason || "")}`;
   else if (e.type === "agent.crashed") text = `✖ The agent's process exited on its own between turns (crash ${e.count || 1}); Orchestra is restarting it.${e.stderr ? ` Last stderr: <code>${esc(e.stderr.trim().split("\n").slice(-1)[0].slice(0, 160))}</code>` : ""}`;
-  else if (e.type === "agent.crash_loop") text = `✖ Crash loop: ${e.count} exits in fifteen minutes. The agent is paused and the Supervisor has been asked to look. Resume it from the Agents page once fixed.`;
+  else if (e.type === "agent.crash_loop") text = `✖ Crash loop: ${e.count} exits in fifteen minutes. The agent is paused after a crash loop and the Supervisor has been asked to look: ask the Supervisor to resume it once fixed.`;
   else if (e.type === "agent.compacted" && e.mode === "auto") text = `⇣ Context is bounded by the harness itself (${esc(e.reason || "")}); Orchestra leaves this session alone.`;
   else if (e.type === "agent.compacted") text = `⇣ Context compacted by the harness${e.tokens_before ? `: ${Number(e.tokens_before).toLocaleString()} → ${Number(e.tokens_after || 0).toLocaleString()} tokens` : ""} (${esc(e.reason || "")}). Older messages became a summary the agent keeps; the transcript is unchanged.`;
   else if (e.type === "agent.reset") text = `⟲ Session started over by ${esc(e.by || "the operator")}${e.reason ? ` (${esc(e.reason)})` : ""}. The conversation before this point is archived as run <code>${esc(e.archived || "")}</code>; the agent keeps the project context and its team's space, not its memory of the chat.`;
@@ -255,10 +254,11 @@ function runningPhase(s, now) {
     const sinceTok = s.last_token_at ? now - s.last_token_at : 0;
     return { cls: sinceTok > 60 ? "waiting" : "working", text: `receiving tokens · last token ${ago(sinceTok)} ago`, title: turn };
   }
-  // The session is mid-turn and its stream has been silent since phase_since. We report
-  // how long; we do not know why.
+  // The session is mid-turn and its stream has been quiet since phase_since: normal while a
+  // tool runs or the model thinks; past a minute it is worth saying how long.
   const wait = now - (s.phase_since || s.started_at || now);
-  return { cls: wait > 60 ? "waiting" : "working", text: `no new message for ${ago(wait)}`, title: turn + " · session has not exited and nothing has streamed" };
+  if (wait <= 60) return { cls: "working", text: `working · ${ago(wait)}`, title: `${turn}; quiet since then, which is normal while a tool runs` };
+  return { cls: "waiting", text: `quiet for ${ago(wait)}`, title: `the turn is still running; no output for ${ago(wait)}` };
 }
 function sessionChip(s, now, a) {
   const p = agentStatus(s, now, a);

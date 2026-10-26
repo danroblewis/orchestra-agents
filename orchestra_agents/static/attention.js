@@ -52,21 +52,25 @@
     .att-item .att-acts { grid-column:2; grid-row:1 / span 2; display:flex; flex-direction:column; gap:6px; align-items:stretch }
     .att-item button { padding:3px 10px; border-radius:6px; border:1px solid var(--border2, #2a3142); background:var(--panel2, #151a24); color:var(--text, #e6e8ee); cursor:pointer; font-size:12px }
     .att-item button.primary { border-color:#f59e0b; color:#fbbf24 }
-    @media (max-width:640px) { .att-bar .att-what { white-space:normal } .att-item { grid-template-columns:1fr } .att-item .att-acts { grid-column:1; grid-row:auto; flex-direction:row } }`;
+    @media (max-width:640px) {
+      .att-bar .att-what { white-space:normal } .att-item { grid-template-columns:1fr } .att-item .att-acts { grid-column:1; grid-row:auto; flex-direction:row }
+      /* the navigation is one line that does not wrap: the button shrinks to its icon and count and goes first, the project name goes, and the line scrolls sideways */
+      .att-btn { order:-1; margin:0 6px 0 0; padding:3px 7px } .att-btn .att-word { display:none } nav #proj { display:none }
+      #nav { overflow-x:auto; scrollbar-width:none } #nav::-webkit-scrollbar { display:none } }`;
   document.head.appendChild(css);
 
-  let A = { blocked: [], message: null, count: 0, working: false };
+  let A = { blocked: [], message: null, count: 0, working: false };   // blocked: the task system's [{id, reason}]
   let dismissed = "";                       // the banner's content when the viewer closed it
+  let rendered = "";                        // the banner's content as last built: a click never lands on a replaced button
   const baseTitle = document.title;
   const sig = () => JSON.stringify([A.blocked.map((b) => b.id), A.message && A.message.at]);
   const ago_ = (t) => (typeof ago === "function" && t ? ago(Date.now() / 1000 - t) : "");
-  const since = (iso) => { const t = Date.parse(iso || ""); return isFinite(t) ? ago_(t / 1000) : ""; };
   const e_ = (s) => (typeof esc === "function" ? esc(s) : String(s ?? ""));
 
   // the navigation button
   const btn = document.createElement("button");
   btn.className = "att-btn"; btn.type = "button";
-  btn.innerHTML = '<span>💬 Supervisor</span><span class="att-dot" title="the Supervisor is working"></span><span class="att-n"></span>';
+  btn.innerHTML = '<span>💬<span class="att-word"> Supervisor</span></span><span class="att-dot" title="the Supervisor is working"></span><span class="att-n"></span>';
   btn.onclick = () => openSupervisor();
   const nav = document.getElementById("nav");
   if (nav) nav.insertBefore(btn, document.getElementById("proj"));
@@ -87,8 +91,11 @@
     if (A.message) parts.push(`<b>the Supervisor wrote to you</b> ${ago_(A.message.at)} ago`);
     const show = parts.length && sig() !== dismissed;
     bar.classList.toggle("on", !!show);
-    if (show) bar.innerHTML = `<span>⚠</span><span class="att-what">${parts.join(" · ")}</span>
+    if (show && sig() !== rendered) {
+      rendered = sig();
+      bar.innerHTML = `<span>⚠</span><span class="att-what">${parts.join(" · ")}</span>
       <button onclick="window.SupervisorAttention.open()">Review &amp; answer</button><button class="att-x" title="hide until something changes" onclick="window.SupervisorAttention.dismiss()">✕</button>`;
+    }
     const panel = document.getElementById("att-panel");
     if (panel) panel.outerHTML = panelHtml();
   }
@@ -96,7 +103,7 @@
   function panelHtml() {
     if (!A.count) return '<div id="att-panel"></div>';
     const items = A.blocked.map((b) => `<div class="att-item">
-        <div class="att-t"><code>${e_(b.id)}</code> ${e_(b.title)} <span class="muted" style="font-weight:400">· blocked ${since(b.since)}</span></div>
+        <div class="att-t"><code>${e_(b.id)}</code> <span class="muted" style="font-weight:400">· blocked</span></div>
         <div class="att-r">${e_(b.reason) || "(no reason recorded)"}</div>
         <div class="att-acts"><button class="primary" onclick="window.SupervisorAttention.answer('${e_(b.id)}')">Answer</button>
           <button onclick="window.openTicket ? openTicket('${e_(b.id)}') : (location.href='/tickets#ticket=${e_(b.id)}')">Ticket</button></div></div>`);
@@ -124,10 +131,14 @@
 
   // the Supervisor's chat, with what waits listed above the message box
   async function openSupervisor(prefill) {
+    if (typeof window.openDrawer === "function") openDrawer('<h3>Supervisor</h3><div class="empty">opening the Supervisor…</div>');   // the scripts take a moment
     await ready();
     await openTranscript("supervisor");
-    const head = document.getElementById("transcript-head");
-    if (head && !document.getElementById("att-panel")) head.insertAdjacentHTML("afterend", panelHtml());
+    const chat = document.getElementById("chat"), head = document.getElementById("transcript-head");
+    if (!document.getElementById("att-panel")) {
+      if (chat) chat.insertAdjacentHTML("beforebegin", panelHtml());
+      else if (head) head.insertAdjacentHTML("afterend", panelHtml());
+    }
     if (prefill) {
       const ta = document.getElementById("chat-input");
       if (ta && !ta.disabled) { ta.value = prefill; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
@@ -147,10 +158,7 @@
   window.SupervisorAttention = {
     open: () => openSupervisor(),
     dismiss: () => { dismissed = sig(); render(); },
-    answer: (id) => {
-      const b = A.blocked.find((x) => x.id === id);
-      openSupervisor(`About ${id}${b ? ` ("${b.title}")` : ""}, which is blocked: `);
-    },
+    answer: (id) => openSupervisor(`About ${id}, which is blocked: `),
   };
 
   const aside = () => { const t = window.TaskAttention; if (!t || !t.standAside) return false; t.standAside(); return true; };

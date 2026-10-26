@@ -63,12 +63,18 @@
   .evmap .dim { opacity:.1 } .evmap .n { cursor:grab }
   .evmap .legend { color:var(--muted); font-size:10.5px; margin-top:6px; display:flex; gap:14px; flex-wrap:wrap } .evmap .legend i { display:inline-block; width:18px; border-top:2px solid; margin-right:5px; vertical-align:middle }
   .evmap .loops { font-size:12px; color:var(--text2); margin-top:8px } .evmap .loops b { color:#fcd34d } .evmap .loops code { font-size:10.5px }
+  @media (max-width:640px) {
+    .tl .row, .tl .axis { grid-template-columns:1fr; height:auto; gap:4px } .tl .row { padding:4px 0 } .tl .next { text-align:left }
+    .tl .axis .marks span:not(:first-child):not(:last-child) { display:none }
+    .arow { grid-template-columns:22px 1fr auto } .arow .name { white-space:normal } .arow .sched, .arow .ctls { grid-column:1 / -1 }
+    .evmap svg { height:auto } .def { grid-template-columns:1fr; gap:2px 0 } .def > div:nth-child(even) { margin-bottom:6px }
+  }
 </style>
 </head>
 <body>
 <nav id="nav"><a href="/">Dashboard</a><a href="/machines">Machines</a><a href="/dynamics">Dynamics</a><a href="/core">Core</a><span class="muted" id="proj"></span><span class="muted" id="conn" style="margin-left:auto"></span></nav>
 <div class="org">
-  <p class="intro">Who is in this project and what they are for; the Dashboard shows what they are doing right now. A <b>role</b> is a job description. An <b>agent</b> is an instance of roles in a team and is what runs: <span class="tag k-continuous">continuous</span> agents are processes that are always up and wake on events, <span class="tag k-scheduled">scheduled</span> agents run on an interval or a daily time, <span class="tag k-ad_hoc">ad hoc</span> agents get a fresh session each time their lead briefs them or a subscribed event fires. A <b>team</b> has one lead, responsibilities it keeps true, access, and a space in the repository. All of it is created in conversation with the Supervisor and stored under <code>.orchestra/</code>.</p>
+  <p class="intro">Who is in this project and what they are for; the Dashboard shows what they are doing right now. A <b>role</b> is a job description. An <b>agent</b> is an instance of roles in a team and is what runs: <span class="tag k-continuous">continuous</span> agents are processes that are always up and wake on events, <span class="tag k-scheduled">scheduled</span> agents run on an interval or a daily time, <span class="tag k-ad_hoc">ad hoc</span> agents get a fresh session each time their lead briefs them or a subscribed event fires. A <b>team</b> has one lead, responsibilities it keeps true, access, and a space in the repository. All of it is created, paused, reset or removed in conversation with the Supervisor and stored under <code>.orchestra/</code>; this page reads.</p>
   <div id="evmap-host"></div>
   <div id="list"></div>
 </div>
@@ -81,14 +87,6 @@
 const API = AGENTS_API;
 function renderNav() {}                                     // the navigation is Orchestra's now
 let STATE = null, ORG = null;
-async function control(body) { const r = await fetch(API + "/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) alert(await r.text()); refresh(); }
-function act(action, name) {
-  const warn = { reset_agent: `Start ${name} over with an empty transcript? Its conversation so far is kept as an archived run, but the agent will not remember it. Do this when its session has grown so long that every turn is slow.`,
-                 delete_agent: `Delete agent ${name}? Its sessions are archived and its record is removed from .orchestra/agents/.`,
-                 delete_role: `Delete role ${name}? Only possible when no agent uses it.`, delete_team: `Delete team ${name}? Only possible when it has no agents or sub-teams.` }[action];
-  if (warn && !confirm(warn)) return;
-  control({ action, name });
-}
 const sessionOf = (a) => STATE && STATE.sessions.find((x) => x.id === a.session_id);
 let HORIZON = 8 * 3600;
 try { HORIZON = Number(localStorage.getItem("orchestra.tl.horizon")) || HORIZON; } catch (e) {}
@@ -119,7 +117,7 @@ function agentGraph(m) {
   const nodes = Object.fromEntries(m.nodes.map((n) => [n.id, n]));
   const evNodes = {}, links = {};
   const evNode = (type, filter, custom) => { const id = "ev:" + type + (filter ? ":" + filter : "");
-    evNodes[id] = evNodes[id] || { id, kind: "event", label: filter && type === "ticket.transitioned" ? filter : filter ? type + ":" + filter : type, type, filter, custom: !!custom, cnt: (filter ? m.counts[type + ":" + filter] : m.counts[type]) || 0 }; return id; };
+    evNodes[id] = evNodes[id] || { id, kind: "event", label: filter ? type + " → " + filter : type, labels: filter ? [type, "→ " + filter] : undefined, type, filter, custom: !!custom, cnt: (filter ? m.counts[type + ":" + filter] : m.counts[type]) || 0 }; return id; };
   const link = (a, b, extra) => { const k = a + ">" + b; links[k] = links[k] || { source: a, target: b, seen: 0 }; links[k].seen += extra.seen || 0; };
   const emits = m.edges.filter((e) => e.to.startsWith("ev:")), wakes = m.edges.filter((e) => e.from.startsWith("ev:"));
   const typeOf = (id) => nodes[id].label, isCustom = (id) => !!nodes[id].custom;
@@ -133,21 +131,23 @@ function agentGraph(m) {
   // picture is the communication pattern rather than the catalogue of everything logged.
   let ls = Object.values(links);
   if (!window.EV_SHOW_ALL) { const watched = new Set(ls.filter((l) => l.source.startsWith("ev:")).map((l) => l.source)); ls = ls.filter((l) => !l.target.startsWith("ev:") || watched.has(l.target)); }
-  // Collapse event nodes that connect to exactly the same emitters and the same subscribers
-  // into one multi-line node: the map is about who talks to whom, not the catalogue of names.
+  // Collapse the variants of one event type that connect to exactly the same emitters and the
+  // same subscribers into one box (its first line the type, then the variants): the map is about
+  // who talks to whom, not the catalogue of names. Different types stay apart.
   const sig = {};
   for (const n of Object.values(evNodes)) {
     const ins = ls.filter((l) => l.target === n.id).map((l) => l.source).sort().join(","), outs = ls.filter((l) => l.source === n.id).map((l) => l.target).sort().join(",");
     if (!ins && !outs) continue;
-    (sig[ins + "|" + outs] = sig[ins + "|" + outs] || []).push(n);
+    const k = n.type + "|" + ins + "|" + outs;
+    (sig[k] = sig[k] || []).push(n);
   }
   const alias = {};
   for (const group of Object.values(sig)) {
     if (group.length < 2) continue;
     group.sort((a, b) => b.cnt - a.cnt || a.label.localeCompare(b.label));
     const id = "ev:group:" + group.map((n) => n.id).join("+");
-    evNodes[id] = { id, kind: "event", label: group[0].label, labels: group.map((n) => n.label), type: "group", filter: null,
-                    custom: group.some((n) => n.custom), cnt: group.reduce((a, n) => a + n.cnt, 0) };
+    evNodes[id] = { id, kind: "event", label: group[0].type, labels: [group[0].type, ...group.map((n) => "→ " + (n.filter || "(any)"))], type: group[0].type, filter: null,
+                    custom: group.some((n) => n.custom), cnt: group.reduce((a, n) => a + n.cnt, 0), variants: group.map((n) => `${n.label}: ${n.cnt}/24h`) };
     for (const n of group) { alias[n.id] = id; delete evNodes[n.id]; }
   }
   if (Object.keys(alias).length) {
@@ -174,7 +174,7 @@ function eventMap(m) {
   if (!g.nodes.length) return "";
   const cycles = sccs(g.nodes, g.links);
   const inCyc = new Set(cycles.flat());
-  const name = (id) => { const n = g.nodes.find((x) => x.id === id); return n ? (n.labels ? n.labels.join("/") : n.label) : id; };
+  const name = (id) => { const n = g.nodes.find((x) => x.id === id); return n ? (n.variants ? `${n.label} (${n.labels.slice(1).join(", ")})` : n.label) : id; };
   const loops = cycles.map((c) => { const es = g.links.filter((l) => c.includes(l.source) && c.includes(l.target));
     const agents = c.filter((id) => !id.startsWith("ev:")).map(name);
     return `<div><b>${esc(agents.join(" ⇄ "))}</b>: ${es.map((l) => `${esc(name(l.source))} → ${esc(name(l.target))}`).join(", ")}</div>`; }).join("");
@@ -185,7 +185,9 @@ function eventMap(m) {
 }
 function drawGraph(g, inCyc) {
   const svgEl = document.getElementById("evsvg"); if (!svgEl || typeof d3 === "undefined") return;
-  const W = svgEl.clientWidth || 1000, H = 560;
+  // On a narrow screen the map is laid out 480 wide and the svg scales it down: the boxes keep apart.
+  const W = Math.max(svgEl.clientWidth || 1000, 480), H = W < 640 ? 420 : 560;
+  const short = (l) => (l.length > 26 ? l.slice(0, 25) + "…" : l);
   const svg = d3.select(svgEl).attr("viewBox", `0 0 ${W} ${H}`); svg.selectAll("*").remove();
   const palette = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
   const byName = Object.fromEntries((ORG ? ORG.agents : []).map((a) => [a.name, a]));
@@ -196,7 +198,7 @@ function drawGraph(g, inCyc) {
   const R = 22;
   if (EVSIM) EVSIM.stop();
   const sim = EVSIM = d3.forceSimulation(nodes).force("link", d3.forceLink(links).id((d) => d.id).distance(110)).force("charge", d3.forceManyBody().strength(-520))
-    .force("center", d3.forceCenter(W / 2, H / 2)).force("collide", d3.forceCollide((n) => n.kind === "event" ? Math.max(46, 10 + ((n.labels || [1]).length - 1) * 6.5 + 26, Math.max(...(n.labels || [n.label]).map((l) => l.length)) * 3.4 + 20) : R + 30));
+    .force("center", d3.forceCenter(W / 2, H / 2)).force("collide", d3.forceCollide((n) => n.kind === "event" ? Math.max(46, 10 + ((n.labels || [1]).length - 1) * 6.5 + 26, Math.max(...(n.labels || [n.label]).map((l) => Math.min(l.length, 26))) * 3.4 + 20) : R + 30));
   const cyc = (l) => inCyc.has(l.source.id || l.source) && inCyc.has(l.target.id || l.target);
   const path = svg.append("g").selectAll("path").data(links).join("path").attr("class", (l) => `e ${l.seen ? "seen" : ""} ${cyc(l) ? "cyc" : ""}`).attr("marker-end", (l) => cyc(l) ? "url(#arrc)" : "url(#arr)")
     .attr("data-from", (l) => l.source.id || l.source).attr("data-to", (l) => l.target.id || l.target);
@@ -209,7 +211,7 @@ function drawGraph(g, inCyc) {
     .call(d3.drag().on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; }).on("drag", (ev, d) => { d.fx = ev.x; d.fy = ev.y; }).on("end", (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = d.fy = null; }));
   node.filter((n) => active.has(n.id)).append("circle").attr("class", "halo").attr("r", R + 7).append("title").text("active right now");
   node.filter((n) => n.kind !== "event").append("circle").attr("class", "body").attr("r", R);
-  const evLines = (n) => n.labels || [n.label], evHW = (n) => Math.max(40, Math.max(...evLines(n).map((l) => l.length)) * 3.4 + 12), evHH = (n) => 10 + (evLines(n).length - 1) * 6.5;
+  const evLines = (n) => (n.labels || [n.label]).map(short), evHW = (n) => Math.max(40, Math.max(...evLines(n).map((l) => l.length)) * 3.4 + 12), evHH = (n) => 10 + (evLines(n).length - 1) * 6.5;
   node.filter((n) => n.kind === "event").append("rect").attr("x", (n) => -evHW(n)).attr("y", (n) => -evHH(n)).attr("width", (n) => 2 * evHW(n)).attr("height", (n) => 2 * evHH(n)).attr("rx", 5);
   // Like the Dashboard avatars: the initial inside the colour, the name beneath it in text colour.
   const evText = node.filter((n) => n.kind === "event").append("text").attr("text-anchor", "middle").attr("class", (n) => `ev ${n.custom ? "custom" : ""}`);
@@ -217,9 +219,10 @@ function drawGraph(g, inCyc) {
   node.filter((n) => n.kind !== "event").append("text").attr("text-anchor", "middle").attr("dy", 5).attr("class", "initial").text((n) => n.label[0].toUpperCase());
   node.filter((n) => n.kind !== "event").append("text").attr("text-anchor", "middle").attr("dy", R + 13).attr("class", "name").text((n) => n.label);
   node.append("text").attr("class", "sub").attr("text-anchor", "middle").attr("dy", (n) => n.kind === "event" ? evHH(n) + 12 : R + 24).text((n) => n.kind === "event" ? (n.cnt ? n.cnt + "/24h" : "") : n.team || (n.kind === "system" ? "system" : ""));
-  node.append("title").text((n) => `${n.label}${n.description ? ": " + n.description : ""}`);
+  node.append("title").text((n) => n.variants ? `${n.label}\n${n.variants.join("\n")}` : `${n.label}${n.description ? ": " + n.description : ""}${n.kind === "event" && n.cnt ? ` · ${n.cnt}/24h` : ""}`);
   sim.on("tick", () => {
-    nodes.forEach((n) => { const hw = n.kind === "event" ? Math.max(40, Math.max(...(n.labels || [n.label]).map((l) => l.length)) * 3.4 + 12) + 4 : Math.max(R + 4, n.label.length * 3.3); const hh = n.kind === "event" ? 10 + ((n.labels || [1]).length - 1) * 6.5 + 14 : R + 10; n.x = Math.max(hw, Math.min(W - hw, n.x)); n.y = Math.max(hh, Math.min(H - hh - 20, n.y)); });
+    // every node stays inside the canvas: an event box by its half-width, an agent by its name
+    nodes.forEach((n) => { const hw = n.kind === "event" ? evHW(n) + 4 : Math.max(R + 4, n.label.length * 3.3); const hh = n.kind === "event" ? evHH(n) + 14 : R + 10; n.x = Math.max(hw, Math.min(W - hw, n.x)); n.y = Math.max(hh, Math.min(H - hh - 20, n.y)); });
     path.attr("d", (l) => { const s = l.source, t = l.target;
       if (s === t) return `M${s.x},${s.y - R} C${s.x + 50},${s.y - 70} ${s.x + 70},${s.y - 20} ${s.x + R},${s.y}`;
       const dx = t.x - s.x, dy = t.y - s.y, dist = Math.hypot(dx, dy) || 1, nx = -dy / dist, ny = dx / dist;       // curve so a reverse edge takes the other side
@@ -258,7 +261,7 @@ function timeline(agents, now) {
     return `<div class="row"><span class="lbl"><a href="#" onclick="openAgent('${a.name}');return false">${esc(a.name)}</a> <span class="muted">${a.every ? "every " + esc(a.every) : ""}${a.every && a.at ? ", " : ""}${a.at ? "daily " + esc(a.at) : ""}</span>${evs}</span><div class="track">${dots}</div><span class="next">${next}</span></div>`;
   }).join("");
   const H = HORIZON / 3600, step = H / 4;
-  const marks = [0, 1, 2, 3, 4].map((i) => `<span>${i === 0 ? "now " + clock(now) : "+" + (step * i) + "h"}</span>`).join("");
+  const marks = [0, 1, 2, 3, 4].map((i) => `<span>${i === 0 ? "now " + clock(now) : "+" + (step * i) + "h"}</span>`).join("");   // on a phone only the first and last show
   const pick = [2, 8, 24].map((h) => `<option value="${h * 3600}" ${h * 3600 === HORIZON ? "selected" : ""}>next ${h}h</option>`).join("");
   return `<div class="tl">${html}<div class="axis"><span>scheduled wake-ups · <select onchange="setHorizon(this.value)">${pick}</select></span><div class="marks">${marks}</div><span></span></div></div>`;
 }
@@ -337,21 +340,18 @@ function unfilled(role) {
   return "no agent";
 }
 function statusOf(a, now) {
-  if (a.paused) return `<span class="chip ${a.crash_loop ? "down" : ""}" title="${esc(a.crash_loop || "")}"><span class="dot"></span>${a.crash_loop ? "paused: crash loop" : "paused"}</span>`;
+  if (a.paused) return `<span class="chip ${a.crash_loop ? "down" : ""}" title="${esc(a.crash_loop ? a.crash_loop + ": ask the Supervisor to resume it once fixed" : "paused by the Supervisor; ask it to resume")}"><span class="dot"></span>${a.crash_loop ? "paused after a crash loop" : "paused"}</span>`;
   // the latest session of this agent: its resident one, or the newest of its runs
   const s = sessionOf(a) || (STATE ? STATE.sessions.filter((x) => x.kind === a.name).sort((x, y) => (y.started_at || 0) - (x.started_at || 0))[0] : null) || null;
   return sessionChip(s, now, { ...a, host_alive: !!(STATE && STATE.control && STATE.control.alive) });
 }
 function agentRow(a, lead, now) {
   const letter = a.name[0].toUpperCase();
-  const fresh = a.resident ? `<button class="ctl" onclick="act('reset_agent','${a.name}')" title="Start over with an empty transcript (the old one is archived as a run)">⟲</button>` : "";
-  const ctls = a.builtin ? `${a.name === "supervisor" ? "" : `<button class="ctl" onclick="act('restart_agent','${a.name}')" title="Restart the process; transcript kept">↻</button>`}${fresh}` :
-    `${a.paused ? `<button class="ctl" onclick="act('resume_agent','${a.name}')">▶</button>` : `<button class="ctl" onclick="act('pause_agent','${a.name}')">⏸</button>`}<button class="ctl" onclick="act('restart_agent','${a.name}')" title="Restart the process; transcript kept">↻</button>${fresh}<button class="ctl kill" onclick="act('delete_agent','${a.name}')">✕</button>`;
   return `<div class="arow"><div class="av ${lead ? "lead" : ""}" title="${lead ? "lead" : "member"}">${letter}</div>
     <span class="name"><a href="#" onclick="openAgent('${a.name}');return false">${esc(a.name)}</a>${lead ? ' <span class="tag">lead</span>' : ""}</span>
     <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span>
     <span class="sched" title="${esc(a.description || "")}">${schedule(a)}${a.source === "role" ? ' <span class="tag" title="A role record that is its own agent">from role</span>' : ""}${a.team && a.team_exists === false ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="This agent names a team that has not been created yet. It runs without team responsibilities until the Supervisor creates it.">team ${esc(a.team)} not created yet</span>` : ""}</span>
-    ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one continuing transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button>${ctls}</span></div>`;
+    ${statusOf(a, now)}<span class="ctls"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')" title="${a.resident ? "its one continuing transcript" : `its latest run; ${a.run_count || 0} run${a.run_count === 1 ? "" : "s"} so far, all listed in the agent view`}">transcript${!a.resident && a.run_count ? ` (${a.run_count})` : ""}</button></span></div>`;
 }
 function teamCard(t, byName, now, sub) {
   const agents = t.agents.map((a) => agentRow(byName[a.name] || a, a.name === t.lead, now)).join("") || '<div class="empty">no agents yet</div>';
@@ -360,7 +360,7 @@ function teamCard(t, byName, now, sub) {
   const extra = [(t.emits || []).length ? `emits ${t.emits.map((e) => `<code>${esc(e)}</code>`).join(" ")}` : "", (t.probes || []).length ? `probes ${t.probes.map((p) => `<code>${esc(p.name)}</code>`).join(" ")}` : ""].filter(Boolean).join(" · ");
   return `<div class="team ${sub ? "sub" : ""}"><div class="head"><h3><a href="#" onclick="openTeam('${t.name}');return false">${esc(t.name)}</a></h3>
       ${t.builtin ? '<span class="tag">built-in</span>' : `<span class="tag">${t.tracked ? "space tracked" : "space untracked"}</span>`}
-      <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTeam('${t.name}')">team</button>${t.builtin ? "" : `<button class="ctl kill" onclick="act('delete_team','${t.name}')">delete</button>`}</span></div>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTeam('${t.name}')">team</button></span></div>
     <div class="desc">${esc(t.description || "")}</div>
     ${t.responsibilities_excerpt ? `<div class="resp md">${md(t.responsibilities_excerpt)}</div>` : ""}
     <div class="meta">${access ? "access: " + access : "access: only what its agents' roles carry"} · space <code>${esc(t.space)}</code> · capacity ${t.capacity}${extra ? " · " + extra : ""}</div>
@@ -393,9 +393,8 @@ async function openAgent(name) {
   if (!r.ok) { alert(r.error || "cannot load agent"); return; }
   const a = r.agent, st = r.state || {}, now = ORG ? ORG.now : Date.now() / 1000;
   const tools = Object.entries(r.tool_names || {}).map(([g, names]) => `<div><b>${esc(g)}</b>: ${names.map((n) => `<code>${esc(n)}</code>`).join(" ")}</div>`).join("") || "none";
-  const ctls = a.builtin ? "" : `${a.paused ? `<button class="ctl" onclick="act('resume_agent','${a.name}')">▶ resume</button>` : `<button class="ctl" onclick="act('pause_agent','${a.name}')">⏸ pause</button>`}<button class="ctl" onclick="act('restart_agent','${a.name}')">↻ restart</button><button class="ctl kill" onclick="act('delete_agent','${a.name}')">delete</button>`;
-  openDrawer(`<h3>${esc(a.name)} <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span> <span class="tag">${esc(a.session)}</span> ${a.builtin ? '<span class="tag">built-in</span>' : ""} ${statusOf(a, now)}
-      <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')">${a.resident ? "transcript" : "latest run"}</button>${ctls}<button class="ctl" onclick="closeDrawer()">close</button></span></h3>
+  openDrawer(`<h3>${esc(a.name)} <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span> ${a.builtin ? '<span class="tag">built-in</span>' : ""} ${statusOf(a, now)}
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')">${a.resident ? "transcript" : "latest run"}</button><button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(a.description || "")}</div>
     <div class="def">
       <div>roles</div><div>${(r.roles || []).map((x) => `<a href="#" onclick="openRole('${x.name}');return false">${esc(x.name)}</a>${x.description ? ` <span class="muted">${esc(x.description)}</span>` : ""}`).join("<br>") || "none"}</div>
@@ -417,7 +416,7 @@ async function openRole(name) {
   if (!r.ok) { alert(r.error || "cannot load role"); return; }
   const role = r.role;
   const tools = Object.entries(r.tool_names || {}).map(([g, names]) => `<div><b>${esc(g)}</b>: ${names.map((n) => `<code>${esc(n)}</code>`).join(" ")}</div>`).join("") || "none";
-  openDrawer(`<h3>role ${esc(name)} ${role.builtin ? '<span class="tag">built-in</span>' : ""}<span style="margin-left:auto;display:flex;gap:6px">${role.builtin ? "" : `<button class="ctl kill" onclick="act('delete_role','${name}')">delete</button>`}<button class="ctl" onclick="closeDrawer()">close</button></span></h3>
+  openDrawer(`<h3>role ${esc(name)} ${role.builtin ? '<span class="tag">built-in</span>' : ""}<span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(role.description || "")}</div>
     <div class="def">
       <div>used by agents</div><div>${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || unfilled(role)}</div>

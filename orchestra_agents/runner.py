@@ -143,9 +143,12 @@ class AgentRunner:
 
     def _confirmed(self, a: dict, instance: str, offset: int) -> bool:
         """Wait for the task system's word on this acceptance before a session costs anything:
-        ``ticket.transitioned`` naming this instance as the ticket's owner (it holds it), or
-        ``task.released`` (another instance was first, or the ticket moved on). Without either
-        within the offer's lease, it is not taken as ours."""
+        ``ticket.transitioned`` naming this instance as the ticket's owner and this assignment (it
+        holds it; a transition of the same ticket for another assignment, such as an earlier
+        offer this instance also accepted, confirms nothing), or ``task.released`` (another
+        instance was first, or the ticket moved on). Without either within the offer's lease, it
+        is not taken as ours. A transition that names no assignment (an older task system) is
+        taken by ticket and owner alone."""
         aid, tid = a["assignment"], a["ticket"]
         end = time.time() + self._lease(a)
         while time.time() < end:
@@ -153,7 +156,8 @@ class AgentRunner:
                 return False
             evs, offset = self.events.after(offset)
             for ev in evs:
-                if ev.get("type") == TRANSITIONED and ev.get("ticket") == tid and ev.get("owner") == instance:
+                if (ev.get("type") == TRANSITIONED and ev.get("ticket") == tid and ev.get("owner") == instance
+                        and ev.get("assignment", aid) == aid):
                     return True
                 if ev.get("type") == RELEASED and ev.get("assignment") == aid and ev.get("instance") in (None, instance):
                     self.released[aid] = ev.get("reason") or "no reason given"

@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from .closing import close_together
 from .harness import AgentSession
 from .org import AgentDef
 
@@ -111,12 +112,10 @@ class Residents:
                 host.log(f"{sid}: crash loop; paused and the supervisor woken")
 
     def close_all(self) -> None:
-        """At shutdown: every resident session closed, each one's failure logged and not fatal."""
-        for name, proc in list(self.procs.items()):
-            try:
-                proc.close()
-            except Exception as e:  # noqa: BLE001 - shut the rest down regardless
-                self.host.log(f"{proc.session_id}: closing at shutdown: {e!r}")
+        """At shutdown: every resident session closed, together (closing.py), each one's failure
+        logged and not fatal."""
+        close_together(list(self.procs.values()), lambda p, e: self.host.log(f"{p.session_id}: closing at shutdown: {e!r}"))
+        for name in list(self.procs):
             self.host.store.set_session(_session_id(name), status="idle", pid=None)
         self.procs.clear()
 

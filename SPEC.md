@@ -111,7 +111,13 @@ its prompt has it read the log and file a bug ticket for the program.
 `orchestra-agents run` is one process per project, the machine `agents`. Orchestra's launcher
 starts it: the plugin declares it in `Plugin.processes` when the project's `orchestra.toml` has an
 `[agents]` section (`web.processes`), so `orchestra run` keeps it running in the interpreter
-Orchestra runs in; a project without the section gets the pages and no host. It:
+Orchestra runs in, as the process `agents.host`; a project without the section gets the pages and
+no host. It is started with `--wait`: while another host holds the project, or the control port is
+taken, it waits for that to clear instead of exiting, so a host restarted while the previous one
+still shuts down takes over afterwards. Its shutdown closes the running turns together, waits up
+to `SHUTDOWN_REPORTS_S` (10 s) for their reports, then closes the resident sessions together, each
+close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace it declares
+(`web.STOP_GRACE_S`), so Orchestra's launcher never kills it mid-way. It:
 
 - announces itself with `orchestra.machine.started` (package `agents`, continuous, what it
   listens for, its log), and announces every agent instance it starts (an AI agent, on which

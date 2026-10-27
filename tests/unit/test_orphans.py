@@ -98,3 +98,49 @@ def test_a_second_host_for_the_project_exits_without_touching_anything(project):
         assert not [e for e in events.read(0)[0] if e["type"] in ("session.interrupted", "orchestra.machine.started")]
     finally:
         other.kill()
+
+
+def test_with_wait_a_second_host_waits_for_the_first_and_then_takes_over(project, monkeypatch):
+    """How Orchestra's launcher starts it (`run --wait`): restarted while the previous host still
+    shuts down, it neither exits nor touches anything until that one is gone, then starts."""
+    import threading
+
+    from orchestra_agents import host as host_mod
+
+    monkeypatch.setattr(host_mod, "WAIT_RETRY_S", 0.1)
+    store, events = AgentStore(project), Events.for_project(project)
+    other = subprocess.Popen(["sleep", "60"], start_new_session=True)     # the previous host, still stopping
+    try:
+        store.set_control(12345, other.pid)
+        host = AgentHost(project, store, events)
+        host.harness = FakeHarness(reply="ok")
+        out = {}
+        th = threading.Thread(target=lambda: out.setdefault("rc", host.run(once=True, wait=True)), daemon=True)
+        th.start()
+        time.sleep(0.5)
+        assert th.is_alive() and store.runtime()["control"]["pid"] == other.pid
+        assert not [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"]
+        other.kill()
+        other.wait()
+        th.join(timeout=20)
+        assert out == {"rc": 0}
+        assert [e["source"] for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"][:1] == ["agents"]
+    finally:
+        if other.poll() is None:
+            other.kill()
+
+
+def test_with_wait_a_host_stopped_while_waiting_exits_cleanly(project, monkeypatch):
+    from orchestra_agents import host as host_mod
+
+    monkeypatch.setattr(host_mod, "WAIT_RETRY_S", 0.1)
+    store, events = AgentStore(project), Events.for_project(project)
+    other = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    try:
+        store.set_control(12345, other.pid)
+        host = AgentHost(project, store, events)
+        host.harness = FakeHarness(reply="ok")
+        host.stop.set()                                                   # SIGTERM while it waits
+        assert host.run(wait=True) == 0 and store.runtime()["control"]["pid"] == other.pid
+    finally:
+        other.kill()

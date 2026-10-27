@@ -32,8 +32,8 @@ escalation and the Coordinator's per attention event (it has no schedule here:
 |---|---|
 | `orchestra run` | Orchestra's host: starts what the plugins declare and `[[machines]]` names, and rediscovers the system dynamics model from the metrics |
 | `orchestra web --port 8072` | Orchestra's web UI with both plugins: the task system's Tickets page, Tasks panel and scheduler card; the agents' Agents page, Supervisor button and agent cards |
-| `tasking run` | the task system's scheduler (declared by its plugin): offers ready tickets to the roles over the bus, applies what comes back, lands reviewed branches through the merge gate |
-| `orchestra-agents run` | the agents' host (`agents`, declared by its plugin): the Supervisor and the Coordinator resident, an AI worker per ticket it takes (`worker/1`, `worker/2`), a reviewer per ticket (`reviewer/1`), the Supervisor chat |
+| `tasking run --wait` | the task system's scheduler (the process `tasks.scheduler`, declared by its plugin): offers ready tickets to the roles over the bus, applies what comes back, lands reviewed branches through the merge gate |
+| `orchestra-agents run --wait` | the agents' host (the machine `agents`, the process `agents.host`, declared by its plugin): the Supervisor and the Coordinator resident, an AI worker per ticket it takes (`worker/1`, `worker/2`), a reviewer per ticket (`reviewer/1`), the Supervisor chat |
 | `machines/shell_worker.py shell --only-commands` | the program worker (`worker/shell`, from `[[machines]]`): answers only offers whose description gives `sh` blocks, runs them in the ticket's worktree and commits what they changed |
 
 The program worker has its own instance, `shell`: the agents' host names its AI workers

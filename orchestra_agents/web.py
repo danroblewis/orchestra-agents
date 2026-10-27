@@ -31,6 +31,7 @@ from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
 CHAT_PING_SECONDS = 20   # keep the chat stream alive through proxies while the Supervisor thinks
+STOP_GRACE_S = 30.0      # SIGTERM to SIGKILL for the host: above its worst-case shutdown (host.SHUTDOWN_WORST_S, 20 s)
 
 
 def plugin(orchestra_project) -> Plugin:
@@ -42,12 +43,16 @@ def plugin(orchestra_project) -> Plugin:
 
 
 def processes(project) -> list[Process]:
-    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run`, the
-    machine `agents`), in the environment this package is installed in, when the project's
-    orchestra.toml has an `[agents]` section. A project without one has the pages and no host:
-    installing the package beside Orchestra starts no AI."""
+    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run --wait`,
+    the machine `agents`; Orchestra names the process `agents.host`), in the environment this
+    package is installed in, when the project's orchestra.toml has an `[agents]` section. A project
+    without one has the pages and no host: installing the package beside Orchestra starts no AI.
+    ``--wait``: a host restarted while the previous one still shuts down waits for it. The stop
+    grace outlasts the host's own shutdown, so Orchestra never kills it mid-way and leaves its
+    sessions' processes behind."""
     raw = tomllib.loads((project.repo_root / "orchestra.toml").read_text(encoding="utf-8"))
-    return [Process("agents", [sys.executable, "-m", "orchestra_agents", "run"])] if "agents" in raw else []
+    return ([Process("host", [sys.executable, "-m", "orchestra_agents", "run", "--wait"], stop_grace_s=STOP_GRACE_S)]
+            if "agents" in raw else [])
 
 
 def declared(project) -> list[Declared]:

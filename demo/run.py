@@ -161,8 +161,9 @@ def start(target: Path, port: int, env: dict[str, str] | None = None) -> dict[st
 
 def stop(procs: dict[str, subprocess.Popen]) -> None:
     """SIGTERM to Orchestra's host and web UI, then SIGKILL to what is still up after STOP_WAIT_S.
-    The host stops what it launched first, waiting up to each process's stop grace; killed before
-    that, it would leave them running."""
+    The host stops what it launched first, waiting up to each process's stop grace (the agents'
+    host declares the longest, orchestra_agents.web.STOP_GRACE_S); killed before that, it would
+    leave them running."""
     for p in procs.values():
         if p.poll() is None:
             p.terminate()

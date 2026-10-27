@@ -92,3 +92,8 @@ def test_tools_has_a_header_and_whole_descriptions(capsys):
     out = capsys.readouterr().out.splitlines()
     assert out[0].startswith("tool") and out[1].startswith("report_ticket") and len(out) == 2
     assert out[1].rstrip().endswith((".", ")")) and len(out[1]) > 110                           # not cut at 80 characters
+
+
+def test_run_takes_wait():
+    assert build_parser().parse_args(["run", "--wait"]).wait is True
+    assert build_parser().parse_args(["run"]).wait is False

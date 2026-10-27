@@ -21,6 +21,7 @@ from orchestra.runtime import alive
 
 from . import prompting, tooling
 from .clock import due_at, parse_interval
+from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer
 from .events import GAVE_UP, Events
@@ -39,6 +40,9 @@ from .turns import Turns
 HOST_LOG: Path | None = None
 HOST_LOG_MAX = 5_000_000
 SHUTDOWN_REPORTS_S = 10.0    # how long shutdown waits for the open assignments' reports to go out
+# shutdown closes the running turns together, waits for the reports, then closes the residents together
+SHUTDOWN_WORST_S = CLOSE_S + SHUTDOWN_REPORTS_S + CLOSE_S
+WAIT_RETRY_S = 2.0           # --wait: how often to look again for the previous host to be gone
 
 
 def log(msg: str) -> None:
@@ -95,21 +99,13 @@ class AgentHost:
                            reason="the agents' host was not running (it crashed or was killed) during this turn")
             self.store.set_session(s["id"], status="idle", pid=None)
 
-    def run(self, once: bool = False) -> int:
+    def run(self, once: bool = False, wait: bool = False) -> int:
         """The host until it is stopped. Returns the exit status: 1 when another host already
         holds this project (two would kill each other's turns and both answer every assignment),
         or when the control endpoint cannot be served (without it the Supervisor cannot be
-        reached and the web cannot see the host: it must not run as a ghost)."""
-        other = (self.store.runtime().get("control") or {}).get("pid")
-        if other and other != os.getpid() and alive(other):
-            log(f"another orchestra-agents run holds this project (pid {other}); exiting")
-            return 1
-        try:
-            self._start_control()
-        except OSError as e:
-            log(f"control endpoint unavailable on port {self.cfg.control_port}: {e}; exiting")
-            return 1
-
+        reached and the web cannot see the host: it must not run as a ghost). With ``wait`` (as
+        Orchestra's launcher starts it) it waits for either to clear instead: a host restarted
+        while the previous one still shuts down takes over when that one is gone."""
         def _stop(_sig, _frame):
             self.stop.set()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -117,6 +113,8 @@ class AgentHost:
                 signal.signal(sig, _stop)
             except ValueError:  # not the main thread (tests)
                 pass
+        if not self._take_project(wait):
+            return 0 if self.stop.is_set() else 1
         self.recover()
         # the host announces what it acts on as itself: a finished ticket's sessions go to the
         # archive. Assignments, releases and attention are the agents', which announce their own
@@ -137,11 +135,8 @@ class AgentHost:
         finally:
             try:
                 self._shutdown_markers()
-                for p in list(self.live_procs.values()):       # a worker or reviewer mid-turn: no orphans
-                    try:
-                        p.close()
-                    except Exception as e:  # noqa: BLE001 - shut the rest down regardless
-                        log(f"closing a running session: {e!r}")
+                close_together(list(self.live_procs.values()),                    # mid-turn: no orphans
+                               lambda _s, e: log(f"closing a running session: {e!r}"))
                 deadline = time.time() + SHUTDOWN_REPORTS_S     # each open assignment reports that it failed
                 for th in list(self.runner.threads.values()):
                     th.join(max(0.1, deadline - time.time()))
@@ -399,6 +394,31 @@ class AgentHost:
         if sid in self.live_procs:
             return self.live_procs[sid]
         return next((p for p in self.residents.procs.values() if p.session_id == sid), None)
+
+    def _take_project(self, wait: bool) -> bool:
+        """Hold the project and serve the control endpoint. False when another live host holds the
+        project or the port cannot be bound (said once in the log); with ``wait``, it looks again
+        every WAIT_RETRY_S until it can, or until the host is stopped."""
+        said = None
+        while True:
+            other = (self.store.runtime().get("control") or {}).get("pid")
+            why = None
+            if other and other != os.getpid() and alive(other):
+                why = f"another orchestra-agents run holds this project (pid {other})"
+            else:
+                try:
+                    self._start_control()
+                    return True
+                except OSError as e:
+                    why = f"control endpoint unavailable on port {self.cfg.control_port}: {e}"
+            if not wait:
+                log(f"{why}; exiting")
+                return False
+            if why != said:
+                log(f"{why}; waiting for it to clear")
+                said = why
+            if self.stop.wait(WAIT_RETRY_S):
+                return False
 
     def _start_control(self) -> None:
         """Serve the Supervisor chat; raises OSError when the port cannot be bound."""

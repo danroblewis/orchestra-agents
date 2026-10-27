@@ -8,7 +8,8 @@ from conftest import agents_project
 from orchestra.config import init_project as init_orchestra
 
 from orchestra_agents.config import load_project
-from orchestra_agents.web import processes
+from orchestra_agents.host import SHUTDOWN_WORST_S
+from orchestra_agents.web import STOP_GRACE_S, processes
 
 
 def test_the_host_is_declared_for_a_project_with_an_agents_section(tmp_path, monkeypatch):
@@ -19,5 +20,6 @@ def test_the_host_is_declared_for_a_project_with_an_agents_section(tmp_path, mon
     init_orchestra(repo)
     assert processes(load_project(repo)) == []                  # installed beside Orchestra, no [agents]: no AI starts
     [p] = processes(agents_project(repo))
-    assert (p.name, p.restart) == ("agents", "always")
-    assert p.argv() == [sys.executable, "-m", "orchestra_agents", "run"]
+    assert (p.name, p.restart) == ("host", "always")                # Orchestra runs it as agents.host
+    assert p.argv() == [sys.executable, "-m", "orchestra_agents", "run", "--wait"]
+    assert p.stop_grace_s == STOP_GRACE_S > SHUTDOWN_WORST_S + 5      # Orchestra never kills it mid-shutdown

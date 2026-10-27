@@ -43,6 +43,7 @@ from orchestra.config import home, project_key
 
 HERE = Path(__file__).resolve().parent
 PYTHON = sys.executable
+STOP_WAIT_S = 60.0     # longer than the host's worst-case shutdown: the longest stop grace it waits out, and its own stop
 # A command ticket is written for the task system's shell worker (its README, "Writing tickets for
 # the demo's worker"): `sh` blocks run in the ticket's branch, and the acceptance names a `file`
 # they leave, which a program (and the fake reviewer) can check; `sleep 10` stands for work, so
@@ -124,12 +125,16 @@ def start(target: Path, port: int, env: dict[str, str] | None = None) -> dict[st
 
 
 def stop(procs: dict[str, subprocess.Popen]) -> None:
+    """SIGTERM to Orchestra's host and web UI, then SIGKILL to what is still up after STOP_WAIT_S.
+    The host stops what it launched first, waiting up to each process's stop grace; killed before
+    that, it would leave them running."""
     for p in procs.values():
         if p.poll() is None:
             p.terminate()
+    deadline = time.time() + STOP_WAIT_S
     for p in procs.values():
         try:
-            p.wait(timeout=15)
+            p.wait(timeout=max(0.0, deadline - time.time()))
         except subprocess.TimeoutExpired:
             p.kill()
             p.wait()

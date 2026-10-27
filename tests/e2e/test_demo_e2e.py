@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 from conftest import free_port
+from orchestra import runtime
+from orchestra.config import load_project
 
 from demo.run import PLAN, get, make_project, plan, start, stop, wait_for, wait_until
 
@@ -44,6 +46,9 @@ def demo(tmp_path, monkeypatch):
     finally:
         stop(procs)
         assert all(p.poll() is not None for p in procs.values())
+        # the host stopped what it launched: no process it recorded outlives it
+        left = runtime.read(load_project(target)).get("processes") or {}
+        assert not [n for n, r in left.items() if r.get("pid") and runtime.alive(r["pid"])], left
 
 
 def states(url: str) -> dict[str, str]:
@@ -128,10 +133,25 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     assert [e["source"] for e in all_events(url) if e["type"] == "task.requested"] == ["planner"] * len(ids)
     one = get(url + f"{TASKS}/tickets/DEMO-1")
     assert [n["author"] for n in one["notes"]] == ["worker", "reviewer", "merge_gate"] and one["notes"][1]["text"].startswith("APPROVED")
+    assert one["notes"][-1]["text"].startswith("landed on main as ")
 
     # every ticket's branch landed on main through the merge gate
     landed = git(target, "ls-tree", "-r", "--name-only", "main").split()
     assert {"notes/toolchain.txt", "notes/started.txt", "tools/line_counts.py", "tests/test_line_counts.py", "machines/repo_stats.py"} <= set(landed)
+
+    # the machine that landed runs: `orchestra run` read the root's orchestra.toml, which the landing
+    # updated, started the collector, and its series are in the project's store, offered to discovery
+    def collecting() -> bool:
+        procs = {p["name"]: p for p in get(url + "/api/core")["host"]["processes"]}
+        return (procs.get("repo_stats") or {}).get("state") == "running" and procs["repo_stats"]["alive"]
+    wait_until("the landed collector running", collecting, timeout_s=60)
+
+    def written() -> bool:
+        rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}
+        labels = (rows.get("repo_files") or {}).get("labels") or {}
+        return load_project(target).key in labels.get("project", {}).get("values", []) \
+            and "repo_stats" in labels.get("machine", {}).get("values", [])
+    wait_until("the collector's series in the store", written, timeout_s=60)
 
     # a finished ticket's sessions are archived (on the host's next tick), their transcripts still served
     wait_until("the archive", lambda: not [s for s in get(url + f"{AGENTS}/agents")["sessions"] if s["role"] == "reviewer"], timeout_s=15)

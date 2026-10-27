@@ -28,6 +28,14 @@ import time
 from pathlib import Path
 
 
+def reviewed_marker(cwd):
+    """Where this fake remembers it rejected once: in the worktree's git directory, never in the
+    tree, which a reviewer leaves at the reviewed commit (untracked files removed)."""
+    import subprocess
+    from pathlib import Path
+    r = subprocess.run(["git", "rev-parse", "--git-path", "fake_reviewed"], cwd=cwd, capture_output=True, text=True, check=False)
+    return Path(cwd) / r.stdout.strip() if r.returncode == 0 else Path(cwd) / ".fake_reviewed"
+
 def emit(obj: dict) -> None:
     sys.stdout.write(json.dumps(obj) + "\n")
     sys.stdout.flush()
@@ -114,7 +122,7 @@ def main() -> None:
                     api("report_ticket", {"state": "READY_FOR_REVIEW", "summary": "added WORK.md line"})
                     text, tool = "Done, reported ready.", "report_ticket"
             elif role == "reviewer":
-                marker = Path.cwd() / ".fake_reviewed"
+                marker = reviewed_marker(Path.cwd())
                 if os.environ.get("FAKE_PI_REJECT_FIRST") and not marker.exists():
                     marker.write_text("1")
                     api("report_review", {"verdict": "REJECTED", "summary": "needs work", "feedback": "1. add more"})

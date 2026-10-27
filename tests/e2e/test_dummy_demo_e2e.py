@@ -6,7 +6,10 @@ that only note that they ran, and every Python process unable to reach beyond th
 (no_network/sitecustomize.py), it checks that:
 
 - a ticket is offered, accepted, worked (a real commit), reviewed, gated and landed;
-- a second ticket is rejected once by the reviewer, reworked by the same worker session, and lands;
+- a second ticket is rejected once by the reviewer, reworked by the same worker instance and
+  session, and lands, the work passing directly between them: the hand-offs Orchestra's event map
+  computes are worker → reviewer → worker → reviewer → merge_gate, the task system only where it
+  acted (the first offer);
 - the Supervisor answers a chat turn through the web's /supervisor;
 - no model was run and nothing tried the network."""
 
@@ -16,6 +19,7 @@ from pathlib import Path
 
 import pytest
 from conftest import free_port
+from orchestra.web.machines import MachineIndex
 from test_demo_e2e import AGENTS, TASKS, all_events, chat, git, reported_by, settled, states
 
 from demo.run import get, make_project, plan, start, stop, wait_for, wait_until
@@ -23,6 +27,29 @@ from demo.run import get, make_project, plan, start, stop, wait_for, wait_until
 GUARD = Path(__file__).parent / "no_network"
 KEYS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY",
         "GEMINI_API_KEY", "OPENROUTER_API_KEY")
+
+
+def handoffs(events: list[dict], subject: str) -> list[tuple[str, str | None, str]]:
+    """The hand-offs Orchestra's Machines page and event map compute from the bus (its
+    ``MachineIndex``, behind ``/api/machines``), in the order they arose, for the events about
+    ``subject``: (from machine, via event type, to machine). The index reads the bus as it grows."""
+    seen: list[dict] = []
+
+    class Grown:                                     # the bus as it stood after each event
+        def end(self):
+            return len(seen)
+
+        def read(self, since=0, limit=500):
+            return seen[since:][-limit:], len(seen)
+
+    idx, out = MachineIndex(Grown()), []
+    for ev in events:
+        before = dict(idx.handoffs)
+        seen.append(ev)
+        idx.update()
+        if ev.get("subject") == subject:
+            out += [k for k, n in idx.handoffs.items() if n > before.get(k, 0)]
+    return out
 
 
 @pytest.fixture
@@ -65,16 +92,18 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     by = reported_by(url)
     verdicts = {}
     for e in events:
-        if e["type"] == "task.reported" and e["data"].get("role") == "reviewer":
-            verdicts.setdefault(e["subject"], []).append((e["data"].get("report") or {}).get("verdict"))
+        if e["type"] in ("review.approved", "changes.requested") and e["source"].startswith("reviewer/"):
+            verdicts.setdefault(e["subject"], []).append("APPROVED" if e["type"] == "review.approved" else "REJECTED")
 
     # DEMO-4, one round: offered, accepted by a dummy worker, worked with a real commit, reviewed,
     # gated and landed on main, where the collector it wrote now runs
-    assert by["DEMO-4"] in (["worker/1", "reviewer/1"], ["worker/2", "reviewer/1"]), by["DEMO-4"]
+    assert len(by["DEMO-4"]) == 2 and by["DEMO-4"][0] in ("worker/1", "worker/2") and by["DEMO-4"][1].startswith("reviewer/"), by["DEMO-4"]
     assert verdicts["DEMO-4"] == ["APPROVED"]
     offered = [e for e in events if e["type"] == "task.assigned" and e["subject"] == "DEMO-4"]
     accepted = [e for e in events if e["type"] == "task.accepted" and e["subject"] == "DEMO-4"]
-    assert {e["data"]["role"] for e in offered} == {"worker", "reviewer"} and {e["source"] for e in accepted} >= {"reviewer/1"}
+    asked = [e for e in events if e["type"] == "review.requested" and e["subject"] == "DEMO-4"]
+    assert {e["data"]["role"] for e in offered} == {"worker"} and by["DEMO-4"][1] in {e["source"] for e in accepted}   # the queue offered the work
+    assert [e["source"] for e in asked] == [by["DEMO-4"][0]]                                 # the worker itself asked for the review
     assert "DEMO-4: measure the repository" in git(target, "log", "--format=%s", "main")
     assert "machines/repo_stats.sh" in git(target, "ls-tree", "-r", "--name-only", "main")
     assert "[[collect]]" in git(target, "show", "main:orchestra.toml")
@@ -82,7 +111,13 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
 
     # DEMO-3, two rounds: rejected once, reworked in the same worker session, approved, landed
     assert verdicts["DEMO-3"] == ["REJECTED", "APPROVED"]
-    assert len(by["DEMO-3"]) == 4 and by["DEMO-3"][1] == by["DEMO-3"][3] == "reviewer/1"
+    assert len(by["DEMO-3"]) == 4 and all(r.startswith("reviewer/") for r in by["DEMO-3"][1::2])   # any reviewer may take a review
+    assert by["DEMO-3"][0] == by["DEMO-3"][2] and by["DEMO-3"][0].startswith("worker/")     # reworked by the same worker instance
+    back = [e for e in events if e["type"] == "changes.requested" and e["subject"] == "DEMO-3"]
+    assert [e["data"]["to"] for e in back] == [by["DEMO-3"][0]]                             # the rejection went to it, not to a queue
+    assert handoffs(events, "DEMO-3") == [("task_scheduler", "task.assigned", "worker"), ("worker", "review.requested", "reviewer"),
+                                          ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
+                                          ("reviewer", "review.approved", "merge_gate")]
     assert "def test_longest_first" in git(target, "show", "main:tests/test_line_counts.py")
     assert {"DEMO-3: count the lines of the Python files", "DEMO-3: test that the longest file comes first"} <= \
         set(git(target, "log", "--format=%s", "main").splitlines())

@@ -241,7 +241,7 @@ def reviewer_task_tasks(t: TicketView, summary: str, files: list[str], result: s
 def reviewer_task(project: Project, t: TicketView, commit: str, diff: str, files: list[str],
                   log: str, test_output: str | None) -> str:
     diff = diff if len(diff) < 60000 else diff[:60000] + "\n... (diff truncated; open files in the worktree for the rest)\n"
-    tests = f"## Unit test output (already run by Orchestra)\n```\n{test_output.strip()[-4000:]}\n```\n" if test_output else \
+    tests = f"## Unit test output (the worker's run on this commit; the merge gate runs every test again before landing)\n```\n{test_output.strip()[-4000:]}\n```\n" if test_output else \
         "## Unit tests\nNo unit test command is configured.\n"
     return (f"# Review request\n\n{_ticket_block(t)}\n"
             f"## Commit under review\n{commit}\n\n## Commits on the branch\n```\n{log.strip()}\n```\n\n"

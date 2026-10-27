@@ -11,8 +11,10 @@ import pytest
 
 from orchestra_agents.protocol import (
     ACCEPTED,
+    APPROVED,
     ASSIGNED,
     ATTENTION,
+    CHANGES_REQUESTED,
     DONE,
     PLANNER_ROLES,
     QUERY,
@@ -20,6 +22,7 @@ from orchestra_agents.protocol import (
     RELEASED,
     REPORTED,
     REQUESTS,
+    REVIEW_REQUESTED,
     STATES,
     TASK_EVENTS,
     WORKING,
@@ -47,11 +50,12 @@ def test_emitted_names_are_read_whole():
 def test_the_copied_event_names_and_states_match_the_task_systems_source():
     tasking = pytest.importorskip("tasking")
     source = "".join(p.read_text(encoding="utf-8") for p in sorted(Path(tasking.__file__).parent.rglob("*.py")))
-    for name in TASK_EVENTS:
-        assert f'"{name}"' in source, f"{name} is in protocol.TASK_EVENTS but not in orchestra-tasking's source"
+    for name in (*TASK_EVENTS, ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, REVIEW_REQUESTED, CHANGES_REQUESTED, APPROVED):
+        assert f'"{name}"' in source, f"{name} is in protocol.py but not in orchestra-tasking's source"
     emitted = emitted_names(source)
     assert "pickup.resumed" in emitted and "pipeline.resumed" in emitted             # the conditional emits are read
-    known = set(TASK_EVENTS) | {ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, QUERY} | set(REQUESTS.values())
+    known = set(TASK_EVENTS) | {ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, REVIEW_REQUESTED, CHANGES_REQUESTED, APPROVED,
+                                ATTENTION, DONE, REFUSED, QUERY} | set(REQUESTS.values())
     assert emitted <= known, f"orchestra-tasking emits {sorted(emitted - known)}, which protocol.py does not list"
     for state in STATES:
         assert f"State.{state}" in source or f'"{state}"' in source, f"{state} is in protocol.STATES but not a State in orchestra-tasking"
@@ -64,3 +68,16 @@ def test_the_planner_role_names_match_the_task_systems():
     source = (Path(tasking.__file__).parent / "events.py").read_text(encoding="utf-8")
     for role in PLANNER_ROLES:
         assert f'"{role}"' in source, f"{role} is in protocol.PLANNER_ROLES but not a name in tasking/events.py"
+
+
+def test_the_claim_rule_matches_the_task_systems():
+    """Who holds a turn is decided the same way on both sides: the first valid claim on the bus."""
+    tasking = pytest.importorskip("tasking.assignments")
+    from orchestra_agents.protocol import holder
+    offer = {"assignment": "a", "to": "worker/1"}
+    cases = [[{"type": ACCEPTED, "assignment": "a", "source": "worker/2"}, {"type": ACCEPTED, "assignment": "a", "source": "worker/1"}],
+             [{"type": ACCEPTED, "assignment": "a", "source": "worker/1", "instance": "worker/9"}],
+             [{"type": ACCEPTED, "assignment": "b", "source": "worker/1"}, {"type": ACCEPTED, "assignment": "a", "source": "worker/1"}]]
+    for evs in cases:
+        for o in (offer, {"assignment": "a"}):
+            assert holder(evs, o) == tasking.holder(evs, o), (evs, o)

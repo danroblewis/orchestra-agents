@@ -31,12 +31,15 @@ from .clock import now, parse_interval
 from .config import Project
 from .protocol import (
     ACCEPTED,
+    APPROVED,
     ASSIGNED,
     ATTENTION,
+    CHANGES_REQUESTED,
     DONE,
     REFUSED,
     RELEASED,
     REPORTED,
+    REVIEW_REQUESTED,
     TASK_EVENTS,
     WORKING,
 )
@@ -46,7 +49,8 @@ AGENT_KINDS = ("continuous", "scheduled", "ad_hoc")
 ACCESS_MODES = ("read", "write")
 # The event types an agent may wake on: the task system's (protocol.py, where the contract and
 # the hand-copied list live) and the agents' own (host.py, api_org.py, probes.py).
-TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED, ATTENTION, DONE, REFUSED, *TASK_EVENTS)
+TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REVIEW_REQUESTED, CHANGES_REQUESTED, APPROVED, REPORTED, RELEASED, ATTENTION,
+                    DONE, REFUSED, *TASK_EVENTS)
 AGENT_EVENT_TYPES = (
     "agent.said", "context.updated", "session.started", "session.settled",
     "session.timed_out", "session.error", "session.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
@@ -72,7 +76,9 @@ EVENT_HELP = {
     "probe.failed": "a probe's condition stops holding (filter with :probe_name)",
     "probe.recovered": "a probe's condition holds again (filter with :probe_name)",
     ASSIGNED: "the task system offers a ticket to a role", ACCEPTED: "a machine takes an offered ticket",
-    WORKING: "the holder of a ticket says it is still at it", REPORTED: "the holder of a ticket reports",
+    WORKING: "the holder of a ticket says it is still at it",
+    REVIEW_REQUESTED: "a worker finished a ticket and asks the reviewers", CHANGES_REQUESTED: "a reviewer sends a ticket back to its worker",
+    APPROVED: "a reviewer approves a ticket, for the gate", REPORTED: "the holder of a ticket ends its turn blocked or without a report",
     RELEASED: "the task system takes an assignment back",
     ATTENTION: "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
     DONE: "the task system answered a request", REFUSED: "the task system refused a request",

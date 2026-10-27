@@ -2,14 +2,24 @@
 contract: the table in orchestra-tasking's tasking/assignments.py and the request names in
 tasking/requests.py; nothing is imported from it.
 
-- Assignment: the task system offers a ticket to a role (``task.assigned``); a machine that
-  fills the role accepts it (``task.accepted``), says it is still working (``task.working``, at
-  least every HEARTBEAT_S, with ``text``: what it is doing now, for whoever shows the ticket)
-  and reports (``task.reported``); the task system may take it back (``task.released``). There is
-  no machine-sent release in the contract: a stop of the host reports every open assignment as
-  ``failed``. The task system counts a worker's failed report against the ticket's crash budget
-  (the ticket goes back to OPEN); a reviewer's is a review that ended without a verdict (the
-  review is redone, up to its no-verdict budget).
+- Assignment (the owner's decision D17: the task system is the record, not the hub). Work passes
+  directly between the machines that do it. An offer opens a turn: ``task.assigned`` from the task
+  system's queue, ``review.requested`` from the worker that finished (for any reviewer), or
+  ``changes.requested`` from the reviewer that rejected (``to`` the worker instance that did the
+  work, which takes it back in the same session). A machine claims an offer
+  (``task.accepted``); the first valid claim on the bus holds it, and the claimant knows by
+  reading its claim back (``holder``): no confirmation comes from the task system. It says it is
+  still working (``task.working``, at least every HEARTBEAT_S, with ``text``: what it is doing
+  now), and ends the turn by passing the work on (``review.requested``, ``changes.requested``,
+  ``review.approved`` for the task system's gate) or with ``task.reported`` when it passes to no
+  machine (a worker's BLOCKED, or no report). Every event of a turn names the offer as its
+  ``causationid``. The task system listens, records, and may take a turn back
+  (``task.released``: a silent holder, an offer nobody took, rejected work its worker did not
+  take back within the return timeout, the operator, a restart). There is no machine-sent
+  release in the contract: a stop of the host reports every open assignment as ``failed``. The
+  task system counts a worker's failed report against the ticket's crash budget (the ticket goes
+  back to OPEN); a reviewer's is a review that ended without a verdict (the review is redone, up
+  to its no-verdict budget).
 - Requests: a planner asks the task system to change tickets (``task.requested``,
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
   it); it answers ``request.done`` with the result or ``request.refused`` with why.
@@ -34,6 +44,8 @@ import time
 import uuid
 
 ASSIGNED, ACCEPTED, WORKING, REPORTED, RELEASED = "task.assigned", "task.accepted", "task.working", "task.reported", "task.released"
+REVIEW_REQUESTED, CHANGES_REQUESTED, APPROVED = "review.requested", "changes.requested", "review.approved"
+OFFERS = (ASSIGNED, REVIEW_REQUESTED, CHANGES_REQUESTED)     # the events that offer a turn
 ATTENTION = "task.attention_needed"
 # The task system's planner role names, the ``to`` of an attention event (its tasking/events.py).
 COORDINATOR, SUPERVISOR = "coordinator", "supervisor"
@@ -69,6 +81,21 @@ DONE, REFUSED = "request.done", "request.refused"
 WAIT_S = 30.0
 
 
+def valid_claim(ev: dict, offer: dict) -> bool:
+    """A claim (``task.accepted``, flat) that may hold ``offer``: its instance, if sent, is its
+    source, and an offer addressed ``to`` one instance is claimed by that instance. The rule is
+    the task system's (its tasking/assignments.py), copied by hand."""
+    src = ev.get("source")
+    return (ev.get("type") == ACCEPTED and ev.get("assignment") == offer.get("assignment") and bool(src)
+            and ev.get("instance") in (None, src) and offer.get("to") in (None, src))
+
+
+def holder(evs: list[dict], offer: dict) -> str | None:
+    """Who holds ``offer`` by the bus's order: the source of its first valid claim among ``evs``
+    (flat events in bus order, read from the offer on), or None while nobody has claimed it."""
+    return next((ev["source"] for ev in evs if valid_claim(ev, offer)), None)
+
+
 class TaskClient:
     """The task system, as an agent's tools reach it: a request on the bus and its answer."""
 
@@ -83,7 +110,7 @@ class TaskClient:
         subject = args.get("id") or args.get("milestone_id")
         data = {"request": rid, "args": args, "by": self.role}
         if op in QUERIES:
-            self.events.publish(QUERY, {**data, "op": op}, source=self.source, **({"subject": str(subject)} if subject else {}))
+            self.events.publish(QUERY, {**data, "op": op}, source=self.source)     # a read acts on no ticket: no subject
         elif op in REQUESTS:
             self.events.publish(REQUESTS[op], data, source=self.source, **({"subject": str(subject)} if subject else {}))
         else:

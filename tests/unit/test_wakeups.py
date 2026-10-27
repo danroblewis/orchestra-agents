@@ -1,7 +1,8 @@
 """Who the host wakes on what: the built-in planners on the task system's attention events
 addressed to them, custom agents on what they subscribe to, never a worker or reviewer (their
 events are assignments, answered by the runner); which roles are the agents' at all; and the
-runner's side of an assignment: a slot per instance, a release that is not a failure, a finished
+runner's side of an assignment: a slot per instance, a claim that lost the race on the bus, a
+release that is not a failure, rejected work coming back to the same slot and session, a finished
 ticket archived, and a report for every open assignment at shutdown."""
 
 import json
@@ -10,7 +11,7 @@ import threading
 import time
 
 import pytest
-from conftest import Confirming, FakeHarness, agents_project
+from conftest import FakeHarness, agents_project
 
 from orchestra_agents import protocol
 from orchestra_agents.config import ConfigError
@@ -28,13 +29,6 @@ def project(tmp_path, monkeypatch):
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
     return agents_project(repo)
-
-
-@pytest.fixture(autouse=True)
-def scheduler(project):
-    """The task system's answer to every acceptance (conftest.Confirming): the first holds it."""
-    with Confirming(Events.for_project(project)) as c:
-        yield c
 
 
 def host_with(project, harness):
@@ -278,7 +272,7 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
     # the level agents_working{role} is written as 0 for every resident role and every role
     # served when the host starts, so the level is live (and every flow fitted) from the run's
     # start, not from the first turn
-    from orchestra.sd.series import machine_of, sample
+    from orchestra.sd.series import sample, writer_of
     host, store, _events = host_with(project, FakeHarness(reply="ok"))
     host.stop.set()
     t0 = time.time()
@@ -287,7 +281,7 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
     assert sorted((lab["role"], lab["machine"], [v for _, v in pts]) for _, lab, pts in dump) == \
         [(r, r, [0.0]) for r in ("coordinator", "reviewer", "supervisor", "worker")]
     for ser in sample(dump, t0 - 60, 5, 24):
-        assert machine_of(ser) == ser.labels["role"] and abs(ser.intervals[0][0] - t0) < 2, (ser.key, ser.intervals)   # live from the start
+        assert writer_of(ser) == ser.labels["role"] and abs(ser.intervals[0][0] - t0) < 2, (ser.key, ser.intervals)   # live from the start
 
 
 def test_the_host_announces_only_what_it_acts_on_as_itself(project):
@@ -323,34 +317,60 @@ def test_a_process_orchestra_gave_up_on_wakes_the_supervisor_with_its_log(projec
     assert "process repo_stats" in w["reason"] and "exit code 1" in w["reason"] and str(log) in w["reason"]
 
 
-def test_an_instance_that_loses_the_acceptance_race_starts_no_session(project, tmp_path):
-    """Another machine accepted first: the task system releases this instance, which then opens
-    no session (nothing spent) and reports nothing."""
+def test_an_instance_that_loses_the_race_on_the_bus_starts_no_session(project, tmp_path):
+    """Another machine's claim is on the bus before this instance's: it reads that, opens no
+    session (nothing spent) and says nothing more; nobody had to tell it."""
     harness = FakeHarness(reply="done")
     host, _store, events = host_with(project, harness)
     (tmp_path / "w").mkdir()
     assigned(events, "a1", "T-1", tmp_path / "w")
     events.publish("task.accepted", {"assignment": "a1", "ticket": "T-1", "role": "worker", "instance": "worker/shell"},
                    source="worker/shell", subject="T-1")
-    wait_for(events, "ticket.transitioned")                             # the program holds it
     host.runner.tick()
     host.runner.threads["a1"].join(20)
     evs = events.read(0)[0]
-    assert [e["instance"] for e in evs if e["type"] == "task.released"] == ["worker/1"]
-    assert harness.sessions == [] and not [e for e in evs if e["type"] in ("session.started", "task.reported")]
+    assert [e["source"] for e in evs if e["type"] == "task.accepted"] == ["worker/shell", "worker/1"]
+    assert harness.sessions == [] and not [e for e in evs if e["type"] in ("session.started", "task.reported", "task.released")]
     assert host._slots == {} and host.runner.released == {}
 
 
-def test_an_acceptance_nobody_answers_starts_no_session(project, tmp_path, scheduler):
-    """No word from the task system within the offer's lease: no session, and a failed report
-    that says why (ignored if the ticket was never this instance's)."""
-    scheduler._stop.set()                                               # the task system has gone quiet
+def finishing(host, report):
+    """Every turn ends with ``report``, as if the agent had called its exit tool."""
+    host.turns.prompt_with_retry = lambda proc, tid, task, nudge, released: (report, "", False)
+
+
+def test_rejected_work_comes_back_to_the_same_slot_and_session(project, tmp_path):
+    """A worker that asked for a review keeps its slot (worker/1) while the work is out, so a new
+    ticket takes worker/2; changes requested of worker/1 are taken by worker/1 in the ticket's
+    session; changes requested of another instance are not taken here."""
     harness = FakeHarness(reply="done")
     host, _store, events = host_with(project, harness)
-    (tmp_path / "w").mkdir()
-    events.publish("task.assigned", {"assignment": "a1", "role": "worker", "ticket": "T-1", "workspace": str(tmp_path / "w"),
-                                     "branch": None, "lease_s": 1, "brief": {"id": "T-1", "title": "t"}}, subject="T-1")
+    finishing(host, {"state": "READY_FOR_REVIEW", "summary": "wrote it"})
+    for n in (1, 2):
+        (tmp_path / f"w{n}").mkdir()
+    assigned(events, "a1", "T-1", tmp_path / "w1")
     host.runner.tick()
     host.runner.threads["a1"].join(20)
-    [rep] = [e for e in events.read(0)[0] if e["type"] == "task.reported"]
-    assert rep["failed"] is True and "did not confirm the acceptance" in rep["text"] and harness.sessions == []
+    [req] = [e for e in events.read(0)[0] if e["type"] == "review.requested"]
+    assert req["source"] == "worker/1" and req["ends"] == "a1" and req["role"] == "reviewer" and req["review"]["worker"] == "worker/1"
+    assert req["review"]["summary"] == "wrote it" and req["review"]["commit"] is None
+    assert host._slots == {"worker-T-1": "worker/1"}                         # kept while the work is out
+    assigned(events, "a2", "T-2", tmp_path / "w2")
+    host.runner.tick()
+    host.runner.threads["a2"].join(20)
+    assert [e["source"] for e in events.read(0)[0] if e["type"] == "task.accepted" and e["assignment"] == "a2"] == ["worker/2"]
+    back = {"role": "worker", "ticket": "T-1", "workspace": str(tmp_path / "w1"), "branch": None, "lease_s": 180, "ends": req["assignment"],
+            "brief": {"id": "T-1", "title": "t", "feedback": "1. more", "rejected_by": "reviewer"}, "feedback": "1. more"}
+    events.publish("changes.requested", {**back, "assignment": "c9", "to": "worker/9"}, source="reviewer/1", subject="T-1")
+    events.publish("changes.requested", {**back, "assignment": "c1", "to": "worker/1"}, source="reviewer/1", subject="T-1")
+    host.runner.tick()
+    assert "c9" not in host.runner.threads                                    # for another instance: not taken
+    host.runner.threads["c1"].join(20)
+    claims = [(e["assignment"], e["source"]) for e in events.read(0)[0] if e["type"] == "task.accepted"]
+    assert ("c1", "worker/1") in claims and not [c for c in claims if c[0] == "c9"]
+    worked = [s.spec.session_id for s in harness.sessions if s.spec.role == "worker"]
+    assert worked == ["worker-T-1", "worker-T-2", "worker-T-1"]                # the same session, re-engaged
+    assert len([e for e in events.read(0)[0] if e["type"] == "review.requested"]) == 3
+    events.publish("ticket.transitioned", {"ticket": "T-1", "from": "MERGING", "to": "DONE"}, source="merge_gate")
+    host.runner.tick()
+    assert "worker-T-1" not in host._slots                                    # the ticket ended: the slot is free

@@ -74,27 +74,38 @@ All of it is CloudEvents on Orchestra's bus (`events.py` over `orchestra.events`
 in `protocol.py`, and the task system implements the same names (its `tasking/assignments.py`
 and `tasking/requests.py` hold the full field tables).
 
-**Assignment** (`runner.py`, inside the host): the task system offers a ticket to a role with
-`task.assigned` (assignment id, role, ticket, workspace, branch or null, lease, the ticket's
-brief; a reviewer's offer carries the worker's summary and, in code mode, the commit and the
-unit-test output). For a role it serves, the host starts a session for the ticket (`worker-<id>`
-or `reviewer-<id>`) as the lowest free instance of the role (`worker/1`), answers
-`task.accepted` from that instance, and waits for the task system's word before the session
-starts: `ticket.transitioned` naming the instance as the ticket's `owner` (it holds it), or
-`task.released` (another machine accepted first), so an instance that loses the race spends
-nothing; with no word within the offer's lease it starts nothing and reports `failed`. It then sends `task.working` at least every `HEARTBEAT_S` and sooner
-when what the agent is saying has changed (the heartbeat's `text`: a line for the task system's
-Tasks panel), runs the turn, and reports `task.reported` with the agent's report (a worker's
-`report_ticket`, exactly {state, summary, blocked_reason}: READY_FOR_REVIEW or BLOCKED with a
-reason; a reviewer's `report_review`, exactly {verdict, summary, feedback}: APPROVED or REJECTED
-with feedback; a code review's report also names the commit the offer named, or none), or
-`failed` when the turn ended without one. A
-`task.released` for its assignment kills the turn (`session.interrupted`, with the reason; nothing is
-reported for an assignment the instance no longer holds). A finished ticket's sessions (its
-`ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable. A reviewer
-served here is offered the ticket again after every worker report, including every round of a
-worker that redoes rejected work: the task system re-offers a rejected ticket to the worker role
-after every rejection and asks the Coordinator for attention only at every
+**Assignment** (`runner.py`, inside the host). Work passes directly between the machines that do
+it; the task system listens, records, and takes back what a silent machine holds (the owner's
+decision D17). An offer opens a turn: `task.assigned` from the task system's queue (assignment
+id, role, ticket, workspace, branch and base or null, lease, the ticket's brief, the unit command
+in code mode; a reviewer's carries `review` {summary, commit, test_output, worker}),
+`review.requested` from the worker that finished (the same fields, for the reviewers), or
+`changes.requested` from the reviewer that rejected, addressed `to` the worker instance that did
+the work. For a role it serves, the host takes the offer as the instance of the ticket's session
+(`worker-<id>` or `reviewer-<id>`), the lowest free one of the role (`worker/1`); an offer
+addressed `to` an instance is taken only if that instance is this ticket's slot here. It claims it
+(`task.accepted`) and reads its claim back from the bus before the session starts: the first
+valid claim of an offer on the bus holds it (the bus's order decides a race, and the task system
+records the same holder without a word to a loser), so an instance that loses spends nothing. It
+then sends `task.working` at least every `HEARTBEAT_S` and sooner when what the agent is saying
+has changed (the heartbeat's `text`: a line for the task system's Tasks panel), runs the turn,
+and ends it as the agent decided: a worker's `report_ticket` READY_FOR_REVIEW asks the reviewers
+directly (`review.requested`; in code mode after committing what the agent left, naming the
+commit and the unit command's output on it; a branch with nothing beyond the base is reported
+BLOCKED instead); a reviewer's `report_review` REJECTED asks the worker that did the work for
+changes (`changes.requested`, to `review.worker`, leaving the worktree at the reviewed commit),
+APPROVED goes to the task system's gate (`review.approved`); BLOCKED, or no report, is
+`task.reported` (`failed` when the turn ended without one). Every event of a turn names the offer
+as its `causationid`. A worker that asked for a review keeps its slot while the work is out, so
+rejected work (the reviewer's, or the gate's, which the task system offers `to` the worker)
+comes back to the same instance and the same session; the slot is let go when the ticket ends,
+when another worker takes it, or when the task system takes the rejected work back to its queue
+because it was not taken within its return timeout (as after a host restart, whose slots are
+new). A `task.released` for its assignment kills the turn (`session.interrupted`, with the
+reason; nothing is reported for an assignment the instance no longer holds). A finished ticket's
+sessions (its `ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable. A
+worker that redoes rejected work is reviewed again after every round: rejected work goes back to
+its worker at once and the task system asks the Coordinator for attention only at every
 `review_rounds_before_escalation`-th round; nothing in it stops the loop by itself (section 9).
 
 **Requests** (`tooling.py`): an agent's ticket and milestone tools are requests on the bus

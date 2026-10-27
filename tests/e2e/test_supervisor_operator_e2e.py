@@ -143,12 +143,12 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     def done() -> bool:
         return {t["id"]: t["state"] for t in get(url + f"{TASKS}/state")["tickets"]}.get("DEMO-1") == "DONE"
     wait_until("the collector ticket DONE", done, timeout_s=300)
-    workers = [e["source"] for e in all_events(url) if e["type"] == "task.reported" and e.get("subject") == "DEMO-1"]
+    workers = [e["source"] for e in all_events(url) if e["type"] == "review.requested" and e.get("subject") == "DEMO-1"]
     assert workers[0] == "worker/1", workers
     assert "machines/repo_stats.sh" in git(target, "ls-tree", "-r", "--name-only", "main")
 
     # orchestra run starts the landed collector, and its series reach the project's store
     def written() -> bool:
         rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}
-        return "repo_stats" in ((rows.get("repo_files") or {}).get("labels") or {}).get("machine", {}).get("values", [])
+        return "repo_stats" in ((rows.get("repo_files") or {}).get("labels") or {}).get("instrument", {}).get("values", [])
     wait_until("the collector's series in the store", written, timeout_s=90)

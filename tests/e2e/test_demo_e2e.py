@@ -84,12 +84,16 @@ def all_events(url: str) -> list[dict]:
         since = page["next"]
 
 
+ENDS = ("review.requested", "changes.requested", "review.approved", "task.reported")
+
+
 def reported_by(url: str) -> dict[str, list[str]]:
-    """Who reported on each ticket, in order, from the bus.
-    Both workers may accept a command ticket's offer: the first keeps it, the other is released."""
+    """Who ended each turn on each ticket, in order, from the bus: a review requested, changes
+    requested, an approval, a report. Both workers may claim a command ticket's offer: the first
+    claim on the bus holds it, and the other starts nothing."""
     out: dict[str, list[str]] = {}
     for e in all_events(url):
-        if e["type"] == "task.reported":
+        if e["type"] in ENDS:
             out.setdefault(e["subject"], []).append(e["source"])
     return out
 
@@ -118,16 +122,17 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
         return False
     wait_until("the reviewer on a ticket", reviewing, timeout_s=120)
     s, card = seen["session"], seen["card"]
-    assert s["instance"] == "reviewer/1" and s["ticket"]["state"] == "IN_REVIEW" and s["ticket"]["title"] in [t["title"] for t in PLAN["tickets"]]
-    assert card["assignment"]["instance"] == "reviewer/1" and card["assignment"]["text"] == "Reading RESULT.md against the acceptance criteria."
+    assert s["instance"].startswith("reviewer/") and s["ticket"]["state"] == "IN_REVIEW" and s["ticket"]["title"] in [t["title"] for t in PLAN["tickets"]]
+    assert card["assignment"]["instance"] == s["instance"] and card["assignment"]["text"] == "Reading RESULT.md against the acceptance criteria."
 
     wait_until("the tickets", lambda: settled(url), timeout_s=300)
     assert states(url) == dict.fromkeys(ids, "DONE")
     by = reported_by(url)
-    # each offer has one holder, and only it reports; the program takes only the command tickets, an AI worker any
+    # each offer has one holder, and only it ends the turn; the program takes only the command tickets, an AI
+    # worker any; any reviewer instance may take a review a worker asked for (reviews run side by side)
     for tid in ids:
         workers, reviewers = by[tid][:-1], by[tid][-1:]
-        assert len(workers) == 1 and reviewers == ["reviewer/1"], (tid, by[tid])
+        assert len(workers) == 1 and reviewers[0].startswith("reviewer/"), (tid, by[tid])
         assert workers[0] in ("worker/1", "worker/2", "worker/shell"), (tid, by[tid])           # the AI workers, the program
         assert workers[0] != "worker/shell" or tid in ("DEMO-1", "DEMO-2"), (tid, by[tid])
     assert [e["source"] for e in all_events(url) if e["type"] == "task.requested"] == ["planner"] * len(ids)
@@ -144,15 +149,11 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     # the collector that landed runs: `orchestra run` read the root's orchestra.toml, which the
     # landing updated, announced the collector on its behalf, runs it, and its series are in the
     # project's store, offered to discovery
-    def announced() -> bool:
-        return any(e["type"] == "orchestra.machine.started" and e["source"] == "repo_stats" for e in all_events(url))
-    wait_until("the landed collector announced", announced, timeout_s=60)
-
-    def written() -> bool:
+    def written() -> bool:                      # an instrument, named by its label (Orchestra: measurements are not machines)
         rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}
         labels = (rows.get("repo_files") or {}).get("labels") or {}
         return load_project(target).key in labels.get("project", {}).get("values", []) \
-            and "repo_stats" in labels.get("machine", {}).get("values", [])
+            and "repo_stats" in labels.get("instrument", {}).get("values", [])
     wait_until("the collector's series in the store", written, timeout_s=60)
 
     # a finished ticket's sessions are archived (on the host's next tick), their transcripts still served
@@ -197,8 +198,9 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         if not d.get("ok"):
             return False
         seen.update({m["id"]: m for m in d["machines"]})
-        return {"agents", "supervisor", "coordinator", "reviewer", "worker", "task_scheduler"} <= set(seen)
-    wait_until("the machines", observed, timeout_s=60)
+        return {"agents", "supervisor", "coordinator", "reviewer", "worker", "task_scheduler"} <= set(seen) \
+            and bool({"review.approved", "changes.requested"} & {p["type"] for p in seen["reviewer"]["publishes"]})   # a review ended
+    wait_until("the machines", observed, timeout_s=120)
     host = seen["agents"]
     assert host["package"] == "agents" and host["mode"] == "continuous" and host["kind"] == "program" and host["active"]
     assert host["subscribes"] == ["ticket.transitioned"]            # what the host acts on as itself; the agents announce their own
@@ -210,14 +212,16 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == "haiku" and m["instances"] == []
     reviewer = seen["reviewer"]
     assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["kind"] == "agent"
-    announced = [e for e in all_events(url) if e["type"] == "orchestra.machine.started" and e["source"] == "reviewer/1"]
-    assert len(announced) == 1, "an instance announces itself once in the host's lifetime, not per review"
-    assert [i["id"] for i in reviewer["instances"]] == ["1"] and {"task.accepted", "task.reported", "task.working"} <= {p["type"] for p in reviewer["publishes"]}
+    announced = [e["source"] for e in all_events(url) if e["type"] == "orchestra.machine.started" and e["source"].startswith("reviewer/")]
+    assert len(announced) == len(set(announced)), "an instance announces itself once in the host's lifetime, not per review"
+    assert {i["id"] for i in reviewer["instances"]} == {a.partition("/")[2] for a in announced} and {"task.accepted", "task.working"} <= {p["type"] for p in reviewer["publishes"]} \
+        and {"review.approved", "changes.requested"} & {p["type"] for p in reviewer["publishes"]}
     # the worker role has two kinds of machine: the program (instance shell, started by `orchestra run`
     # from [[machines]]) and the agents' AI workers (1, 2); one machine, worker, with their instances
     worker = seen["worker"]
     assert "shell" in [i["id"] for i in worker["instances"]] or "shell" in (worker.get("logs") or []), worker
     started = {e["source"]: e["data"] for e in all_events(url) if e["type"] == "orchestra.machine.started"}
     assert started["worker/shell"]["kind"] == "program" and "task.assigned" in started["worker/shell"]["listens_for"]
+    assert "review.requested" in reviewer["subscribes"] and "changes.requested" in worker["subscribes"]
     assert seen["task_scheduler"]["package"] == "tasks"
     assert seen["planner"]["mode"] == "ad hoc" and seen["planner"]["kind"] == "program"

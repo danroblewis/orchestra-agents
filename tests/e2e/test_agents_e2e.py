@@ -9,9 +9,10 @@ Every test runs once per harness: the fake Pi (RPC protocol, tools via the exten
 the fake Codex (`exec --json`, tools via the same MCP server), and the dummy harness, a product
 feature with no fake: its scripted agent plays the fakes' knobs from a script (``knob``). The agents must behave
 identically on all of them. What is checked is what the agents put on the bus for each ticket
-(the protocol, from the instance that holds the assignment), their archived sessions and
-transcripts, and the ticket's final state; the transitions in between are the task system's own
-suite's."""
+(the protocol, from the instance that holds the assignment: the work passes directly from the
+worker to a reviewer and back, the owner's decision D17), the hand-offs Orchestra's event map
+computes from it, their archived sessions and transcripts, and the ticket's final state; the
+transitions in between are the task system's own suite's."""
 
 import os
 import shutil
@@ -176,38 +177,50 @@ def agent_store(env: Env) -> AgentStore:
     return AgentStore(env.project, Events.for_project(env.project))
 
 
+ENDS = ("review.requested", "changes.requested", "review.approved", "task.reported")
+
+
 def on_the_bus(events, ticket):
-    """The agents' assignment events for one ticket, in order: (type, source), with each event."""
+    """The agents' events about their turns on one ticket, in order: (type, source), with each event."""
     evs, _ = events.read(0, limit=10000)
-    return [(e["type"], e["source"], e) for e in evs if e.get("ticket") == ticket and e["type"] in ("task.accepted", "task.working", "task.reported")]
+    return [(e["type"], e["source"], e) for e in evs if e.get("ticket") == ticket and e["type"] in ("task.accepted", "task.working", *ENDS)]
 
 
 def check_protocol(events, ticket, *rounds):
-    """Each round is (role, report shape): the instance accepted and reported from the same
-    instance, with the report the role owes, and every heartbeat between carried its text (a
-    turn shorter than the heartbeat interval sends none)."""
+    """Each round is (role, how the turn ended, shape): the instance that claimed the turn ended
+    it, from the same instance, the way the round says (a review requested, changes requested, an
+    approval, a report), and every heartbeat between carried its text (a turn shorter than the
+    heartbeat interval sends none). ``shape`` is checked against the review a worker handed on,
+    a report's report, or the event itself."""
     seen = on_the_bus(events, ticket)
-    reports = [x for x in seen if x[0] == "task.reported"]
-    assert [e["role"] for _, _, e in reports] == [role for role, _ in rounds]
-    for (role, shape), (_, source, rep) in zip(rounds, reports, strict=True):
-        aid = rep["assignment"]
-        mine = [(t, s, e) for t, s, e in seen if e["assignment"] == aid]
-        assert mine[0][0] == "task.accepted" and mine[-1][0] == "task.reported"
+    ends = [x for x in seen if x[0] in ENDS]
+    assert [(s.partition("/")[0], t) for t, s, _ in ends] == [(role, kind) for role, kind, _ in rounds]
+    for (role, kind, shape), (_, source, end) in zip(rounds, ends, strict=True):
+        aid = end.get("ends") or end["assignment"]
+        mine = [(t, s, e) for t, s, e in seen if t in ("task.accepted", "task.working") and e.get("assignment") == aid]
+        assert mine and mine[0][0] == "task.accepted"
         assert all(isinstance(e.get("text"), str) for t, _, e in mine if t == "task.working")
-        accepted = mine[0][2]
-        assert source == f"{role}/1" and accepted["instance"] == source
+        assert source == f"{role}/1" and mine[0][2]["instance"] == source
         assert all(s == source for _, s, _ in mine)
-        assert rep["failed"] is False and set(rep["report"]) == ({"state", "summary", "blocked_reason"} if role == "worker" else {"verdict", "summary", "feedback"})
+        got = end["review"] if kind == "review.requested" else end["report"] if kind == "task.reported" else end
         for k, v in shape.items():
-            assert rep["report"].get(k) == v, (k, rep["report"])
-        if role == "reviewer" and rep.get("commit") is not None:
-            assert len(rep["commit"]) >= 7
-    return reports
+            assert got.get(k) == v, (k, got)
+        if kind == "review.approved" and end.get("commit") is not None:
+            assert len(end["commit"]) >= 7
+        if kind == "changes.requested":
+            assert end["feedback"] and end["to"] == "worker/1"                           # back to the worker that did it
+    return ends
 
 
-WORK_READY = ("worker", {"state": "READY_FOR_REVIEW"})
-APPROVED = ("reviewer", {"verdict": "APPROVED"})
-REJECTED = ("reviewer", {"verdict": "REJECTED"})
+def handoffs(events, ticket):
+    """The hand-offs Orchestra's event map computes from this bus, for the events about ``ticket``."""
+    from test_dummy_demo_e2e import handoffs as computed
+    return computed(events.bus.read(0, limit=100000)[0], ticket)
+
+
+WORK_READY = ("worker", "review.requested", {})
+APPROVED = ("reviewer", "review.approved", {})
+REJECTED = ("reviewer", "changes.requested", {})
 
 
 def test_ticket_goes_open_to_done(env):
@@ -216,6 +229,7 @@ def test_ticket_goes_open_to_done(env):
     assert env.state(t) == "DONE"
     reports = check_protocol(env.events, t, WORK_READY, APPROVED)
     assert reports[1][2]["commit"] in git("log", "--format=%H", "main", cwd=env.repo)      # the reviewer named the commit it read
+    assert reports[0][2]["review"]["commit"] == reports[1][2]["commit"] and "[passed]" in reports[0][2]["review"]["test_output"]
     astore = agent_store(env)
     assert {s["id"] for s in astore.sessions()} == {"supervisor", "coordinator"}
     archived = astore.runtime()["archived_sessions"]
@@ -230,10 +244,13 @@ def test_rejection_loops_back_to_worker(env, monkeypatch):
     t = env.create(title="Needs two tries")
     env.settle(t)
     assert env.state(t) == "DONE"
-    reports = check_protocol(env.events, t, WORK_READY, REJECTED, WORK_READY, APPROVED)
-    assert reports[1][2]["report"]["feedback"]                                            # a rejection says why
+    check_protocol(env.events, t, WORK_READY, REJECTED, WORK_READY, APPROVED)          # reworked by the same instance, worker/1
     msgs = read_transcript(agent_store(env).runtime()["archived_sessions"][f"worker-{t}"])
     assert sum(1 for m in msgs if m["role"] == "user") == 2                              # the same worker session, re-engaged
+    # the work passed between the machines: the scheduler only offered it first, and the gate took the approval
+    assert handoffs(env.events, t) == [("task_scheduler", "task.assigned", "worker"), ("worker", "review.requested", "reviewer"),
+                                       ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
+                                       ("reviewer", "review.approved", "merge_gate")]
 
 
 def test_blocked_worker(env, monkeypatch):
@@ -241,7 +258,7 @@ def test_blocked_worker(env, monkeypatch):
     t = env.create(title="Blocked one")
     env.settle(t)
     assert env.state(t) == "BLOCKED"
-    check_protocol(env.events, t, ("worker", {"state": "BLOCKED", "blocked_reason": "need a decision"}))
+    check_protocol(env.events, t, ("worker", "task.reported", {"state": "BLOCKED", "blocked_reason": "need a decision"}))
 
 
 def test_dependency_order(env):

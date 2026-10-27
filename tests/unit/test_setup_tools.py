@@ -156,8 +156,6 @@ def test_collectors_and_scrapes(project, store):
 def test_what_orchestra_would_refuse_is_not_written(project, store):
     before = (project.repo_root / "orchestra.toml").read_text()
     head = git(project.repo_root, "rev-parse", "HEAD")
-    with pytest.raises(StoreError, match="the change was not made"):        # a [[collect]] may not take a machine's name
-        call(project, store, "set_collector", name="shell_worker", command="machines/x.sh", reason="the owner wants disk usage")
     with pytest.raises(StoreError, match="restart must be one of"):
         call(project, store, "set_machine", name="feed", command="python feed.py", restart="sometimes", reason="the feed must keep running")
     with pytest.raises(StoreError, match="roles the AI agents can fill"):

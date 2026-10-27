@@ -52,7 +52,7 @@ The guarantees we care about, and where each one comes from:
 | Agents are machines Orchestra can see | Every event goes on Orchestra's bus as a CloudEvent, with the agent's instance (`supervisor`, `worker/1`) as `source` (`events.py`). Each instance announces itself with `orchestra.machine.started` (`host.py` `_announce`). |
 | The agents never change a ticket directly | Ticket and milestone tools are requests on the bus, and the task system applies them (`protocol.py` `TaskClient`). Nothing imports `tasking`. |
 | No branching or worktree management | The task system names the workspace in the offer. The runner only runs a session in it (`runner.py`). |
-| A lost race costs nothing | The runner starts a session only after the task system confirms that this instance owns this assignment (`runner.py` `_confirmed`). |
+| A lost race costs nothing | The runner starts a session only after it has read its claim back from the bus as the first valid claim of the offer (`runner.py` `_held`): the bus's order decides, and the task system confirms nothing. |
 | No orphan processes | Each turn's pid is recorded on its session. A new host kills orphans on start (`host.py` `recover`). Shutdown closes turns, waits for their reports, then closes the residents, all inside the stop grace (`host.py` `run`, `closing.py`, `web.py` `STOP_GRACE_S`). |
 | Bounded context | Each session's context is measured in tokens from the harness's own transcript. Past the limit the session is compacted or rotated (`residents.py` `trim_if_large`). |
 | The human talks only to the Supervisor | The UI and CLI only read. The one write is the chat (`web.py` `POST /supervisor`, `control.py`). |
@@ -220,7 +220,7 @@ flowchart TD
   P --> S[_schedule_wakeups<br/>every / at]
   S --> E[_wake_on_events<br/>match new bus events to wake_on, landings]
   E --> W[for each agent not busy, paused or deleted:<br/>drain its wake-ups and start a turn thread]
-  W --> RN[runner.tick<br/>answer task.assigned, task.released, archive done tickets]
+  W --> RN[runner.tick<br/>take offers: task.assigned, review.requested, changes.requested<br/>task.released, archive done tickets]
 ```
 
 - The config is re-read every tick. A change to `[agents]` takes effect within a second.
@@ -273,8 +273,8 @@ The organisation has three kinds of record, kept apart (`roles.py`, `org.py`):
 |---|---|---|---|---|
 | `supervisor` | continuous, resident | tickets, context, pipeline, roles, team, events, observe, setup | `task.attention_needed:supervisor`, `orchestra.process.gave_up`, a human message, `escalate_to_supervisor`, a crash loop, a landing of a human's ticket | none |
 | `coordinator` | continuous, resident; `scheduled` when `[agents] coordinator_every` is set | tickets, capacity, escalate (+ `team`, because it is in a team) | `task.attention_needed:coordinator`, the optional schedule | `engineering` (lead) |
-| `worker` | ad hoc, one session per ticket | report_ticket | `task.assigned` for `worker` (through the runner) | `engineering` |
-| `reviewer` | ad hoc, one session per ticket | report_review | `task.assigned` for `reviewer` (through the runner) | `engineering` |
+| `worker` | ad hoc, one session per ticket | report_ticket | `task.assigned` for `worker`, `changes.requested` to its instance (through the runner) | `engineering` |
+| `reviewer` | ad hoc, one session per ticket | report_review | `task.assigned` for `reviewer`, `review.requested` (through the runner) | `engineering` |
 
 `worker` and `reviewer` are agents only for the roles in `[agents] serves`
 (`org_store.all_agents`). A role that another machine fills, such as the demo's shell worker, is
@@ -600,84 +600,86 @@ between turns cannot happen there.
 ## 8. Filling the task system's roles: the runner
 
 `runner.AgentRunner` runs inside the host, and `runner.tick` runs on every host tick. It answers
-`task.assigned` for each role in both `builtins.PER_TICKET_ROLES` (`worker`, `reviewer`) and
+the offers of work for each role in both `builtins.PER_TICKET_ROLES` (`worker`, `reviewer`) and
 `[agents] serves`. The event names are in `protocol.py`. The task system's field tables are in
-orchestra-tasking's `tasking/assignments.py`.
+orchestra-tasking's `tasking/assignments.py`. Work passes directly between the machines that do
+it (the owner's decision D17): the task system offers waiting work, records the rest, and takes
+back what a silent machine holds; it relays nothing and confirms nothing.
 
 ### The protocol as this side implements it
 
 | Step | Event (source → bus) | Data this side sends or reads |
 |---|---|---|
-| Offer | `task.assigned` (task_scheduler) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`), `unit_command` (code worker), `review {summary, commit, test_output}` (reviewer) |
-| Accept | `task.accepted` (instance, e.g. `worker/1`; subject = ticket) | `{assignment, ticket, role, instance}` |
-| Confirmation | `ticket.transitioned` (task_scheduler) | Read: `ticket`, `owner` = this instance, and `assignment` = this assignment. If an older task system leaves out `assignment`, ticket and owner alone are enough. |
-| Lost or taken back | `task.released` (task_scheduler) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
+| Offer | `task.assigned` (task_scheduler), `review.requested` (a worker), `changes.requested` (a reviewer, `to` one worker instance) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` and `base` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`, `feedback`), `unit_command` (code), `review {summary, commit, test_output, worker}` (reviewer), `to` |
+| Claim | `task.accepted` (instance, e.g. `worker/1`; subject = ticket; causationid = the offer) | `{assignment, ticket, role, instance}` |
+| Held? | the bus itself | Read back from where the offer was read: the first valid claim of the offer (`protocol.holder`) is this one, and no `task.released` of it came first |
+| Taken back | `task.released` (task_scheduler) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
 | Heartbeat | `task.working` (instance) | `{assignment, ticket, role, text}`: at least every `HEARTBEAT_S` (30 s), and sooner (checked every 2 s) when the agent's latest text changes. `text` is the last 160 characters of `partial_text` or `last_text`. |
-| Report | `task.reported` (instance) | `{assignment, ticket, role, report, failed, text, commit}`. `text` is the agent's last 2,000 characters. `commit` is the offer's `review.commit` for a code review, otherwise null. |
+| A worker passes on | `review.requested` (instance) | The offer fields for the reviewers' turn: a new `assignment`, `role: reviewer`, `ends` (its own), `review {summary, commit, test_output, worker: this instance}` |
+| A reviewer rejects | `changes.requested` (instance) | A new `assignment`, `role: worker`, `to` (the offer's `review.worker`), `ends`, the brief with `feedback` and `rejected_by`, `summary`, `feedback`, `commit` |
+| A reviewer approves | `review.approved` (instance) | `{ends, ticket, role, summary, commit}`, for the task system's gate |
+| Report | `task.reported` (instance) | `{assignment, ticket, role, report, failed, text, commit}`: only when the work passes to no machine. `text` is the agent's last 2,000 characters. |
 
-The **report** values:
+How a turn ends:
 
-| Case | `report` | `failed` |
+| Case | Event | `report` / `failed` |
 |---|---|---|
-| A worker called `report_ticket` | `{state: READY_FOR_REVIEW \| BLOCKED, summary, blocked_reason}` | `false` |
-| A reviewer called `report_review` | `{verdict: APPROVED \| REJECTED, summary, feedback}` | `false` |
-| The turn and one nudge ended normally with no report | `null` | `false` (the task system blocks the ticket for a planner) |
-| The turn timed out or the harness failed | the report if one was made, else `null` | `true` |
-| No confirmation within the lease, or an exception | `null` | `true` |
-| The host stopped mid-turn | `null` | `true` |
-| Released (lost race, or taken back) | **nothing is sent** | — |
+| A worker called `report_ticket` READY_FOR_REVIEW | `review.requested` (code: after committing what is left, with the commit and the unit command's output) | — |
+| ... and in code mode the branch has nothing beyond the base | `task.reported` | `{state: BLOCKED, ...}` / `false` |
+| A worker called `report_ticket` BLOCKED | `task.reported` | `{state: BLOCKED, summary, blocked_reason}` / `false` |
+| A reviewer called `report_review` REJECTED | `changes.requested` (code: the worktree tidied back to the commit) | — |
+| A reviewer called `report_review` APPROVED | `review.approved` | — |
+| The turn and one nudge ended normally with no report | `task.reported` | `null` / `false` (the task system blocks the ticket for a planner) |
+| The turn timed out or the harness failed, or an exception | `task.reported` | `null` (a worker's BLOCKED if one was made) / `true` |
+| The host stopped mid-turn | `task.reported` | `null` / `true` |
+| Another claim was first, or released before the session opened | **nothing is sent** | — |
 
-### An assignment run, with a lost race
+### Slots: rejected work comes back to the same instance
 
 The host takes the lowest free slot of the role (`worker/1`, `worker/2`, ...) on the main thread
-(`host._instance`). Each assignment then runs in a thread of its own (`runner._run`).
+(`host._instance`), and each turn runs in a thread of its own (`runner._run`). A worker whose
+turn ended with `review.requested` keeps its slot for the ticket (`runner.kept`): the next ticket
+takes another, and an offer addressed `to` that instance for that ticket (the reviewer's
+`changes.requested`, or the task system's `task.assigned` after the gate rejected the work) is
+taken in it, resuming the session `worker-<ticket>`. The slot is let go when the ticket ends
+(DONE or CANCELLED), when another worker claims the ticket, or when the task system releases the
+rejected work because it was not taken within `[tasks] return_timeout`. A restarted host has new
+slots, so its old rejections reach the queue after that timeout.
+
+### A ticket worked, rejected once and reworked, with a lost race
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant S as task_scheduler
   participant B as Orchestra bus
-  participant R as runner (host, as worker/1)
-  participant O as other machine (shell worker/2)
-  participant H as harness session worker-T1
-  participant T as tooling.handle (MCP or api)
-  participant St as runtime.json
+  participant W as runner as worker/1
+  participant O as other machine (worker/shell)
+  participant V as runner as reviewer/1
+  participant G as merge_gate
 
   S->>B: task.assigned {assignment A1, role worker, ticket T1, workspace, branch, lease_s, brief}
-  B-->>R: runner.tick sees the offer, takes slot worker/1
-  B-->>O: same offer
-  R->>B: task.accepted {A1, T1, worker, instance worker/1}
-  O->>B: task.accepted {A1, T1, worker, instance worker/2}
-  Note over R: _confirmed waits for up to lease_s (180 s if unset). No session yet, nothing spent.
+  W->>B: task.accepted {A1, instance worker/1}
+  O->>B: task.accepted {A1, instance worker/shell}
+  Note over W,O: each reads its claim back: worker/1's is first. worker/shell starts nothing; nobody tells it
+  Note over W: session worker-T1 opens; task.working while it runs
+  W->>B: review.requested {assignment R1, ends A1, review {summary, commit, test_output, worker worker/1}}
+  Note over W: slot worker/1 kept for T1
+  V->>B: task.accepted {R1, instance reviewer/1}
+  Note over V: reads its claim back; session reviewer-T1 opens
+  V->>B: changes.requested {assignment C1, to worker/1, ends R1, feedback}
+  W->>B: task.accepted {C1, instance worker/1}
+  Note over W: the same session worker-T1, resumed with the feedback
+  W->>B: review.requested {assignment R2, ends C1, ...}
+  V->>B: task.accepted {R2}
+  V->>B: review.approved {ends R2, commit}
+  G->>B: gate.started ... gate.landed, ticket.transitioned {to DONE}
+  Note over W,V: the sessions go to the archive; slot worker/1 is let go
+  Note over S: recorded every step (ticket.transitioned with no subject, causationid = the step)
 
-  alt worker/1 was first
-    S->>B: ticket.transitioned {ticket T1, to IN_PROGRESS, owner worker/1, assignment A1}
-    S->>B: task.released {A1, instance worker/2, reason another instance was first}
-    B-->>R: confirmation for worker/1 and A1
-    R->>H: open session (cwd = workspace, tools = report_ticket)
-    R->>St: session running, ticket title and state for the cards
-    loop every 2 s while the turn runs
-      R->>B: task.working {A1, text} when text changed, or at least every 30 s
-    end
-    R->>H: prompt(worker_task)
-    H->>T: report_ticket {state READY_FOR_REVIEW, summary}
-    T->>St: reports[T1] = report
-    H-->>R: settled
-    R->>St: pop_report(T1)
-    Note over R,H: If there is no report, one nudge turn (300 s cap) asks for it.
-    R->>H: close
-    R->>B: task.reported {A1, report, failed false, text, commit null}
-  else worker/2 was first: worker/1 lost the race
-    S->>B: ticket.transitioned {ticket T1, owner worker/2, assignment A1}
-    S->>B: task.released {A1, instance worker/1, reason another instance was first}
-    B-->>R: release for A1 naming worker/1
-    Note over R: released[A1] is set, no session is opened, nothing is reported, slot worker/1 is freed
-  end
-
-  opt released later, mid-turn
+  opt released mid-turn
     S->>B: task.released {A1, reason ...}
-    R->>H: kill (runner.tick)
-    Note over R: turns.note records session.interrupted "released by the task system". No task.reported.
+    W->>W: kill the turn (runner.tick); session.interrupted, nothing more said
   end
 ```
 
@@ -687,7 +689,7 @@ sequenceDiagram
   unit command) or `worker_task_tasks` (tasks: write `RESULT.md` in the scratch folder). A
   reviewer gets `reviewer_task`. For it, the runner reads
   `git diff <base>...<commit>`, the changed file names and `git log` in the workspace, plus the
-  task system's test output. In tasks mode it gets `reviewer_task_tasks` with the folder's files
+  worker's run of the unit command on that commit (the gate runs every test again before landing). In tasks mode it gets `reviewer_task_tasks` with the folder's files
   and `RESULT.md`. Rejection feedback and `rejected_by` from the brief go into the worker's
   prompt.
 - **The nudge** (`turns.prompt_with_retry`). If the first turn ends with no report and no
@@ -695,8 +697,8 @@ sequenceDiagram
   in between, the nudge is not sent.
 - **Archive.** A `ticket.transitioned` to `DONE` or `CANCELLED` moves `worker-<T>` and
   `reviewer-<T>` to `archived_sessions` (`store.purge_ticket_sessions`).
-- **Host crash.** The host reports nothing it did not see end. The task system re-offers the
-  ticket when its lease runs out.
+- **Host crash.** The host reports nothing it did not see end. The task system takes the ticket
+  back when its lease runs out (it saw the claim, whoever offered the turn) and offers it again.
 - **Who fills the roles** (`fillers.py`). `Fillers` watches `task.accepted` and
   `orchestra.machine.started`, including the last 5,000 events at start. It tells the planners
   which instances fill each role and what `kind` each announced, for up to 6 h after last
@@ -1122,7 +1124,7 @@ Every event is a CloudEvent written through `orchestra.events`. The fields below
 |---|---|---|
 | `orchestra.machine.started` | `agents` | `{package: agents, mode: continuous, kind: program, listens_for: [ticket.transitioned], log}` |
 | `orchestra.machine.started` | the instance (once per source, harness and model in the host's lifetime) | `{package: agents, mode: continuous \| ad hoc, listens_for, kind: agent, role, harness, model}` |
-| `task.accepted`, `task.working`, `task.reported` | the instance | See [section 8](#8-filling-the-task-systems-roles-the-runner) |
+| `task.accepted`, `task.working`, `review.requested`, `changes.requested`, `review.approved`, `task.reported` | the instance | See [section 8](#8-filling-the-task-systems-roles-the-runner) |
 | `task.requested`, `task.change_requested`, `task.note_requested`, `task.cancel_requested`, `task.unblock_requested`, `milestone.requested`, `milestone.change_requested`, `milestone.close_requested`, `capacity.change_requested`, `pipeline.resume_requested` | the instance | `{request, args, by}`; subject = `args.id` or `args.milestone_id` |
 | `task.query_requested` | the instance (or the woken agent's name, for host snapshots) | `{request, args, by, op}`. `op` is one of `list_tickets`, `get_ticket`, `project_status`, `list_milestones`, `get_capacity`, `snapshot`, `list_gate_runs`, `get_gate_run`, `get_staging_status`. |
 | `session.started` | the instance | `{session, kind, ticket}` |
@@ -1149,9 +1151,10 @@ The web plugin publishes nothing.
 
 | Type | By | Why |
 |---|---|---|
-| `task.assigned` | `runner.tick` | Offers for the served roles |
-| `task.released` | `runner.tick`, `runner._confirmed` | A lost race, or the assignment taken back |
-| `ticket.transitioned` | `runner._confirmed`, `runner.tick`, `landings.py` | The confirmation (owner and assignment). A move to DONE or CANCELLED archives sessions and settles a landing. |
+| `task.assigned`, `review.requested`, `changes.requested` | `runner.tick` | Offers for the served roles (one addressed `to` an instance only for that slot) |
+| `task.accepted` | `runner._held`, `runner.tick`, `fillers.py` | Whose claim was first; another worker taking a ticket whose slot is kept |
+| `task.released` | `runner.tick`, `runner._held` | The assignment taken back, or rejected work the queue took back |
+| `ticket.transitioned` | `runner.tick`, `landings.py` | A move to DONE or CANCELLED archives sessions, lets the slot go and settles a landing. |
 | `ticket.created` with `by=supervisor` | `landings.py` | Remember the human's tickets |
 | `task.accepted`, `orchestra.machine.started` | `fillers.py`, `observe._announced_log` | Who fills the roles, and where a machine's log is |
 | `request.done`, `request.refused` | `protocol.TaskClient` | Answers to requests and queries |

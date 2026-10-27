@@ -390,7 +390,9 @@ class AgentHost:
         self._mark("session.started", session=sid, kind=role, ticket=ticket_id)
         self.store.measure_turn(role, self._slots.get(sid, role), started=True)
 
-    def _session_idle(self, sid: str, text: str, resident: bool = False) -> None:
+    def _session_idle(self, sid: str, text: str, resident: bool = False, release: bool = True) -> None:
+        """A turn ended. A per-ticket session's slot is given back here unless ``release`` is
+        false: the runner decides (a worker keeps its slot while its work is out for review)."""
         proc = self.live_procs.pop(sid, None) if not resident else self._proc_for(sid)
         fields = {"pid": self._pid(proc) if resident and proc is not None else None}   # the turn's process is gone; a resident's stays
         if proc is not None and proc.session_file:
@@ -400,7 +402,7 @@ class AgentHost:
         self.events.emit("session.settled", session=sid)
         s = self.store.find_session(sid) or {}
         self.store.measure_turn(s.get("kind") or sid, self._slots.get(sid, s.get("kind") or sid), started=False)
-        if not resident:
+        if not resident and release:
             self._release(sid)
 
     def _proc_for(self, sid: str) -> AgentSession | None:

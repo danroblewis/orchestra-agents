@@ -27,12 +27,15 @@ from dataclasses import dataclass
 from .events import GAVE_UP
 from .protocol import (
     ACCEPTED,
+    APPROVED,
     ASSIGNED,
     ATTENTION,
+    CHANGES_REQUESTED,
     COORDINATOR,
     RELEASED,
     REPORTED,
     REQUESTS,
+    REVIEW_REQUESTED,
     SUPERVISOR,
     WORKING,
 )
@@ -77,12 +80,13 @@ register(Role(
            REQUESTS["set_capacity"]),
     description="Keeps the plan executable: clarity, size, order, dependencies. Never changes intent.",
 ))
-# Per-ticket roles are not resident; the host starts them on the task system's assignments (runner.py).
+# Per-ticket roles are not resident; the host starts them on the offers of work (runner.py): the task
+# system's queue, and the machines that pass work on directly (a review requested, changes requested).
 register(Role(name="worker", prompt="worker", tools=("report_ticket",), resident=False,
-              wake_on=(ASSIGNED, RELEASED), emits=(ACCEPTED, WORKING, REPORTED),
-              description="Does one ticket in the workspace the task system prepared and reports READY_FOR_REVIEW or BLOCKED."))
+              wake_on=(ASSIGNED, CHANGES_REQUESTED, RELEASED), emits=(ACCEPTED, WORKING, REVIEW_REQUESTED, REPORTED),
+              description="Does one ticket in the workspace it is handed and asks the reviewers, or reports BLOCKED."))
 register(Role(name="reviewer", prompt="reviewer", tools=("report_review",), resident=False,
-              wake_on=(ASSIGNED, RELEASED), emits=(ACCEPTED, WORKING, REPORTED),
-              description="Reviews one ticket's result (a diff, or RESULT.md) and reports APPROVED or REJECTED."))
+              wake_on=(ASSIGNED, REVIEW_REQUESTED, RELEASED), emits=(ACCEPTED, WORKING, CHANGES_REQUESTED, APPROVED, REPORTED),
+              description="Reviews one ticket's result (a diff, or RESULT.md): approves it for the gate, or sends it back to its worker."))
 
 PER_TICKET_ROLES = tuple(r.name for r in ROLES.values() if not r.resident)   # the task system's roles the agents can fill

@@ -3,7 +3,9 @@ and the Pi extension both call this).
 
 Some tools are the agents' own: a worker's or reviewer's report (handed to the session that runs
 it, which reports to the task system on the bus), the project context, escalating to the
-Supervisor, reading the bus, and the organisation (roles, agents, teams, emit_event). Everything
+Supervisor, reading the bus, the organisation (roles, agents, teams, emit_event), reading the
+whole system (``observe.py``, ``observe_model.py``) and the Supervisor's changes to the project's
+``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
 about tickets and milestones is the task system's, asked for on the bus (protocol.TaskClient): a
 request it answers, so only it changes them. The role comes from the environment the agent was
 started in, never from the agent."""
@@ -14,13 +16,15 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from . import prompting
+from . import observe, observe_model, prompting
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
 from .org_store import all_agents, all_teams
 from .protocol import PLANNER_ROLES, QUERIES, REQUESTS, TaskClient
+from .restart import restart_machine
 from .roles import all_roles
+from .setup_tools import SETUP_COMMANDS, handle_setup
 from .store import AgentStore, StoreError
 
 
@@ -107,6 +111,25 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)
 
+    if command in SETUP_COMMANDS or command in SYSTEM_COMMANDS:
+        project.reload_config()               # the file as it is now: an earlier call in this session may have changed it
+    if command in SETUP_COMMANDS:
+        return handle_setup(project, store, command, a, author, role)
+    if command == "restart_machine":
+        return restart_machine(project, store, a, author, role)
+    if command == "check_setup":
+        return observe.check_setup(project, store)
+    if command == "read_config":
+        return observe.read_config(project)
+    if command == "list_processes":
+        return observe.list_processes(project)
+    if command == "read_machine_log":
+        return observe.read_machine_log(project, store, a)
+    if command == "list_metrics":
+        return observe_model.list_metrics(project, a)
+    if command == "get_model":
+        return observe_model.get_model(project)
+
     if command in REQUESTS or command in QUERIES:                 # the task system's
         if command in REQUESTS and not may_change_tickets(project, role):
             raise StoreError(f"role {role} may not change tickets or milestones ({command})")
@@ -119,6 +142,8 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
 
 
 PLANNERS = set(PLANNER_ROLES)
+SYSTEM_COMMANDS = frozenset({"restart_machine", "check_setup", "read_config", "list_processes", "read_machine_log",
+                             "list_metrics", "get_model"})          # they read the setup (observe.py, restart.py)
 
 
 def may_change_tickets(project: Project, role: str) -> bool:

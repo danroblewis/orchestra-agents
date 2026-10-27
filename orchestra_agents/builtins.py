@@ -14,6 +14,9 @@ Tool groups:
   events       read the event log, raise a team's declared events
   team         read the organisation; brief ad hoc agents and message along the tree
   roles        design the organisation: roles, agents, teams (the Supervisor)
+  observe      read the whole system: orchestra.toml, processes, logs, metrics, the model, the snapshot
+  setup        change orchestra.toml (roles the AI agents fill, work mode, gate tests, capacity limit,
+               machines and collectors) and restart a machine (the Supervisor only)
   report_ticket / report_review   the worker's and the reviewer's exit tools
 """
 
@@ -57,12 +60,14 @@ def register(role: Role) -> Role:
 
 register(Role(
     name="supervisor", prompt="supervisor",
-    tools=("tickets", "context", "pipeline", "roles", "team", "events"),
+    tools=("tickets", "context", "pipeline", "roles", "team", "events", "observe", "setup"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent"),
     emits=(REQUESTS["create_ticket"], REQUESTS["update_ticket"], REQUESTS["create_milestone"], REQUESTS["close_milestone"],
-           "context.updated", "role.created", "agent.created", "team.created", "agent.messaged"),
-    description="Talks to the human; translates requests into objectives, verification, and tickets.",
+           "context.updated", "role.created", "agent.created", "team.created", "agent.messaged",
+           "config.changed", "machine.restarted"),
+    description="Talks to the human; translates requests into objectives, verification, and tickets; keeps the "
+                "project's setup able to do them.",
 ))
 register(Role(
     name="coordinator", prompt="coordinator",

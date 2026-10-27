@@ -16,7 +16,10 @@ to check).
 
 Env knobs shared with fake_pi: FAKE_PI_WORKER_BLOCK, FAKE_PI_REJECT_FIRST, FAKE_PI_BREAK_FIRST.
 FAKE_CLAUDE_SLOW=<seconds>: a reviewer says what it is reading, then takes that long before its
-verdict, so what it is doing can be seen while it holds the ticket."""
+verdict, so what it is doing can be seen while it holds the ticket.
+FAKE_CLAUDE_SUPERVISOR=<file>: in a chat turn (one with the human's message) the Supervisor calls
+the tools the file lists, a JSON list of {"tool", "args"}, in order, and replies with what each
+answered; without it, a Supervisor only acknowledges."""
 
 from __future__ import annotations
 
@@ -210,6 +213,10 @@ def main() -> None:
         else:
             use_tool("report_review", {"verdict": "APPROVED", "summary": "looks good"})
             text = "Approved."
+    elif role == "supervisor" and os.environ.get("FAKE_CLAUDE_SUPERVISOR") and "[The human's message]" in prompt:
+        steps = json.loads(Path(os.environ["FAKE_CLAUDE_SUPERVISOR"]).read_text())
+        said = [f"- {s['tool']}: {use_tool(s['tool'], s.get('args', {}))}" for s in steps]
+        text = "What I did with my tools:\n" + "\n".join(said)
     else:
         text = f"{role} acknowledges: {prompt[:60]}"
     mcp.close()

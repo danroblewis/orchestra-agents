@@ -107,7 +107,8 @@ grant the `tickets` group; a worker or reviewer only reports.
 any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`). The Supervisor also
 wakes on Orchestra's `orchestra.process.gave_up` (its launcher stopped restarting a process): the
 wake-up names the process, its last exit code and its log, `<state>/logs/machines/<name>.log`, and
-its prompt has it read the log and file a bug ticket for the program.
+its prompt has it read the log, fix a cause in the program's entry itself (section 10) and file a
+bug ticket for a cause in the program.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
@@ -190,7 +191,8 @@ Events the host and the agents publish: `session.started`, `session.settled`, `a
 `session.timed_out`, `session.error`, `session.interrupted`, `agent.crashed`, `agent.crash_loop`,
 `agent.compacted`, `agent.reset`, `agent.paused`, `agent.resumed`, `agent.messaged`,
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
-the organisation, and a team's own declared types raised with `emit_event` (rate-limited, and
+the organisation, `config.changed` and `machine.restarted` from the Supervisor's setup tools
+(section 10), and a team's own declared types raised with `emit_event` (rate-limited, and
 refused when the cause chain is three deep). The source of a session's events is the agent's
 instance; the host's own are `agents`. The web plugin publishes nothing.
 
@@ -297,3 +299,62 @@ ignores `rejected_by` and redoes the same work is a loop of paid reviews, and th
 worker's (the task system's shell worker reports BLOCKED on an identical rejection). Everywhere a
 real model is not needed, the tests use the fakes in `tests/e2e/` (one per harness, speaking the
 product's real protocol).
+
+## 10. The Supervisor as the project's operator (`observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`)
+
+The human talks only to the Supervisor (Orchestra's rule 9), so when the system cannot do what
+the human asks, the Supervisor is the one who sees why and fixes the setup. Its prompt
+(`prompts/operator.md`, part of both of its prompts) gives it a duty: when a ticket blocks or is
+rejected twice for the same reason, or a request of the human's is not met, look first, then
+check whether the system can do it at all (which machines fill which role, the kind of work, the
+gate's tests, whether what is needed runs), fix the setup with its tools, and tell the human what
+it changed and why; never keep filing tickets the system cannot complete. It never changes code,
+in an emergency or otherwise: code is a worker's, through a ticket, a review and the gate.
+
+**Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
+as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
+launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
+changed now, its recent commits), `list_processes` (Orchestra's runtime record and the declared
+collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a
+machine announced, read only within the repository or the state directory, as Orchestra's web
+server reads one), `list_metrics` (the project's store, as the Core page's catalogue),
+`get_model` (Orchestra's model view, shortened), `snapshot` (the task system's query), and
+`read_events`. All of it reads through Orchestra as a library; nothing is written.
+
+**Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
+group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),
+`set_work_mode` (`[project] work`), `set_gate_unit` (`[[gate.unit]]`), `set_capacity_limit`
+(`[tasks] workers`, `reviewers`), `set_machine` (`[[machines]]`), `set_collector` (`[[collect]]` or
+`[[scrape]]`), `remove_entry` (any of those arrays). Each:
+
+- refuses unless the repository root is a git checkout on the base branch and `orchestra.toml` has
+  no uncommitted change, and refuses a reason shorter than a sentence;
+- edits the file keeping its comments and layout (`tomlkit`; a removed entry is cut from the text,
+  so the comments after it stay), and refuses a result that does not parse or that Orchestra's
+  readers (its settings, `[[machines]]`, `[[collect]]`/`[[scrape]]`) or the agents' `[agents]`
+  accept less well than before;
+- commits `orchestra.toml` alone, whatever else is changed in the checkout, with the message
+  `Supervisor: <what changed>` and the reason as its body; a failed commit puts the file back;
+- publishes `config.changed` {section, change, reason, commit, applies, by} from the Supervisor;
+- answers with what applies now and what restarts, from the readers' documented rules: the
+  agents' host reads `[agents]` every second; the task system's scheduler reads `[project]`,
+  `[tasks]` and `[gate]` on every tick (its own SPEC owns what they mean); Orchestra's launcher and
+  collectors read the file when it changes (Orchestra's SPEC §5.1, §5.2): a machine added starts,
+  one removed stops, one whose command or restart changed restarts, a collector changed starts
+  over. A change of the work mode also restarts the resident sessions whose prompt depends on it,
+  after their current turn.
+
+`restart_machine` restarts a `[[machines]]` program, including one Orchestra gave up on. Orchestra's
+launcher has no restart command, so the entry is taken out of the file, the runtime record is
+watched until the launcher has stopped the program (its stop grace plus 10 s at most), and the file
+is put back byte for byte, which starts it again; nothing is committed, and `machine.restarted`
+{name, reason, pid_before, pid} is published. It refuses without a running `orchestra run`, and for
+a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
+someone else changes the file in between, the entry is not put back and the answer says so.
+
+Limits: a commit to the base branch while the task system's gate is landing a ticket makes that
+landing fail (the base moved under it), as any commit there would: the task system pauses its
+pipeline, puts the ticket back to APPROVED and asks the Supervisor for attention; `resume_pipeline`
+lands it on the next run. A tool's answer about what applies describes the readers' rules; it
+does not wait to see them act (except `restart_machine`, which watches the launcher).
+

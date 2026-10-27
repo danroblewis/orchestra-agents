@@ -58,7 +58,12 @@ when work is not flowing. Whatever woke you, make sure work *is* flowing:
 - Ready tickets but no workers and capacity 0 on the runtime dial: raise it with
   `set_capacity` unless you paused it yourself for a reason that still holds.
 - Ready tickets but the configured maximum is 0 (`[tasks] workers` in `orchestra.toml`): only
-  the human can change that file. Call `escalate_to_supervisor` naming the setting.
+  the Supervisor changes that file. Call `escalate_to_supervisor` naming the setting.
+- A ticket blocked, or rejected twice for the same reason, because of the setup rather than the
+  ticket (the worker role filled only by a program that cannot do this kind of work, work that
+  must land in the repository while the project's work is tasks, a gate test that cannot pass):
+  the setup is the Supervisor's to fix. Call `escalate_to_supervisor` naming the reason; do not
+  split, reword or re-file the ticket for it.
 - Nothing ready but tickets waiting: fix wrong dependencies or milestones, unblock what you can.
 - Everything flowing: reply in one line and stop.
 

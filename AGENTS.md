@@ -11,9 +11,12 @@ broken without updating the spec and saying so in the commit.
    store, and nothing imports from `tasking`.
 2. **No branching, no worktrees.** The task system prepares the workspace and names it in the
    assignment; the agents work in it. A reviewer reads the diff in the worktree; the host never
-   creates, switches, merges or deletes a branch. The one git write here is committing the
-   organisation's own files under `.orchestra/`, and only when the checkout is on the base
-   branch and otherwise clean.
+   creates, switches, merges or deletes a branch. The git writes here are two: committing the
+   organisation's own files under `.orchestra/`, only when the checkout is on the base branch and
+   otherwise clean; and the Supervisor's setup tools committing `orchestra.toml` alone
+   (`toml_edit.py`), only when the checkout is on the base branch and that file has no
+   uncommitted change. (`restart_machine` writes the file without one entry and puts it back
+   byte for byte; it commits nothing.)
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
@@ -41,8 +44,10 @@ broken without updating the spec and saying so in the commit.
    Nothing else touches a backend or those files directly.
 10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
     write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or
-    deleting an agent, role or team is the Supervisor's, through its tools; operator controls on
-    tickets are the task system's. `orchestra-agents api` runs only inside an agent's session
+    deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
+    setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
+    operator controls on tickets are the task system's. The Supervisor changes configuration,
+    never code: code is a worker's, through a ticket, a review and the gate. `orchestra-agents api` runs only inside an agent's session
     (`ORCHESTRA_ROLE`); without a role the tool interface reads and changes nothing.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
     is a template project and its runner, not a package. No `sys.path` manipulation; the one

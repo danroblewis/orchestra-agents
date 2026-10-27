@@ -52,6 +52,7 @@ AGENT_EVENT_TYPES = (
     "session.timed_out", "session.error", "session.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
     "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
+    "config.changed", "machine.restarted",
 )
 EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
 # What each of them means, in one line, for the Agents page's triggers (served in /org).
@@ -88,6 +89,8 @@ EVENT_HELP = {
     "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed",
     "agent.messaged": "an agent gets a message or brief",
     "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
+    "config.changed": "the Supervisor changes orchestra.toml (committed, with the reason)",
+    "machine.restarted": "the Supervisor restarts one of the project's programs",
 }
 # Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
 # those are validated against the teams, not this list.

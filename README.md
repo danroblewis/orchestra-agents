@@ -59,7 +59,17 @@ nothing of Orchestra's) that prints Prometheus text, and declare it in `orchestr
 `[[collect]]` with an interval (or a `[[scrape]]` of a URL that already serves Prometheus
 metrics); once the branch lands, `orchestra run` runs it and stores what it prints in the
 project's metrics store (Orchestra's `docs/machines.md`). That needs `work = "code"` in
-`[project]` and an AI agent among the workers.
+`[project]` and an AI agent among the workers; when the project is not set up that way, the
+Supervisor changes it.
+
+The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
+processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
+snapshot) and, when the setup cannot do what is asked, changes `orchestra.toml` with its setup
+tools: which roles the AI agents fill, the kind of work, the gate's tests, the capacity limit,
+`[[machines]]`, `[[collect]]` and `[[scrape]]` entries, and restarting a program. Each change is a
+commit of `orchestra.toml` alone on the base branch with the reason, and a `config.changed` event
+on the bus; it tells you in the chat what it changed and why. It never changes code: that is a
+worker's, through a ticket, a review and the merge gate.
 
 Without the task plugin in the same `orchestra web`, the agents still run, but a ticket link on
 the Agents page opens no ticket drawer and no banner says a ticket is blocked.

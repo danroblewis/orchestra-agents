@@ -57,4 +57,11 @@ class FakeTasks:
             return {"ok": True, "ticket": t}
         if op == "list_tickets":
             return {"ok": True, "tickets": list(self.tickets.values())}
+        if op == "snapshot":
+            counts: dict[str, int] = {}
+            for t in self.tickets.values():
+                counts[t["state"]] = counts.get(t["state"], 0) + 1
+            return {"ok": True, "snapshot": {"counts": counts, "tickets": list(self.tickets.values()),
+                                             "milestones": list(self.milestones.values()), "capacity": {},
+                                             "pipeline": {"paused": False}, "assignments": []}}
         raise ValueError(f"the fake task system has no {op}")

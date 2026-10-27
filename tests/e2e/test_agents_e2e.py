@@ -6,7 +6,8 @@ own, as a separate machine would.
 
 Every test runs once per harness: the fake Pi (RPC protocol, tools via the extension's
 `orchestra-agents api` path), the fake Claude Code (stream-json, tools via the real MCP server),
-and the fake Codex (`exec --json`, tools via the same MCP server). The agents must behave
+the fake Codex (`exec --json`, tools via the same MCP server), and the dummy harness, a product
+feature with no fake: its scripted agent plays the fakes' knobs from a script (``knob``). The agents must behave
 identically on all of them. What is checked is what the agents put on the bus for each ticket
 (the protocol, from the instance that holds the assignment), their archived sessions and
 transcripts, and the ticket's final state; the transitions in between are the task system's own
@@ -74,15 +75,51 @@ class Env:
             time.sleep(0.2)
 
 
-@pytest.fixture(params=["pi", "claude_code", "codex"])
+# What the fakes' knobs (FAKE_PI_*) make them do, as dummy scripts: the same behaviour, from a
+# script instead of an environment variable (harness/dummy_script.py).
+REPORT_READY = '{ tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "added WORK.md line" } }'
+KNOBS = {
+    "FAKE_PI_REJECT_FIRST": '''
+[[rule]]
+role = "reviewer"
+turn = 1
+steps = [{ tool = "report_review", args = { verdict = "REJECTED", summary = "needs work", feedback = "1. add more" } }]
+''',
+    "FAKE_PI_WORKER_BLOCK": '''
+[[rule]]
+role = "worker"
+steps = [{ tool = "report_ticket", args = { state = "BLOCKED", summary = "cannot", blocked_reason = "need a decision" } }]
+''',
+    "FAKE_PI_BREAK_FIRST": f'''
+[[rule]]
+role = "worker"
+turn = 1
+steps = [{{ run = "git rm -q README.md" }}, {{ commit = "{{ticket}}: fake work" }}, {REPORT_READY}]
+
+[[rule]]
+role = "worker"
+steps = [{{ write = "README.md", text = "# e2e\\n" }}, {{ commit = "{{ticket}}: fake work" }}, {REPORT_READY}]
+''',
+}
+
+
+def knob(env: Env, monkeypatch, name: str) -> None:
+    """Turn one of the fakes' knobs on: the variable for a fake, the script for the dummy."""
+    monkeypatch.setenv(name, "1")
+    if env.project.config.harness == "dummy":
+        (env.repo.parent / "dummy.toml").write_text(KNOBS[name])
+
+
+@pytest.fixture(params=["pi", "claude_code", "codex", "dummy"])
 def env(tmp_path, monkeypatch, request):
     harness = request.param
     home = tmp_path / "home"
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(home))
-    fake = tmp_path / harness
-    shutil.copy(FAKES[harness], fake)
-    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv(BINARY_ENV[harness], str(fake))
+    if harness in FAKES:
+        fake = tmp_path / harness
+        shutil.copy(FAKES[harness], fake)
+        fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+        monkeypatch.setenv(BINARY_ENV[harness], str(fake))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-home"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
     monkeypatch.delenv("FAKE_PI_WORKER_BLOCK", raising=False)
@@ -102,6 +139,10 @@ def env(tmp_path, monkeypatch, request):
     assert '# tick = "3s"' in text
     toml.write_text(text.replace('# tick = "3s"', 'tick = "500ms"'))        # the scheduler looks at the queue often: the tests wait on it
     project = agents_project(repo, harness=harness)
+    if harness == "dummy":      # the script lives outside the repository, so a test can change it with the checkout clean
+        (tmp_path / "dummy.toml").write_text("")
+        toml.write_text(toml.read_text() + f'dummy_script = "{tmp_path / "dummy.toml"}"\n')
+        project.reload_config()
     assert project.config.harness == harness and project.config.work == "code"
     git("add", "-A", cwd=repo)
     git("commit", "-qm", "orchestra config", cwd=repo)
@@ -185,7 +226,7 @@ def test_ticket_goes_open_to_done(env):
 
 
 def test_rejection_loops_back_to_worker(env, monkeypatch):
-    monkeypatch.setenv("FAKE_PI_REJECT_FIRST", "1")
+    knob(env, monkeypatch, "FAKE_PI_REJECT_FIRST")
     t = env.create(title="Needs two tries")
     env.settle(t)
     assert env.state(t) == "DONE"
@@ -196,7 +237,7 @@ def test_rejection_loops_back_to_worker(env, monkeypatch):
 
 
 def test_blocked_worker(env, monkeypatch):
-    monkeypatch.setenv("FAKE_PI_WORKER_BLOCK", "1")
+    knob(env, monkeypatch, "FAKE_PI_WORKER_BLOCK")
     t = env.create(title="Blocked one")
     env.settle(t)
     assert env.state(t) == "BLOCKED"
@@ -217,7 +258,7 @@ def test_gate_rejection_reengages_worker_then_lands(env, monkeypatch):
     """The worker's first attempt passes review but fails the gate's tests; the task system sends
     it back; the same worker session is re-engaged in the same worktree, fixes it, is re-reviewed,
     and the ticket lands."""
-    monkeypatch.setenv("FAKE_PI_BREAK_FIRST", "1")
+    knob(env, monkeypatch, "FAKE_PI_BREAK_FIRST")
     t = env.create(title="Breaks the build first")
     env.settle(t)
     assert env.state(t) == "DONE"

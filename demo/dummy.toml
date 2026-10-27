@@ -1,0 +1,156 @@
+# The free demo's script (`uv run demo/run.py --dummy`): what the scripted agents of the dummy
+# harness do with the demo's four tickets, so they land with real work and cost nothing. Rules
+# are tried in order and the first that matches is played; a turn no rule here matches gets the
+# harness's built-in rule for its role (orchestra_agents/harness/dummy_defaults.toml). The format
+# is in SPEC.md section 6 and orchestra_agents/harness/dummy_script.py.
+
+# DEMO-1 and DEMO-2 are shell commands: the program worker usually takes them, but a dummy worker
+# that accepts first does the same.
+[[rule]]
+role = "worker"
+prompt = "Record the toolchain"
+steps = [
+  { say = "Recording the toolchain." },
+  { run = "mkdir -p notes && { git --version; uname -s; } > notes/toolchain.txt" },
+  { commit = "{ticket}: record the toolchain" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "notes/toolchain.txt names git's version and the kernel." } },
+]
+
+[[rule]]
+role = "worker"
+prompt = "Record the day the project started"
+steps = [
+  { run = "mkdir -p notes && date +%F > notes/started.txt" },
+  { commit = "{ticket}: record the day the project started" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "notes/started.txt holds today's date." } },
+]
+
+# DEMO-3: the reviewer rejects the first round (the test does not check the order), and the
+# worker's second round adds the test it asked for. Rules for a later turn come first.
+[[rule]]
+role = "reviewer"
+prompt = "Count the lines of the Python files"
+turn = 1
+steps = [
+  { say = "Reading the test against the acceptance criteria." },
+  { sleep = 3 },
+  { tool = "report_review", args = { verdict = "REJECTED", summary = "The tool works, but its test does not check the order.", feedback = "1. Test that the longest file comes first." } },
+]
+reply = "Rejected: the test does not check the order."
+
+[[rule]]
+role = "worker"
+prompt = "Count the lines of the Python files"
+turn = 2
+
+[[rule.steps]]
+write = "tests/test_line_counts.py"
+text = '''
+import runpy
+
+
+def test_longest_first():
+    counts = runpy.run_path("tools/line_counts.py")["counts"]()
+    assert counts, "git tracks no Python file"
+    assert [n for _, n in counts] == sorted((n for _, n in counts), reverse=True)
+'''
+
+[[rule.steps]]
+commit = "{ticket}: test that the longest file comes first"
+
+[[rule.steps]]
+tool = "report_ticket"
+args = { state = "READY_FOR_REVIEW", summary = "The test now checks that the longest file comes first." }
+
+[[rule]]
+role = "worker"
+prompt = "Count the lines of the Python files"
+
+[[rule.steps]]
+say = "Writing tools/line_counts.py and its test."
+
+[[rule.steps]]
+write = "tools/line_counts.py"
+text = '''
+"""Each Python file git tracks, with its number of lines, longest first."""
+
+import subprocess
+
+
+def counts(root="."):
+    names = subprocess.run(["git", "ls-files", "*.py"], cwd=root, capture_output=True, text=True, check=True).stdout.split()
+    out = []
+    for name in names:
+        with open(f"{root}/{name}", encoding="utf-8", errors="replace") as f:
+            out.append((name, sum(1 for _ in f)))
+    return sorted(out, key=lambda c: (-c[1], c[0]))
+
+
+if __name__ == "__main__":
+    for name, n in counts():
+        print(f"{n:6d}  {name}")
+'''
+
+[[rule.steps]]
+write = "tests/test_line_counts.py"
+text = '''
+import subprocess
+import sys
+
+
+def test_it_runs():
+    assert subprocess.run([sys.executable, "tools/line_counts.py"], check=False).returncode == 0
+'''
+
+[[rule.steps]]
+run = "python tools/line_counts.py"
+
+[[rule.steps]]
+commit = "{ticket}: count the lines of the Python files"
+
+[[rule.steps]]
+tool = "report_ticket"
+args = { state = "READY_FOR_REVIEW", summary = "tools/line_counts.py prints each tracked Python file's line count, longest first, with a test." }
+
+# DEMO-4: a real collector, declared under [[collect]]; once it lands, `orchestra run` runs it.
+[[rule]]
+role = "worker"
+prompt = "Measure the repository"
+
+[[rule.steps]]
+write = "machines/repo_stats.sh"
+text = '''
+#!/bin/sh
+# The repository's size, as Prometheus text: the files git tracks and the commits on main.
+set -eu
+echo "repo_files $(git ls-files | wc -l | tr -d ' ')"
+echo "repo_commits $(git rev-list --count main)"
+'''
+
+[[rule.steps]]
+run = "chmod +x machines/repo_stats.sh && machines/repo_stats.sh"
+
+[[rule.steps]]
+write = "orchestra.toml"
+append = true
+text = '''
+
+[[collect]]
+name = "repo_stats"
+command = "machines/repo_stats.sh"
+every = "30s"
+'''
+
+[[rule.steps]]
+commit = "{ticket}: measure the repository"
+
+[[rule.steps]]
+tool = "report_ticket"
+args = { state = "READY_FOR_REVIEW", summary = "machines/repo_stats.sh prints repo_files and repo_commits; declared under [[collect]] every 30 s." }
+
+# The Supervisor answers a chat (and every wake-up) with the project's status, read with its
+# tool; it does not think, so it says so.
+[[rule]]
+role = "supervisor"
+steps = [{ tool = "project_status" }]
+reply = "I read the project's status with my tool (above). I am the demo's scripted Supervisor: I answer every message the same way and change nothing."

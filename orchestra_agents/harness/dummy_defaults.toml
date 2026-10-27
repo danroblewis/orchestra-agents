@@ -1,0 +1,39 @@
+# The dummy harness's built-in rules (dummy_script.py): what each built-in role does when the
+# project's script has no rule for the turn. They make a working team on their own: a worker
+# that does a token piece of work and reports it ready, a reviewer that approves, a Supervisor
+# that answers, a Coordinator and any custom agent that do nothing.
+
+# A code ticket: a file of the ticket's own (so two tickets' branches land side by side), committed.
+[[rule]]
+role = "worker"
+checkout = true
+steps = [
+  { write = "work/{ticket}.md", text = "Work on {ticket}, turn {turn}, by the dummy worker.\n", append = true },
+  { commit = "{ticket}: dummy work" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "The dummy worker wrote work/{ticket}.md and committed it." } },
+]
+reply = "Done; reported ready for review."
+
+# A task: the result in the ticket's folder.
+[[rule]]
+role = "worker"
+steps = [
+  { write = "RESULT.md", text = "# {ticket}\n\nThe dummy worker's result, turn {turn}.\n" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "The dummy worker wrote RESULT.md." } },
+]
+reply = "Done; reported ready for review."
+
+[[rule]]
+role = "reviewer"
+steps = [
+  { tool = "report_review", args = { verdict = "APPROVED", summary = "The dummy reviewer approves." } },
+]
+reply = "Approved."
+
+[[rule]]
+role = "supervisor"
+reply = "I am a scripted Supervisor (the dummy harness). I read your message and changed nothing."
+
+[[rule]]
+role = "*"
+reply = "Nothing to do."

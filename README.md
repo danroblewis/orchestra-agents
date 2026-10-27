@@ -4,7 +4,8 @@ AI agents as Orchestra machines. A host (`orchestra-agents run`) keeps the resid
 (the Supervisor the human talks to, the Coordinator that keeps the plan executable, any custom
 agent), wakes them on events and schedules, and runs a worker or a reviewer on a ticket when a
 task system (orchestra-tasking) assigns one over Orchestra's event bus. Which product runs a
-session is a setting: Pi, Claude Code or Codex. An Orchestra plugin (`agents`) adds the Agents
+session is a setting: Pi, Claude Code or Codex, or `dummy`, scripted agents with no model, no
+network and no cost, for demos and tests. An Orchestra plugin (`agents`) adds the Agents
 page, the Supervisor chat, and the agents' machine cards to Orchestra's web UI.
 
 How it works, with diagrams, the tools and the protocols: [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -18,13 +19,15 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
 
     uv sync --extra dev                # first clone github.com/danroblewis/orchestra beside this repository as `orchestra_2`, and orchestra-tasking as `orchestra-tasking` (the paths in [tool.uv.sources])
     uv run demo/run.py                 # a fresh demo project at ~/orchestra-agents-demo, http://127.0.0.1:8072
+    uv run demo/run.py --dummy         # the same demo for free: scripted agents, no model, no network
 
 An AI reviewer (Claude Code, Haiku) and a program worker (a shell runner) work the same queue:
 fifteen tickets over about four minutes, eight at once and then one every 30 s, five of them
 rejected once and three blocked for a planner, about ten cents of Haiku; `--tickets 3` is a
 one-minute look. `demo/README.md` says what you will see and where. Ctrl-C stops everything;
-remove `~/orchestra-agents-demo` first to run it again. With `CLAUDE_BINARY` set to
-`tests/e2e/fake_claude.py` it runs without a model.
+remove `~/orchestra-agents-demo` first to run it again. With `--dummy` the agents run on the
+dummy harness, playing `demo/dummy.toml`: the four tickets land with real work (one rejected once
+and reworked) and the Supervisor answers the chat, without a model and at no cost.
 
 ## Use it on a repository
 
@@ -32,7 +35,7 @@ The task system must be set up first (`tasking init`, `tasking run`; see its REA
 repository's `orchestra.toml`:
 
     [agents]
-    harness = "claude_code"      # pi | claude_code | codex
+    harness = "claude_code"      # pi | claude_code | codex | dummy
     model = "haiku"
     serves = ["worker", "reviewer"]   # the task system's roles these agents fill
 
@@ -80,10 +83,29 @@ State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in t
 under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page
 shows it.
 
+## Dummy agents
+
+`harness = "dummy"` runs every agent from a script instead of a model: each turn plays the first
+matching rule of the file `[agents] dummy_script` names (TOML), then the built-in rules, so the
+setting alone is a working team (a worker commits a token file and reports ready, a reviewer
+approves, the Supervisor answers that it is scripted). A rule matches on the role, the ticket, a
+pattern in the prompt and the turn's number, and its steps write files, run commands, commit,
+call the agents' tools, wait or fail:
+
+    [[rule]]
+    role = "reviewer"
+    turn = 1                     # the first review of each ticket is a rejection
+    steps = [{ tool = "report_review", args = { verdict = "REJECTED", summary = "Not yet.", feedback = "1. Add a test." } }]
+
+The tools go through the same calls as a model's, so a test on dummy agents tests everything but
+the model. The format: SPEC.md section 6, ARCHITECTURE.md "The dummy harness and its scripts",
+and `demo/dummy.toml` as a worked example.
+
 ## Tests
 
     uv run python -m pytest -q         # about four minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
-protocol); nothing in the tests calls a model.
+protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`
+runs the whole demo on dummy agents with no API key and no network.

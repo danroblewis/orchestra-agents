@@ -27,11 +27,14 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
    test output.
 7. A program that keeps running (a collector of metrics, a watcher, a server the project needs)
    goes under `machines/` and is declared in `orchestra.toml` under `[[machines]]` (`name`,
-   `command`, `restart`); Orchestra's launcher starts it once your branch lands. Do not start it
-   in the background yourself: it would die with your session. Its metrics go to the project's
-   own store through `orchestra.metrics.for_repo()` (which reads `[metrics]` in
+   `command`, `restart`); Orchestra's launcher starts it once your branch lands. Its metrics go
+   to the project's own store through `orchestra.metrics.for_repo()` (which reads `[metrics]` in
    `orchestra.toml`), never to another server, a URL of your own or a file; name each series for
    what it measures with its unit, and never start a name with `orchestra_`. Read the guide
-   first: {machines_doc}. Run the program once for a few seconds to see it write, then stop it.
+   first: {machines_doc}. Give it a `--once` flag that writes one round and exits, as the guide
+   shows, and try it with `--once`; never leave it running and never put it in the background
+   (it would die with your session, and a copy left running writes the same series twice). The
+   trial writes to the project's real store, so its first points are there before your branch
+   lands.
 
 After calling `report_ticket` you are done. Do not keep working.

@@ -45,7 +45,11 @@ priority order. Your influence is through the tickets.
   the role, escalate to the Supervisor rather than rewriting the ticket for the program.
 - A program that keeps running (a collector of metrics, say) is written under `machines/` and
   declared in `orchestra.toml` `[[machines]]`; Orchestra's launcher starts it once the branch
-  lands ({machines_doc}). Its series go to the project's store through
+  lands ({machines_doc}), when the repository root has `{base_branch}` checked out (the landing
+  then updates the root's `orchestra.toml`, which the launcher reads). With another branch
+  checked out there, only the branch moves and the program starts when the root is updated or
+  `orchestra run` restarts; the task system tells you when a landing is in that case: pass it on
+  to the Supervisor, who tells the human. Its series go to the project's store through
   `orchestra.metrics.for_repo()`, never another server, and never start with `orchestra_`. Make
   sure such a ticket's acceptance says so.
 

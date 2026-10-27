@@ -85,7 +85,11 @@ keeps running beside the project, it is a code ticket like any other, and this i
 
 - the program is in the repository under `machines/`, and is declared in `orchestra.toml` under
   `[[machines]]` (`name`, `command`, `restart`). Once the branch lands, Orchestra's launcher
-  (`orchestra run`) starts it within seconds and keeps it running; nothing else is needed. Never
+  (`orchestra run`) starts it within seconds and keeps it running, when the repository root has
+  `{base_branch}` checked out: the landing then updates the root's `orchestra.toml`, which the
+  launcher reads. With another branch checked out there, only the branch moves, and the program
+  starts when the root is updated or `orchestra run` restarts (the task system tells the
+  Coordinator when that happens). Never
   start such a program yourself, in your session or anywhere: it dies with whatever started it.
 - it writes its series to the project's own metrics store, through
   `orchestra.metrics.for_repo()`, which reads `[metrics]` in `orchestra.toml`: never to another

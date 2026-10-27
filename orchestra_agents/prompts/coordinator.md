@@ -43,15 +43,18 @@ priority order. Your influence is through the tickets.
   roles"): AI agents, programs, or both. Do not assume the worker is a program, or an AI agent.
   A ticket a program cannot take waits for one that can; when no machine that can do it fills
   the role, escalate to the Supervisor rather than rewriting the ticket for the program.
-- A program that keeps running (a collector of metrics, say) is written under `machines/` and
-  declared in `orchestra.toml` `[[machines]]`; Orchestra's launcher starts it once the branch
-  lands ({machines_doc}), when the repository root has `{base_branch}` checked out (the landing
-  then updates the root's `orchestra.toml`, which the launcher reads). With another branch
-  checked out there, only the branch moves and the program starts when the root is updated or
-  `orchestra run` restarts; the task system tells you when a landing is in that case: pass it on
-  to the Supervisor, who tells the human. Its series go to the project's store through
-  `orchestra.metrics.for_repo()`, never another server, and never start with `orchestra_`. Make
-  sure such a ticket's acceptance says so.
+- A measurement is a **collector**: a small script under `machines/` (shell or any language,
+  importing nothing of Orchestra's) that prints its measurements in the Prometheus text format
+  and exits, declared in `orchestra.toml` under `[[collect]]` with `name`, `command` and `every`
+  ({machines_doc}). Something that already serves Prometheus metrics on a URL is a `[[scrape]]`
+  instead. Once the branch lands, `orchestra run` runs it on its interval and stores what it
+  prints in the project's store; that happens when the repository root has `{base_branch}`
+  checked out (the landing then updates the root's `orchestra.toml`, which `orchestra run`
+  reads). With another branch checked out there, only the branch moves and the collector starts
+  when the root is updated or `orchestra run` restarts; the task system tells you when a landing
+  is in that case: pass it on to the Supervisor, who tells the human. A collector writes nowhere
+  itself (no server, URL or file of its own), and no series name starts with `orchestra_`.
+  Make sure such a ticket's acceptance says so. Never run a collector yourself.
 
 ## Execution health, on every wake-up
 

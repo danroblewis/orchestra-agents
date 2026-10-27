@@ -87,66 +87,34 @@ def judge(prompt: str, cwd: Path) -> list[str]:
     return failures
 
 
-# What the fake writes for a ticket asking for a machine (machines/repo_stats.py, declared under
-# [[machines]]): a real collector, written as docs/machines.md in Orchestra's repository says, so the
-# demo's e2e can see it land, start and write its series.
-COLLECTOR = '''"""Repository stats: how many files git tracks, every few seconds.
-
-    python machines/repo_stats.py           keeps measuring (how `orchestra run` runs it)
-    python machines/repo_stats.py --once    writes one round and exits
+# What the fake writes for a ticket asking for a collector (machines/repo_stats.sh, declared under
+# [[collect]]): a real one, written as docs/machines.md in Orchestra's repository says (a script that
+# prints Prometheus text and imports nothing of Orchestra's), so the demo's e2e can see it land, run
+# and its series reach the store.
+COLLECTOR = """#!/bin/sh
+# How many files git tracks, as Prometheus text.
+set -eu
+echo "repo_files $(git ls-files | wc -l)"
 """
-
-import os
-import subprocess
-import sys
-import time
-from pathlib import Path
-
-from orchestra.config import load_project
-from orchestra.events import Events
-from orchestra.metrics import Point, for_repo
-
-MACHINE = "repo_stats"
-EVERY_S = 3
-
-
-def repo_files(root: Path) -> int:
-    out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True).stdout
-    return len(out.splitlines())
-
-
-def main(once: bool = False) -> None:
-    project = load_project()
-    store = for_repo(project.repo_root)
-    Events.for_project(project, source=MACHINE).publish("orchestra.machine.started", {
-        "mode": "continuous", "kind": "program", "listens_for": [], "log": os.environ.get("ORCHESTRA_MACHINE_LOG")})
-    while True:
-        store.write([Point("repo_files", repo_files(project.repo_root), time.time(), {"machine": MACHINE})])
-        if once:
-            return
-        time.sleep(EVERY_S)
-
-
-if __name__ == "__main__":
-    main(once="--once" in sys.argv[1:])
-'''
-DECLARED = '\n[[machines]]\nname = "repo_stats"\ncommand = "python machines/repo_stats.py"\nrestart = "always"\n'
+DECLARED = '\n[[collect]]\nname = "repo_stats"\ncommand = "machines/repo_stats.sh"\nevery = "3s"\n'
 
 
 def do_what_it_asks(prompt: str, cwd: Path) -> None:
     """A code worker's stand-in for doing the ticket: it runs the description's ``sh`` blocks, if
     any (a ticket written for a program worker), and makes each file the acceptance criteria name
-    that is not there yet, so the fake reviewer finds them. A ticket for the repository's machine
-    (its acceptance names machines/repo_stats.py and [[machines]]) gets a real collector, declared
-    in orchestra.toml."""
+    that is not there yet, so the fake reviewer finds them. A ticket for the repository's collector
+    (its acceptance names machines/repo_stats.sh and [[collect]]) gets a real one, declared in
+    orchestra.toml."""
     m = re.search(r"## Description\n(.*?)(?=\n## |\Z)", prompt, re.DOTALL)
     for block in re.findall(r"```(?:sh|bash|shell)\s*\n(.*?)```", m.group(1) if m else "", re.DOTALL):
         subprocess.run(["bash", "-c", block], cwd=cwd, check=False)
     m = re.search(r"## Acceptance criteria\n(.*?)(?=\n## |\Z)", prompt, re.DOTALL)
     acceptance = m.group(1) if m else ""
-    if "machines/repo_stats.py" in acceptance and "[[machines]]" in acceptance:
+    if "machines/repo_stats.sh" in acceptance and "[[collect]]" in acceptance:
         (cwd / "machines").mkdir(exist_ok=True)
-        (cwd / "machines" / "repo_stats.py").write_text(COLLECTOR)
+        script = cwd / "machines" / "repo_stats.sh"
+        script.write_text(COLLECTOR)
+        script.chmod(0o755)
         toml = cwd / "orchestra.toml"
         toml.write_text(toml.read_text() + DECLARED)
     for name in re.findall(r"`([^`\s]+)`", acceptance):

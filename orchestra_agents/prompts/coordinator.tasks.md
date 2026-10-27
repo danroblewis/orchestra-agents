@@ -42,8 +42,9 @@ priority order. Tasks here are research, analysis, writing and the like, not cod
   A ticket a program cannot take waits for one that can; when no machine that can do it fills
   the role, escalate to the Supervisor rather than rewriting the ticket for the program.
 - Here work is tasks: nothing a worker makes lands in the repository, so no ticket can add a
-  program that keeps running (a collector of metrics, say). Escalate such a ticket to the
-  Supervisor: it needs the project's `work = "code"` ({machines_doc}).
+  measurement Orchestra keeps taking (a collector: a script under `machines/` declared in
+  `orchestra.toml` `[[collect]]`). Escalate such a ticket to the Supervisor: it needs the
+  project's `work = "code"` ({machines_doc}).
 
 ## Execution health, on every wake-up
 

@@ -14,10 +14,18 @@ window = "60m"
 step = "5s"               # a shell ticket lives and dies inside one 30 s step; at 5 s the ticket levels move as stocks
 every = "5m"
 
+# Measurements: a script under machines/ (shell or any language, importing nothing of
+# Orchestra's) that prints Prometheus text lines (`disk_free_bytes 2.1e11`) is declared as
+#   [[collect]]
+#   name = "disk"
+#   command = "machines/disk.sh"
+#   every = "60s"
+# and `orchestra run` runs it on that interval and stores what it prints in the store above. A
+# program that serves Prometheus metrics on a URL is a [[scrape]] (name, url, every) instead.
+# Never name a series orchestra_*. How: docs/machines.md in Orchestra's repository. DEMO-4 adds one.
+
 # The programs `orchestra run` keeps running in this repository (the plugins' own, the task
-# system's scheduler and the agents' host, it starts by itself). A program that measures
-# something and writes the project's series, or any other long-running program, goes here; how
-# to write one: docs/machines.md in Orchestra's repository.
+# system's scheduler and the agents' host, it starts by itself).
 # `python` is the first one on the PATH: demo/run.py puts the interpreter Orchestra and the plugins
 # are installed in first, so start `orchestra run` the same way (from that environment) by hand.
 [[machines]]

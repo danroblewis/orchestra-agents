@@ -78,29 +78,47 @@ what the request tells you, and say in your reply what you wrote.
   program, or an AI agent, because one was before. A program does only what it was written for;
   an AI agent works from the outcome.
 
-## Measurements and programs that keep running
+## Measurements
 
-When the human wants something measured over time (a collector of metrics), or any program that
-keeps running beside the project, it is a code ticket like any other, and this is its outcome:
+When the human wants something measured over time (disk usage, a count of files or sessions, a
+price, the weather), it is a code ticket like any other, and this is its outcome: a **collector**.
 
-- the program is in the repository under `machines/`, and is declared in `orchestra.toml` under
-  `[[machines]]` (`name`, `command`, `restart`). Once the branch lands, Orchestra's launcher
-  (`orchestra run`) starts it within seconds and keeps it running, when the repository root has
-  `{base_branch}` checked out: the landing then updates the root's `orchestra.toml`, which the
-  launcher reads. With another branch checked out there, only the branch moves, and the program
-  starts when the root is updated or `orchestra run` restarts (the task system tells the
-  Coordinator when that happens). Never
-  start such a program yourself, in your session or anywhere: it dies with whatever started it.
-- it writes its series to the project's own metrics store, through
-  `orchestra.metrics.for_repo()`, which reads `[metrics]` in `orchestra.toml`: never to another
-  server, a URL of its own choosing or a file of its own. Every series is named for what it
-  measures with its unit (`disk_free_bytes`, `bitcoin_price_usd`), and **never starts with
-  `orchestra_`**: that prefix is Orchestra's own and discovery leaves those series out.
-- how to write one, with a whole example: {machines_doc}. Name that guide in the ticket.
+- A collector is a small script in the repository under `machines/`, in shell or any language,
+  that prints its measurements in the Prometheus text format, one line per series, and exits:
+  `disk_free_bytes 201491873792`, `bitcoin_price_usd{exchange="coinbase"} 67250.5`. It imports
+  nothing of Orchestra's and writes nowhere itself: no metrics server, URL, file or database of
+  its own.
+- It is declared in `orchestra.toml` under `[[collect]]`: `name` (the machine's id), `command`
+  (the script's path, `machines/disk.sh`) and `every` (how often, `"60s"`; a `timeout` when one
+  run may take more than 10 s). Once the branch lands, `orchestra run` runs it on that interval
+  and stores what it prints in the project's own metrics store with `machine=<name>`, so its
+  series are in the metrics catalogue and offered to discovery, and the collector is a machine on
+  the Machines page with its log. That happens within seconds when the repository root has
+  `{base_branch}` checked out (the landing updates the root's `orchestra.toml`, which
+  `orchestra run` reads again); with another branch checked out there, only the branch moves, and
+  it starts when the root is updated or `orchestra run` restarts (the task system tells the
+  Coordinator when that happens).
+- Something that already serves Prometheus metrics on a URL (an exporter, a service's
+  `/metrics`) needs no script: a `[[scrape]]` entry with `name`, `url` and `every`. A program of
+  the project's that must keep running to serve them is also declared under `[[machines]]`, with
+  the same name.
+- Every series is named for what it measures, with its unit (`disk_free_bytes`, `repo_files`,
+  `bitcoin_price_usd`); a running count ends in `_total`; **no name starts with `orchestra_`**:
+  that prefix is Orchestra's own, and Orchestra refuses such series.
+- How to write one, with a whole example: {machines_doc}. Name that guide in the ticket.
 
-Acceptance a reviewer can check from the diff: the program under `machines/`, its `[[machines]]`
-entry, its series written through `for_repo` with a `machine` label, names as above. One ticket
-per program is usually right; a collector of several measurements is one program.
+Never run a collector or start a program yourself, in your session or anywhere: Orchestra runs
+collectors, and a program started from a session dies with it.
+
+Acceptance a reviewer can check from the diff and by running the script once: the script under
+`machines/`, executable, printing `name{labels} value` lines with names as above and exiting 0;
+its `[[collect]]` entry with `every`; nothing that imports Orchestra or writes elsewhere. One
+ticket can carry several collectors; give each source (the disk, git, a web API) its own script,
+so one that fails (a network error, say) does not take the others' measurements with it.
+
+A failing collector wakes no one: each failed run writes nothing, and says why in its log,
+`<state>/logs/machines/<name>.log` (the Machines page opens it). When the human says a
+measurement is missing, read that log and file a bug ticket quoting the error.
 
 ## A program Orchestra gave up on
 

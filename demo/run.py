@@ -16,9 +16,9 @@ starts logs to ~/.orchestrator/<key>/logs/machines/.
 
 The tickets show the two kinds of worker on one queue. Two are shell commands, which the
 program takes (it answers only tickets that give `sh` blocks) and an AI worker could do as
-well; two are small code changes only an AI worker can make, one of them a machine: a program
-that measures something into the project's metrics store, declared in `[[machines]]` so that
-Orchestra starts it once its branch lands. Every ticket is a branch reviewed by an AI reviewer
+well; two are small code changes only an AI worker can make, one of them a collector: a script
+that prints measurements in the Prometheus text format, declared under `[[collect]]` so that
+Orchestra runs it on an interval and stores its series once its branch lands. Every ticket is a branch reviewed by an AI reviewer
 and landed on main through the merge gate.
 
 The AI agents run on Claude Code with Haiku, which costs money (README.md). The demo checks
@@ -66,15 +66,15 @@ PLAN = {"milestone": {"name": "Demo", "description": "Two kinds of worker on one
                             "tests/ that the merge gate runs with pytest.",
              "acceptance": "- `tools/line_counts.py` exists and runs with python, from the repository root\n"
                            "- `tests/test_line_counts.py` exists and passes\n- nothing outside tools/ and tests/ changes"},
-            {"title": "Measure the repository", "objective": "A machine: a program Orchestra keeps running that writes the project's metrics.",
-             "description": "Add a machine that measures the repository every 30 seconds: how many files git tracks and how many "
-                            "commits main has. Its series land in this project's metrics store, so they appear on the Core page and "
-                            "discovery is offered them, and Orchestra starts it and keeps it running once it is merged. Follow "
-                            "docs/machines.md in Orchestra's repository.",
-             "acceptance": "- `machines/repo_stats.py` exists\n"
-                           "- `orchestra.toml` declares it under [[machines]] with restart always\n"
-                           "- it writes through orchestra.metrics.for_repo, with plain series names that do not start with orchestra_ "
-                           "and a machine label\n- it announces itself with orchestra.machine.started"},
+            {"title": "Measure the repository", "objective": "A collector: a script Orchestra runs on an interval, whose output becomes the project's metrics.",
+             "description": "Add a collector that measures the repository every 30 seconds: how many files git tracks and how many "
+                            "commits main has. Once it is merged, Orchestra runs it and stores what it prints in this project's "
+                            "metrics store, so the series appear on the Core page and discovery is offered them. Follow \"A script "
+                            "collector\" in docs/machines.md in Orchestra's repository.",
+             "acceptance": "- `machines/repo_stats.sh` exists, is executable, and prints both counts as Prometheus text lines (name, then value)\n"
+                           "- `orchestra.toml` declares it under [[collect]], to run every 30 seconds\n"
+                           "- each series is named for what it measures and no name starts with orchestra_\n"
+                           "- it imports nothing of Orchestra's and writes nowhere itself"},
         ]}
 
 
@@ -88,18 +88,20 @@ _Maintained by the Supervisor. Every Supervisor turn starts with this document._
 ## Objectives
 1. Show two kinds of worker on one queue: a program that runs shell commands, and AI agents that
    write code; every ticket a branch, reviewed and landed on main through the merge gate.
-2. Measure the project and its work: the task system's and the agents' own series, and programs
-   of this repository (`machines/`, declared under `[[machines]]`) that measure whatever the owner
-   asks for, into this project's metrics store, for the Dynamics page.
+2. Measure the project and its work: the task system's and the agents' own series, and
+   collectors of this repository (scripts under `machines/` that print Prometheus text, declared
+   under `[[collect]]`) that measure whatever the owner asks for, into this project's metrics
+   store, for the Dynamics page.
 
 ## Value propositions
 - The owner sees how work flows through the system and what it costs, from the metrics, without
   reading logs.
-- A new measurement is one ticket: written, reviewed, landed, then started by `orchestra run`.
+- A new measurement is one ticket: a collector written, reviewed, landed, then run by `orchestra run`.
 
 ## Non-goals
 - No product: what the tickets build is small and exists to be measured.
-- No servers or stores of its own: series go to the project's store (`orchestra.metrics.for_repo`).
+- No servers or stores of its own: a collector prints its series and Orchestra stores them in the
+  project's store; nothing here imports Orchestra.
 
 ## Definition of done
 A ticket is DONE when its review is approved and its branch has landed on main through the merge

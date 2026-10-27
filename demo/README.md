@@ -40,11 +40,12 @@ The program worker has its own instance, `shell`: the agents' host names its AI 
 `worker/1`, `worker/2`, and the scheduler knows a holder by its source. Both kinds answer a
 command ticket's offer; the first to accept keeps it and the other is released.
 
-`orchestra.toml` has Orchestra's sections (the file bus; `[discovery]` on a 5 s grid;
-`[[machines]]`), the task system's (`[project]` with `work = "code"`, `[tasks]` with two worker
-slots, one reviewer and a 1 s tick, the merge gate's `[[gate.unit]]`: every Python file compiles
-and the tests pass) and `[agents]` with `serves = ["worker", "reviewer"]`. The Coordinator and
-the Supervisor are told which machines, program or AI agent, have been seen filling each role.
+`orchestra.toml` has Orchestra's sections (the file bus and file metrics store; `[discovery]` on
+a 5 s grid; `[[machines]]`; a comment on `[[collect]]`), the task system's (`[project]` with
+`work = "code"`, `[tasks]` with two worker slots, one reviewer and a 1 s tick, the merge gate's
+`[[gate.unit]]`: every Python file compiles and the tests pass) and `[agents]` with
+`serves = ["worker", "reviewer"]`. The Coordinator and the Supervisor are told which machines,
+program or AI agent, have been seen filling each role.
 
 `run.py` also writes a project context (`.orchestra/PROJECT.md`: the demo's objectives, value
 propositions and non-goals), which the Supervisor starts from, so a request in the chat is acted on
@@ -63,10 +64,16 @@ hand, start it from that environment.
   takes each, whichever accepts first.
 - **DEMO-3 Count the lines of the Python files** is a small tool and its test: only an AI worker
   can write it. The merge gate runs the test before it lands.
-- **DEMO-4 Measure the repository** is a machine: a program that writes the repository's file
-  and commit counts into the project's metrics store every 30 seconds, declared in
-  `[[machines]]`, so Orchestra starts it once the branch lands on main (with the real Claude
-  Code; the fake writes only placeholder files).
+- **DEMO-4 Measure the repository** is a collector: a script, `machines/repo_stats.sh`, that
+  prints the repository's file and commit counts in the Prometheus text format and imports
+  nothing of Orchestra's, declared under `[[collect]]` with an interval of 30 seconds. Once its
+  branch lands on main, `orchestra run` runs it on that interval and stores what it prints in the
+  project's metrics store, where the Core page's metrics catalogue and discovery find it.
+
+A measurement of your own is the same: ask the Supervisor for it in the chat, and a worker writes
+the script and its `[[collect]]` entry (or a `[[scrape]]` of a URL that serves Prometheus
+metrics) on a ticket of its own. How a collector is written: `docs/machines.md` in Orchestra's
+repository. Series never start with `orchestra_`: the prefix is Orchestra's own.
 
 Where to look, at http://127.0.0.1:8072:
 

@@ -137,14 +137,16 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
 
     # every ticket's branch landed on main through the merge gate
     landed = git(target, "ls-tree", "-r", "--name-only", "main").split()
-    assert {"notes/toolchain.txt", "notes/started.txt", "tools/line_counts.py", "tests/test_line_counts.py", "machines/repo_stats.py"} <= set(landed)
+    assert {"notes/toolchain.txt", "notes/started.txt", "tools/line_counts.py", "tests/test_line_counts.py", "machines/repo_stats.sh"} <= set(landed)
+    toml = git(target, "show", "main:orchestra.toml")
+    assert "[[collect]]" in toml and "machines/repo_stats.sh" in toml
 
-    # the machine that landed runs: `orchestra run` read the root's orchestra.toml, which the landing
-    # updated, started the collector, and its series are in the project's store, offered to discovery
-    def collecting() -> bool:
-        procs = {p["name"]: p for p in get(url + "/api/core")["host"]["processes"]}
-        return (procs.get("repo_stats") or {}).get("state") == "running" and procs["repo_stats"]["alive"]
-    wait_until("the landed collector running", collecting, timeout_s=60)
+    # the collector that landed runs: `orchestra run` read the root's orchestra.toml, which the
+    # landing updated, announced the collector on its behalf, runs it, and its series are in the
+    # project's store, offered to discovery
+    def announced() -> bool:
+        return any(e["type"] == "orchestra.machine.started" and e["source"] == "repo_stats" for e in all_events(url))
+    wait_until("the landed collector announced", announced, timeout_s=60)
 
     def written() -> bool:
         rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}

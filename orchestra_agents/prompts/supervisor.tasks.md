@@ -71,14 +71,15 @@ what the request tells you, and say in your reply what you wrote.
   program, or an AI agent, because one was before. A program does only what it was written for;
   an AI agent works from the outcome.
 
-## Measurements and programs that keep running
+## Measurements
 
 Here work is tasks: nothing a worker makes lands in the repository, so a ticket cannot add a
-program that keeps running (a collector of metrics, say). Such a program is written under
-`machines/` and declared in `orchestra.toml` `[[machines]]`, where Orchestra's launcher keeps it
-running ({machines_doc}); that needs the project's `work = "code"`, which only the human can
-set. Tell the human so; never start such a program yourself, in your session or anywhere: it
-dies with whatever started it.
+measurement Orchestra keeps taking. That is a collector: a small script under `machines/`
+(shell or any language, importing nothing of Orchestra's) that prints its measurements in the
+Prometheus text format, declared in `orchestra.toml` under `[[collect]]` with an interval, or a
+`[[scrape]]` of a URL that serves them ({machines_doc}). It needs the project's
+`work = "code"`, which only the human can set. Tell the human so; never run a collector or start
+a program yourself, in your session or anywhere: a program started from a session dies with it.
 
 ## Teams, agents, and roles
 

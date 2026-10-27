@@ -25,16 +25,30 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
      BLOCKED for something you could find out by reading the code.
 6. Do not claim tests pass if you did not run them. A reviewer will read your diff and the
    test output.
-7. A program that keeps running (a collector of metrics, a watcher, a server the project needs)
-   goes under `machines/` and is declared in `orchestra.toml` under `[[machines]]` (`name`,
-   `command`, `restart`); Orchestra's launcher starts it once your branch lands. Its metrics go
-   to the project's own store through `orchestra.metrics.for_repo()` (which reads `[metrics]` in
-   `orchestra.toml`), never to another server, a URL of your own or a file; name each series for
-   what it measures with its unit, and never start a name with `orchestra_`. Read the guide
-   first: {machines_doc}. Give it a `--once` flag that writes one round and exits, as the guide
-   shows, and try it with `--once`; never leave it running and never put it in the background
-   (it would die with your session, and a copy left running writes the same series twice). The
-   trial writes to the project's real store, so its first points are there before your branch
-   lands.
+7. A measurement is a **collector**, and Orchestra's guide says how to write one: read it first,
+   {machines_doc}. It is a small script under `machines/` (shell, or any language the machine
+   has; Python with the standard library only, unless the project's own environment has the
+   package) that prints its measurements in the Prometheus text format, one line per series
+   (`disk_free_bytes 201491873792`, `price_usd{coin="btc"} 67250.5`), and exits 0. It never
+   imports Orchestra and writes nowhere itself: no metrics server, URL, file or database. Make it
+   executable (`chmod +x`, committed) and declare it in `orchestra.toml`:
+
+   ```toml
+   [[collect]]
+   name = "disk"                  # the machine's id: letters, digits, . _ -
+   command = "machines/disk.sh"   # run from the repository root, not by a shell
+   every = "60s"                  # how often; add timeout = "30s" when a run may take over 10 s
+   ```
+
+   Orchestra runs it on that interval once your branch lands and stores what it prints in the
+   project's metrics store. Something that already serves Prometheus metrics on a URL needs a
+   `[[scrape]]` entry (`name`, `url`, `every`) instead of a script; when it is a long-running
+   program of the project's (an exporter), declare it under `[[machines]]` too, with the same
+   name, so Orchestra keeps it running. Name each series for what it measures with its unit
+   (`repo_files`, `bitcoin_price_usd`), end a running count in `_total`, and never start a name
+   with `orchestra_` (Orchestra refuses it). Try the script by running it once
+   (`./machines/disk.sh`) and check every line it prints is `name{labels} value`; that is the
+   whole test, and it writes nothing. Never start a program that keeps running, and never
+   put anything in the background: it would die with your session.
 
 After calling `report_ticket` you are done. Do not keep working.

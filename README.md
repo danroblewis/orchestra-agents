@@ -53,11 +53,13 @@ keeps it running and stops it with itself, giving it 30 s to shut down; its outp
 `orchestra run` out and run `orchestra-agents run`; two hosts of one project refuse to run side
 by side (with `--wait`, the second waits for the first to stop).
 
-A program the project wants kept running (a collector of metrics, say) is the project's own:
-the Supervisor has a worker write it under `machines/` and declare it in `orchestra.toml`
-`[[machines]]`, and Orchestra's launcher starts it once the branch lands (Orchestra's
-`docs/machines.md`). That needs `work = "code"` in `[project]` and an AI agent among the
-workers.
+A measurement the project wants taken over time is a collector of the project's own: the
+Supervisor has a worker write a small script under `machines/` (shell or any language, importing
+nothing of Orchestra's) that prints Prometheus text, and declare it in `orchestra.toml` under
+`[[collect]]` with an interval (or a `[[scrape]]` of a URL that already serves Prometheus
+metrics); once the branch lands, `orchestra run` runs it and stores what it prints in the
+project's metrics store (Orchestra's `docs/machines.md`). That needs `work = "code"` in
+`[project]` and an AI agent among the workers.
 
 Without the task plugin in the same `orchestra web`, the agents still run, but a ticket link on
 the Agents page opens no ticket drawer and no banner says a ticket is blocked.

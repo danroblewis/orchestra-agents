@@ -66,6 +66,26 @@ def test_read_config(project, store):
     assert any("the project" in c for c in out["recent_commits"])
 
 
+def test_read_config_hides_what_looks_like_a_secret(project, store):
+    toml_path = project.repo_root / "orchestra.toml"
+    toml_path.write_text(toml_path.read_text() + """
+[[scrape]]
+name = "app"
+url = "https://admin:hunter2@host/metrics?token=abc123&page=2"
+auth = { bearer = "tok-1", bearer_file = "/run/app.tok" }
+
+[[machines]]
+name = "feed"
+command = "python feed.py --api-key s3cret ghp_abcdefghijklmnopqrstuvwxyz0123"
+""")
+    git(project.repo_root, "commit", "-qam", "secrets someone wrote by hand")
+    text = see(project, store, "read_config")["text"]
+    for secret in ("admin", "hunter2", "abc123", "tok-1", "s3cret", "ghp_"):
+        assert secret not in text, secret
+    assert "https://<hidden>@host/metrics?token=<hidden>&page=2" in text and 'bearer_file = "/run/app.tok"' in text
+    assert '[[collect]]\nname = "disk"' in text
+
+
 def test_processes_and_collectors_with_their_last_round(project, store):
     out = see(project, store, "list_processes")
     assert out["launcher"].startswith("no orchestra run") and out["processes"] == []

@@ -12,13 +12,19 @@ A change is made only when the checkout can take it as a commit of its own: the 
 is a git checkout on the base branch, and ``orchestra.toml`` has no uncommitted change (someone's
 edit in progress is never mixed into the Supervisor's). The commit holds ``orchestra.toml`` and
 nothing else, whatever else is changed in the checkout. When the commit fails the file is put
-back as it was, so a refused change leaves nothing behind."""
+back as it was, so a refused change leaves nothing behind.
+
+Nothing that looks like a secret is ever added (``secret_shapes``): the file is committed and
+every change is announced on the bus, so a change whose new lines hold a password, a token or a
+key is refused before anything is written, and the Supervisor is told to pass it through an
+environment variable or a file the program reads."""
 
 from __future__ import annotations
 
 import os
 import subprocess
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -30,6 +36,7 @@ from orchestra.launcher import from_toml as processes_from_toml
 from tomlkit.toml_document import TOMLDocument
 
 from .config import Config, ConfigError, Project
+from .secret_shapes import secret_in
 from .store import StoreError
 
 FILE = "orchestra.toml"
@@ -92,6 +99,14 @@ def check(before: str, after: str) -> None:
         raise StoreError("the change was not made, because " + "; ".join(new))
 
 
+def no_secret(before: str, after: str) -> None:
+    """Refuse a change whose new lines hold what looks like a secret."""
+    for line in (Counter(after.splitlines()) - Counter(before.splitlines())):
+        if what := secret_in(line):
+            raise StoreError(f"the change holds what looks like a secret ({what}); {FILE} is committed and announced, so "
+                             "pass it through an environment variable or a file the program reads")
+
+
 def write(project: Project, text: str) -> None:
     """The whole file at once (a reader never sees half of it), keeping its mode."""
     p = path(project)
@@ -127,6 +142,7 @@ def change(project: Project, edit: Callable[[str], tuple[str, str]], reason: str
     what, after = edit(before)
     if after == before:
         return {"changed": f"nothing: {what} already", "commit": None}
+    no_secret(before, after)
     check(before, after)
     write(project, after)
     try:

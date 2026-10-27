@@ -21,6 +21,7 @@ from orchestra.web.machine_logs import readable, tail
 
 from .config import Project
 from .fillers import Fillers
+from .secret_shapes import redact
 from .store import AgentStore, StoreError
 from .toml_edit import FILE, git, path, why_not_committable
 
@@ -29,9 +30,11 @@ LOOK_BACK = 5000
 
 
 def read_config(project: Project) -> dict:
-    """The file as it is, whether it can take a change now, and its last commits."""
+    """The file as it is, with anything that looks like a secret hidden (``secret_shapes``: a
+    session's transcript is no place for one), whether it can take a change now, and its last
+    commits."""
     log = git(project, "log", "-8", "--format=%h %ad %s", "--date=format:%Y-%m-%d %H:%M", "--", FILE).stdout.splitlines()
-    return {"ok": True, "path": str(path(project)), "text": path(project).read_text(encoding="utf-8"),
+    return {"ok": True, "path": str(path(project)), "text": redact(path(project).read_text(encoding="utf-8")),
             "can_change": why_not_committable(project) or "yes: the root is on the base branch and the file is committed",
             "recent_commits": log}
 

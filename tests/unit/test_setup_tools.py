@@ -164,6 +164,38 @@ def test_what_orchestra_would_refuse_is_not_written(project, store):
     assert changed_events(store) == []
 
 
+@pytest.mark.parametrize("tool,args,what", [
+    ("set_collector", {"name": "app", "url": "https://admin:hunter2@host/metrics"}, "a user and password in a URL"),
+    ("set_collector", {"name": "app", "url": "https://host/metrics?access_token=abc123"}, "a secret in a URL's query"),
+    ("set_collector", {"name": "app", "url": "https://host/metrics?page=2&api_key=zzz"}, "a secret in a URL's query"),
+    ("set_machine", {"name": "feed", "command": "python feed.py --token ghp_abcdefghijklmnopqrstuvwxyz0123"}, "a value after a secret's option"),
+    ("set_machine", {"name": "feed", "command": "python feed.py --password=s3cret"}, "a value after a secret's option"),
+    ("set_machine", {"name": "feed", "command": "python feed.py --api-key s3cret"}, "a value after a secret's option"),
+    ("set_machine", {"name": "feed", "command": "python feed.py github_pat_abcdefghijklmnopqrstuvwxyz_0123"}, "a GitHub token"),
+    ("set_machine", {"name": "feed", "command": "python feed.py gho_abcdefghijklmnopqrstuvwxyz0123"}, "a GitHub token"),
+    ("set_machine", {"name": "feed", "command": "python slack.py xoxb-1234567890-abcdefghij"}, "a Slack token"),
+    ("set_machine", {"name": "feed", "command": "aws-feed AKIAABCDEFGHIJKLMNOP"}, "an AWS access key"),
+    ("set_machine", {"name": "feed", "command": "python llm.py sk-ant-api03-abcdefghijklmnop"}, "an API key"),
+    ("set_collector", {"name": "app", "command": "curl -sH 'Authorization: Bearer abcdefgh12345678' http://x/metrics"}, "a bearer token"),
+])
+def test_a_change_that_holds_a_secret_is_refused_before_anything_is_written(project, store, tool, args, what):
+    before, head = (project.repo_root / "orchestra.toml").read_text(), git(project.repo_root, "rev-parse", "HEAD")
+    with pytest.raises(StoreError, match="looks like a secret") as e:
+        call(project, store, tool, reason="the owner wants this measured", **args)
+    assert what in str(e.value) and "environment variable" in str(e.value)
+    assert "hunter2" not in str(e.value) and "s3cret" not in str(e.value)
+    assert (project.repo_root / "orchestra.toml").read_text() == before and git(project.repo_root, "rev-parse", "HEAD") == head
+    assert changed_events(store) == []
+
+
+def test_a_secret_passed_through_the_environment_or_a_file_is_accepted(project, store):
+    call(project, store, "set_collector", name="app", url="https://host.example/metrics?page=2", reason="the app serves its own metrics")
+    call(project, store, "set_machine", name="feed", command="python feed.py --token $FEED_TOKEN --token-file /run/feed.tok",
+         reason="the feed must keep running")
+    call(project, store, "set_machine", name="clone", command="git clone ssh://git@github.com/x/y.git", reason="the mirror must keep running")
+    assert {m["name"] for m in toml(project)["machines"]} >= {"feed", "clone"}
+
+
 def test_a_change_that_cannot_be_its_own_commit_on_the_base_branch_is_refused(project, store):
     with pytest.raises(StoreError, match="reason"):
         call(project, store, "set_work_mode", work="code", reason="why")

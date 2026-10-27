@@ -300,3 +300,16 @@ def test_a_wake_ups_snapshot_query_comes_from_the_agent_woken(project):
         host._wake("coordinator", ["task.attention_needed: T-1 is blocked"])
     q = [e for e in events.read(0)[0] if e["type"] == "task.query_requested"]
     assert [(e["source"], e["op"], e["by"]) for e in q] == [("coordinator", "snapshot", "coordinator")]
+
+
+def test_a_process_orchestra_gave_up_on_wakes_the_supervisor_with_its_log(project):
+    """A collector that crashes at runtime lands, fails, and is given up on by Orchestra's
+    launcher; the Supervisor is woken with what to read, so it can file a bug ticket."""
+    host, store, events = host_with(project, FakeHarness(reply="ok"))
+    host._refresh_org(store.runtime()["agent_state"])
+    events.publish("orchestra.process.gave_up", {"name": "repo_stats", "code": 1, "failures": 5})
+    host._wake_on_events()
+    [w] = store.runtime()["wakeups"]
+    assert w["target"] == "supervisor"
+    log = project.orchestra.logs_dir / "machines" / "repo_stats.log"
+    assert "process repo_stats" in w["reason"] and "exit code 1" in w["reason"] and str(log) in w["reason"]

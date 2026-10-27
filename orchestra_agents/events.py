@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .config import Project
 
 HOST = "agents"
+GAVE_UP = "orchestra.process.gave_up"   # Orchestra's launcher stopped restarting a process (data: name, code, failures)
 
 
 def default_source() -> str:

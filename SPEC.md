@@ -101,7 +101,10 @@ grant the `tickets` group; a worker or reviewer only reports.
 
 **Attention**: the task system asks a planner to look at something with `task.attention_needed`
 (`to`: supervisor or coordinator, the reason, the ticket). The built-in planners wake on it like
-any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
+any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`). The Supervisor also
+wakes on Orchestra's `orchestra.process.gave_up` (its launcher stopped restarting a process): the
+wake-up names the process, its last exit code and its log, `<state>/logs/machines/<name>.log`, and
+its prompt has it read the log and file a bug ticket for the program.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .events import GAVE_UP
 from .protocol import (
     ACCEPTED,
     ASSIGNED,
@@ -57,7 +58,7 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "context", "pipeline", "roles", "team", "events"),
-    wake_on=(f"{ATTENTION}:{SUPERVISOR}",),
+    wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent"),
     emits=(REQUESTS["create_ticket"], REQUESTS["update_ticket"], REQUESTS["create_milestone"], REQUESTS["close_milestone"],
            "context.updated", "role.created", "agent.created", "team.created", "agent.messaged"),

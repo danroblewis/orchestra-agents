@@ -23,7 +23,7 @@ from . import prompting, tooling
 from .clock import due_at, parse_interval
 from .config import Project
 from .control import ControlServer
-from .events import Events
+from .events import GAVE_UP, Events
 from .fillers import Fillers
 from .harness import AgentSession, SessionSpec, get_harness
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
@@ -328,9 +328,20 @@ class AgentHost:
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
-                bits = [f"{k}={ev[k]}" for k in ("ticket", "milestone", "from", "to", "reason", "by", "probe", "subject", "note", "output") if ev.get(k)]
-                self.store.add_wakeup(name, f"event {ev['type']}" + (" " + " ".join(str(b)[:300] for b in bits) if bits else ""))
+                self.store.add_wakeup(name, self._wake_reason(ev))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
+
+    def _wake_reason(self, ev: dict) -> str:
+        """What a wake-up says about the event that caused it: its type and the fields an agent
+        acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
+        if ev["type"] == GAVE_UP:
+            name = ev.get("name")
+            log = self.project.orchestra.logs_dir / "machines" / f"{name}.log"
+            return (f"event {GAVE_UP}: Orchestra's launcher gave up on the process {name} after {ev.get('failures')} "
+                    f"failures in a row, each soon after it started (last exit code {ev.get('code')}); it is not restarted. "
+                    f"Its log: {log} (also on the Core page)")
+        bits = [f"{k}={ev[k]}" for k in ("ticket", "milestone", "from", "to", "reason", "by", "probe", "subject", "note", "output") if ev.get(k)]
+        return f"event {ev['type']}" + (" " + " ".join(str(b)[:300] for b in bits) if bits else "")
 
     def _schedule_wakeups(self, states: dict) -> None:
         """Queue a wake-up for agents whose interval has elapsed or whose daily time has come."""

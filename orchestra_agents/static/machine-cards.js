@@ -19,7 +19,7 @@
   const ROLE_C = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
   const RANK = { supervisor: 10, coordinator: 11, agents: 15, worker: 30, reviewer: 31 };
   const stateColor = (st) => (typeof color === "function" ? color(st) : "var(--muted)");
-  const kindOf = (m) => m.kind;
+  const kindOf = (m) => (m.kinds && m.kinds.agent ? "agent" : m.kind);   // a machine with any agent instance is an agent here (worker: agent ×2, program ×1)
   const roleOf = (m) => (m.about && m.about.role) || m.id;
   const sessionsOf = (m) => (D ? D.sessions.filter((s) => s.role === roleOf(m)) : []);
   // what is known of the agent beyond its sessions, for its status (agents.js agentStatus)

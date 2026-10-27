@@ -26,13 +26,14 @@ Normalized events (dicts with ``type``):
 
 from __future__ import annotations
 
+import json
 import os
 import queue
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 OnEvent = Callable[[dict], None]
@@ -200,6 +201,28 @@ class AgentSession(ABC):
         None when no turn ever ran."""
 
 
+@dataclass
+class ContextSize:
+    """How full a session's context is, as the harness's own transcript records it."""
+    tokens: int | None = None      # at the last model call since the last compaction; None: no call since, or none recorded
+    compactions: list[dict] = field(default_factory=list)   # every compaction recorded, oldest first: {tokens_before, tokens_after}
+
+
+def records(session_file: str | Path) -> Iterator[dict]:
+    """A JSONL transcript's records; a line that is not a JSON object is skipped."""
+    p = Path(session_file)
+    if not p.exists():
+        return
+    with p.open(encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(e, dict):
+                yield e
+
+
 class Harness(ABC):
     name: str = "unknown"
 
@@ -211,6 +234,14 @@ class Harness(ABC):
     def read_transcript(session_file: str | Path) -> list[dict]:
         """Parse the harness's transcript into [{role, text, tool_calls, ts, ...}] where role
         is user | assistant | toolResult. ``ts`` is an ISO-8601 string or epoch seconds."""
+
+    @staticmethod
+    def context(session_file: str | Path) -> ContextSize:
+        """How full the session's context is: the tokens the harness's last model call reported,
+        and the compactions its transcript records (whoever asked for them). Never the
+        transcript's size, which holds far more than the context (tool output, request records).
+        Default: nothing known, so nothing is compacted or rotated."""
+        return ContextSize()
 
 
 def assistant_text(content) -> str:

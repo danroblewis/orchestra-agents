@@ -77,7 +77,10 @@ and `tasking/requests.py` hold the full field tables).
 brief; a reviewer's offer carries the worker's summary and, in code mode, the commit and the
 unit-test output). For a role it serves, the host starts a session for the ticket (`worker-<id>`
 or `reviewer-<id>`) as the lowest free instance of the role (`worker/1`), answers
-`task.accepted` from that instance, sends `task.working` at least every `HEARTBEAT_S` and sooner
+`task.accepted` from that instance, and waits for the task system's word before the session
+starts: `ticket.transitioned` naming the instance as the ticket's `owner` (it holds it), or
+`task.released` (another machine accepted first), so an instance that loses the race spends
+nothing; with no word within the offer's lease it starts nothing and reports `failed`. It then sends `task.working` at least every `HEARTBEAT_S` and sooner
 when what the agent is saying has changed (the heartbeat's `text`: a line for the task system's
 Tasks panel), runs the turn, and reports `task.reported` with the agent's report (a worker's
 `report_ticket`, exactly {state, summary, blocked_reason}: READY_FOR_REVIEW or BLOCKED with a
@@ -139,9 +142,14 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
 - bounds every turn: it ends when the agent settles, after `silence_timeout` with nothing from
   the harness, or at `turn_timeout` when set (`session.timed_out`, with what the agent was doing);
   a harness failure is `session.error`; a restart mid-turn is `session.interrupted`;
-- bounds every session's context: past `session_max_bytes` of transcript since the last
-  compaction it asks the harness to compact (`agent.compacted`), and rotates the session when
-  the harness cannot (`agent.reset`, the old transcript archived as a run); the events that
+- bounds every session's context, in tokens as the harness's transcript records them (the
+  tokens of its last model call; `Harness.context`), never by the transcript's size, which holds
+  far more than the context: past `compact_tokens` a harness that compacts itself (Claude Code)
+  is left to it, one that compacts on request (Pi) is asked, and one that cannot (Codex) has its
+  session rotated (`agent.reset`, the old transcript archived as a run). `agent.compacted` is
+  published once for each compaction the transcript records, whoever asked for it (Claude Code's
+  `compact_boundary`, Pi's `compaction` entry, Codex's `compacted`), with the tokens before and
+  after when the harness says; it always means a real compaction. The events that
   concern one session are also kept on its record, so its transcript shows them without a read
   of the bus;
 - on start, refuses to run beside another host of the same project, then stops any turn the
@@ -160,11 +168,20 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   since the last turn: a count per type and at most eight events that concern the Supervisor
   (attention addressed to it, a ticket blocked, the gate, staging, a process Orchestra gave up
   on, an agent's crash loop; `prompting.CONCERNS`), however busy the bus was, so a turn does not
-  fill the session's context. The human's message follows whole. Streamed as NDJSON.
-  A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause,
-  restart or reset waits for the running one, and a paused Supervisor refuses the chat with the
-  reason. The web plugin proxies it; `orchestra-agents chat` attaches to it. A host that cannot
+  fill the session's context. The notices are marked as the Supervisor's alone, and the human's
+  message follows whole after `[The human's message]` (`prompting.chat_turn`). Streamed as NDJSON.
+  A reply that claims an action the turn did not take (a promise of a later action not tied to
+  anything that will happen, or a claim of a change with no tool call; `promises.py`, a
+  heuristic) gets one more turn on the session to take it or say it is not done; the human gets
+  the correction after the reply. The same check runs on the Supervisor's wake-ups, whose reply
+  is left for the human as a message. A session runs one turn at a time: a chat and a wake-up
+  queue behind each other, a pause, restart or reset waits for the running one, and a paused
+  Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra-agents chat` attaches to it. A host that cannot
   bind the endpoint exits instead of running unreachable;
+- wakes the Supervisor when a ticket it created (`ticket.created` with `by` = supervisor: the
+  human's requests) is DONE, to leave the human one short message (`landings.py`); the tickets are
+  followed in the Supervisor's agent state until DONE or CANCELLED. A landing is otherwise not
+  named in the Supervisor's digest;
 - answers `orchestra-agents status` from its records (`org_views.agents_status`, the same
   picture the machine cards read): the host, the harness and model, the roles it fills, each
   resident agent's state and wake-ups, and the sessions on tickets.
@@ -217,7 +234,8 @@ caller's role (from the environment the session was started in, never from the a
 `provider`, `thinking`, `serves` (the task system's roles these agents fill; default worker and
 reviewer), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
-(default 20m), `session_max_bytes`, `compact_tokens`, `prompts` (per-role prompt file overrides,
+(default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
+compacted), `prompts` (per-role prompt file overrides,
 relative to the repository), `control_port` (default any free port; a host that cannot bind it
 exits with status 1). Every interval (`coordinator_every`, an agent's `every`, a probe's `every`;
 `clock.py`) is written as Orchestra writes durations, a bare number of seconds or a number with

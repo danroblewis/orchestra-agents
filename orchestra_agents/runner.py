@@ -29,6 +29,8 @@ from .protocol import (
 )
 
 SAY_S = 2.0            # a heartbeat goes out early when what the agent is saying has changed, at most this often
+CONFIRM_S = 180.0      # how long an acceptance waits for the task system's word when the offer names no lease
+CONFIRM_POLL_S = 0.2   # how often it looks
 
 
 class AgentRunner:
@@ -73,14 +75,17 @@ class AgentRunner:
                         pass
 
     def _run(self, a: dict, sid: str, instance: str) -> None:
-        """One assignment: accept, run the session's turn with heartbeats, report. A release
-        that arrives before the session is open skips the turn; one that arrives during it
-        kills the turn (tick) or ends it before the nudge (turns.prompt_with_retry)."""
+        """One assignment: accept, wait for the task system to confirm it (``_confirmed``: an
+        instance that lost the race starts no session), run the session's turn with heartbeats,
+        report. A release that arrives before the session is open skips the turn; one that
+        arrives during it kills the turn (tick) or ends it before the nudge
+        (turns.prompt_with_retry)."""
         host = self.host
         aid, role, tid = a["assignment"], a["role"], a["ticket"]
         path = Path(a["workspace"])
         say = lambda kind, **data: self.events.publish(kind, {"assignment": aid, "ticket": tid, "role": role, **data},
                                                        source=instance, subject=tid)
+        offset = self.events.end()                            # the answer comes after the acceptance
         say(ACCEPTED, instance=instance)
         done = threading.Event()
 
@@ -104,8 +109,10 @@ class AgentRunner:
                 task, nudge = self._work_task(t, a)
             else:
                 task, nudge, commit = self._review_task(t, a, path)
-            if aid in self.released:
-                return                                        # taken back before the turn began: no session, nothing to mark
+            if not self._confirmed(a, instance, offset):
+                if aid not in self.released:                  # no answer at all: say so, in case the ticket is ours after all
+                    text = f"the task system did not confirm the acceptance within {int(self._lease(a))} s; no session was started"
+                return                                        # another instance won, or no answer: no session, nothing spent
             proc = self.procs[aid] = open_session()
             try:
                 if host.residents.trim_if_large(proc, sid, role) == "rotated":
@@ -129,6 +136,30 @@ class AgentRunner:
             if self.released.pop(aid, None) is None:      # a released assignment is no longer this instance's to report on
                 say(REPORTED, report=report, failed=failed, text=(text or "")[-2000:], commit=commit)
             host._release(sid)                            # the slot, whether or not the session ever opened
+
+    @staticmethod
+    def _lease(a: dict) -> float:
+        return float(a.get("lease_s") or CONFIRM_S)
+
+    def _confirmed(self, a: dict, instance: str, offset: int) -> bool:
+        """Wait for the task system's word on this acceptance before a session costs anything:
+        ``ticket.transitioned`` naming this instance as the ticket's owner (it holds it), or
+        ``task.released`` (another instance was first, or the ticket moved on). Without either
+        within the offer's lease, it is not taken as ours."""
+        aid, tid = a["assignment"], a["ticket"]
+        end = time.time() + self._lease(a)
+        while time.time() < end:
+            if aid in self.released:
+                return False
+            evs, offset = self.events.after(offset)
+            for ev in evs:
+                if ev.get("type") == TRANSITIONED and ev.get("ticket") == tid and ev.get("owner") == instance:
+                    return True
+                if ev.get("type") == RELEASED and ev.get("assignment") == aid and ev.get("instance") in (None, instance):
+                    self.released[aid] = ev.get("reason") or "no reason given"
+                    return False
+            time.sleep(CONFIRM_POLL_S)
+        return False
 
     def _work_task(self, t: TicketView, a: dict) -> tuple[str, str]:
         if a.get("branch") is None:                           # a task: a folder and a result

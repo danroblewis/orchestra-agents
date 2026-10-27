@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .base import (
     AgentSession,
+    ContextSize,
     Harness,
     OnEvent,
     SessionSpec,
@@ -25,6 +26,7 @@ from .base import (
     _Deadlines,
     _NormalizerBase,
     assistant_text,
+    records,
     resolve_binary,
 )
 
@@ -270,6 +272,19 @@ class PiHarness(Harness):
 
     def start(self, spec: SessionSpec) -> PiSession:
         return PiSession(spec, self.binary)
+
+    @staticmethod
+    def context(session_file: str | Path) -> ContextSize:
+        """An assistant message's ``usage`` holds the call's tokens (``totalTokens``, or input,
+        cache and output added up); a ``compaction`` entry is a compaction, with ``tokensBefore``."""
+        out = ContextSize()
+        for e in records(session_file):
+            if e.get("type") == "compaction":
+                out.compactions.append({"tokens_before": e.get("tokensBefore"), "tokens_after": None})
+                out.tokens = None
+            elif e.get("type") == "message" and (m := e.get("message") or {}).get("role") == "assistant" and isinstance(u := m.get("usage"), dict):
+                out.tokens = int(u.get("totalTokens") or sum(int(u.get(k) or 0) for k in ("input", "cacheRead", "cacheWrite", "output")))
+        return out
 
     @staticmethod
     def read_transcript(session_file: str | Path) -> list[dict]:

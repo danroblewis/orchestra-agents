@@ -13,6 +13,7 @@ from orchestra.config import init_project as init_orchestra
 
 from orchestra_agents.config import Project, load_project
 from orchestra_agents.harness.base import AgentSession, Harness, SessionSpec, TurnResult
+from orchestra_agents.harness.pi import PiHarness
 
 
 def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "") -> Project:
@@ -110,3 +111,43 @@ class FakeHarness(Harness):
     @staticmethod
     def read_transcript(session_file) -> list[dict]:
         return []
+
+    context = staticmethod(PiHarness.context)      # the fakes' transcripts, when a test writes one, are Pi's
+
+
+class Confirming:
+    """The task system's answer to an acceptance, as its scheduler gives it: the first instance to
+    accept an offer holds it (``ticket.transitioned`` naming it as the owner); a later one is told
+    ``task.released``. The runner starts no session before one of the two."""
+
+    def __init__(self, events):
+        self.events = events
+        self.holders: dict[str, str] = {}
+        self._stop = threading.Event()
+        self._offset = events.end()
+        self._t = threading.Thread(target=self._run, daemon=True)
+
+    def __enter__(self):
+        self._t.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._t.join(timeout=5)
+
+    def _run(self):
+        while not self._stop.wait(0.05):
+            evs, self._offset = self.events.after(self._offset)
+            for ev in evs:
+                if ev.get("type") != "task.accepted":
+                    continue
+                aid, tid, who = ev.get("assignment"), ev.get("ticket"), ev.get("source")
+                if aid in self.holders:
+                    self.events.publish("task.released", {"assignment": aid, "ticket": tid, "role": ev.get("role"), "instance": who,
+                                                          "reason": f"already taken by {self.holders[aid]}"},
+                                        source="task_scheduler", subject=tid)
+                    continue
+                self.holders[aid] = who
+                to = "IN_PROGRESS" if ev.get("role") == "worker" else "IN_REVIEW"
+                self.events.publish("ticket.transitioned", {"ticket": tid, "from": "OPEN", "to": to, "owner": who},
+                                    source="task_scheduler", subject=tid)

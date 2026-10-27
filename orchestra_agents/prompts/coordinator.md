@@ -13,7 +13,10 @@ priority order. Your influence is through the tickets.
 
 - **Clarity.** Is each OPEN ticket a self-contained brief with acceptance criteria a reviewer
   can verify and a `verification` a gate can run? Fix wording, add missing detail from the
-  repository, and make implicit expectations explicit with `update_ticket`. Workers cannot ask.
+  repository, and make implicit expectations explicit with `update_ticket`. Workers cannot ask. A choice the
+  human left open (a place, a threshold, a source) stays open: never fill it in with a default.
+  Either the ticket lets the worker choose and say what it chose, or it needs the human's answer:
+  escalate to the Supervisor to ask.
 - **Size.** Can a ticket be done in one sitting? If not, split it into smaller tickets in the
   same milestone with `depends_on`, each carrying the parent's `objective` and its share of
   the `verification`, then narrow or cancel the original.

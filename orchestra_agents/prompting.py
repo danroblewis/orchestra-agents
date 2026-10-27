@@ -328,12 +328,30 @@ def execution_health(snapshot: dict) -> list[str]:
 
 # What in the event stream concerns the Supervisor enough to be named one by one in its digest:
 # what it is asked to decide or handle (attention addressed to it, a blocked ticket, the gate, the
-# staging deploy, a process Orchestra gave up on, an agent that keeps crashing) and what it waits
-# to tell the human (a ticket landed). Everything else is only counted.
-CONCERNS = ("gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken", "staging.failed",
+# staging deploy, a process Orchestra gave up on, an agent that keeps crashing). Everything else is
+# only counted; a ticket of the human's that is done wakes it on its own (landings.py).
+CONCERNS = ("gate.rejected", "gate.conflict", "gate.error", "gate.base_broken", "staging.failed",
             "pipeline.paused", "orchestra.process.gave_up", "agent.crash_loop")
 DIGEST_EVENTS = 8          # at most this many named events
 DIGEST_TYPES = 8           # at most this many event types counted by name
+
+
+# In front of a Supervisor wake-up: the human is not there, and the reply is what they will read.
+SUPERVISOR_WAKE = ("[Orchestra: a wake-up, not a message from the human, who is not present for this turn. Act with your "
+                   "tools if you can. Your reply is left for the human as a message: write it to them, short and in your own "
+                   "words, about what they need to know or decide; never quote this notice or the reasons below.]\n\n")
+
+# Between what Orchestra tells the Supervisor before a chat turn and the human's message.
+CHAT_SEAM = ("[Orchestra: the notices above are for you; the human has not seen them. Answer the human's message below. "
+             "Mention a notice only when it bears on what they asked, as news in your own words, never as something they saw.]\n\n"
+             "[The human's message]\n")
+
+
+def chat_turn(context: str, message: str) -> str:
+    """A chat turn's prompt: Orchestra's notices (supervisor_context), then the human's message,
+    marked as theirs, so the reply answers the human and keeps the notices out of it. With no
+    notices the message arrives as itself."""
+    return context + CHAT_SEAM + message if context else message
 
 
 def concerns_supervisor(e: dict) -> bool:

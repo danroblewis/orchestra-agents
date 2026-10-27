@@ -4,12 +4,13 @@ events are assignments, answered by the runner); which roles are the agents' at 
 runner's side of an assignment: a slot per instance, a release that is not a failure, a finished
 ticket archived, and a report for every open assignment at shutdown."""
 
+import json
 import subprocess
 import threading
 import time
 
 import pytest
-from conftest import FakeHarness, agents_project
+from conftest import Confirming, FakeHarness, agents_project
 
 from orchestra_agents import protocol
 from orchestra_agents.config import ConfigError
@@ -27,6 +28,13 @@ def project(tmp_path, monkeypatch):
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
     return agents_project(repo)
+
+
+@pytest.fixture(autouse=True)
+def scheduler(project):
+    """The task system's answer to every acceptance (conftest.Confirming): the first holds it."""
+    with Confirming(Events.for_project(project)) as c:
+        yield c
 
 
 def host_with(project, harness):
@@ -109,7 +117,7 @@ def test_a_released_assignment_is_an_interruption_not_a_failure(project, tmp_pat
     (tmp_path / "w").mkdir()
     assigned(events, "a1", "T-1", tmp_path / "w")
     host.runner.tick()
-    wait_for(events, "task.accepted")
+    wait_for(events, "session.started")                                  # confirmed, and the turn is running
     events.publish("task.released", {"assignment": "a1", "ticket": "T-1", "role": "worker", "reason": "operator stopped it"}, subject="T-1")
     host.runner.tick()
     host.runner.threads["a1"].join(20)
@@ -160,7 +168,7 @@ def test_a_rotated_ticket_session_starts_its_turn_once(project, tmp_path):
     host, store, events = host_with(project, FakeHarness(reply="done"))
     big = project.sessions_dir / "worker-T-1.jsonl"
     big.parent.mkdir(parents=True, exist_ok=True)
-    big.write_text("x" * (project.config.session_max_bytes + 1))
+    big.write_text(json.dumps({"type": "message", "message": {"role": "assistant", "usage": {"totalTokens": project.config.compact_tokens + 1}}}) + "\n")
     store.set_session("worker-T-1", kind="worker", status="idle", ticket_id="T-1", session_file=str(big))
     (tmp_path / "w").mkdir()
     assigned(events, "a1", "T-1", tmp_path / "w")
@@ -313,3 +321,36 @@ def test_a_process_orchestra_gave_up_on_wakes_the_supervisor_with_its_log(projec
     assert w["target"] == "supervisor"
     log = project.orchestra.logs_dir / "machines" / "repo_stats.log"
     assert "process repo_stats" in w["reason"] and "exit code 1" in w["reason"] and str(log) in w["reason"]
+
+
+def test_an_instance_that_loses_the_acceptance_race_starts_no_session(project, tmp_path):
+    """Another machine accepted first: the task system releases this instance, which then opens
+    no session (nothing spent) and reports nothing."""
+    harness = FakeHarness(reply="done")
+    host, _store, events = host_with(project, harness)
+    (tmp_path / "w").mkdir()
+    assigned(events, "a1", "T-1", tmp_path / "w")
+    events.publish("task.accepted", {"assignment": "a1", "ticket": "T-1", "role": "worker", "instance": "worker/shell"},
+                   source="worker/shell", subject="T-1")
+    wait_for(events, "ticket.transitioned")                             # the program holds it
+    host.runner.tick()
+    host.runner.threads["a1"].join(20)
+    evs = events.read(0)[0]
+    assert [e["instance"] for e in evs if e["type"] == "task.released"] == ["worker/1"]
+    assert harness.sessions == [] and not [e for e in evs if e["type"] in ("session.started", "task.reported")]
+    assert host._slots == {} and host.runner.released == {}
+
+
+def test_an_acceptance_nobody_answers_starts_no_session(project, tmp_path, scheduler):
+    """No word from the task system within the offer's lease: no session, and a failed report
+    that says why (ignored if the ticket was never this instance's)."""
+    scheduler._stop.set()                                               # the task system has gone quiet
+    harness = FakeHarness(reply="done")
+    host, _store, events = host_with(project, harness)
+    (tmp_path / "w").mkdir()
+    events.publish("task.assigned", {"assignment": "a1", "role": "worker", "ticket": "T-1", "workspace": str(tmp_path / "w"),
+                                     "branch": None, "lease_s": 1, "brief": {"id": "T-1", "title": "t"}}, subject="T-1")
+    host.runner.tick()
+    host.runner.threads["a1"].join(20)
+    [rep] = [e for e in events.read(0)[0] if e["type"] == "task.reported"]
+    assert rep["failed"] is True and "did not confirm the acceptance" in rep["text"] and harness.sessions == []

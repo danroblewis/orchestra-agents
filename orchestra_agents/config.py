@@ -34,8 +34,7 @@ class Config:
     coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
     turn_timeout: float = 0.0           # hard cap per turn; 0 = none
     silence_timeout: float = 1200.0     # end a turn after this long with nothing from the harness
-    session_max_bytes: int = 300_000    # transcript growth since the last compaction that triggers one
-    compact_tokens: int = 100_000
+    compact_tokens: int = 100_000       # a context past this many tokens is compacted (residents.trim_if_large)
     prompt_overrides: dict[str, str] = field(default_factory=dict)
     control_port: int = 0               # 0: any free port, recorded for the web and `chat`
     base_branch: str = "main"           # from the task system's [project], for the prompts
@@ -62,7 +61,7 @@ class Config:
             serves=serves, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
-            session_max_bytes=int(a.get("session_max_bytes", 300_000)), compact_tokens=int(a.get("compact_tokens", 100_000)),
+            compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 

@@ -120,36 +120,40 @@ class Residents:
         self.procs.clear()
 
     def trim_if_large(self, proc: AgentSession | None, sid: str, agent: str) -> str | None:
-        """Keep every session's context bounded. When the transcript has grown past
-        `session_max_bytes` since it was last compacted, ask the harness to compact: older
-        messages become a summary and the agent keeps what it learned, which is what
-        matters 200k tokens into a task. Only when the harness cannot compact (or the
-        attempt fails) is the session rotated: archived as a run and started fresh, with
-        the wake-up or task carrying the current state. Returns "compacted", "rotated",
-        or None when nothing was needed."""
+        """Keep every session's context bounded, measured in tokens as the harness records them
+        (harness.context: the tokens of its last model call), never by the transcript's size,
+        which holds far more than the context. First, every compaction the transcript records
+        that was not reported yet is reported (``agent.compacted``), whoever did it: that is the
+        only time the event is published, so it always means a real compaction. Then, when the
+        context holds more than ``compact_tokens``: a harness that compacts itself is left to it;
+        one that compacts on request is asked (older messages become a summary and the agent
+        keeps what it learned); one that cannot is rotated: archived as a run and started fresh,
+        with the wake-up or task carrying the current state. Returns "compacted", "rotated", or
+        None when nothing happened."""
         host = self.host
-        limit = host.cfg.session_max_bytes
+        limit = host.cfg.compact_tokens
         s = host.store.find_session(sid) or {}
         f = s.get("session_file")
-        if not limit or not f or not Path(f).exists():
+        if not f or not Path(f).exists():
             return None
-        size = Path(f).stat().st_size
-        grown = size - int(s.get("compacted_at_bytes") or 0)
-        if grown <= limit:
-            return None
+        ctx = host.harness.context(f)
+        seen = int(s.get("compactions_seen") or 0)
+        for c in ctx.compactions[seen:]:
+            self._compacted(sid, agent, c, "the harness compacted the context by itself")
+        if len(ctx.compactions) != seen:
+            host.store.set_session(sid, compactions_seen=len(ctx.compactions))
+        if not limit or ctx.tokens is None or ctx.tokens <= limit:
+            return "compacted" if len(ctx.compactions) > seen else None
+        over = f"the context held {ctx.tokens:,} tokens, more than compact_tokens ({limit:,})"
         if proc is not None and proc.alive():
             res = proc.compact()
             if res and res.get("mode") == "auto":
-                # A harness that bounds its own context; nothing to do but note it.
-                host.store.set_session(sid, compacted_at_bytes=Path(f).stat().st_size)
-                host._mark("agent.compacted", session=sid, agent=agent, mode="auto", limit=res.get("limit"),
-                           reason=f"the harness compacts itself past {int(res.get('limit') or 0):,} tokens")
-                return "compacted"
+                return None                                # its own compaction is reported when the transcript records it
             if res:
-                host.store.set_session(sid, compacted_at_bytes=Path(f).stat().st_size, compactions=int(s.get("compactions") or 0) + 1)
-                host._mark("agent.compacted", session=sid, agent=agent, tokens_before=res.get("tokens_before"),
-                           tokens_after=res.get("tokens_after"), reason=f"{grown // 1000} KB of transcript since the last compaction")
-                host.log(f"{sid}: compacted ({res.get('tokens_before')} -> {res.get('tokens_after')} tokens)")
+                # the harness records this compaction in its transcript (now or shortly): it is reported here, not again then
+                host.store.set_session(sid, compactions_seen=len(ctx.compactions) + 1)
+                self._compacted(sid, agent, {"tokens_before": res.get("tokens_before") or ctx.tokens, "tokens_after": res.get("tokens_after")},
+                                f"{over}; Orchestra asked the harness to compact it")
                 return "compacted"
         # no compaction on this harness, or it failed: rotate
         owned = self.procs.get(agent)
@@ -161,6 +165,11 @@ class Residents:
         archived = host.store.retire_session(sid, archived_file)
         host.store.set_agent_state(agent, context_hash=None)
         host._mark("agent.reset", session=sid, agent=agent, archived=archived, by="orchestra",
-                   reason=f"transcript reached {size // 1000} KB and the harness could not compact it")
-        host.log(f"{sid}: transcript {size // 1000} KB, no compaction; archived as {archived}, starting fresh")
+                   reason=f"{over}, and the harness could not compact it")
+        host.log(f"{sid}: {over}, no compaction; archived as {archived}, starting fresh")
         return "rotated"
+
+    def _compacted(self, sid: str, agent: str, c: dict, reason: str) -> None:
+        self.host._mark("agent.compacted", session=sid, agent=agent, tokens_before=c.get("tokens_before"),
+                        tokens_after=c.get("tokens_after"), reason=reason)
+        self.host.log(f"{sid}: compacted ({c.get('tokens_before')} -> {c.get('tokens_after')} tokens): {reason}")

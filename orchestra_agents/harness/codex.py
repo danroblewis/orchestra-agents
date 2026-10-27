@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .base import (
     AgentSession,
+    ContextSize,
     Harness,
     OnEvent,
     SessionSpec,
@@ -29,6 +30,7 @@ from .base import (
     _Deadlines,
     _LineReader,
     _NormalizerBase,
+    records,
     resolve_binary,
 )
 
@@ -266,6 +268,22 @@ class CodexHarness(Harness):
 
     def start(self, spec: SessionSpec) -> CodexSession:
         return CodexSession(spec, self.binary)
+
+    @staticmethod
+    def context(session_file: str | Path) -> ContextSize:
+        """A ``token_count`` event's ``last_token_usage`` is the last call's (``input_tokens``
+        includes the cached ones); a ``compacted`` record is a compaction Codex did."""
+        out = ContextSize()
+        for e in records(session_file):
+            pl = e.get("payload") or {}
+            if e.get("type") == "compacted":
+                out.compactions.append({"tokens_before": None, "tokens_after": None})
+                out.tokens = None
+            elif e.get("type") == "event_msg" and pl.get("type") == "token_count":
+                u = (pl.get("info") or {}).get("last_token_usage") or {}
+                if u:
+                    out.tokens = int(u.get("total_tokens") or int(u.get("input_tokens") or 0) + int(u.get("output_tokens") or 0))
+        return out
 
     @staticmethod
     def read_transcript(session_file: str | Path) -> list[dict]:

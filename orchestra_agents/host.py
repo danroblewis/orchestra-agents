@@ -19,14 +19,15 @@ from pathlib import Path
 import psutil
 from orchestra.runtime import alive
 
-from . import prompting, tooling
+from . import promises, prompting, tooling
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer
 from .events import GAVE_UP, Events
 from .fillers import Fillers
-from .harness import AgentSession, SessionSpec, get_harness
+from .harness import AgentSession, SessionSpec, TurnResult, get_harness
+from .landings import Landings
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
@@ -83,6 +84,7 @@ class AgentHost:
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
+        self.landings = Landings(store)                # the human's tickets, followed until they are done
         self.runner = AgentRunner(self)                # answers the task system's assignments
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
@@ -317,9 +319,12 @@ class AgentHost:
 
     def _wake_on_events(self) -> None:
         """Match new events against every agent's wake_on list and queue wake-ups. Workers and
-        reviewers are not woken: their events are assignments, answered by the runner."""
+        reviewers are not woken: their events are assignments, answered by the runner. A ticket
+        the Supervisor created for the human that is done wakes it to tell the human (landings.py)."""
         evs, self._wake_at = self.events.after(self._wake_at)
         for ev in evs:
+            if landed := self.landings.see(ev, self.cfg):
+                self.store.add_wakeup("supervisor", landed)
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
@@ -468,11 +473,33 @@ class AgentHost:
             if ev.get("type") in ("tool_start", "assistant_end"):
                 emit(ev)
 
-        res = proc.prompt(prefix + message, self.cfg.turn_timeout or None, on_event=on_event, idle_timeout=self.cfg.silence_timeout)
+        res = self._honest(proc, prompting.chat_turn(prefix, message), on_event)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self.events.emit("agent.said", session="supervisor", summary=(res.text or "")[:500])
         return {"text": res.text, "error": res.error, "timed_out": res.timed_out}
+
+    def _honest(self, proc: AgentSession, text: str, on_event) -> TurnResult:
+        """A Supervisor turn whose reply is for the human. A reply that claims an action the turn
+        did not take (promises.py) gets one more turn on the same session to take it or say it is
+        not done; the human gets both, the correction after the reply."""
+        calls = [0]
+
+        def counting(ev: dict) -> None:
+            if ev.get("type") == "tool_start":
+                calls[0] += 1
+            on_event(ev)
+
+        limits = {"timeout": self.cfg.turn_timeout or None, "idle_timeout": self.cfg.silence_timeout}
+        res = proc.prompt(text, on_event=counting, **limits)
+        said = None if res.error or res.timed_out else promises.unkept(res.text, calls[0])
+        if said is None:
+            return res
+        log(f"supervisor: the reply claims an action the turn did not take ({said[:120]!r}); one more turn to do it or say so")
+        again = proc.prompt(promises.follow_up(said), on_event=on_event, **limits)
+        if again.error or again.timed_out or not again.text.strip():
+            return res
+        return TurnResult(text=f"{res.text.rstrip()}\n\n{again.text.strip()}")
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)
@@ -502,10 +529,10 @@ class AgentHost:
         self._session_running(sid, target, proc)
         task = prompting.wake_task(target, reasons, snap, self.fillers.lines(self.cfg.serves))
         if target == "supervisor":
-            task = ("[Orchestra: escalation from another agent; the human is not present for this turn. "
-                    "Act with your tools if you can, otherwise leave a note the human will see.]\n\n"
-                    + prompting.supervisor_context(snap, [], self.project, self.store) + task)
-        res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
+            task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + task
+            res = self._honest(proc, task, self.turns.on_event(sid))
+        else:
+            res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)
         self._session_idle(sid, res.text, resident=not ephemeral)
         if ephemeral:

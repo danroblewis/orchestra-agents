@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .base import (
     AgentSession,
+    ContextSize,
     Harness,
     OnEvent,
     SessionSpec,
@@ -26,6 +27,7 @@ from .base import (
     _Deadlines,
     _LineReader,
     _NormalizerBase,
+    records,
     resolve_binary,
 )
 
@@ -92,8 +94,9 @@ class ClaudeCodeSession(AgentSession):
 
     def compact(self) -> dict | None:
         """Claude Code compacts its own context past the --autocompact window it was started
-        with; there is no command to ask for it between turns. Reporting that keeps the
-        loop from rotating a session the harness is already keeping bounded."""
+        with; there is no command to ask for it between turns. Saying so keeps the host from
+        rotating a session the harness keeps bounded; each compaction it does is in the
+        transcript (``context``)."""
         if not self.spec.compact_tokens:
             return None
         return {"mode": "auto", "limit": max(100_000, int(self.spec.compact_tokens))}
@@ -256,6 +259,24 @@ class ClaudeCodeHarness(Harness):
 
     def start(self, spec: SessionSpec) -> ClaudeCodeSession:
         return ClaudeCodeSession(spec, self.binary)
+
+    @staticmethod
+    def context(session_file: str | Path) -> ContextSize:
+        """Each assistant record carries the API's usage (input, cache write, cache read and
+        output tokens: the context of that call); a ``compact_boundary`` system record is a
+        compaction Claude Code did by itself, with the tokens before and after. A subagent's
+        records (``isSidechain``) are another context and are skipped."""
+        out = ContextSize()
+        for e in records(session_file):
+            if e.get("isSidechain"):
+                continue
+            if e.get("type") == "system" and e.get("subtype") == "compact_boundary":
+                meta = e.get("compactMetadata") or {}
+                out.compactions.append({"tokens_before": meta.get("preTokens"), "tokens_after": meta.get("postTokens")})
+                out.tokens = None
+            elif e.get("type") == "assistant" and isinstance(u := (e.get("message") or {}).get("usage"), dict):
+                out.tokens = sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"))
+        return out
 
     @staticmethod
     def read_transcript(session_file: str | Path) -> list[dict]:

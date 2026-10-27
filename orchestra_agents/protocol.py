@@ -72,8 +72,9 @@ WAIT_S = 30.0
 class TaskClient:
     """The task system, as an agent's tools reach it: a request on the bus and its answer."""
 
-    def __init__(self, events, role: str = "", source: str | None = None):
+    def __init__(self, events, role: str = "", source: str | None = None, wait_s: float | None = None):
         self.events, self.role, self.source = events, role, source     # source: the machine the requests come from (default: the bus's)
+        self.wait_s = wait_s                                            # how long to wait for the answer (default WAIT_S)
 
     def __call__(self, op: str, args: dict | None = None) -> dict:
         args = dict(args or {})
@@ -87,7 +88,8 @@ class TaskClient:
             self.events.publish(REQUESTS[op], data, source=self.source, **({"subject": str(subject)} if subject else {}))
         else:
             return {"ok": False, "error": f"the task system has no operation {op!r}"}
-        end = time.time() + WAIT_S
+        wait = WAIT_S if self.wait_s is None else self.wait_s
+        end = time.time() + wait
         while time.time() < end:
             evs, offset = self.events.after(offset)
             for ev in evs:
@@ -98,4 +100,4 @@ class TaskClient:
                 if ev.get("type") == REFUSED:
                     return {"ok": False, "error": ev.get("error") or "refused"}
             time.sleep(0.25)
-        return {"ok": False, "error": f"the task system did not answer within {int(WAIT_S)} s: is its scheduler running?"}
+        return {"ok": False, "error": f"the task system did not answer within {wait:g} s: is its scheduler running?"}

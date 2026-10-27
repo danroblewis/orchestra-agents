@@ -32,7 +32,9 @@ from . import prompting
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .fillers import KEEP_S, Fillers
+from .gate_busy import landing
 from .org_store import all_agents
+from .restart import recover
 from .store import AgentStore, StoreError
 from .toml_edit import change, on_document
 from .toml_entries import entries, remove, set_key, table, upsert
@@ -228,8 +230,13 @@ HANDLERS: dict[str, Callable[[Project, AgentStore, dict], Plan]] = {
 def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str, Any], author: str, role: str) -> dict:
     if role != "supervisor":
         raise StoreError("only the supervisor changes orchestra.toml")
+    recovered = recover(project)                  # an entry an interrupted restart left out
     plan = HANDLERS[command](project, store, a)
+    if why := landing(store, role):
+        raise StoreError(why)
     done = change(project, plan.edit, a.get("reason") or "")
+    if recovered:
+        done["recovered"] = recovered
     if done["commit"] is None:
         return {"ok": True, **done, "applies": "Nothing changed, so nothing applies or restarts."}
     if plan.then:

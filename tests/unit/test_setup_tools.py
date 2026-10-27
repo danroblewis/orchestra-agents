@@ -7,6 +7,7 @@ import tomllib
 
 import pytest
 from conftest import agents_project
+from fake_tasks import FakeTasks
 
 from orchestra_agents import tooling
 from orchestra_agents.events import Events
@@ -252,3 +253,31 @@ def test_the_supervisor_is_told_to_look_fix_the_setup_and_name_only_real_paths(p
         assert f"`{tool}`" in text
     assert "You never change code" in text and "Never suggest any other control on a page" in text
     assert "only the human can set" not in text and "Never restart or run the program yourself" not in text
+
+
+class Landing(FakeTasks):
+    """A task system whose gate is landing a branch now."""
+
+    def __enter__(self):
+        self.events.publish("orchestra.machine.started", {"package": "tasks", "mode": "continuous"})
+        return super().__enter__()
+
+    def answer(self, op, a):
+        if op == "list_gate_runs":
+            return {"ok": True, "runs": [{"id": "G-7", "status": "landed"}, {"id": "G-8", "status": "running", "ticket": "DEMO-3"}]}
+        return super().answer(op, a)
+
+
+def test_nothing_is_committed_while_a_gate_run_is_landing_a_branch(project, store):
+    head = git(project.repo_root, "rev-parse", "HEAD")
+    with Landing(project) as tasks, pytest.raises(StoreError, match=r"a gate run \(G-8\) is landing a branch now"):
+        call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
+    assert [x["op"] for x in tasks.seen] == ["list_gate_runs"]
+    assert git(project.repo_root, "rev-parse", "HEAD") == head and toml(project)["project"]["work"] == "tasks"
+
+
+def test_a_task_system_that_does_not_know_the_query_does_not_stop_a_change(project, store):
+    with FakeTasks(project) as tasks:
+        tasks.events.publish("orchestra.machine.started", {"package": "tasks", "mode": "continuous"})
+        out = call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
+    assert out["commit"] and [x["op"] for x in tasks.seen] == ["list_gate_runs"]

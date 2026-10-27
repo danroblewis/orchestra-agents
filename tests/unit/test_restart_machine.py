@@ -88,6 +88,7 @@ def test_a_machine_is_stopped_and_started_again_with_its_entry_unchanged(project
     assert not runtime.alive(old) and runtime.alive(out["pid"])
     assert (project.repo_root / "orchestra.toml").read_text() == before_text
     assert git(project.repo_root, "rev-parse", "HEAD") == head                       # nothing to commit
+    assert not (project.state_dir / "pending-restart.json").exists()
     evs, _ = store.events.read(0, 1000)
     [ev] = [e for e in evs if e["type"] == "machine.restarted"]
     assert ev["name"] == "sleeper" and ev["reason"] == WHY and ev["source"] == "supervisor" and ev["pid"] == out["pid"]
@@ -112,3 +113,48 @@ def test_without_orchestra_run_there_is_nothing_to_restart(project):
     store = AgentStore(project, Events.for_project(project, source="supervisor"))
     with pytest.raises(StoreError, match="no `orchestra run` launches"):
         tooling.handle(project, store, "restart_machine", {"name": "sleeper", "reason": WHY}, role="supervisor")
+
+
+def test_a_restart_the_agents_were_killed_in_is_put_back_by_the_next_setup_change(project):
+    # the agents were killed (a timeout, an interrupt) after the entry was taken out: the record
+    # and the file without the entry are left. The next setup tool puts the entry back first,
+    # so the file is committed again and the change goes through
+    from orchestra_agents.restart import _save_pending, recover
+
+    store = AgentStore(project, Events.for_project(project, source="supervisor"))
+    toml_path = project.repo_root / "orchestra.toml"
+    before = toml_path.read_text()
+    without = before.replace(SLEEPER.split("[[collect]]")[0], "")
+    assert without != before
+    _save_pending(project, "sleeper", before, without)
+    toml_path.write_text(without)
+    out = tooling.handle(project, store, "set_capacity_limit", {"workers": 2, "reason": "two tickets may run at once now"},
+                         role="supervisor")
+    assert out["ok"] and out["commit"] and "sleeper" in out["recovered"]
+    text = toml_path.read_text()
+    assert 'name = "sleeper"' in text and "workers = 2" in text
+    assert git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml") == ""
+    assert not (project.state_dir / "pending-restart.json").exists()
+    assert recover(project) is None                                                # nothing left to do
+
+
+def test_a_record_is_dropped_when_someone_changed_the_file_since(project):
+    from orchestra_agents.restart import _save_pending, recover
+
+    toml_path = project.repo_root / "orchestra.toml"
+    before = toml_path.read_text()
+    _save_pending(project, "sleeper", before, before.replace("stop_grace = 2", ""))
+    toml_path.write_text(before + "\n# the human's edit\n")
+    assert recover(project) is None and toml_path.read_text().endswith("# the human's edit\n")
+    assert not (project.state_dir / "pending-restart.json").exists()
+
+
+def test_nothing_restarts_while_a_gate_run_is_landing_a_branch(project, launcher):
+    from test_setup_tools import Landing
+
+    store = AgentStore(project, Events.for_project(project, source="supervisor"))
+    old = wait_pid(project, "sleeper")
+    before = (project.repo_root / "orchestra.toml").read_text()
+    with Landing(project), pytest.raises(StoreError, match="is landing a branch now"):
+        tooling.handle(project, store, "restart_machine", {"name": "sleeper", "reason": WHY}, role="supervisor")
+    assert (project.repo_root / "orchestra.toml").read_text() == before and pid_of(project, "sleeper") == old

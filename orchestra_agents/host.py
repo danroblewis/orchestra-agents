@@ -33,6 +33,7 @@ from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
 from .protocol import TRANSITIONED
 from .residents import Residents
+from .restart import recover as recover_restart
 from .roles import all_roles
 from .runner import AgentRunner
 from .store import AgentStore, StoreError
@@ -118,6 +119,8 @@ class AgentHost:
         if not self._take_project(wait):
             return 0 if self.stop.is_set() else 1
         self.recover()
+        if put_back := recover_restart(self.project):      # a restart_machine the last host was killed in
+            log(put_back)
         # the host announces what it acts on as itself: a finished ticket's sessions go to the
         # archive. Assignments, releases and attention are the agents', which announce their own
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",

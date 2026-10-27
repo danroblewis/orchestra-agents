@@ -25,7 +25,7 @@ from orchestra_agents.store import AgentStore
 
 
 def test_registry():
-    assert set(HARNESSES) == {"pi", "claude_code", "codex"}
+    assert set(HARNESSES) == {"pi", "claude_code", "codex", "dummy"}
     assert get_harness(None).name == "pi"
     assert get_harness("claude-code").name == "claude_code"
     assert get_harness("codex").name == "codex"

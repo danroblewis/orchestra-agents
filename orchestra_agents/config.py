@@ -26,7 +26,8 @@ __all__ = ["Config", "ConfigError", "Project", "load_project"]
 
 @dataclass
 class Config:
-    harness: str = "pi"                 # pi | claude_code | codex
+    harness: str = "pi"                 # pi | claude_code | codex | dummy
+    dummy_script: str | None = None     # the dummy harness's script, relative to the repository (harness/dummy_script.py)
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
@@ -56,7 +57,7 @@ class Config:
             except ConfigError as e:
                 raise ConfigError(f"[agents] coordinator_every: {e}") from e
         return cls(
-            harness=(a.get("harness") or "pi").replace("-", "_"), provider=a.get("provider") or None,
+            harness=(a.get("harness") or "pi").replace("-", "_"), dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
             model=a.get("model") or None, thinking=a.get("thinking"),
             serves=serves, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),

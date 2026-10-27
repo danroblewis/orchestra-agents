@@ -10,12 +10,17 @@ any. From the orchestra-agents repository:
 
     uv run demo/run.py                 # copies this folder to ~/orchestra-agents-demo and starts everything
     uv run demo/run.py /tmp/d --port 8072
+    uv run demo/run.py --dummy         # free: scripted agents (dummy.toml), no model, no network
 
 Needs: Claude Code installed and signed in, with `claude` on the PATH or named by
 `CLAUDE_BINARY`; or the fake, `CLAUDE_BINARY=$PWD/tests/e2e/fake_claude.py uv run demo/run.py`,
 as the e2e tests do: its worker runs a ticket's `sh` blocks and makes the files the acceptance
 names, its reviewer checks that they exist, its Coordinator and Supervisor only acknowledge.
-`run.py` refuses to start without one or the other.
+`run.py` refuses to start without one or the other, unless `--dummy` is given: then the agents
+run on the dummy harness and play `dummy.toml` (copied into the target, and named by
+`[agents] dummy_script`), which works each ticket for real (the notes, `tools/line_counts.py` and
+its test, the collector), rejects DEMO-3's first round for a test that does not check the order,
+and has the Supervisor answer every message with the project's status. Nothing costs anything.
 
 Ctrl-C stops everything. To start over, remove the target directory and run it again: `run.py`
 removes the state a previous run left for that path (under `~/.orchestrator/<name>-<hash>/`)

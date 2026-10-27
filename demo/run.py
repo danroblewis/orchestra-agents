@@ -1,7 +1,8 @@
 """The agents' demo, in one command, from this repository's environment:
 
-    uv run demo/run.py [target] [--port 8072]
+    uv run demo/run.py [target] [--port 8072] [--dummy]
     # target: a new directory, default ~/orchestra-agents-demo
+    # --dummy: scripted agents (the dummy harness, dummy.toml beside this file): no model, no cost
 
 It copies the template beside it (orchestra.toml, README.md, .gitignore), a project context for
 the Supervisor (CONTEXT, as .orchestra/PROJECT.md) and the task system's own shell worker (orchestra-tasking's demo/machines/shell_worker.py, from the checkout the dev
@@ -22,7 +23,10 @@ Orchestra runs it on an interval and stores its series once its branch lands. Ev
 and landed on main through the merge gate.
 
 The AI agents run on Claude Code with Haiku, which costs money (README.md). The demo checks
-that ``claude`` (or CLAUDE_BINARY) is on the PATH before it starts anything. CLAUDE_BINARY names
+that ``claude`` (or CLAUDE_BINARY) is on the PATH before it starts anything. With ``--dummy`` they
+run on the dummy harness instead: scripted agents with no model, no network and no cost, playing
+``dummy.toml`` (which lands the four tickets with real work, rejecting DEMO-3 once), so the whole
+demo runs for free (tests/e2e/test_dummy_demo_e2e.py). CLAUDE_BINARY names
 another ``claude`` to run instead; the e2e tests set it to tests/e2e/fake_claude.py and use the
 same functions against a temporary directory and a free port (tests/e2e/test_demo_e2e.py)."""
 
@@ -113,14 +117,24 @@ new tool or machine comes with a test there.
 """
 
 
-def make_project(target: Path) -> Path:
+DUMMY_SCRIPT = "dummy.toml"
+
+
+def make_project(target: Path, dummy: bool = False) -> Path:
     """The template as a fresh git repository at ``target`` (which must not exist yet), with no
     state: Orchestra names a project's state directory after the target's path, so a previous
     run of the demo at the same path left tickets, sessions and events there that would show up
-    again."""
+    again. With ``dummy`` the agents run on the dummy harness, playing ``dummy.toml``."""
     if target.exists():
         sys.exit(f"{target} exists; remove it or name another directory")
-    shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__"))
+    shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__", *(() if dummy else (DUMMY_SCRIPT,))))
+    if dummy:
+        toml = target / "orchestra.toml"
+        text = toml.read_text(encoding="utf-8")
+        agents = 'harness = "claude_code"  # pi | claude_code | codex\nmodel = "haiku"          # the cheapest model\n'
+        assert agents in text, "demo/orchestra.toml's [agents] changed; update make_project"
+        toml.write_text(text.replace(agents, f'harness = "dummy"        # scripted agents: no model, no cost\ndummy_script = "{DUMMY_SCRIPT}"\n'),
+                        encoding="utf-8")
     (target / "machines").mkdir()
     shutil.copy(shell_worker(), target / "machines" / "shell_worker.py")
     (target / ".orchestra").mkdir()
@@ -247,14 +261,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("target", nargs="?", default=Path.home() / "orchestra-agents-demo", type=Path)
     ap.add_argument("--port", type=int, default=8072)
+    ap.add_argument("--dummy", action="store_true", help="scripted agents (the dummy harness): no model, no network, no cost")
     a = ap.parse_args()
     binary = os.environ.get("CLAUDE_BINARY", "claude")
-    if not shutil.which(binary):
+    if not a.dummy and not shutil.which(binary):
         sys.exit(f"{binary} not found: install Claude Code and sign in, set CLAUDE_BINARY to another `claude`, "
-                 "or use tests/e2e/fake_claude.py (README.md)")
+                 "or run the free demo with --dummy (README.md)")
     signal.signal(signal.SIGTERM, interrupt)          # `kill` stops everything, like Ctrl-C
     signal.signal(signal.SIGINT, interrupt)
-    target, url = make_project(a.target.expanduser().resolve()), f"http://127.0.0.1:{a.port}"
+    target, url = make_project(a.target.expanduser().resolve(), dummy=a.dummy), f"http://127.0.0.1:{a.port}"
     procs = start(target, a.port)
     running = lambda: all(p.poll() is None for p in procs.values())
     try:

@@ -11,12 +11,14 @@ from pathlib import Path
 from .base import AgentSession, Harness, SessionSpec, TurnResult
 from .claude_code import ClaudeCodeHarness
 from .codex import CodexHarness
+from .dummy import DummyHarness
 from .pi import PiHarness
 
 HARNESSES: dict[str, type[Harness]] = {
     PiHarness.name: PiHarness,
     ClaudeCodeHarness.name: ClaudeCodeHarness,
     CodexHarness.name: CodexHarness,
+    DummyHarness.name: DummyHarness,     # a scripted agent: no model, no network, no cost
 }
 DEFAULT_HARNESS = PiHarness.name
 

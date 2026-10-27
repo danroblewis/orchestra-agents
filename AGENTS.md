@@ -35,7 +35,10 @@ broken without updating the spec and saying so in the commit.
    session), never from the agent; `tooling.handle` checks it for every call.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
    run once per harness. Real Claude runs only in the demo, with Haiku, and the demo honours
-   `CLAUDE_BINARY` so a test can stand a fake in.
+   `CLAUDE_BINARY` so a test can stand a fake in. The dummy harness is the exception: it is a
+   product feature with no product behind it, so it has no fake; the e2e tests run on it as it
+   ships, with a script for each fake's knob. A test of anything around the agents (another goal's
+   acceptance, the task system's flow, the web) uses the dummy harness, never a model.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
    `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
    each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host and
@@ -80,6 +83,11 @@ broken without updating the spec and saying so in the commit.
   `developer_instructions`. Rollouts live under `$CODEX_HOME/sessions/` (`response_item` lines
   hold the messages and function calls, `event_msg` `McpToolCall` items hold MCP calls). MCP
   tools reach the model as a `namespace` tool, which only OpenAI's own API understands.
+
+- Dummy: no product. A turn is `python -m orchestra_agents.harness.dummy_agent <transcript>` with
+  the prompt on stdin; it prints the normalized events itself (plus `error` on a failed turn) and
+  writes the transcript already in `read_transcript`'s shape. Its tools are `mcp.Server.call`
+  in-process, so it gets exactly what an MCP client of the same session would.
 
 ## Conventions
 

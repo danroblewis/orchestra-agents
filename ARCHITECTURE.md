@@ -39,8 +39,9 @@ has a long-running process of its own, the **host**.
   other agents.
 - When a task system (orchestra-tasking) offers a ticket to the `worker` or `reviewer` role,
   the host can fill that role. It starts one agent session for that ticket.
-- The **harness** setting picks which product runs a session: Pi, Claude Code or Codex. Only
-  the code under `harness/` knows which one is in use.
+- The **harness** setting picks which product runs a session: Pi, Claude Code or Codex, or
+  `dummy`, scripted agents with no model and no cost for demos and tests. Only the code under
+  `harness/` knows which one is in use.
 - The plugin adds the Agents page, the Supervisor chat, an attention banner and the agents'
   machine cards to Orchestra's web UI.
 
@@ -134,7 +135,7 @@ The modules, grouped by job:
 |---|---|
 | Entry points | `cli.py` (the `orchestra-agents` command), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
 | The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py` |
-| Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
+| Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/dummy.py`, `harness/dummy_agent.py`, `harness/dummy_script.py`, `harness/dummy_defaults.toml`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
 | Tools | `tooling.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
@@ -375,19 +376,21 @@ Each harness turns its product's stream into one vocabulary:
 heartbeats read those fields. The pid in `turn_start` is recorded so that a later host can kill
 an orphan.
 
-### The three harnesses
+### The four harnesses
 
-| | Pi (`harness/pi.py`) | Claude Code (`harness/claude_code.py`) | Codex (`harness/codex.py`) |
-|---|---|---|---|
-| Process | One `pi --mode rpc` per session, kept running between turns | `claude -p` for each turn | `codex exec --json` for each turn |
-| Resume | `--session-dir`/`--session-id` | `--session-id <uuid>` first, then `--resume <uuid>`; the uuid is in `sessions/claude-code/<id>.json` | `resume <thread_id>` from the first `thread.started`; kept in `sessions/codex/<id>.json` |
-| System prompt | `--append-system-prompt` | `--append-system-prompt-file` | `-c developer_instructions=...` |
-| Tools | `pi_extension.ts`, which reads `orchestra-agents tools --json` and calls `orchestra-agents api <tool>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config` | The same MCP server, through `-c mcp_servers.orchestra={...}` |
-| Permissions | — | `--dangerously-skip-permissions` | `--sandbox danger-full-access` |
-| Transcript | Pi's JSONL in `session_dir` | `$CLAUDE_CONFIG_DIR/projects/<cwd-key>/<uuid>.jsonl` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<thread>.jsonl` |
-| Compaction | When asked (`{"type":"compact"}`) | Compacts itself (`--autocompact`); `compact()` answers `{"mode": "auto"}` | Cannot compact, so the session is rotated |
-| `alive()` | The process is running | Not closed | Not closed |
-| Binary | `PI_BINARY` | `CLAUDE_BINARY` | `CODEX_BINARY` |
+| | Pi (`harness/pi.py`) | Claude Code (`harness/claude_code.py`) | Codex (`harness/codex.py`) | Dummy (`harness/dummy.py`) |
+|---|---|---|---|---|
+| Process | One `pi --mode rpc` per session, kept running between turns | `claude -p` for each turn | `codex exec --json` for each turn | `python -m orchestra_agents.harness.dummy_agent` for each turn |
+| Resume | `--session-dir`/`--session-id` | `--session-id <uuid>` first, then `--resume <uuid>`; the uuid is in `sessions/claude-code/<id>.json` | `resume <thread_id>` from the first `thread.started`; kept in `sessions/codex/<id>.json` | The transcript is the session: the turn number is counted from it |
+| System prompt | `--append-system-prompt` | `--append-system-prompt-file` | `-c developer_instructions=...` | Not read (kept beside the log, as for every harness) |
+| What it does | The model decides | The model decides | The model decides | The first matching rule of the script ([below](#the-dummy-harness-and-its-scripts)) |
+| Tools | `pi_extension.ts`, which reads `orchestra-agents tools --json` and calls `orchestra-agents api <tool>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config` | The same MCP server, through `-c mcp_servers.orchestra={...}` | The MCP server's `Server.call`, in the agent's process |
+| Permissions | — | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | — |
+| Transcript | Pi's JSONL in `session_dir` | `$CLAUDE_CONFIG_DIR/projects/<cwd-key>/<uuid>.jsonl` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<thread>.jsonl` | `sessions/dummy/<id>.jsonl`, already in the common message shape |
+| Compaction | When asked (`{"type":"compact"}`) | Compacts itself (`--autocompact`); `compact()` answers `{"mode": "auto"}` | Cannot compact, so the session is rotated | Never needed: it records no tokens |
+| `alive()` | The process is running | Not closed | Not closed | Not closed |
+| Binary | `PI_BINARY` | `CLAUDE_BINARY` | `CODEX_BINARY` | This package's Python |
+| Cost, network | A model call per turn | A model call per turn | A model call per turn | None |
 
 ```mermaid
 flowchart TB
@@ -412,12 +415,108 @@ flowchart TB
     CXP -->|stdio JSON-RPC| MCP2["python -m orchestra_agents.harness.mcp"]
   end
 
-  START --> PIS & CCS & CXS
-  PIN & CCN & CXN -->|normalized events| ONEV["turns.on_event: phase, partial text, pid"]
+  subgraph DU["Dummy"]
+    DUS[DummySession] -->|spawn per turn, prompt on stdin| DUP["python -m orchestra_agents.harness.dummy_agent<br/>plays the script's rule"]
+    DUP -->|normalized events| DUN[DummySession]
+    DUP -->|in process| MCP3["mcp.Server.call"]
+  end
+
+  START --> PIS & CCS & CXS & DUS
+  PIN & CCN & CXN & DUN -->|normalized events| ONEV["turns.on_event: phase, partial text, pid"]
   APICLI --> HANDLE["tooling.handle"]
   MCP1 --> HANDLE
   MCP2 --> HANDLE
+  MCP3 --> HANDLE
 ```
+
+### The dummy harness and its scripts
+
+The dummy harness runs an agent with no model: no network and no cost. It exists so that demos
+and the tests of everything around the agents (the host, the runner, the task system's flow, the
+web, other goals' acceptance tests) run for free and still go through the real paths. A turn is
+a process in its own process group, like a `claude -p` turn, so `kill`, timeouts and orphan
+recovery work as for any harness. The process (`dummy_agent.py`):
+
+1. counts the session's earlier turns in its transcript, and records the prompt;
+2. loads the script (`[agents] dummy_script`, re-read every turn) and picks the first rule that
+   matches (`dummy_script.py`); the built-in rules (`dummy_defaults.toml`) come after the file's;
+3. plays the rule's steps, printing the normalized events and recording each message and tool
+   result in the transcript. Tool calls go through `mcp.Server.call`: only the session's tool
+   groups, `tooling.check_args`, then `tooling.handle` with the role from the environment. A
+   worker's `report_ticket` lands in the store, and the runner sends it on, as for a model;
+4. prints its reply and `settled`, or `error` (exit status 1) for a `fail` step or a script that
+   does not parse, which the session returns as the turn's error.
+
+**The script format** (TOML). Rules are tried in order; the first whose conditions all hold is
+played.
+
+| Rule key | Meaning |
+|---|---|
+| `role` | Required. The agent's role (`ORCHESTRA_ROLE`: `worker`, `reviewer`, `supervisor`, `coordinator`, a custom agent's name), or `"*"` |
+| `ticket` | A glob on the ticket id (`ORCHESTRA_TICKET`): `"DEMO-3"`, `"DEMO-*"` |
+| `prompt` | A regular expression searched in the turn's prompt: a ticket's title, `REJECTED`, a word of the human's message |
+| `turn` | The session's nth turn (1 is the first), or a list. A per-ticket session keeps its transcript across rounds, so a reviewer's turn 1 is its first review of the ticket |
+| `checkout` | `true`: the working directory is a git checkout (a code ticket); `false`: it is not (a task's folder) |
+| `steps` | What the agent does, in order (below) |
+| `reply` | The turn's last message. Default: the last tool's answer or `say` |
+
+| Step | Does |
+|---|---|
+| `{ say = "..." }` | A message (it shows on the cards and in the heartbeat's text) |
+| `{ write = "path", text = "...", append = false }` | Writes a file relative to the working directory |
+| `{ run = "shell command" }` | Runs it with `bash -c` in the working directory; the output and status are the result, and the script goes on |
+| `{ commit = "message" }` | `git add -A` and a commit, even an empty one; without a git identity configured, as `dummy agent` |
+| `{ tool = "name", args = { ... } }` | One of the agents' tools. A refusal (not in the session's groups, a wrong argument, a role check) is the result, and the script goes on |
+| `{ sleep = 5 }` | Waits that many seconds: a slow agent, or one a release or a timeout cuts off |
+| `{ fail = "why" }` | The turn fails with this error (`session.error`; a per-ticket turn reports `failed`) |
+
+`{ticket}`, `{role}`, `{turn}`, `{instance}` and `{message}` (the human's message in a chat turn,
+else the prompt's first line) are replaced in every string. Long steps read better as
+`[[rule.steps]]` tables with multi-line strings; `demo/dummy.toml` uses both forms.
+
+```toml
+# A reviewer that rejects the first round, a worker that fails once, a slow worker.
+[[rule]]
+role = "reviewer"
+turn = 1
+steps = [{ tool = "report_review", args = { verdict = "REJECTED", summary = "Not yet.", feedback = "1. Add a test." } }]
+
+[[rule]]
+role = "worker"
+ticket = "E2E-2"
+turn = 1
+steps = [{ fail = "the dummy worker crashes once" }]
+
+[[rule]]
+role = "worker"
+ticket = "E2E-3"
+steps = [
+  { say = "Working slowly." },
+  { sleep = 20 },
+  { write = "work/{ticket}.md", text = "done\n" },
+  { commit = "{ticket}: slow work" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "Done, slowly." } },
+]
+
+[[rule]]
+role = "supervisor"
+prompt = "(?i)more workers"
+steps = [{ tool = "set_capacity_limit", args = { workers = 3, reason = "The human asked for more workers in the chat." } }]
+reply = "I raised the worker limit to 3."
+```
+
+**The built-in rules** make `harness = "dummy"` alone a working team: a worker writes
+`work/<ticket>.md` in a code ticket's worktree (a file of the ticket's own, so branches land side
+by side) or `RESULT.md` in a task's folder, commits, and reports READY_FOR_REVIEW; a reviewer
+approves; the Supervisor answers that it is scripted and changed nothing; the Coordinator and any
+custom agent reply "Nothing to do."
+
+**Using it in a test.** Set `harness = "dummy"` and, when the test needs specific behaviour,
+`dummy_script` to a file. A path outside the repository (an absolute one) lets a test change the
+script without dirtying the checkout the task system lands on (`tests/e2e/test_agents_e2e.py`
+`knob`). `tests/e2e/test_dummy_demo_e2e.py` runs the whole demo on it with no API key, stub
+`claude`/`pi`/`codex` binaries that fail if run, and every Python process unable to leave the
+machine (`tests/e2e/no_network/sitecustomize.py`, on `PYTHONPATH`).
 
 ### Keeping context bounded (`residents.trim_if_large`)
 
@@ -1048,7 +1147,8 @@ Wake-ups that are **not** bus events: a human chat message, `escalate_to_supervi
 
 | Key | Default | Meaning |
 |---|---|---|
-| `harness` | `pi` | `pi`, `claude_code` or `codex` (dashes are accepted) |
+| `harness` | `pi` | `pi`, `claude_code`, `codex` or `dummy` (dashes are accepted) |
+| `dummy_script` | none | The dummy harness's script, relative to the repository ([section 6](#the-dummy-harness-and-its-scripts)) |
 | `model`, `provider`, `thinking` | none | Passed to the harness |
 | `serves` | `["worker", "reviewer"]` | The task system's roles these agents fill. Validated against `PER_TICKET_ROLES`. |
 | `coordinator_every` | none | Makes the Coordinator `scheduled` |
@@ -1066,7 +1166,7 @@ The host also reads `[project] base_branch` (default `main`), `ticket_prefix` (`
 | Path | What | Written by |
 |---|---|---|
 | `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, hashes...), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
-| `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` and `.system.md`; `codex/<id>.json` | The harnesses |
+| `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` and `.system.md`; `codex/<id>.json`; `dummy/<id>.jsonl` and its `archive/` | The harnesses |
 | `logs/agents-host.log` | The host's log (rotated at 5 MB) | `host.log` |
 | `logs/agents/<session>.stderr.log`, `<session>.prompt.md` | Each session's stderr, and the prompt it started with | The harness, and `host._open_session` |
 | `PROJECT.md` | The project context | `prompting.write_context` (`update_project_context`) |
@@ -1122,7 +1222,7 @@ A new **built-in** role is a code change:
    `orchestra-agents api`. Never define a tool in one harness only (AGENTS.md rule 5).
 4. Register the class in `harness/__init__.py` `HARNESSES`.
 5. Add a fake at `tests/e2e/fake_<name>.py` that speaks the product's real protocol, and run the
-   e2e tests for it (AGENTS.md rule 8). Write down the product facts the code depends on in
+   e2e tests for it (AGENTS.md rule 8; the dummy harness, which has no product, runs them as it ships). Write down the product facts the code depends on in
    AGENTS.md.
 
 Nothing outside `harness/` may branch on the harness.

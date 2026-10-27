@@ -4,7 +4,9 @@ AI agents as Orchestra machines. This package runs them: it keeps the resident o
 Supervisor, the Coordinator, any custom agent), wakes them on the events they listen for and on
 their schedules, starts a worker or a reviewer on a ticket when a task system assigns one, and
 shows them in Orchestra's web UI (an Orchestra plugin, `agents`). Which product runs a session
-(Pi, Claude Code, Codex) is a setting; the agents behave the same on each.
+(Pi, Claude Code, Codex) is a setting; the agents behave the same on each. A fourth harness,
+`dummy`, runs scripted agents with no model, so demos and the tests of everything around the
+agents cost nothing.
 
 It meets the task system (orchestra-tasking) only on Orchestra's bus. This file is the design;
 `AGENTS.md` is the short list of rules that must not be broken.
@@ -237,6 +239,35 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
   compacts its own context (`--autocompact`). `CLAUDE_BINARY` names the binary to run.
 - **Codex** (`codex.py`): `codex exec --json` per turn, resumed by thread id, the rollout under
   `$CODEX_HOME`; tools through the same MCP server.
+- **Dummy** (`dummy.py`, `dummy_agent.py`, `dummy_script.py`): a scripted agent with no model, no
+  network and no cost. Each turn is one `python -m orchestra_agents.harness.dummy_agent` process
+  (in its own process group, like a `claude -p` turn, so a release kills it and a later host finds
+  it as an orphan); it plays its role's rule from the project's script, calls the agents' tools
+  the way the MCP server does (only the session's tool groups, `tooling.check_args`, then
+  `tooling.handle` with the session's role), and writes its transcript,
+  `sessions/dummy/<session>.jsonl`, in the common message shape. The host, the runner, the task
+  system and the web cannot tell it from a model, so a test or a demo on it exercises everything
+  but the model. It never compacts (its transcript records no tokens).
+
+**Scripts.** A script is a TOML file of `[[rule]]` tables, named by `[agents] dummy_script`
+(relative to the repository; re-read every turn). On each turn the first rule whose conditions
+all hold is played; the built-in rules (`harness/dummy_defaults.toml`) come after the file's, so a
+script says only what differs, and `harness = "dummy"` alone is a working team: a worker writes
+`work/<ticket>.md` in a code ticket's worktree (`RESULT.md` in a task's folder), commits it and
+reports READY_FOR_REVIEW; a reviewer approves; the Supervisor answers that it is scripted and
+changed nothing; the Coordinator and any custom agent reply "Nothing to do." A rule's conditions:
+`role` (required; a role's or custom agent's name, or `"*"`), `ticket` (a glob on the ticket id),
+`prompt` (a regular expression searched in the turn's prompt), `turn` (the session's nth turn,
+counted from its transcript, or a list of them) and `checkout` (whether the working directory is a
+git checkout). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
+`append`), `run` (a shell command in the working directory; its output and status are the
+result, and the script goes on), `commit` (everything, with this message; a commit even when
+nothing changed), `tool` (an agents' tool, with `args`; a refusal is the result, and the script
+goes on), `sleep` (seconds), `fail` (the turn fails with this error: `session.error`, and a
+per-ticket turn reports `failed`). `reply` is the turn's last message (default: the last tool's
+answer or `say`). `{ticket}`, `{role}`, `{turn}`, `{instance}` and `{message}` (the human's message
+in a chat turn) are replaced in every string. A script that does not parse fails the turn with
+the reason. The demo's script (`demo/dummy.toml`) is the worked example.
 
 The tools are defined once, as data, in `harness/tools.py`, in groups; every harness exposes the
 same catalogue to its model, and every call goes through `tooling.handle`, which checks the
@@ -244,7 +275,8 @@ caller's role (from the environment the session was started in, never from the a
 
 ## 7. Settings and state (`config.py`, `store.py`)
 
-`[agents]` in the project's `orchestra.toml`: `harness` (pi | claude_code | codex), `model`,
+`[agents]` in the project's `orchestra.toml`: `harness` (pi | claude_code | codex | dummy),
+`dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
 `provider`, `thinking`, `serves` (the task system's roles these agents fill; default worker and
 reviewer), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
@@ -310,7 +342,8 @@ until the worker reports BLOCKED or a planner cancels or unblocks the ticket: a 
 ignores `rejected_by` and redoes the same work is a loop of paid reviews, and the brake is the
 worker's (the task system's shell worker reports BLOCKED on an identical rejection). Everywhere a
 real model is not needed, the tests use the fakes in `tests/e2e/` (one per harness, speaking the
-product's real protocol).
+product's real protocol), and the dummy harness (section 6), which has no product to fake, costs
+nothing at all: `demo/run.py --dummy` is the whole demo for free.
 
 ## 10. The Supervisor as the project's operator (`observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`)
 

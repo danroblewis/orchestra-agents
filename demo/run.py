@@ -3,8 +3,8 @@
     uv run demo/run.py [target] [--port 8072]
     # target: a new directory, default ~/orchestra-agents-demo
 
-It copies the template beside it (orchestra.toml, README.md, .gitignore) and the task system's
-own shell worker (orchestra-tasking's demo/machines/shell_worker.py, from the checkout the dev
+It copies the template beside it (orchestra.toml, README.md, .gitignore), a project context for
+the Supervisor (CONTEXT, as .orchestra/PROJECT.md) and the task system's own shell worker (orchestra-tasking's demo/machines/shell_worker.py, from the checkout the dev
 extra installs) to the target, makes it a git repository (Orchestra wants orchestra.toml at a
 repository root; the task system lands each ticket's branch on its main), removes any state a
 previous run left for it, and starts Orchestra: its host (`orchestra run`) and its web UI. The
@@ -78,6 +78,39 @@ PLAN = {"milestone": {"name": "Demo", "description": "Two kinds of worker on one
         ]}
 
 
+# The project context the Supervisor starts from (orchestra_agents.prompting.read_context seeds
+# the agents' copy from .orchestra/PROJECT.md in the repository): without one, a Supervisor would
+# first ask the human what the project is for.
+CONTEXT = """# Project context
+
+_Maintained by the Supervisor. Every Supervisor turn starts with this document._
+
+## Objectives
+1. Show two kinds of worker on one queue: a program that runs shell commands, and AI agents that
+   write code; every ticket a branch, reviewed and landed on main through the merge gate.
+2. Measure the project and its work: the task system's and the agents' own series, and programs
+   of this repository (`machines/`, declared under `[[machines]]`) that measure whatever the owner
+   asks for, into this project's metrics store, for the Dynamics page.
+
+## Value propositions
+- The owner sees how work flows through the system and what it costs, from the metrics, without
+  reading logs.
+- A new measurement is one ticket: written, reviewed, landed, then started by `orchestra run`.
+
+## Non-goals
+- No product: what the tickets build is small and exists to be measured.
+- No servers or stores of its own: series go to the project's store (`orchestra.metrics.for_repo`).
+
+## Definition of done
+A ticket is DONE when its review is approved and its branch has landed on main through the merge
+gate.
+
+## Verification
+The merge gate compiles every Python file and runs `pytest` on `tests/` once there are tests; a
+new tool or machine comes with a test there.
+"""
+
+
 def make_project(target: Path) -> Path:
     """The template as a fresh git repository at ``target`` (which must not exist yet), with no
     state: Orchestra names a project's state directory after the target's path, so a previous
@@ -88,6 +121,8 @@ def make_project(target: Path) -> Path:
     shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__"))
     (target / "machines").mkdir()
     shutil.copy(shell_worker(), target / "machines" / "shell_worker.py")
+    (target / ".orchestra").mkdir()
+    (target / ".orchestra" / "PROJECT.md").write_text(CONTEXT, encoding="utf-8")
     git = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.invalid"]
     subprocess.run([*git, "init", "-q", "-b", "main"], cwd=target, check=True)
     subprocess.run([*git, "add", "-A"], cwd=target, check=True)

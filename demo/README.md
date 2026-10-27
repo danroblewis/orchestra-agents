@@ -46,6 +46,10 @@ slots, one reviewer and a 1 s tick, the merge gate's `[[gate.unit]]`: every Pyth
 and the tests pass) and `[agents]` with `serves = ["worker", "reviewer"]`. The Coordinator and
 the Supervisor are told which machines, program or AI agent, have been seen filling each role.
 
+`run.py` also writes a project context (`.orchestra/PROJECT.md`: the demo's objectives, value
+propositions and non-goals), which the Supervisor starts from, so a request in the chat is acted on
+at once rather than met with questions about what the project is for.
+
 `python` in `[[machines]]` and in the gate's command is the first one on the PATH: `run.py` puts
 the interpreter Orchestra and the plugins are installed in first. To start `orchestra run` by
 hand, start it from that environment.

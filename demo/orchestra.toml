@@ -1,33 +1,53 @@
-# The agents' demo project: Orchestra, the task system, an AI reviewer (Claude Code, Haiku) and a
-# program worker (machines/shell_worker.py) on the same queue. demo/run.py copies this folder to
-# a fresh git repository and starts everything; see README.md.
+# The agents' demo project: Orchestra, the task system and AI agents (Claude Code, Haiku) as
+# worker and reviewer, beside a program worker (machines/shell_worker.py) that takes only tickets
+# written as shell commands. demo/run.py copies this folder to a fresh git repository and starts
+# Orchestra; `orchestra run` starts the rest. See README.md.
 
 [events]
 url = "file"             # Orchestra's bus: a JSONL file in ~/.orchestrator/<key>/
 
 [metrics]
-url = "file"
+url = "file"             # Orchestra's metrics store: <state>/metrics.jsonl; every machine here writes to it
 
 [discovery]
 window = "60m"
 step = "5s"               # a shell ticket lives and dies inside one 30 s step; at 5 s the ticket levels move as stocks
 every = "5m"
 
+# The programs `orchestra run` keeps running in this repository (the plugins' own, the task
+# system's scheduler and the agents' host, it starts by itself). A program that measures
+# something and writes the project's series, or any other long-running program, goes here; how
+# to write one: docs/machines.md in Orchestra's repository.
+# `python` is the first one on the PATH: demo/run.py puts the interpreter Orchestra and the plugins
+# are installed in first, so start `orchestra run` the same way (from that environment) by hand.
+[[machines]]
+name = "shell_worker"
+# instance "shell" (source worker/shell): the agents' host names its AI workers worker/1, worker/2,
+# and two machines sharing a source would both hold one assignment
+command = "python machines/shell_worker.py shell --only-commands"   # takes only tickets whose description gives `sh` blocks
+
 # ---- the task system (orchestra-tasking; sections Orchestra itself ignores) ----
 
 [project]
 base_branch = "main"
 ticket_prefix = "DEMO"
-work = "tasks"           # a scratch folder per ticket, reviewed, nothing merged
+work = "code"            # a branch per ticket, reviewed, landed on main through the merge gate
 
 [tasks]
-workers = 2              # tickets offered to workers at once
-reviewers = 1            # one reviewer: a queue forms in front of it after the burst
+workers = 2              # tickets offered to workers at once: the program and an AI agent both answer
+reviewers = 1
 tick = "1s"              # the scheduler's record follows a machine within a second (3 s by default would quantise every residence to 3 s)
+
+[gate]
+timeout = "300s"
+
+[[gate.unit]]            # what a branch must pass to land: every Python file compiles, and the tests, once there are any
+name = "unit"
+command = "python -m compileall -q . && if [ -d tests ]; then python -m pytest -q tests; fi"
 
 # ---- the agents (orchestra-agents) ----
 
 [agents]
 harness = "claude_code"  # pi | claude_code | codex
-model = "haiku"          # the cheapest model: a review is a short turn
-serves = ["reviewer"]    # the worker role is the shell worker's, a program
+model = "haiku"          # the cheapest model
+serves = ["worker", "reviewer"]

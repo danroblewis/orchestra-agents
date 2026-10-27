@@ -8,9 +8,11 @@ tool call goes through the real MCP server named in that config (JSON-RPC over s
 so the server is exercised end to end. It appends a Claude-format transcript under
 CLAUDE_CONFIG_DIR/projects/<cwd>/<uuid>.jsonl, where the harness expects it.
 
-A reviewer judges: each `file` named in the acceptance criteria must exist in the workspace and
-each "text" must be in RESULT.md there, else it rejects with a line per failure (criteria of
-other shapes are not its to check).
+A code worker runs the description's ``sh`` blocks, makes the files the acceptance criteria name
+(do_what_it_asks), writes its ticket's own note under work/ and commits. A reviewer judges: each
+`file` named in the acceptance criteria must exist in the workspace and each "text" must be in
+RESULT.md there, else it rejects with a line per failure (criteria of other shapes are not its
+to check).
 
 Env knobs shared with fake_pi: FAKE_PI_WORKER_BLOCK, FAKE_PI_REJECT_FIRST, FAKE_PI_BREAK_FIRST.
 FAKE_CLAUDE_SLOW=<seconds>: a reviewer says what it is reading, then takes that long before its
@@ -85,6 +87,23 @@ def judge(prompt: str, cwd: Path) -> list[str]:
     return failures
 
 
+def do_what_it_asks(prompt: str, cwd: Path) -> None:
+    """A code worker's stand-in for doing the ticket: it runs the description's ``sh`` blocks, if
+    any (a ticket written for a program worker), and makes each file the acceptance criteria name
+    that is not there yet, so the fake reviewer finds them."""
+    m = re.search(r"## Description\n(.*?)(?=\n## |\Z)", prompt, re.DOTALL)
+    for block in re.findall(r"```(?:sh|bash|shell)\s*\n(.*?)```", m.group(1) if m else "", re.DOTALL):
+        subprocess.run(["bash", "-c", block], cwd=cwd, check=False)
+    m = re.search(r"## Acceptance criteria\n(.*?)(?=\n## |\Z)", prompt, re.DOTALL)
+    for name in re.findall(r"`([^`\s]+)`", m.group(1) if m else ""):
+        path = cwd / name
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # a test file holds a test that passes: a gate running pytest fails on a file with none
+            body = "def test_written_by_the_fake_worker():\n    assert True\n" if path.name.startswith("test_") and path.suffix == ".py" else ""
+            path.write_text("# written by the fake worker\n" + body)
+
+
 def main() -> None:
     sid = arg("--session-id") or arg("--resume") or str(uuidlib.uuid4())
     prompt = sys.stdin.read()
@@ -131,7 +150,10 @@ def main() -> None:
             use_tool("report_ticket", {"state": "BLOCKED", "summary": "cannot", "blocked_reason": "need a decision"})
             text = "I am blocked."
         else:
-            f = cwd / "WORK.md"
+            checkout = (cwd / ".git").exists()           # a code ticket's worktree; a task's folder is not a checkout
+            # in a checkout each ticket writes a file of its own, so two tickets' branches land side by side
+            f = cwd / "work" / f"{ticket}.md" if checkout else cwd / "WORK.md"
+            f.parent.mkdir(exist_ok=True)
             f.write_text((f.read_text() if f.exists() else "") + f"work on {ticket}\n")
             broke = cwd / ".fake_broke"
             if os.environ.get("FAKE_PI_BREAK_FIRST") and not broke.exists():
@@ -139,7 +161,8 @@ def main() -> None:
                 (cwd / "README.md").unlink()
             elif broke.exists() and not (cwd / "README.md").exists():
                 (cwd / "README.md").write_text("# e2e\n")
-            if (cwd / ".git").exists():                  # a code ticket's worktree; a task's folder is not a checkout
+            if checkout:
+                do_what_it_asks(prompt, cwd)
                 subprocess.run(["git", "add", "-A"], cwd=cwd, check=True)
                 subprocess.run(["git", "commit", "-qm", f"{ticket}: fake work"], cwd=cwd, check=True)
             else:

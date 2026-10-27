@@ -1,0 +1,3 @@
+# what the demo's processes leave in the checkout: logs and compiled Python, never committed
+run/
+__pycache__/

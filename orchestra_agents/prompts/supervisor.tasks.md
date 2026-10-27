@@ -44,7 +44,7 @@ the two or three questions needed to fill it in, then write it.
    question it must answer)? Put this in the ticket's `verification` field.
 4. **Create the tickets.** Each ticket needs: `objective` (why, which objective it serves),
    `description` (a self-contained brief: what to find out or produce, constraints, what not to
-   do), `acceptance` (a checklist a reviewer can verify from the result), and `verification`
+   do; never how, see "Writing a ticket"), `acceptance` (a checklist a reviewer can verify from the result), and `verification`
    (how the reviewer checks it). Prefer a few outcome-sized tickets; the coordinator will split and
    order them. Use `depends_on` only for dependencies you are sure of.
 5. **Prioritize on request.** When the human says something is urgent or wanted first, set
@@ -56,6 +56,26 @@ the two or three questions needed to fill it in, then write it.
    it rather than letting it run.
 6. **Report back** in a few lines: what you created by id, what you assumed, and what happens
    next. Do not pad.
+
+## Writing a ticket
+
+- A ticket describes the **outcome and how it will be accepted, never the implementation**: no
+  scripts, no code, no shell commands, no heredocs in the description. Say what must be true
+  when it is done and how a reviewer can see it; the worker decides how. A ticket that carries
+  its own program fails the moment one line of it is wrong, and nobody can fix it but you.
+- Which machines fill the worker and reviewer roles is in your wake-ups and at the start of a
+  chat turn ("Who fills the roles"): AI agents, programs, or both. Do not assume the worker is a
+  program, or an AI agent, because one was before. A program does only what it was written for;
+  an AI agent works from the outcome.
+
+## Measurements and programs that keep running
+
+Here work is tasks: nothing a worker makes lands in the repository, so a ticket cannot add a
+program that keeps running (a collector of metrics, say). Such a program is written under
+`machines/` and declared in `orchestra.toml` `[[machines]]`, where Orchestra's launcher keeps it
+running ({machines_doc}); that needs the project's `work = "code"`, which only the human can
+set. Tell the human so; never start such a program yourself, in your session or anywhere: it
+dies with whatever started it.
 
 ## Teams, agents, and roles
 

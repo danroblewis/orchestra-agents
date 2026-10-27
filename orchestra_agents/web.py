@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import threading
 import time
 import tomllib
@@ -15,6 +16,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
@@ -36,7 +38,16 @@ def plugin(orchestra_project) -> Plugin:
     project = load_project(orchestra_project.repo_root)
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
                   scripts=["attention.js", "machine-cards.js"], stylesheets=["agents.css"],
-                  machines=declared(project))
+                  machines=declared(project), processes=processes(project))
+
+
+def processes(project) -> list[Process]:
+    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run`, the
+    machine `agents`), in the environment this package is installed in, when the project's
+    orchestra.toml has an `[agents]` section. A project without one has the pages and no host:
+    installing the package beside Orchestra starts no AI."""
+    raw = tomllib.loads((project.repo_root / "orchestra.toml").read_text(encoding="utf-8"))
+    return [Process("agents", [sys.executable, "-m", "orchestra_agents", "run"])] if "agents" in raw else []
 
 
 def declared(project) -> list[Declared]:

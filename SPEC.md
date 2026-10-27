@@ -105,7 +105,10 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
-`orchestra-agents run` is one process per project, the machine `agents`. It:
+`orchestra-agents run` is one process per project, the machine `agents`. Orchestra's launcher
+starts it: the plugin declares it in `Plugin.processes` when the project's `orchestra.toml` has an
+`[agents]` section (`web.processes`), so `orchestra run` keeps it running in the interpreter
+Orchestra runs in; a project without the section gets the pages and no host. It:
 
 - announces itself with `orchestra.machine.started` (package `agents`, continuous, what it
   listens for, its log), and announces every agent instance it starts (an AI agent, on which
@@ -118,7 +121,10 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   `wake_on` (a filter after the colon matches the transition target, a status, a probe name,
   the role an attention event is addressed to, or an agent-raised event's subject), queues
   scheduled wake-ups, runs the teams' probes, answers assignments, and runs one turn per woken
-  agent in a thread with the reasons and a snapshot of the project (a query to the task system).
+  agent in a thread with the reasons, a snapshot of the project (a query to the task system)
+  and who fills the task system's roles (`fillers.py`: the roles `[agents] serves`, and each
+  instance seen on the bus accepting a role's assignment or announcing itself as one, with the
+  `kind` it announced, so a planner never assumes the worker is a program or an AI agent).
   When the task system does not answer, the prompt says so instead of showing an empty project,
   and a wake-up that was only a schedule is skipped without a turn;
 - bounds every turn: it ends when the agent settles, after `silence_timeout` with nothing from
@@ -141,7 +147,11 @@ any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`).
   redone, up to its no-verdict budget; `tasking/reports.py`);
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
   recorded in the runtime record): one turn on the resident session per message, prefixed with
-  the project context when it changed and the events since the last turn, streamed as NDJSON.
+  the project context and who fills the roles when either changed, and a digest of the events
+  since the last turn: a count per type and at most eight events that concern the Supervisor
+  (attention addressed to it, a ticket blocked, the gate, staging, a process Orchestra gave up
+  on, an agent's crash loop; `prompting.CONCERNS`), however busy the bus was, so a turn does not
+  fill the session's context. The human's message follows whole. Streamed as NDJSON.
   A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause,
   restart or reset waits for the running one, and a paused Supervisor refuses the chat with the
   reason. The web plugin proxies it; `orchestra-agents chat` attaches to it. A host that cannot

@@ -25,5 +25,13 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
      BLOCKED for something you could find out by reading the code.
 6. Do not claim tests pass if you did not run them. A reviewer will read your diff and the
    test output.
+7. A program that keeps running (a collector of metrics, a watcher, a server the project needs)
+   goes under `machines/` and is declared in `orchestra.toml` under `[[machines]]` (`name`,
+   `command`, `restart`); Orchestra's launcher starts it once your branch lands. Do not start it
+   in the background yourself: it would die with your session. Its metrics go to the project's
+   own store through `orchestra.metrics.for_repo()` (which reads `[metrics]` in
+   `orchestra.toml`), never to another server, a URL of your own or a file; name each series for
+   what it measures with its unit, and never start a name with `orchestra_`. Read the guide
+   first: {machines_doc}. Run the program once for a few seconds to see it write, then stop it.
 
 After calling `report_ticket` you are done. Do not keep working.

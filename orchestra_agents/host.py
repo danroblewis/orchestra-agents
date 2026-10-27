@@ -24,6 +24,7 @@ from .clock import due_at, parse_interval
 from .config import Project
 from .control import ControlServer
 from .events import Events
+from .fillers import Fillers
 from .harness import AgentSession, SessionSpec, get_harness
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
@@ -77,6 +78,7 @@ class AgentHost:
         self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
+        self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
         self.runner = AgentRunner(self)                # answers the task system's assignments
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
@@ -425,7 +427,8 @@ class AgentHost:
             self.residents.procs["supervisor"] = proc
         evs, self._digest_at = self.events.after(self._digest_at)
         new = [e for e in evs if e["type"] not in ("session.started", "session.settled")]
-        prefix = prompting.supervisor_context(tooling.snapshot(self.store, "supervisor"), new, self.project, self.store)
+        prefix = prompting.supervisor_context(tooling.snapshot(self.store, "supervisor"), new, self.project, self.store,
+                                              roles=self.fillers.lines(self.cfg.serves))
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -466,7 +469,7 @@ class AgentHost:
         self.store.set_agent_state(target, last_woken=time.time(), turn_depth=self._pending_depth.pop(target, 0))
         log(f"{sid}: waking ({len(reasons)} reason(s))")
         self._session_running(sid, target, proc)
-        task = prompting.wake_task(target, reasons, snap)
+        task = prompting.wake_task(target, reasons, snap, self.fillers.lines(self.cfg.serves))
         if target == "supervisor":
             task = ("[Orchestra: escalation from another agent; the human is not present for this turn. "
                     "Act with your tools if you can, otherwise leave a note the human will see.]\n\n"

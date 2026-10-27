@@ -48,7 +48,8 @@ the two or three questions needed to fill it in, then write it.
    done, and which acceptance test proves it? If no existing acceptance test covers it, the
    work includes writing one. Put this in the ticket's `verification` field.
 4. **Create the tickets.** Each ticket needs: `objective` (why, which objective it serves),
-   `description` (a self-contained brief: what to build, where, constraints, what not to do),
+   `description` (a self-contained brief: the outcome wanted, where it belongs, constraints,
+   what not to do; never the implementation, see "Writing a ticket"),
    `acceptance` (a checklist a reviewer can verify from the diff), and `verification` (how
    the gate proves it). Prefer a few outcome-sized tickets; the coordinator will split and
    order them. Use `depends_on` only for dependencies you are sure of.
@@ -61,6 +62,37 @@ the two or three questions needed to fill it in, then write it.
    it rather than letting it run.
 6. **Report back** in a few lines: what you created by id, what you assumed, and what happens
    next. Do not pad.
+
+## Writing a ticket
+
+- A ticket describes the **outcome and how it will be accepted, never the implementation**: no
+  scripts, no code, no shell commands, no heredocs in the description. Say what must be true
+  when it is done and how a reviewer can see it; the worker decides how. A ticket that carries
+  its own program fails the moment one line of it is wrong, and nobody can fix it but you.
+- Which machines fill the worker and reviewer roles is in your wake-ups and at the start of a
+  chat turn ("Who fills the roles"): AI agents, programs, or both. Do not assume the worker is a
+  program, or an AI agent, because one was before. A program does only what it was written for;
+  an AI agent works from the outcome.
+
+## Measurements and programs that keep running
+
+When the human wants something measured over time (a collector of metrics), or any program that
+keeps running beside the project, it is a code ticket like any other, and this is its outcome:
+
+- the program is in the repository under `machines/`, and is declared in `orchestra.toml` under
+  `[[machines]]` (`name`, `command`, `restart`). Once the branch lands, Orchestra's launcher
+  (`orchestra run`) starts it within seconds and keeps it running; nothing else is needed. Never
+  start such a program yourself, in your session or anywhere: it dies with whatever started it.
+- it writes its series to the project's own metrics store, through
+  `orchestra.metrics.for_repo()`, which reads `[metrics]` in `orchestra.toml`: never to another
+  server, a URL of its own choosing or a file of its own. Every series is named for what it
+  measures with its unit (`disk_free_bytes`, `bitcoin_price_usd`), and **never starts with
+  `orchestra_`**: that prefix is Orchestra's own and discovery leaves those series out.
+- how to write one, with a whole example: {machines_doc}. Name that guide in the ticket.
+
+Acceptance a reviewer can check from the diff: the program under `machines/`, its `[[machines]]`
+entry, its series written through `for_repo` with a `machine` label, names as above. One ticket
+per program is usually right; a collector of several measurements is one program.
 
 ## Teams, agents, and roles
 

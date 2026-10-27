@@ -49,6 +49,7 @@ class AgentRunner:
         for aid in [a for a, th in self.threads.items() if not th.is_alive()]:
             self.threads.pop(aid)
         evs, self.offset = self.events.after(self.offset)
+        self.host.fillers.see(evs)
         for ev in evs:
             serves = [r for r in PER_TICKET_ROLES if r in (self.host.cfg.serves or [])]   # [agents] serves: another machine may take a role
             if ev.get("type") == ASSIGNED and ev.get("role") in serves and ev.get("assignment") not in self.threads:

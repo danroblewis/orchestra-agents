@@ -42,10 +42,21 @@ The commands run from this repository's environment (`--project <this repo>`, as
 system's README does it), since the target repository need not have anything installed; the
 `dev` extra brings the task system (`uv sync --extra dev` here first):
 
+    cd <repo> && uv run --project <this repo> orchestra run          # Orchestra's host; its launcher starts the agents' host
     cd <repo> && uv run --project <this repo> orchestra web          # Orchestra's UI with both plugins' pages
-    uv run --project <this repo> tasking run                         # the task system's scheduler
-    uv run --project <this repo> orchestra-agents run                # the agents' host
     uv run --project <this repo> orchestra-agents chat               # the Supervisor, in the terminal
+
+`orchestra run` starts the agents' host (`orchestra-agents run`) because the plugin declares it
+for Orchestra's launcher when `orchestra.toml` has `[agents]`, keeps it running and stops it with
+itself; its output is in `~/.orchestrator/<key>/logs/machines/agents.log`. To run the host by
+hand instead, leave `orchestra run` out and run `orchestra-agents run`; two hosts of one project
+refuse to run side by side.
+
+A program the project wants kept running (a collector of metrics, say) is the project's own:
+the Supervisor has a worker write it under `machines/` and declare it in `orchestra.toml`
+`[[machines]]`, and Orchestra's launcher starts it once the branch lands (Orchestra's
+`docs/machines.md`). That needs `work = "code"` in `[project]` and an AI agent among the
+workers.
 
 Without the task plugin in the same `orchestra web`, the agents still run, but a ticket link on
 the Agents page opens no ticket drawer and no banner says a ticket is blocked.

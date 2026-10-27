@@ -59,8 +59,20 @@ def role_prompt(project: Project, role: str) -> str:
     return _fill(project, text)
 
 
+MACHINES_DOC_URL = "https://github.com/danroblewis/orchestra/blob/main/docs/machines.md"
+
+
+def machines_doc() -> str:
+    """Where Orchestra's guide to writing a machine (its series, its declaration for the launcher)
+    is: the file in Orchestra's checkout when it is installed from one, else the published copy."""
+    import orchestra
+    local = Path(orchestra.__file__).resolve().parents[1] / "docs" / "machines.md"
+    return str(local) if local.exists() else MACHINES_DOC_URL
+
+
 def _fill(project: Project, text: str) -> str:
-    return text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
+    return (text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
+            .replace("{machines_doc}", machines_doc()))
 
 
 def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict | None = None) -> str:
@@ -241,7 +253,10 @@ def org_reference() -> str:
             + ".\nA wake_on entry may filter transitions, e.g. 'ticket.transitioned:DONE' or 'ticket.transitioned:BLOCKED'.")
 
 
-def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:
+WAKE_TICKETS = 40          # open tickets listed in a wake-up; the rest are a count, and `list_tickets` has them
+
+
+def wake_task(target: str, reasons: list[str], snapshot: dict, roles: list[str] | None = None) -> str:
     counts = ", ".join(f"{k}={v}" for k, v in snapshot["counts"].items() if v)
     lines = [f"# Wake-up for the {target.replace('_', ' ')}", "", "## Why you were woken"]
     shown = reasons[:12]
@@ -253,19 +268,22 @@ def wake_task(target: str, reasons: list[str], snapshot: dict) -> str:
                        "reason, not because the project is empty; do not act on ticket counts this turn.")]
     else:
         lines += ["", "## Execution health"] + execution_health(snapshot)
+    if roles:
+        lines += ["", "## Who fills the roles"] + roles
     lines += ["", "## Project snapshot", f"Ticket counts: {counts or 'none'}",
               f"Pipeline: {'PAUSED: ' + str(snapshot['pipeline'].get('reason')) if snapshot['pipeline'].get('paused') else 'running'}",
               "", "Milestones:"]
     for m in snapshot["milestones"]:
         lines.append(f"- {m['id']} [{m['status']}] {m['name']}")
     lines += ["", "Tickets (id, state, priority, milestone, title):"]
-    for t in snapshot["tickets"]:
-        if t["state"] in TERMINAL:
-            continue
+    live = [t for t in snapshot["tickets"] if t["state"] not in TERMINAL]
+    for t in live[:WAKE_TICKETS]:
         extra = f" BLOCKED: {t['blocked_reason']}" if t["state"] == "BLOCKED" else ""
         extra += f" (review rounds: {t['review_rounds']})" if t["review_rounds"] else ""
         obj = f" | objective: {t['objective'][:80]}" if t.get("objective") else ""
         lines.append(f"- {t['id']} {t['state']} p{t['priority']} {t['milestone_id']} {t['title']}{extra}{obj}")
+    if len(live) > WAKE_TICKETS:
+        lines.append(f"- ...and {len(live) - WAKE_TICKETS} more; `list_tickets` has them all")
     lines += ["", ("Use your tools to act, then report the way your role says to; if it does not say, reply with a few "
                    "lines on what you did and why.")]
     return "\n".join(lines)
@@ -308,11 +326,32 @@ def execution_health(snapshot: dict) -> list[str]:
     return out
 
 
-def supervisor_context(snapshot: dict, events: list[dict], project: Project | None = None, store=None) -> str:
+# What in the event stream concerns the Supervisor enough to be named one by one in its digest:
+# what it is asked to decide or handle (attention addressed to it, a blocked ticket, the gate, the
+# staging deploy, a process Orchestra gave up on, an agent that keeps crashing) and what it waits
+# to tell the human (a ticket landed). Everything else is only counted.
+CONCERNS = ("gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken", "staging.failed",
+            "pipeline.paused", "orchestra.process.gave_up", "agent.crash_loop")
+DIGEST_EVENTS = 8          # at most this many named events
+DIGEST_TYPES = 8           # at most this many event types counted by name
+
+
+def concerns_supervisor(e: dict) -> bool:
+    t = e.get("type")
+    return (t in CONCERNS or (t == "task.attention_needed" and e.get("to") == "supervisor")
+            or (t == "ticket.transitioned" and e.get("to") == "BLOCKED"))
+
+
+def supervisor_context(snapshot: dict, events: list[dict], project: Project | None = None, store=None,
+                       roles: list[str] | None = None) -> str:
     """What Orchestra puts in front of a Supervisor turn: the project context document only
     when it has changed since the Supervisor last saw it (the session remembers earlier
-    copies, and `get_project_context` fetches it any time), then the events since its
-    last turn, at most forty. A human's "yes, go ahead" should arrive as itself."""
+    copies, and `get_project_context` fetches it any time), then a short digest of the events
+    since its last turn: how many of each type, and the few that concern it (CONCERNS), at
+    most DIGEST_EVENTS. Who fills the task system's roles (``roles``, fillers.py) comes first
+    when it has changed since the Supervisor last saw it. The digest stays a few lines however busy the bus was, so a turn does
+    not fill the session's context; the snapshot and `list_tickets` have the rest. A human's
+    "yes, go ahead" arrives as itself."""
     out = ""
     if project is not None:
         text = read_context(project).strip()
@@ -322,15 +361,31 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
             out += "[Orchestra: project context" + (", updated" if seen else "") + "]\n" + text + "\n\n"
             if store is not None:
                 store.set_agent_state("supervisor", context_hash=digest)
+    if roles:
+        said = hashlib.sha256("\n".join(roles).encode("utf-8")).hexdigest()[:16]
+        if store is None or store.agent_state("supervisor").get("roles_hash") != said:
+            out += "[Orchestra: who fills the roles]\n" + "\n".join(roles) + "\n\n"
+            if store is not None:
+                store.set_agent_state("supervisor", roles_hash=said)
     if not events:
         return out
-    lines = ["[Orchestra: events since your last turn]"]
-    for e in events[-40:]:
+    by_type: dict[str, int] = {}
+    for e in events:
+        by_type[str(e.get("type"))] = by_type.get(str(e.get("type")), 0) + 1
+    common = sorted(by_type.items(), key=lambda kv: (-kv[1], kv[0]))
+    counted = ", ".join(f"{t}={n}" for t, n in common[:DIGEST_TYPES])
+    rest = sum(n for _, n in common[DIGEST_TYPES:])
+    counted += f", {rest} of {len(common) - DIGEST_TYPES} other types" if rest else ""
+    lines = [f"[Orchestra: {len(events)} events since your last turn: {counted}]"]
+    named = [e for e in events if concerns_supervisor(e)]
+    if named:
+        lines.append("Of these, for you" + (f" (the last {DIGEST_EVENTS} of {len(named)})" if len(named) > DIGEST_EVENTS else "") + ":")
+    for e in named[-DIGEST_EVENTS:]:
         parts = [e["type"]]
-        for k in ("ticket", "milestone", "from", "to", "reason", "by", "summary"):
+        for k in ("ticket", "name", "from", "to", "reason", "by", "error"):
             if e.get(k):
                 parts.append(f"{k}={e[k]}")
-        lines.append("- " + " ".join(str(p) for p in parts))
+        lines.append("- " + " ".join(str(p) for p in parts)[:240])
     counts = ", ".join(f"{k}={v}" for k, v in snapshot["counts"].items() if v)
     if snapshot.get("unavailable"):
         lines.append(f"[Orchestra: the task system did not answer: {snapshot['unavailable']}; ticket counts unknown]")

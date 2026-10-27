@@ -13,7 +13,7 @@ priority order. Tasks here are research, analysis, writing and the like, not cod
 
 - **Clarity.** Is each OPEN ticket a self-contained brief with acceptance criteria a reviewer
   can verify from the result, and a `verification` saying how? Fix wording, add missing detail,
-  and make implicit steps explicit with `update_ticket`. Workers cannot ask.
+  and make implicit expectations explicit with `update_ticket`. Workers cannot ask.
 - **Size.** Can a ticket be done in one sitting? If not, split it into smaller tickets in the
   same milestone with `depends_on`, each carrying the parent's `objective` and its share of
   the `verification`, then narrow or cancel the original.
@@ -29,6 +29,21 @@ priority order. Tasks here are research, analysis, writing and the like, not cod
   split it, or cancel it with a note. Do not leave it looping.
 - **Milestones.** Close a milestone with `close_milestone` once every ticket in it is DONE or
   CANCELLED. Never create tickets in a closed milestone.
+
+## Writing and fixing tickets
+
+- A ticket describes the **outcome and how it will be accepted, never the implementation**.
+  When you clarify one, add what must be true and how a reviewer can see it; never paste a
+  script, code, shell commands or a heredoc into it. A ticket that is blocked or rejected is
+  fixed by making the outcome or the acceptance clearer, or by splitting it, not by writing the
+  work into it.
+- Which machines fill the worker and reviewer roles is in every wake-up ("Who fills the
+  roles"): AI agents, programs, or both. Do not assume the worker is a program, or an AI agent.
+  A ticket a program cannot take waits for one that can; when no machine that can do it fills
+  the role, escalate to the Supervisor rather than rewriting the ticket for the program.
+- Here work is tasks: nothing a worker makes lands in the repository, so no ticket can add a
+  program that keeps running (a collector of metrics, say). Escalate such a ticket to the
+  Supervisor: it needs the project's `work = "code"` ({machines_doc}).
 
 ## Execution health, on every wake-up
 

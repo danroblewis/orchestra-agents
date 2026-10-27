@@ -30,8 +30,8 @@ def test_context_document_is_sent_once_until_it_changes(project):
     again = agents.supervisor_context(snap, [], project, store)
     assert again.startswith("[Orchestra: project context, updated]") and "ship it" in again
     assert agents.supervisor_context(snap, [], project, store) == ""
-    # events still arrive, compactly
-    evs = [{"type": "ticket.transitioned", "ticket": "T-1", "from": "OPEN", "to": "DONE"}]
+    # events still arrive, as a digest
+    evs = [{"type": "ticket.transitioned", "ticket": "T-1", "from": "OPEN", "to": "BLOCKED"}]
     out = agents.supervisor_context(snap, evs, project, store)
     assert "[Orchestra: project context" not in out and "ticket.transitioned ticket=T-1" in out
     # without a store (the CLI's temporary session) the document is always included
@@ -57,3 +57,24 @@ def test_execution_health_reads_the_snapshot_as_the_task_system_sends_it():
     lines = execution_health(snap)
     assert lines[0] == "Worker capacity: 2 of a configured maximum 2"
     assert any(ln.startswith("DIAGNOSIS: tickets are ready and capacity exists but no worker is running") for ln in lines)
+
+
+def test_the_digest_stays_short_however_busy_the_bus_was(project):
+    """A wake-up after a busy hour carries counts by type and only the few events that concern
+    the Supervisor, not the event list: a long digest on every turn filled its context."""
+    snap = {"counts": {"OPEN": 3}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {}, "assignments": []}
+    evs = [{"type": "task.working", "ticket": f"T-{i % 5}", "text": "x" * 200} for i in range(500)]
+    evs += [{"type": "ticket.transitioned", "ticket": f"T-{i}", "from": "OPEN", "to": "IN_PROGRESS"} for i in range(50)]
+    evs += [{"type": "task.attention_needed", "to": "coordinator", "reason": "T-2 BLOCKED"}]
+    evs += [{"type": "task.attention_needed", "to": "supervisor", "reason": f"decide {i}"} for i in range(12)]
+    evs += [{"type": "orchestra.process.gave_up", "name": "telemetry"}]
+    store = AgentStore(project)
+    agents.supervisor_context(snap, [], project, store)                     # the context document, seen once
+    out = agents.supervisor_context(snap, evs, project, store)
+    lines = out.strip().splitlines()
+    assert lines[0].startswith("[Orchestra: 564 events since your last turn: task.working=500, ticket.transitioned=50, task.attention_needed=13")
+    named = [ln for ln in lines if ln.startswith("- ")]
+    assert len(named) == agents.DIGEST_EVENTS and named[-1] == "- orchestra.process.gave_up name=telemetry"
+    assert not any("coordinator" in ln or "IN_PROGRESS" in ln or "task.working " in ln for ln in named)
+    assert "(the last 8 of 13)" in out and lines[-1] == "[Orchestra: ticket counts now: OPEN=3]"
+    assert len(out) < 2000

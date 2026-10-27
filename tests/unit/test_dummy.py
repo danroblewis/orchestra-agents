@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import agents_project
 
+from orchestra_agents import access
 from orchestra_agents.events import Events
 from orchestra_agents.harness import SessionSpec, get_harness, read_transcript
 from orchestra_agents.harness.dummy_script import DEFAULTS, ScriptError, Turn, load, parse
@@ -96,7 +97,9 @@ def session(project, role: str, groups: tuple[str, ...], cwd: Path, ticket: str 
     spec = SessionSpec(session_id=f"{role}-{ticket or 'x'}", session_dir=project.sessions_dir, cwd=cwd, system_prompt="be good",
                        role=role, tool_groups=groups, log_path=project.logs_dir / "agents" / f"{role}.stderr.log",
                        env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(project.repo_root), "ORCHESTRA_TICKET": ticket,
-                            "ORCHESTRA_SOURCE": f"{role}/1" if ticket else role})
+                            "ORCHESTRA_SOURCE": f"{role}/1" if ticket else role,
+                            # a token issued as the host issues one (access.py): tool calls are checked against it
+                            access.TOKEN_ENV: access.issue(AgentStore(project, Events.for_project(project)), f"{role}-{ticket or 'x'}", role, ticket)})
     s = get_harness("dummy").start(spec)
     s.open()
     return s

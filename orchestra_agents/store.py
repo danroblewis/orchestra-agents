@@ -1,7 +1,7 @@
 """The agents' own state, in ``~/.orchestrator/<key>/agents/runtime.json``, behind one file lock:
 their sessions (live and archived, each with the host's markers for its transcript), the reports
 an agent's tool hands to the agent that runs it, wake-ups queued for an agent, each agent's state
-(paused, crashes, schedules), the probes' states, the control endpoint, the metric counters and
+(paused, crashes, schedules, the changes its tools made), the probes' states, the control endpoint, the metric counters and
 when the human last read the Supervisor. Nothing of the task system's is here: tickets are the
 task system's, reached over the bus (protocol.TaskClient)."""
 
@@ -147,6 +147,13 @@ class AgentStore:
             st.update(fields)
             return dict(st)
         return self._mutate_runtime(fn)
+
+    def add_action(self, name: str, action: dict, keep: int) -> None:
+        """One change an agent's tool made (ledger.py), kept in its state, the newest ``keep``."""
+        def fn(d):
+            st = d["agent_state"].setdefault(name, {})
+            st["actions"] = (st.get("actions") or [])[-(keep - 1):] + [action]
+        self._mutate_runtime(fn)
 
     def add_wakeup(self, target: str, reason: str) -> None:
         self._mutate_runtime(lambda d: d["wakeups"].append({"target": target, "reason": reason, "ts": now()}))

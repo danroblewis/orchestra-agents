@@ -175,8 +175,20 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   anything that will happen, or a claim of a change with no tool call; `promises.py`, a
   heuristic) gets one more turn on the session to take it or say it is not done; the human gets
   the correction after the reply. The same check runs on the Supervisor's wake-ups, whose reply
-  is left for the human as a message. A session runs one turn at a time: a chat and a wake-up
-  queue behind each other, a pause, restart or reset waits for the running one, and a paused
+  is left for the human as a message. The prompt alone did not keep the replies true (a live
+  test, 2026-10-27: "I have not done anything" right after two commits; two DONE tickets called
+  in flight), so the Supervisor is given facts and its reply is checked against them, without
+  the model. Every tool call that changes something is answered with what it changed (`done`: a
+  commit's id, a ticket's id) and kept in the agent's state with the time, where every
+  harness's calls pass (`tooling.handle`, `ledger.py`). In front of each Supervisor turn, chat or
+  wake-up, go the changes its tools made since its previous turn began and the state, read from
+  the task system just then, of the tickets it is dealing with (the ones it or the human named
+  in recent turns, the ones it created for the human; `facts.py`). After the reply, a sentence
+  saying nothing was done while the record shows changes made in that turn, or one placing a
+  ticket it names on the wrong side of done (the snapshot read again), gets a correction written
+  by Orchestra appended to the reply: the changes, or each ticket's true state (`truth.py`,
+  narrow heuristics). The human sees it on the live chat and as an `agent.corrected` marker on
+  the transcript. A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause, restart or reset waits for the running one, and a paused
   Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra-agents chat` attaches to it. A host that cannot
   bind the endpoint exits instead of running unreachable;
 - wakes the Supervisor when a ticket it created (`ticket.created` with `by` = supervisor: the
@@ -188,7 +200,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   resident agent's state and wake-ups, and the sessions on tickets.
 
 Events the host and the agents publish: `session.started`, `session.settled`, `agent.said`,
-`session.timed_out`, `session.error`, `session.interrupted`, `agent.crashed`, `agent.crash_loop`,
+`session.timed_out`, `session.error`, `session.interrupted`, `agent.crashed`, `agent.crash_loop`, `agent.corrected`,
 `agent.compacted`, `agent.reset`, `agent.paused`, `agent.resumed`, `agent.messaged`,
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, `config.changed` and `machine.restarted` from the Supervisor's setup tools
@@ -247,7 +259,7 @@ are Orchestra's, found through the Orchestra project.
 
 State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions and archived sessions, each
 with the host's markers for its transcript; the reports an agent's tool handed to the host;
-queued wake-ups; each agent's state; probe states; the control endpoint; the metric counters,
+queued wake-ups; each agent's state, with the changes its tools made, `actions`; probe states; the control endpoint; the metric counters,
 `metric_counts`; and `supervisor_seen_at`, when the human last read the Supervisor), behind one
 file lock and written only by `store.py`; `sessions/` (the harnesses' session records and, for a
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its

@@ -25,6 +25,7 @@ from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer
 from .events import GAVE_UP, Events
+from .facts import SupervisorFacts
 from .fillers import Fillers
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
@@ -86,6 +87,7 @@ class AgentHost:
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
         self.landings = Landings(store)                # the human's tickets, followed until they are done
+        self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s))
         self.runner = AgentRunner(self)                # answers the task system's assignments
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
@@ -466,8 +468,9 @@ class AgentHost:
             self.residents.procs["supervisor"] = proc
         evs, self._digest_at = self.events.after(self._digest_at)
         new = [e for e in evs if e["type"] not in ("session.started", "session.settled")]
-        prefix = prompting.supervisor_context(tooling.snapshot(self.store, "supervisor"), new, self.project, self.store,
-                                              roles=self.fillers.lines(self.cfg.serves))
+        snap = tooling.snapshot(self.store, "supervisor")
+        prefix = prompting.supervisor_context(snap, new, self.project, self.store, roles=self.fillers.lines(self.cfg.serves))
+        facts, began = self.facts.before(snap, message)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -476,7 +479,8 @@ class AgentHost:
             if ev.get("type") in ("tool_start", "assistant_end"):
                 emit(ev)
 
-        res = self._honest(proc, prompting.chat_turn(prefix, message), on_event)
+        res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
+        res = self._checked(res, began, message, emit)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self.events.emit("agent.said", session="supervisor", summary=(res.text or "")[:500])
@@ -503,6 +507,21 @@ class AgentHost:
         if again.error or again.timed_out or not again.text.strip():
             return res
         return TurnResult(text=f"{res.text.rstrip()}\n\n{again.text.strip()}")
+
+    def _checked(self, res: TurnResult, began: float, message: str = "", emit=None) -> TurnResult:
+        """A Supervisor reply checked against Orchestra's records (facts.py, truth.py): what it
+        gets wrong about what it did or where a ticket is gets Orchestra's correction after it,
+        in the reply the human reads, on the live chat and as a marker on its transcript."""
+        if res.error or res.timed_out:
+            return res
+        fix = self.facts.after(res.text, began, message)
+        if fix is None:
+            return res
+        log(f"supervisor: the reply contradicts Orchestra's records; corrected: {fix.splitlines()[1][:160]!r}")
+        self._mark("agent.corrected", session="supervisor", agent="supervisor", text=fix)
+        if emit is not None:
+            emit({"type": "assistant_end", "text": fix})
+        return TurnResult(text=f"{res.text.rstrip()}\n\n{fix}")
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)
@@ -532,8 +551,9 @@ class AgentHost:
         self._session_running(sid, target, proc)
         task = prompting.wake_task(target, reasons, snap, self.fillers.lines(self.cfg.serves))
         if target == "supervisor":
-            task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + task
-            res = self._honest(proc, task, self.turns.on_event(sid))
+            facts, began = self.facts.before(snap)
+            task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
+            res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
         else:
             res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)

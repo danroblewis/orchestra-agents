@@ -19,7 +19,8 @@ FAKE_CLAUDE_SLOW=<seconds>: a reviewer says what it is reading, then takes that 
 verdict, so what it is doing can be seen while it holds the ticket.
 FAKE_CLAUDE_SUPERVISOR=<file>: in a chat turn (one with the human's message) the Supervisor calls
 the tools the file lists, a JSON list of {"tool", "args"}, in order, and replies with what each
-answered; without it, a Supervisor only acknowledges."""
+answered, or with the text of a {"reply"} step when the list has one (a reply as a model might
+get it wrong); without it, a Supervisor only acknowledges."""
 
 from __future__ import annotations
 
@@ -215,8 +216,9 @@ def main() -> None:
             text = "Approved."
     elif role == "supervisor" and os.environ.get("FAKE_CLAUDE_SUPERVISOR") and "[The human's message]" in prompt:
         steps = json.loads(Path(os.environ["FAKE_CLAUDE_SUPERVISOR"]).read_text())
-        said = [f"- {s['tool']}: {use_tool(s['tool'], s.get('args', {}))}" for s in steps]
-        text = "What I did with my tools:\n" + "\n".join(said)
+        said = [f"- {s['tool']}: {use_tool(s['tool'], s.get('args', {}))}" for s in steps if "tool" in s]
+        replies = [s["reply"] for s in steps if "reply" in s]
+        text = replies[-1] if replies else "What I did with my tools:\n" + "\n".join(said)
     else:
         text = f"{role} acknowledges: {prompt[:60]}"
     mcp.close()

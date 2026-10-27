@@ -16,7 +16,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from . import observe, observe_model, prompting
+from . import ledger, observe, observe_model, prompting
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
@@ -47,6 +47,12 @@ def check_args(command: str, args: dict[str, Any]) -> None:
 
 
 def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
+    """One tool call. A call that changed something is answered with what it changed, and the
+    change is kept in the agent's record (ledger.py), whatever the model says about it later."""
+    return ledger.record(store, role, command, args or {}, _handle(project, store, command, args, role, ticket_env))
+
+
+def _handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
     a = args or {}
     author = role or "agents"
 
@@ -158,12 +164,12 @@ def may_change_tickets(project: Project, role: str) -> bool:
     return bool(ag) and not ag.builtin and "tickets" in effective_tools(ag, all_roles(project), all_teams(project))
 
 
-def snapshot(store: AgentStore, role: str) -> dict:
+def snapshot(store: AgentStore, role: str, wait_s: float | None = None) -> dict:
     """The task system's snapshot (a query; the fields the prompts read are listed in protocol.py)
     for a wake-up's or the Supervisor's prompt, asked as the agent being woken (the query's
-    source is its instance, which for a resident is its name). When the task system does not
-    answer, an empty one that says so."""
-    got = TaskClient(store.events, role, source=role)("snapshot")
+    source is its instance, which for a resident is its name), waiting ``wait_s`` for the answer
+    (protocol.WAIT_S by default). When the task system does not answer, an empty one that says so."""
+    got = TaskClient(store.events, role, source=role, wait_s=wait_s)("snapshot")
     snap = got.get("snapshot") if got.get("ok") else None
     if not snap:
         snap = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {},

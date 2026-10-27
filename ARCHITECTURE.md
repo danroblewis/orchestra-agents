@@ -1,7 +1,7 @@
 # orchestra-agents: architecture
 
 This document explains how orchestra-agents works, for the owner and for engineers new to the
-code. It describes the code on `main` at `91ce6dd`. Every module is named by its path under
+code. It describes the code on `main` at `91ce6dd`, with the role checks of `access.py` added since. Every module is named by its path under
 `orchestra_agents/`. `SPEC.md` is the design and `AGENTS.md` holds the rules. This document
 explains the code and does not replace either of them.
 
@@ -100,7 +100,7 @@ flowchart LR
       MCP[harness/mcp.py<br/>MCP server]
       API[orchestra-agents api<br/>cli.py]
     end
-    TOOL[tooling.handle<br/>+ ledger.py]
+    TOOL[tooling.handle<br/>+ access.py + ledger.py]
     STORE[(runtime.json<br/>store.py)]
     REPO[(repository<br/>orchestra.toml, .orchestra/)]
   end
@@ -135,7 +135,7 @@ The modules, grouped by job:
 | Entry points | `cli.py` (the `orchestra-agents` command), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
 | The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py` |
 | Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
-| Tools | `tooling.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
+| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
@@ -291,6 +291,11 @@ not an agent here.
 - **Tool groups are granted by roles and teams** (`org.effective_tools`). Every agent in a team,
   and every team lead, also gets `team`. A per-ticket worker or reviewer gets only its exit tool.
   The `setup` group is not in `roles.TOOL_GROUPS`, so no custom role or team can be given it.
+  `roles` is, but every change it names (`api_org.MUTATIONS`, which includes pausing, resuming,
+  restarting and resetting an agent) is the Supervisor's alone, so a custom holder of `roles`
+  can read `org_guide` and nothing more.
+- **Groups are enforced on every call**, not only by what a harness lists (`access.authorize`,
+  [section 9](#9-the-tools-agents-get)).
 - **Path grants are not enforced.** They are written into the prompt under "Where you work".
   The harnesses run with their own permission checks off.
 - Messages follow the tree (`org.may_message`). The Supervisor may message anyone. A lead may
@@ -355,7 +360,8 @@ these variables in `env` (`host._open_session`):
 
 | Variable | Value |
 |---|---|
-| `ORCHESTRA_ROLE` | The agent's name or the role: `supervisor`, `worker`, a custom agent's name. This is what `tooling.handle` trusts. |
+| `ORCHESTRA_ROLE` | The agent's name or the role: `supervisor`, `worker`, a custom agent's name. A call whose `ORCHESTRA_ROLE` differs from its token's role is refused. |
+| `ORCHESTRA_SESSION_TOKEN` | A token issued for this session (`access.issue`). `runtime.json` `grants` keeps its SHA-256 with the role and ticket. The role and ticket a tool call runs as are the token's. |
 | `ORCHESTRA_SOURCE` | The machine instance: `supervisor`, `worker/1` |
 | `ORCHESTRA_REPO` | The repository root |
 | `ORCHESTRA_TICKET` | The ticket id for a per-ticket session, otherwise `""` |
@@ -608,37 +614,56 @@ sequenceDiagram
   `additionalProperties: false`.
 - **MCP** (`harness/mcp.py`) is used by Claude Code and Codex. It is stdio JSON-RPC 2.0 with the
   methods `initialize`, `tools/list` and `tools/call`. It lists only the tools of the groups in
-  `ORCHESTRA_TOOLS` and refuses any other tool name. A call runs `tooling.check_args` and then
-  `tooling.handle(project, store, name, args, role=ORCHESTRA_ROLE, ticket_env=ORCHESTRA_TICKET)`.
+  `ORCHESTRA_TOOLS` and refuses any other tool name. A call runs `tooling.check_args`, then
+  `access.identify` (the role and ticket of the session's token), then
+  `tooling.handle(project, store, name, args, role=<token's role>, ticket_env=<token's ticket>)`.
   The result is JSON text, and an error is `{"ok": false, "error": ...}` with `isError: true`.
 - **Pi** (`harness/pi_extension.ts`) registers the output of `orchestra-agents tools --json`
   (filtered by `ORCHESTRA_TOOLS`). Each call runs
   `python -m orchestra_agents api <tool> --args <json>` (`cli.cmd_api`). That command refuses to
-  run without `ORCHESTRA_ROLE`, runs `check_args`, then `handle`, and prints JSON.
-- **`tooling.handle`** wraps `_handle` with `ledger.record`. A successful call that changed
+  run without `ORCHESTRA_SESSION_TOKEN`, runs `access.identify`, `check_args`, then `handle`, and
+  prints JSON.
+- **`tooling.handle`** first runs `access.authorize`, then wraps `_handle` with `ledger.record`. A successful call that changed
   something gains a `done` field (`"Changed: <line>."`), and the line is kept in the agent's
   `actions` (the newest 40).
 
 `check_args` refuses an argument the schema does not name, and a required argument that is
 missing or empty.
 
-**Who may call what.** The role always comes from `ORCHESTRA_ROLE`, never from the model.
-`handle` checks the role for these commands:
+**Who is calling.** `host._open_session` issues each session a token (`access.issue`) and puts
+it in the session's environment as `ORCHESTRA_SESSION_TOKEN`. `runtime.json` `grants[session id]`
+keeps its SHA-256, the role and the ticket. Opening a session of the same id replaces the grant.
+The runner, an ephemeral wake-up and `Residents.stop_changed`/`close_all` revoke it when they
+close the session, and `host.recover` drops every grant when a host starts. `access.identify`
+looks the token up and returns the grant's role and ticket. It refuses a missing token, a token
+with no grant, and an `ORCHESTRA_ROLE` that names another role. So a shell inside a worker's
+session that runs `ORCHESTRA_ROLE=supervisor orchestra-agents api pause_agent ...` is refused.
+`ORCHESTRA_TICKET` is no longer read for a call; a worker cannot report on another ticket.
+
+**Who may call what.** `access.authorize`, at the top of `handle`, refuses:
+
+- an empty role, and a role that names no agent and no built-in role;
+- any tool whose group the role does not hold now (`org.effective_tools` over the current
+  roles and teams; a built-in name always means the built-in agent). The error names the role,
+  the group the tool needs and the groups the role has.
+
+Then `handle` checks the role again for these commands:
 
 | Command(s) | Allowed role |
 |---|---|
 | `report_ticket` | `worker` |
 | `report_review` | `reviewer` |
 | `update_project_context` | `supervisor` |
-| Organisation mutations (`create_`/`update_`/`delete_` role, agent, team) | `supervisor` |
+| Organisation mutations (`create_`/`update_`/`delete_` role, agent, team) and `pause_agent`, `resume_agent`, `restart_agent`, `reset_agent` (`api_org.MUTATIONS`) | `supervisor`, even for a custom role or team granted `roles` |
 | All `setup` tools and `restart_machine` | `supervisor` |
 | Ticket and milestone **requests** | `supervisor`, `coordinator`, and custom agents whose effective groups include `tickets` (`may_change_tickets`) |
 | `message_agent`, `run_agent` | Any role, along the tree (`org.may_message`) |
 | `emit_event` | Types declared by the caller's team chain (the Supervisor may raise any non-reserved type). At most 3 deep in a cause chain and 20 per hour. |
 
-Everything else (queries, reads, `pause_agent` and the other agent controls,
-`escalate_to_supervisor`) is limited only by which groups the harness exposes. See
-[section 18](#18-limits-worth-knowing).
+Everything else (queries, reads, `escalate_to_supervisor`) needs only its group. The pages and
+the CLI do not call `handle`: they read the organisation through `api_org.read_org`, which
+serves only `list_`/`get_` roles, agents and teams. See [section 18](#18-limits-worth-knowing) for
+what the token does not stop.
 
 ### The tools
 
@@ -1065,7 +1090,7 @@ The host also reads `[project] base_branch` (default `main`), `ticket_prefix` (`
 
 | Path | What | Written by |
 |---|---|---|
-| `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, hashes...), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
+| `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, hashes...), `grants` (each live session's token digest, role and ticket), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
 | `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` and `.system.md`; `codex/<id>.json` | The harnesses |
 | `logs/agents-host.log` | The host's log (rotated at 5 MB) | `host.log` |
 | `logs/agents/<session>.stderr.log`, `<session>.prompt.md` | Each session's stderr, and the prompt it started with | The harness, and `host._open_session` |
@@ -1131,12 +1156,15 @@ Nothing outside `harness/` may branch on the harness.
 
 ## 18. Limits worth knowing
 
-- **Tool groups limit what a harness shows the model, not what `tooling.handle` accepts.**
-  `handle` checks the role for the commands listed in [section 9](#9-the-tools-agents-get) but
-  never checks the caller's groups. An agent with a shell can run `orchestra-agents api <tool>`
-  in its session (the environment carries `ORCHESTRA_ROLE`) and reach any tool that has no role
-  check: queries, reads, `escalate_to_supervisor`, and `pause_agent`, `resume_agent`,
-  `restart_agent` and `reset_agent`, which are not in `api_org.MUTATIONS`.
+- **The session token is not a sandbox.** Every call is checked against the groups of the role
+  its token was issued for ([section 9](#9-the-tools-agents-get)), so setting `ORCHESTRA_ROLE`
+  gains nothing. But the agents run as the same OS user as the host, with their harnesses'
+  permission checks off. A process that sets out to impersonate another session can read that
+  session's token where the OS lets the same user read it: another process's environment or
+  command line (Codex's MCP override is on its command line), or the `<session>.mcp.json` the
+  Claude Code harness writes. It can also import this package and write `runtime.json`, or
+  publish to the bus under any source. Isolating a hostile agent needs another OS user or a
+  container, which this package does not set up.
 - **Path grants are instructions only.** The harnesses run with their permission checks off.
 - **Reply checks are heuristics.** `promises.py` and `truth.py` match narrow sentence shapes. A
   false claim they miss is still answered by the facts that the next turn carries.

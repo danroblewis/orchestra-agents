@@ -19,7 +19,7 @@ from pathlib import Path
 import psutil
 from orchestra.runtime import alive
 
-from . import promises, prompting, tooling
+from . import access, promises, prompting, tooling
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
@@ -95,7 +95,9 @@ class AgentHost:
 
     def recover(self) -> None:
         """Turns the previous host left running: their processes are stopped (no orphans) and
-        their sessions marked idle, with an event so the transcript shows the cut."""
+        their sessions marked idle, with an event so the transcript shows the cut. Their tokens
+        are no longer honoured: every session this host runs is issued a new one."""
+        self.store.clear_grants()
         for s in self.store.sessions():
             if s.get("status") == "running" and s.get("pid"):
                 self._kill_orphan(int(s["pid"]), s["id"])
@@ -265,11 +267,12 @@ class AgentHost:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")
         source = self._instance(session_id, role, ticket_id)
+        token = access.issue(self.store, session_id, role, ticket_id)     # who the session's tool calls are (access.py)
         proc = self.harness.start(SessionSpec(
             session_id=session_id, session_dir=self.project.sessions_dir, cwd=cwd,
             system_prompt=system_prompt, role=role, tool_groups=tools,
             env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
-                 "ORCHESTRA_SOURCE": source, **(extra_env or {})},
+                 "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token},
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=self.cfg.model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens))
         self._announce(source, role)               # once it exists: a session that failed to start is no machine
@@ -560,5 +563,6 @@ class AgentHost:
         self._session_idle(sid, res.text, resident=not ephemeral)
         if ephemeral:
             proc.close()
+            access.revoke(self.store, sid)
         self.events.emit("agent.said", session=sid, summary=(res.text or "")[:500])
         log(f"{sid}: {(res.text or '(no text)')[:160]!r}")

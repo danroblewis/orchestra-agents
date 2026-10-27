@@ -210,7 +210,7 @@ def test_a_change_that_cannot_be_its_own_commit_on_the_base_branch_is_refused(pr
     with pytest.raises(StoreError, match="checked out"):
         call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
     git(project.repo_root, "checkout", "-q", "main")
-    with pytest.raises(StoreError, match="only the supervisor"):
+    with pytest.raises(StoreError, match="refused set_work_mode: it needs the 'setup' tool group"):
         call(project, store, "set_work_mode", role="coordinator", work="code", reason="a collector must land in the repository")
     assert toml(project)["project"]["work"] == "tasks"
 

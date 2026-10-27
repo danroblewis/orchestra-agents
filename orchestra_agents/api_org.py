@@ -1,7 +1,7 @@
 """Organisation commands: roles, agents, and teams. Called from ``orchestra_agents.tooling.handle``.
 
 Creating, changing, and deleting any of the three, and pausing, resuming, restarting or resetting
-an agent, is the Supervisor's alone, through its tools; the human asks it in the chat. Reading is open to any agent with the `team` or `roles` tool group. Messages and briefs follow
+an agent, is the Supervisor's alone, through its tools; the human asks it in the chat. Reading is open to any agent with the `team` or `roles` tool group (access.authorize checks the group first). Messages and briefs follow
 the tree enforced by ``orchestra_agents.org.may_message``. The views the commands and the web
 plugin return are in ``org_views.py``."""
 
@@ -38,7 +38,10 @@ EVENT_TYPES_SET = frozenset(EVENT_TYPES)
 EMIT_DEPTH_LIMIT = 3          # an event may cause a wake-up that causes an event ... this many times
 EMIT_RATE_LIMIT = 20          # emissions per agent per hour
 MUTATIONS = frozenset({"create_role", "update_role", "delete_role", "create_agent", "update_agent", "delete_agent",
-                       "create_team", "update_team", "delete_team"})
+                       "create_team", "update_team", "delete_team",
+                       "pause_agent", "resume_agent", "restart_agent", "reset_agent"})
+# The Supervisor's alone (AGENTS.md rule 10), whatever groups a custom role or team is granted:
+# `roles` is in roles.TOOL_GROUPS, so a custom role may hold it, and then reads the guide only.
 
 
 def _restart_with_new_prompt(store: AgentStore, ag: AgentDef) -> None:
@@ -50,9 +53,21 @@ def _restart_with_new_prompt(store: AgentStore, ag: AgentDef) -> None:
         store.set_agent_state(ag.name, restart_requested=True)
 
 
+READS = frozenset({"list_roles", "get_role", "list_agents", "get_agent", "list_teams", "get_team"})
+
+
+def read_org(project: Project, store: AgentStore, command: str, a: dict[str, Any]) -> dict:
+    """The organisation's views for the pages and the CLI, which read for a person and are no
+    agent: only the reads, so no tool of an agent's is reached without a role (access.py)."""
+    if command not in READS:
+        raise StoreError(f"{command} is not a read of the organisation")
+    return handle_org(project, store, command, a, "", "")
+
+
 def handle_org(project: Project, store: AgentStore, command: str, a: dict[str, Any], author: str, role: str) -> dict:
     if command in MUTATIONS and role != "supervisor":
-        raise StoreError("only the supervisor may create, change, or delete roles, agents, or teams")
+        raise StoreError(f"refused {command}: creating, changing or deleting roles, agents or teams, and pausing, resuming, "
+                         f"restarting or resetting an agent, is the supervisor's alone, and the caller's role is {role or 'none'!r}")
     try:
         return _handle(project, store, command, a, author, role)
     except (RoleError, OrgError) as e:

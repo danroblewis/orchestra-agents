@@ -2,9 +2,12 @@
 Codex). Dependency-free: newline-delimited JSON-RPC 2.0 over stdin/stdout.
 
     ORCHESTRA_REPO=<repo> ORCHESTRA_ROLE=<role> ORCHESTRA_TOOLS=<groups> ORCHESTRA_TICKET=<id> \\
-        python -m orchestra_agents.harness.mcp
+        ORCHESTRA_SESSION_TOKEN=<token> python -m orchestra_agents.harness.mcp
 
-Tool calls go straight to ``orchestra_agents.tooling.handle``; there is no shelling out."""
+Tool calls go straight to ``orchestra_agents.tooling.handle``; there is no shelling out. The caller
+is the session the host issued the token to (``access.identify``, on every call, so a session
+that has ended is refused), not whatever ``ORCHESTRA_ROLE`` says; ``ORCHESTRA_TOOLS`` only
+chooses which tools are listed."""
 
 from __future__ import annotations
 
@@ -37,7 +40,6 @@ class Server:
     def __init__(self) -> None:
         groups = [g for g in (os.environ.get("ORCHESTRA_TOOLS") or "").split(",") if g]
         self.tools = tools_for(groups)
-        self.role = os.environ.get("ORCHESTRA_ROLE", "")
         self._project = None
         self._store = None
 
@@ -55,11 +57,11 @@ class Server:
         if tool is None or tool not in self.tools:
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": f"unknown tool {name}"})}], "isError": True}
         try:
-            from .. import tooling
+            from .. import access, tooling
             tooling.check_args(tool.name, dict(args or {}))
             project, store = self._ctx()
-            result = tooling.handle(project, store, tool.name, dict(args or {}), role=self.role,
-                                    ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
+            role, ticket = access.identify(store, os.environ)
+            result = tooling.handle(project, store, tool.name, dict(args or {}), role=role, ticket_env=ticket)
             return {"content": [{"type": "text", "text": _tool_text(result)}]}
         except Exception as e:  # noqa: BLE001 - the model gets the error text, like the Pi extension
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}], "isError": True}

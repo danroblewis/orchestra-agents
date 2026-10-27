@@ -117,14 +117,14 @@ def test_team_record_decides_membership(project):
     assert ags["product_owner"].team == "product"
     assert members_of(all_teams(project)["product"], ags) == ["product_owner", "writer"]
     store = AgentStore(project)
-    v = api.handle(project, store, "get_team", {"name": "product"})["team"]
+    v = api.handle(project, store, "get_team", {"name": "product"}, role="supervisor")["team"]
     assert [a["name"] for a in v["agents"]] == ["product_owner", "writer"]
-    assert [a["name"] for a in api.handle(project, store, "list_agents", {})["agents"] if not a["team"] and not a["builtin"]] == []
+    assert [a["name"] for a in api.handle(project, store, "list_agents", {}, role="supervisor")["agents"] if not a["team"] and not a["builtin"]] == []
     # the third case: an agent whose team does not exist yet is still an agent, visibly so
     os_.save_agent(AgentDef(name="retro", roles=["owner"], team="devex", kind="ad_hoc", session="ephemeral", wake_on=["gate.conflict"]))
-    listed = {a["name"]: a for a in api.handle(project, store, "list_agents", {})["agents"]}
+    listed = {a["name"]: a for a in api.handle(project, store, "list_agents", {}, role="supervisor")["agents"]}
     assert listed["retro"]["team"] == "devex" and listed["retro"]["team_exists"] is False and listed["writer"]["team_exists"] is True
-    shown = {n for t in api.handle(project, store, "list_teams", {})["teams"] for n in [a["name"] for a in t["agents"]]}
+    shown = {n for t in api.handle(project, store, "list_teams", {}, role="supervisor")["teams"] for n in [a["name"] for a in t["agents"]]}
     shown |= {n for n, a in listed.items() if not a["team"] or not a["team_exists"]}
     assert {n for n, a in listed.items() if not (a["builtin"] and not a["resident"])} <= shown   # everyone appears somewhere
     from orchestra_agents import prompting
@@ -198,17 +198,17 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     assert store.agent_state("po").get("restart_requested") is True        # the team is in its prompt: its session starts over with it
     assert "warning" not in api.handle(project, store, "create_agent", {"name": "writer", "roles": ["owner"], "team": "product", "kind": "ad_hoc", "session": "ephemeral"}, role="supervisor")
     api.handle(project, store, "update_team", {"name": "product", "members": ["writer"]}, role="supervisor")
-    t = api.handle(project, store, "get_team", {"name": "product"})
+    t = api.handle(project, store, "get_team", {"name": "product"}, role="supervisor")
     assert t["team"]["lead"] == "po" and [a["name"] for a in t["team"]["agents"]] == ["po", "writer"]
     assert "never empty" in t["responsibilities"] and t["tools_dir"].endswith("spaces/product/tools")
-    a = api.handle(project, store, "get_agent", {"name": "po"})
+    a = api.handle(project, store, "get_agent", {"name": "po"}, role="supervisor")
     assert a["tool_groups"] == ["tickets", "escalate", "events", "team"] and a["leads"] == ["product"]
-    assert "team" in api.handle(project, store, "get_agent", {"name": "writer"})["tool_groups"]   # members too
+    assert "team" in api.handle(project, store, "get_agent", {"name": "writer"}, role="supervisor")["tool_groups"]   # members too
     assert "## Team `product` (your team)" in a["prompt"] and a["agent"]["every_seconds"] == 6 * 3600
     # an ephemeral agent's runs are all kept and listed, newest first; its transcript button opens the latest
     store.set_session("writer-20260101-000000", kind="writer", status="idle", started_at=100.0, last_text="first run")
     store.set_session("writer-20260102-000000", kind="writer", status="idle", started_at=200.0, last_text="second run")
-    w = api.handle(project, store, "get_agent", {"name": "writer"})
+    w = api.handle(project, store, "get_agent", {"name": "writer"}, role="supervisor")
     assert [x["id"] for x in w["runs"]] == ["writer-20260102-000000", "writer-20260101-000000"]
     assert w["agent"]["last_run_id"] == "writer-20260102-000000" and w["agent"]["run_count"] == 2
     # wake-ups: creation queues an introduction for scheduled/continuous agents, never for ad hoc ones
@@ -230,29 +230,29 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     with pytest.raises(StoreError, match="leads"):
         api.handle(project, store, "delete_agent", {"name": "po"}, role="supervisor")
     api.handle(project, store, "pause_agent", {"name": "po"}, role="supervisor")
-    assert any(x["name"] == "po" and x["paused"] for x in api.handle(project, store, "list_agents", {})["agents"])
-    org = api.handle(project, store, "list_roles", {})
+    assert any(x["name"] == "po" and x["paused"] for x in api.handle(project, store, "list_agents", {}, role="supervisor")["agents"])
+    org = api.handle(project, store, "list_roles", {}, role="supervisor")
     assert next(r for r in org["roles"] if r["name"] == "owner")["agents"] == ["po", "writer"]
     rec = json.loads((project.repo_root / ".orchestra" / "agents" / "po.json").read_text())
     assert rec["team"] == "product" and "builtin" not in rec
 
 
-def test_without_a_role_there_is_no_write(project, monkeypatch):
-    """An empty role is nobody: it may read, and nothing else; `orchestra-agents api` refuses to
-    run at all without ORCHESTRA_ROLE, which the host sets inside an agent's session."""
+def test_without_a_role_nothing_is_called(project, monkeypatch):
+    """An empty role is nobody: every tool, a read too, is refused before it runs, and
+    `orchestra-agents api` refuses to run at all without the role and the token the host sets
+    inside an agent's session. The pages and the CLI read the organisation through read_org."""
+    from orchestra_agents.api_org import read_org
     store = AgentStore(project)
-    assert api.handle(project, store, "list_roles", {}, role="")["ok"]
-    with pytest.raises(StoreError, match="only the supervisor"):
-        api.handle(project, store, "create_role", {"name": "owner", "description": "d", "prompt": "x" * 50}, role="")
-    with pytest.raises(StoreError, match="only the supervisor"):
-        api.handle(project, store, "update_project_context", {"text": "# Project context\n\n## Objectives\n- x"}, role="")
-    with pytest.raises(StoreError, match="no role"):
-        api.handle(project, store, "message_agent", {"name": "coordinator", "note": "hi"}, role="")
-    with pytest.raises(StoreError, match="no role"):
-        api.handle(project, store, "emit_event", {"type": "direction_changed"}, role="")
+    for command, args in (("list_roles", {}), ("create_role", {"name": "owner", "description": "d", "prompt": "x" * 50}),
+                          ("update_project_context", {"text": "# Project context\n\n## Objectives\n- x"}),
+                          ("message_agent", {"name": "coordinator", "note": "hi"}), ("emit_event", {"type": "direction_changed"}),
+                          ("create_ticket", {"title": "t", "milestone_id": "M1"})):
+        with pytest.raises(StoreError, match=f"refused {command}: no role"):
+            api.handle(project, store, command, args, role="")
     assert not api.may_change_tickets(project, "")
-    with pytest.raises(StoreError, match="may not change tickets"):
-        api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": "M1"}, role="")
+    assert read_org(project, store, "list_roles", {})["ok"]
+    with pytest.raises(StoreError, match="not a read"):
+        read_org(project, store, "create_role", {"name": "owner"})
     monkeypatch.delenv("ORCHESTRA_ROLE", raising=False)
     with pytest.raises(SystemExit, match="ORCHESTRA_ROLE"):
         main(["--repo", str(project.repo_root), "api", "list_roles"])
@@ -271,8 +271,8 @@ def test_custom_agent_with_tickets_tools_may_create_tickets(project):
         m = api.handle(project, store, "create_milestone", {"name": "M"}, **sup)["milestone"]
         r = api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="planner_agent")
         assert r["ok"]
-        with pytest.raises(StoreError, match="may not change tickets"):
+        with pytest.raises(StoreError, match="needs the 'tickets' tool group, and role 'observer_agent' has escalate"):
             api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="observer_agent")
-        with pytest.raises(StoreError, match="may not change tickets"):
+        with pytest.raises(StoreError, match="needs the 'tickets' tool group, and role 'worker' has report_ticket"):
             api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="worker")
         assert [x["by"] for x in tasks.seen] == ["supervisor", "planner_agent"]

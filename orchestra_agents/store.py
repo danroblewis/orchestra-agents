@@ -1,7 +1,7 @@
 """The agents' own state, in ``~/.orchestrator/<key>/agents/runtime.json``, behind one file lock:
 their sessions (live and archived, each with the host's markers for its transcript), the reports
 an agent's tool hands to the agent that runs it, wake-ups queued for an agent, each agent's state
-(paused, crashes, schedules, the changes its tools made), the probes' states, the control endpoint, the metric counters and
+(paused, crashes, schedules, the changes its tools made), the grants of the live sessions' tokens (access.py), the probes' states, the control endpoint, the metric counters and
 when the human last read the Supervisor. Nothing of the task system's is here: tickets are the
 task system's, reached over the bus (protocol.TaskClient)."""
 
@@ -26,7 +26,7 @@ class StoreError(Exception):
     """A request the agents cannot carry out (an unknown agent, a role in use, a grant missing)."""
 
 
-EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}}
+EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}, "grants": {}}
 MARKERS_KEPT = 50         # the host's markers kept per session, newest last
 
 
@@ -181,6 +181,21 @@ class AgentStore:
             st.update(fields)
             return dict(st)
         return self._mutate_runtime(fn)
+
+    def set_grant(self, session_id: str, grant: dict) -> None:
+        """The digest of the token a session was started with, and the role and ticket it was
+        issued for (access.py); one per session id, so a new session of that id replaces it."""
+        self._mutate_runtime(lambda d: d["grants"].__setitem__(session_id, grant))
+
+    def drop_grant(self, session_id: str) -> None:
+        self._mutate_runtime(lambda d: d["grants"].pop(session_id, None))
+
+    def clear_grants(self) -> None:
+        """At the host's start: no session of an earlier host is honoured."""
+        self._mutate_runtime(lambda d: d["grants"].clear())
+
+    def grants(self) -> dict[str, dict]:
+        return dict(self.runtime()["grants"])
 
     def set_control(self, port: int, pid: int) -> None:
         """Where the running host serves the Supervisor chat (control.py)."""

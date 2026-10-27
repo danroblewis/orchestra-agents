@@ -89,20 +89,20 @@ def test_get_role_explains_what_the_role_is(project):
     from orchestra_agents.store import AgentStore, StoreError
 
     store = AgentStore(project)
-    r = api.handle(project, store, "get_role", {"name": "coordinator"})
+    r = api.handle(project, store, "get_role", {"name": "coordinator"}, role="supervisor")
     assert r["role"]["builtin"] and "Coordinator" in r["prompt"] and r["prompt_source"].endswith("prompts/coordinator.tasks.md")   # the project's work is tasks
     assert r["role"]["created_by"] is None and r["role"]["created_at"] is None                 # nobody created a built-in role
     assert "create_ticket" in r["tool_names"]["tickets"] and "set_capacity" in r["tool_names"]["capacity"]
     assert r["agents"] == ["coordinator"]
     RepoRoleStore(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"]),
                                 "Be opinionated about {base_branch}.")
-    r = api.handle(project, store, "get_role", {"name": "product_owner"})
+    r = api.handle(project, store, "get_role", {"name": "product_owner"}, role="supervisor")
     assert not r["role"]["builtin"] and r["prompt"].strip() == "Be opinionated about main."   # the job description, placeholders resolved
     assert r["agents"] == []                                                                 # a role runs only through an agent
     with pytest.raises(StoreError):
-        api.handle(project, store, "get_agent", {"name": "product_owner"})
+        api.handle(project, store, "get_agent", {"name": "product_owner"}, role="supervisor")
     RepoOrgStore(project).save_agent(AgentDef(name="po", roles=["product_owner"], kind="scheduled", every="45m"))
-    a = api.handle(project, store, "get_agent", {"name": "po"})
+    a = api.handle(project, store, "get_agent", {"name": "po"}, role="supervisor")
     assert a["agent"]["every_seconds"] == 45 * 60 and a["agent"]["kind"] == "scheduled"
     assert a["prompt"].startswith("# You are the `po` agent of Orchestra")                 # Orchestra's preamble
     assert "## Your role: product_owner" in a["prompt"] and "Be opinionated about main." in a["prompt"]

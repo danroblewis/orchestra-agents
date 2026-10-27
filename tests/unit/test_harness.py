@@ -302,8 +302,11 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
 
     from fake_tasks import FakeTasks
     base = {**os.environ, "ORCHESTRATOR_HOME": str(tmp_path / "home"), "ORCHESTRA_REPO": str(project.repo_root)}
+    from orchestra_agents import access
+    store = AgentStore(project)
+    sup_token, worker_token = access.issue(store, "supervisor", "supervisor"), access.issue(store, "worker-T-1", "worker", "T-1")
     with FakeTasks(project) as tasks:
-        c = McpClient({**base, "ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_TOOLS": "tickets,context"})
+        c = McpClient({**base, "ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_TOOLS": "tickets,context", access.TOKEN_ENV: sup_token})
         try:
             init = c.rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
             assert init["result"]["serverInfo"]["name"] == "orchestra" and "tools" in init["result"]["capabilities"]
@@ -323,7 +326,8 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
             c.close()
         assert tasks.milestones["M1"]["name"] == "Via MCP" and tasks.seen[0]["by"] == "supervisor"
     # The worker's exit tool goes through the same server with the ticket from the env.
-    w = McpClient({**base, "ORCHESTRA_ROLE": "worker", "ORCHESTRA_TOOLS": "report_ticket", "ORCHESTRA_TICKET": "T-1"})
+    w = McpClient({**base, "ORCHESTRA_ROLE": "worker", "ORCHESTRA_TOOLS": "report_ticket", "ORCHESTRA_TICKET": "T-1",
+                   access.TOKEN_ENV: worker_token})
     try:
         w.rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
         assert [x["name"] for x in w.rpc("tools/list")["result"]["tools"]] == ["report_ticket"]
@@ -331,6 +335,15 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
         assert not r.get("isError"), r
     finally:
         w.close()
+    # A worker's session that lists itself the Supervisor's tools and claims its role is still the worker.
+    f = McpClient({**base, "ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_TOOLS": "roles", access.TOKEN_ENV: worker_token})
+    try:
+        f.rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
+        r = f.rpc("tools/call", {"name": "pause_agent", "arguments": {"name": "supervisor"}})["result"]
+        assert r["isError"] and "started as 'worker'" in r["content"][0]["text"]
+    finally:
+        f.close()
+    assert not store.agent_state("supervisor").get("paused")
     assert AgentStore(project).pop_report("T-1")["state"] == "READY_FOR_REVIEW"
 
 

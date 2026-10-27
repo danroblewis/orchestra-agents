@@ -105,7 +105,7 @@ def test_what_cannot_be_restarted_this_way_says_how_it_can(project, launcher):
         restart("disk")
     with pytest.raises(StoreError, match="the entries are: sleeper"):
         restart("nope")
-    with pytest.raises(StoreError, match="only the supervisor"):
+    with pytest.raises(StoreError, match="refused restart_machine: it needs the 'setup' tool group, and role 'coordinator'"):
         restart("sleeper", role="coordinator")
 
 

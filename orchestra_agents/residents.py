@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from . import access
 from .closing import close_together
 from .harness import AgentSession
 from .org import AgentDef
@@ -65,6 +66,7 @@ class Residents:
             except Exception as e:  # noqa: BLE001 - the session is dropped either way
                 host.log(f"{proc.session_id}: close: {e!r}")
             sid = _session_id(name)
+            access.revoke(host.store, sid)                # a paused or deleted agent's token ends with its session
             host.store.set_session(sid, status="idle", pid=None)
             if st.get("reset_requested"):
                 archived = host.store.retire_session(sid, proc.retire())
@@ -116,6 +118,7 @@ class Residents:
         logged and not fatal."""
         close_together(list(self.procs.values()), lambda p, e: self.host.log(f"{p.session_id}: closing at shutdown: {e!r}"))
         for name in list(self.procs):
+            access.revoke(self.host.store, _session_id(name))
             self.host.store.set_session(_session_id(name), status="idle", pid=None)
         self.procs.clear()
 

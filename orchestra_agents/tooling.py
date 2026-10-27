@@ -7,8 +7,9 @@ Supervisor, reading the bus, the organisation (roles, agents, teams, emit_event)
 whole system (``observe.py``, ``observe_model.py``) and the Supervisor's changes to the project's
 ``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
 about tickets and milestones is the task system's, asked for on the bus (protocol.TaskClient): a
-request it answers, so only it changes them. The role comes from the environment the agent was
-started in, never from the agent."""
+request it answers, so only it changes them. The role is the session's, as the host issued it
+(access.identify, at the MCP server and `orchestra-agents api`), never the agent's, and every
+call is checked against that role's tool groups before it runs (access.authorize)."""
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from . import ledger, observe, observe_model, prompting
+from . import access, ledger, observe, observe_model, prompting
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
@@ -47,8 +48,11 @@ def check_args(command: str, args: dict[str, Any]) -> None:
 
 
 def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
-    """One tool call. A call that changed something is answered with what it changed, and the
-    change is kept in the agent's record (ledger.py), whatever the model says about it later."""
+    """One tool call, first checked against the caller's role and its tool groups (access.py:
+    an unknown or missing role, or a tool outside the role's groups, is refused). A call that
+    changed something is answered with what it changed, and the change is kept in the agent's
+    record (ledger.py), whatever the model says about it later."""
+    access.authorize(project, command, role)
     return ledger.record(store, role, command, args or {}, _handle(project, store, command, args, role, ticket_env))
 
 

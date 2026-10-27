@@ -31,8 +31,11 @@ broken without updating the spec and saying so in the commit.
    tool to one harness only, and never a tool with no operation behind it.
 6. **The harness's session file is the only transcript.** No parallel log of agent messages;
    the host's events (turn starts, cut-offs, resets) are overlaid on it by the view.
-7. **The role comes from the environment** (`ORCHESTRA_ROLE`, set by the host when it starts the
-   session), never from the agent; `tooling.handle` checks it for every call.
+7. **The role is the session's, as the host issued it**, never the agent's: the host starts each
+   session with `ORCHESTRA_ROLE` and a token, `ORCHESTRA_SESSION_TOKEN`, whose digest it records
+   with the role (`access.py`); the MCP server and `orchestra-agents api` take the role from the
+   token, and refuse a call whose `ORCHESTRA_ROLE` disagrees. `tooling.handle` checks every call
+   against that role's tool groups (`access.authorize`) before it runs.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
    run once per harness. Real Claude runs only in the demo, with Haiku, and the demo honours
    `CLAUDE_BINARY` so a test can stand a fake in.
@@ -48,7 +51,8 @@ broken without updating the spec and saying so in the commit.
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration,
     never code: code is a worker's, through a ticket, a review and the gate. `orchestra-agents api` runs only inside an agent's session
-    (`ORCHESTRA_ROLE`); without a role the tool interface reads and changes nothing.
+    (with the session's token); without a role the tool interface reads and changes nothing. The
+    pages and the CLI read the organisation through `api_org.read_org`, never an agent's tool.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
     is a template project and its runner, not a package. No `sys.path` manipulation; the one
     exception is pytest's `pythonpath` in `pyproject.toml`, so the tests can import `conftest`,

@@ -20,7 +20,7 @@ from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
-from . import tooling
+from .api_org import read_org
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness import read_transcript
@@ -83,7 +83,7 @@ def router(project) -> APIRouter:
     @r.get("/roles/{name}")
     async def role_detail(name: str) -> dict:
         try:
-            return tooling.handle(current(project), store, "get_role", {"name": name})
+            return read_org(current(project), store, "get_role", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
@@ -94,21 +94,21 @@ def router(project) -> APIRouter:
         an agent may wake on means."""
         current(project)
         return {"ok": True, "now": time.time(), "serves": project.config.serves, "event_help": EVENT_HELP,
-                "roles": tooling.handle(project, store, "list_roles", {})["roles"],
-                "agents": tooling.handle(project, store, "list_agents", {})["agents"],
-                "teams": tooling.handle(project, store, "list_teams", {})["teams"]}
+                "roles": read_org(project, store, "list_roles", {})["roles"],
+                "agents": read_org(project, store, "list_agents", {})["agents"],
+                "teams": read_org(project, store, "list_teams", {})["teams"]}
 
     @r.get("/agents/{name}")
     async def agent_detail(name: str) -> dict:
         try:
-            return tooling.handle(current(project), store, "get_agent", {"name": name})
+            return read_org(current(project), store, "get_agent", {"name": name})
         except StoreError:
             raise HTTPException(404)
 
     @r.get("/teams/{name:path}")
     async def team_detail(name: str) -> dict:
         try:
-            return tooling.handle(current(project), store, "get_team", {"name": name})
+            return read_org(current(project), store, "get_team", {"name": name})
         except StoreError:
             raise HTTPException(404)
 

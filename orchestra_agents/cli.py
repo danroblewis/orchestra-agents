@@ -9,7 +9,8 @@ import json
 import os
 import sys
 
-from . import tooling
+from . import access, tooling
+from .api_org import read_org
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness.base import assistant_text
@@ -110,15 +111,16 @@ def cmd_tools(args) -> int:
 
 
 def cmd_api(args) -> int:
-    role = os.environ.get("ORCHESTRA_ROLE", "")
-    if not role:
-        sys.exit("orchestra-agents api is the agents' tool interface and runs inside an agent's session (ORCHESTRA_ROLE is set by the host)")
+    if not os.environ.get(access.TOKEN_ENV):
+        sys.exit("orchestra-agents api is the agents' tool interface and runs inside an agent's session "
+                 f"(ORCHESTRA_ROLE and {access.TOKEN_ENV} are set by the host)")
     project = _project(args)
     store, _ = _store(project)
     try:
+        role, ticket = access.identify(store, os.environ)     # the session's role, as the host issued it
         payload = json.loads(args.args) if args.args else {}
         tooling.check_args(args.command, payload)
-        out = tooling.handle(project, store, args.command, payload, role=role, ticket_env=os.environ.get("ORCHESTRA_TICKET", ""))
+        out = tooling.handle(project, store, args.command, payload, role=role, ticket_env=ticket)
     except (StoreError, KeyError, ValueError) as e:
         print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}))
         return 1
@@ -190,12 +192,12 @@ def cmd_roles(args) -> int:
     store, _ = _store(project)
     if args.action == "list":
         print(f"{'role':20} {'kind':9} {'used by':24} tools")
-        for r in tooling.handle(project, store, "list_roles", {})["roles"]:
+        for r in read_org(project, store, "list_roles", {})["roles"]:
             kind = "built-in" if r["builtin"] else "custom"
             print(f"{r['name']:20} {kind:9} {', '.join(r.get('agents') or []) or '-':24} {', '.join(r.get('tools') or []) or '-'}")
         return 0
     try:
-        r = tooling.handle(project, store, "get_role", {"name": args.name or ""})
+        r = read_org(project, store, "get_role", {"name": args.name or ""})
     except StoreError as e:
         sys.exit(f"orchestra-agents: {e}")
     role = r["role"]

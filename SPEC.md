@@ -239,8 +239,36 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
   `$CODEX_HOME`; tools through the same MCP server.
 
 The tools are defined once, as data, in `harness/tools.py`, in groups; every harness exposes the
-same catalogue to its model, and every call goes through `tooling.handle`, which checks the
-caller's role (from the environment the session was started in, never from the agent).
+same catalogue to its model, and every call goes through `tooling.handle`, which checks it
+against the caller's role before it runs (`access.py`):
+
+- **Who is calling.** The host gives every session it starts a token,
+  `ORCHESTRA_SESSION_TOKEN`, beside `ORCHESTRA_ROLE`, and records only the token's SHA-256 with
+  the role and the ticket it was issued for (`runtime.json` `grants`). The MCP server and
+  `orchestra-agents api`, the two ways a tool call reaches `handle` from outside the host, take
+  the role and the ticket from that record (`access.identify`), never from the environment. The
+  environment alone would be cosmetic: every agent has a shell, and a shell inside a worker's
+  session could run `ORCHESTRA_ROLE=supervisor orchestra-agents api pause_agent ...`. Now that
+  call still carries the worker's token and is refused, saying the session was started as
+  `worker`; a missing token, one the host did not issue, and one whose session has ended (closed,
+  or a new session of that id opened, or a new host started) are refused too.
+- **What it may call.** `access.authorize` refuses an empty or unknown role, and any tool whose
+  group the role does not hold now (`org.effective_tools`; a built-in name always means the
+  built-in agent), naming the role and the group the tool needs. Some tools are then checked
+  again by their handlers: the exit tools by role, the organisation's changes, pausing,
+  resuming, restarting and resetting an agent (`api_org.MUTATIONS`), the `setup` group and the
+  project context are the Supervisor's alone, whatever groups a custom role or team holds;
+  ticket requests need `tickets`; messages follow the tree.
+- **The limit.** The agents run as the same OS user as the host, with their harnesses'
+  permission checks off. A process that sets out to impersonate another session can still read
+  that session's token where the OS lets the same user read it (another process's environment
+  or command line, the MCP configuration the Claude Code harness writes for a turn), or import
+  this package and write `runtime.json` itself. The token makes the role the host's to give,
+  not a variable to set; it is not a sandbox. Isolating a hostile agent needs another OS user or
+  a container, which this package does not set up.
+
+The pages and the CLI read the organisation through `api_org.read_org`, which serves only the
+reads and reaches no agent's tool.
 
 ## 7. Settings and state (`config.py`, `store.py`)
 
@@ -259,7 +287,8 @@ are Orchestra's, found through the Orchestra project.
 
 State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions and archived sessions, each
 with the host's markers for its transcript; the reports an agent's tool handed to the host;
-queued wake-ups; each agent's state, with the changes its tools made, `actions`; probe states; the control endpoint; the metric counters,
+queued wake-ups; each agent's state, with the changes its tools made, `actions`; the live
+sessions' token grants, `grants` (digests only); probe states; the control endpoint; the metric counters,
 `metric_counts`; and `supervisor_seen_at`, when the human last read the Supervisor), behind one
 file lock and written only by `store.py`; `sessions/` (the harnesses' session records and, for a
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its

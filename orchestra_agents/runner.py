@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import prompting
+from . import access, prompting
 from .builtins import PER_TICKET_ROLES
 from .builtins import ROLES as BUILTIN
 from .harness import AgentSession
@@ -125,6 +125,7 @@ class AgentRunner:
                 report, text, failed = host.turns.prompt_with_retry(proc, tid, task, nudge, released=lambda: self.released.get(aid))
             finally:
                 proc.close()
+                access.revoke(host.store, sid)                # its token ends with it
                 host._session_idle(sid, text)
         except Exception as e:  # noqa: BLE001 - whatever happened, the scheduler hears how it ended
             text = f"{type(e).__name__}: {e}"

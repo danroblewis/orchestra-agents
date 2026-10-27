@@ -151,5 +151,5 @@ def test_reset_archives_the_transcript_and_starts_over(project):
     assert not st.get("reset_requested") and st.get("context_hash") is None and st.get("turn_depth") == 0   # context is re-sent
     ev = next(e for e in events.read(0)[0] if e["type"] == "agent.reset")
     assert ev["archived"] == archived[0] and ev["by"] == "supervisor"
-    runs = api.handle(project, store, "get_agent", {"name": "supervisor"})["runs"]
+    runs = api.handle(project, store, "get_agent", {"name": "supervisor"}, role="supervisor")["runs"]
     assert archived[0] in [r["id"] for r in runs]                                              # the old conversation is still a run

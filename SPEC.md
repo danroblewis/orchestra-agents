@@ -76,7 +76,7 @@ and `tasking/requests.py` hold the full field tables).
 
 **Assignment** (`runner.py`, inside the host). Work passes directly between the machines that do
 it; the task system listens, records, and takes back what a silent machine holds (the owner's
-decision D17). An offer opens a turn: `task.assigned` from the task system's queue (assignment
+decision D17). An offer opens a turn: `task.assigned` from the role's queue (assignment
 id, role, ticket, workspace, branch and base or null, lease, the ticket's brief, the unit command
 in code mode; a reviewer's carries `review` {summary, commit, test_output, worker}),
 `review.requested` from the worker that finished (the same fields, for the reviewers), or
@@ -103,7 +103,10 @@ when another worker takes it, or when the task system takes the rejected work ba
 because it was not taken within its return timeout (as after a host restart, whose slots are
 new). A `task.released` for its assignment kills the turn (`session.interrupted`, with the
 reason; nothing is reported for an assignment the instance no longer holds). A finished ticket's
-sessions (its `ticket.transitioned` to DONE or CANCELLED) move to the archive, still readable. A
+sessions move to the archive, still readable. A ticket has finished (`protocol.ended`) when the
+gate lands it (`gate.landed`), in tasks mode when its reviewer approves it (`review.approved`:
+nothing is merged), or when a planner's request is done whose result is the ticket in DONE or
+CANCELLED (`request.done`, as a cancel). A
 worker that redoes rejected work is reviewed again after every round: rejected work goes back to
 its worker at once and the task system asks the Coordinator for attention only at every
 `review_rounds_before_escalation`-th round; nothing in it stops the loop by itself (section 9).
@@ -111,17 +114,54 @@ its worker at once and the task system asks the Coordinator for attention only a
 **Requests** (`tooling.py`): an agent's ticket and milestone tools are requests on the bus
 (`task.requested`, `task.change_requested`, `task.unblock_requested`, `milestone.requested`, …)
 and queries (`task.query_requested` with an `op`: `list_tickets`, `get_ticket`, `snapshot`, …),
-answered with `request.done` or `request.refused`; `TaskClient` waits for the answer. The
+answered with `request.done` or `request.refused`; `TaskClient` waits for the answer. What a
+request made is said too: `ticket.created`, `milestone.created`. The
 Supervisor and the Coordinator may change tickets; a custom agent may when its roles or team
 grant the `tickets` group; a worker or reviewer only reports.
 
 **Attention**: the task system asks a planner to look at something with `task.attention_needed`
-(`to`: supervisor or coordinator, the reason, the ticket). The built-in planners wake on it like
+(`to`: supervisor or coordinator, the reason, the ticket), from the machine whose work is stuck
+(`worker`, for a blocked ticket) or whose responsibility raised it (`reviewer`, `merge_gate`). The built-in planners wake on it like
 any agent wakes on an event (`wake_on`: `task.attention_needed:coordinator`). The Supervisor also
 wakes on Orchestra's `orchestra.process.gave_up` (its launcher stopped restarting a process): the
 wake-up names the process, its last exit code and its log, `<state>/logs/machines/<name>.log`, and
 its prompt has it read the log, fix a cause in the program's entry itself (section 10) and file a
 bug ticket for a cause in the program.
+
+**Sources, and no echoes.** The task system's scheduler is no machine: it never announces itself
+and never publishes as `task_scheduler`. It publishes as the machine whose responsibility it
+implements: offers and releases as the role's queue (`task.assigned` and `task.released` with
+source `worker` or `reviewer`, no instance; a release addressed to an instance names it in
+`data.instance`), answers as the asker (`request.done` and `request.refused`, with the request as
+`causationid`; `ticket.created` and `milestone.created` for what a request made), the gate, staging and the pipeline as
+`merge_gate`, probes as `probes`. It announces once, as `worker`, what makes the worker's queue
+act (`listens_for: [gate.conflict, gate.rejected, ticket.created]`). Nothing here reads an offer's
+or a release's source: the claim rule (`protocol.holder`) is the bus's order of claims. And it
+publishes no echo of another machine's act: there is no `ticket.transitioned`,
+`ticket.note_added`, `ticket.updated`, `milestone.updated`, `milestone.closed` or
+`scheduler.stopped`. What a machine did, that machine announced; a ticket's state is the task
+system's record, asked for with the `get_ticket`, `list_tickets` or `snapshot` query, never heard.
+
+**Waking on the task system.** An agent hears acts, not states. To wake when:
+
+| ... | use (`wake_on`) |
+|---|---|
+| a ticket lands (code mode) | `gate.landed` |
+| a ticket is done in tasks mode | `review.approved` |
+| a worker is blocked | `task.reported:BLOCKED`, or `task.attention_needed:coordinator` (the task system asks the Coordinator) |
+| a ticket is cancelled | `request.done:CANCELLED` |
+| a ticket is created | `ticket.created` |
+| work is rejected | `changes.requested` (a reviewer), `gate.rejected`, `gate.conflict` (the gate) |
+| a probe fails | `probe.failed:<probe>` |
+| what a ticket's state is now | no event: ask `get_ticket` |
+
+An agent saved before 2026-10-27 may hold `ticket.transitioned` entries. Its record is read with
+each retired entry replaced (`org.RETIRED`, `org.current_wake_on`): `:DONE` by `gate.landed`,
+`:BLOCKED` by `task.reported:BLOCKED`, `:REJECTED` by `changes.requested`, `gate.rejected` and
+`gate.conflict`, `:APPROVED` by `review.approved`, `:CANCELLED` by `request.done:CANCELLED`; any
+other entry of a removed type is dropped (`org.GONE`). A new agent naming a removed type is
+refused. A retired `:DONE` becomes `gate.landed` only, so in tasks mode such an agent should be
+given `review.approved` as well.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
@@ -137,15 +177,18 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
 (`web.STOP_GRACE_S`), so Orchestra's launcher never kills it mid-way. It:
 
 - announces itself with `orchestra.machine.started` (package `agents`, continuous, what it
-  listens for, its log), and announces every agent instance it starts (an AI agent, on which
+  acts on as itself: `gate.landed`, `request.done`, `review.approved` and `ticket.created`, by
+  which it archives a finished ticket's sessions and follows the human's tickets; its log), and announces every agent instance it starts (an AI agent, on which
   harness and model; a resident agent is continuous, its session always up, a per-ticket or
   ephemeral one ad hoc), so Orchestra's Machines page shows each agent as a machine;
 - opens the resident sessions up front and keeps them up: a process that exits between turns is
   recorded (`agent.crashed`) and restarted; three exits in fifteen minutes pause the agent
   (`agent.crash_loop`) and wake the Supervisor;
 - each second: reloads the config, matches new events on the bus against every agent's
-  `wake_on` (a filter after the colon matches the transition target, a status, a probe name,
-  the role an attention event is addressed to, or an agent-raised event's subject), queues
+  `wake_on` (a filter after the colon matches a status, a probe name, the role an attention
+  event is addressed to, the state a turn ended in (`task.reported`'s `report.state`: BLOCKED),
+  the state a request left its ticket in (`request.done`'s `result.ticket.state`: CANCELLED), or
+  an agent-raised event's subject; section 3's table), queues
   scheduled wake-ups, runs the teams' probes, answers assignments, and runs one turn per woken
   agent in a thread with the reasons, a snapshot of the project (a query to the task system)
   and who fills the task system's roles (`fillers.py`: the roles `[agents] serves`, and each
@@ -172,7 +215,8 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   the assignment the dead host held when its lease runs out: the host reports nothing it did
   not see end. At a clean stop (Ctrl-C, a deploy restart) it closes every live turn and waits
   briefly for each open assignment's `task.reported` (`failed`) to go out, because the
-  contract has no machine-sent release (`task.released` is the scheduler's verb only). The task
+  contract has no machine-sent release (`task.released` is the task system's verb only, published
+  as the role's queue). The task
   system counts a worker's failed report against the ticket's crash budget (the ticket goes
   back to OPEN) and a reviewer's as a review that ended without a verdict (the review is
   redone, up to its no-verdict budget; `tasking/reports.py`);
@@ -180,7 +224,8 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   recorded in the runtime record): one turn on the resident session per message, prefixed with
   the project context and who fills the roles when either changed, and a digest of the events
   since the last turn: a count per type and at most eight events that concern the Supervisor
-  (attention addressed to it, a ticket blocked, the gate, staging, a process Orchestra gave up
+  (attention addressed to it, a worker's turn ended blocked (`task.reported`, its
+  report's state BLOCKED), the gate, staging, a process Orchestra gave up
   on, an agent's crash loop; `prompting.CONCERNS`), however busy the bus was, so a turn does not
   fill the session's context. The notices are marked as the Supervisor's alone, and the human's
   message follows whole after `[The human's message]` (`prompting.chat_turn`). Streamed as NDJSON.
@@ -206,7 +251,8 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   bind the endpoint exits instead of running unreachable;
 - wakes the Supervisor when a ticket it created (`ticket.created` with `by` = supervisor: the
   human's requests) is DONE, to leave the human one short message (`landings.py`); the tickets are
-  followed in the Supervisor's agent state until DONE or CANCELLED. A landing is otherwise not
+  followed in the Supervisor's agent state until they end, as the runner hears it
+  (`protocol.ended`: landed, approved in tasks mode, or cancelled). A landing is otherwise not
   named in the Supervisor's digest;
 - answers `orchestra-agents status` from its records (`org_views.agents_status`, the same
   picture the machine cards read): the host, the harness and model, the roles it fills, each

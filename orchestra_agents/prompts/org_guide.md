@@ -56,8 +56,21 @@ as many agents as the responsibilities need.
 
 ## Events and probes: how an agent learns that something is true
 
-The task system emits events for what it sees (tickets, gate runs, staging) and the agents' host for the agents' turns.
-Two more sources exist, and a team design should say which it uses:
+Every event says what one machine did: a worker reported, a reviewer approved or rejected, the
+gate landed or rejected a branch, a planner's request was done. The agents' host emits events for
+the agents' turns. Nothing announces that a ticket changed state: when an agent needs a ticket's
+state, it asks (`get_ticket`, `list_tickets`). To wake an agent when:
+
+- a ticket lands: `gate.landed` (in tasks mode, where nothing lands, a ticket is done when its
+  reviewer approves it: `review.approved`);
+- a worker is blocked: `task.reported:BLOCKED`, or `task.attention_needed:coordinator` when the
+  task system asks the Coordinator to decide;
+- work is rejected: `changes.requested` (a reviewer), `gate.rejected` or `gate.conflict` (the gate);
+- a ticket is cancelled: `request.done:CANCELLED`;
+- a ticket is created: `ticket.created`.
+
+The part after the colon is a filter. Two more sources exist, and a team design should say which
+it uses:
 
 - **Probes.** A command with an interval, declared on the team (`probes`), run in the
   team's space with its tools on PATH. Exit 0 means the condition holds. Orchestra emits

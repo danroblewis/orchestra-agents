@@ -36,6 +36,7 @@ from .protocol import (
     ATTENTION,
     CHANGES_REQUESTED,
     DONE,
+    LANDED,
     REFUSED,
     RELEASED,
     REPORTED,
@@ -61,27 +62,25 @@ AGENT_EVENT_TYPES = (
 EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
 # What each of them means, in one line, for the Agents page's triggers (served in /org).
 EVENT_HELP = {
-    "ticket.created": "a ticket is created", "ticket.updated": "a ticket's fields change",
-    "ticket.transitioned": "a ticket changes state (filter with :STATE, e.g. :DONE or :REJECTED)",
-    "ticket.note_added": "a note is added to a ticket", "milestone.created": "a milestone is created",
-    "milestone.updated": "a milestone changes", "milestone.closed": "a milestone closes",
-    "gate.started": "a merge gate run starts", "gate.landed": "the gate lands a ticket on the base branch",
+    "ticket.created": "a planner's request created a ticket", "milestone.created": "a planner's request created a milestone",
+    "gate.started": "a merge gate run starts", "gate.landed": "the gate lands a ticket on the base branch: it is done",
     "gate.rejected": "the gate's tests fail for a ticket", "gate.conflict": "a branch conflicts with the base branch at the gate",
     "gate.error": "the gate itself fails to run", "gate.base_broken": "the base branch fails the gate's tests",
     "staging.deployed": "a build is deployed to staging", "staging.failed": "staging failed to come up",
     "staging.restarted": "staging was restarted", "pipeline.paused": "the pipeline is paused",
     "pipeline.resumed": "the pipeline is resumed", "pickup.paused": "new workers are paused",
     "pickup.resumed": "new workers are resumed", "capacity.changed": "the worker dial changes",
-    "kill.requested": "the operator stops a ticket's work", "scheduler.stopped": "the task system's scheduler stops",
+    "kill.requested": "the operator stops a ticket's work",
     "probe.failed": "a probe's condition stops holding (filter with :probe_name)",
     "probe.recovered": "a probe's condition holds again (filter with :probe_name)",
     ASSIGNED: "the task system offers a ticket to a role", ACCEPTED: "a machine takes an offered ticket",
     WORKING: "the holder of a ticket says it is still at it",
     REVIEW_REQUESTED: "a worker finished a ticket and asks the reviewers", CHANGES_REQUESTED: "a reviewer sends a ticket back to its worker",
-    APPROVED: "a reviewer approves a ticket, for the gate", REPORTED: "the holder of a ticket ends its turn blocked or without a report",
+    APPROVED: "a reviewer approves a ticket, for the gate (in tasks mode it is then done)",
+    REPORTED: "the holder of a ticket ends its turn blocked or without a report (filter with :BLOCKED)",
     RELEASED: "the task system takes an assignment back",
     ATTENTION: "the task system asks a planner for a decision (filter with :supervisor or :coordinator)",
-    DONE: "the task system answered a request", REFUSED: "the task system refused a request",
+    DONE: "the task system answered a request (filter with :CANCELLED for a cancelled ticket)", REFUSED: "the task system refused a request",
     "agent.said": "an agent finishes a turn", "context.updated": "the project context changes",
     "session.started": "any agent turn starts", "session.settled": "any agent turn ends",
     "session.timed_out": "the agents' host cuts a turn off at the time limit",
@@ -110,15 +109,37 @@ class OrgError(ValueError):
 _CUSTOM_TYPE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
 
+# wake_on entries for events the task system no longer publishes (it publishes no echo of another
+# machine's act: protocol.py), read as the acts that replace them when an agent's record is loaded.
+RETIRED = {"ticket.transitioned:DONE": [LANDED], "ticket.transitioned:BLOCKED": [f"{REPORTED}:BLOCKED"],
+           "ticket.transitioned:REJECTED": [CHANGES_REQUESTED, "gate.rejected", "gate.conflict"],
+           "ticket.transitioned:APPROVED": [APPROVED], "ticket.transitioned:CANCELLED": [f"{DONE}:CANCELLED"]}
+GONE = ("ticket.transitioned", "ticket.note_added", "ticket.updated", "milestone.updated", "milestone.closed", "scheduler.stopped")
+
+
+def current_wake_on(wake_on: list[str]) -> list[str]:
+    """``wake_on`` with retired entries read as their replacements (``RETIRED``) and those with
+    none left out (``GONE``): an agent saved before 2026-10-27 wakes on the acts themselves."""
+    out: list[str] = []
+    for w in wake_on:
+        for x in RETIRED.get(w, [] if w.partition(":")[0] in GONE else [w]):
+            if x not in out:
+                out.append(x)
+    return out
+
+
 def event_matches(wake_on: list[str], ev: dict) -> bool:
-    """`type` matches the event type; `type:x` also needs x to be the transition target, the
-    status, the probe name, the role an attention event is addressed to, or the subject of an
-    agent-emitted event."""
+    """`type` matches the event type; `type:x` also needs x to be the status, the probe name, the
+    role an attention event is addressed to, the state a turn ended in (a report's: BLOCKED), the
+    state a request left its ticket in (CANCELLED), or the subject of an agent-emitted event."""
+    report = ev.get("report") if isinstance(ev.get("report"), dict) else {}
+    result = ev.get("result") if isinstance(ev.get("result"), dict) else {}
+    ticket = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
     for w in wake_on:
         t, _, suffix = w.partition(":")
         if ev.get("type") != t:
             continue
-        if not suffix or suffix in (ev.get("to"), ev.get("status"), ev.get("probe"), ev.get("subject")):
+        if not suffix or suffix in (ev.get("to"), ev.get("status"), ev.get("probe"), ev.get("subject"), report.get("state"), ticket.get("state")):
             return True
     return False
 
@@ -201,7 +222,9 @@ class AgentDef:
     @classmethod
     def from_dict(cls, d: dict) -> AgentDef:
         known = cls.__dataclass_fields__
-        return cls(**{k: v for k, v in d.items() if k in known})
+        a = cls(**{k: v for k, v in d.items() if k in known})
+        a.wake_on = current_wake_on(list(a.wake_on or []))
+        return a
 
 
 @dataclass

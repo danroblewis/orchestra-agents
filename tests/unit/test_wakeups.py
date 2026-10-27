@@ -58,7 +58,7 @@ def test_attention_wakes_the_planner_it_names(project):
     host._refresh_org(store.runtime()["agent_state"])
     events.publish("task.attention_needed", {"to": "coordinator", "reason": "DEMO-3 is blocked", "ticket": "DEMO-3"}, subject="DEMO-3")
     events.publish("task.assigned", {"assignment": "a1", "role": "reviewer", "ticket": "DEMO-1"}, subject="DEMO-1")
-    events.publish("ticket.transitioned", {"ticket": "DEMO-1", "from": "OPEN", "to": "IN_PROGRESS"}, subject="DEMO-1")
+    events.publish("task.accepted", {"assignment": "a1", "ticket": "DEMO-1", "role": "reviewer"}, source="reviewer/1", subject="DEMO-1")
     host._wake_on_events()
     pending = store.runtime()["wakeups"]
     assert [w["target"] for w in pending] == ["coordinator"]
@@ -84,7 +84,7 @@ def test_a_finished_ticket_has_its_sessions_archived(project):
     store.set_session("worker-T-1", kind="worker", status="idle", ticket_id="T-1")
     store.set_session("reviewer-T-1", kind="reviewer", status="idle", ticket_id="T-1")
     store.set_session("worker-T-2", kind="worker", status="idle", ticket_id="T-2")
-    events.publish("ticket.transitioned", {"ticket": "T-1", "from": "IN_REVIEW", "to": "DONE"}, subject="T-1")
+    events.publish("gate.landed", {"ticket": "T-1", "gate_run": "g1"}, source="merge_gate", subject="T-1")    # the gate's act: it is done
     host.runner.tick()
     rt = store.runtime()
     assert set(rt["archived_sessions"]) == {"worker-T-1", "reviewer-T-1"} and set(rt["sessions"]) == {"worker-T-2"}
@@ -285,13 +285,13 @@ def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
 
 
 def test_the_host_announces_only_what_it_acts_on_as_itself(project):
-    # a finished ticket's sessions are archived on ticket.transitioned; assignments, releases and
-    # attention are the agents', which announce their own
+    # a finished ticket's sessions are archived when it ends (protocol.ended), the human's tickets
+    # remembered; assignments, releases and attention are the agents', which announce their own
     host, _store, events = host_with(project, FakeHarness(reply="ok"))
     host.stop.set()
     host.run(once=True)
     [ann] = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started" and e["source"] == "agents"]
-    assert ann["listens_for"] == ["ticket.transitioned"]
+    assert ann["listens_for"] == ["gate.landed", "request.done", "review.approved", "ticket.created"]
 
 
 def test_a_wake_ups_snapshot_query_comes_from_the_agent_woken(project):
@@ -371,6 +371,6 @@ def test_rejected_work_comes_back_to_the_same_slot_and_session(project, tmp_path
     worked = [s.spec.session_id for s in harness.sessions if s.spec.role == "worker"]
     assert worked == ["worker-T-1", "worker-T-2", "worker-T-1"]                # the same session, re-engaged
     assert len([e for e in events.read(0)[0] if e["type"] == "review.requested"]) == 3
-    events.publish("ticket.transitioned", {"ticket": "T-1", "from": "MERGING", "to": "DONE"}, source="merge_gate")
+    events.publish("gate.landed", {"ticket": "T-1", "gate_run": "g1"}, source="merge_gate", subject="T-1")
     host.runner.tick()
     assert "worker-T-1" not in host._slots                                    # the ticket ended: the slot is free

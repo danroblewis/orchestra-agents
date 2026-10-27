@@ -181,7 +181,7 @@ def test_agent_prompt_is_roles_then_responsibilities_then_access(project):
 def test_api_builds_a_team_the_way_the_guide_says(project):
     store = AgentStore(project)
     guide = api.handle(project, store, "org_guide", {}, role="supervisor")["guide"]
-    assert "One creation per turn" in guide and "ticket.transitioned" in guide
+    assert "One creation per turn" in guide and "task.reported:BLOCKED" in guide and "ticket.transitioned" not in guide
     with pytest.raises(StoreError):
         api.handle(project, store, "create_role", {"name": "owner", "description": "d", "prompt": "x" * 50}, role="coordinator")
     api.handle(project, store, "create_role", {"name": "owner", "description": "Owns a backlog", "prompt": "# You own\n\n" + "Be opinionated. " * 5,

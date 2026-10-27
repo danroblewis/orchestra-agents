@@ -1,6 +1,8 @@
 """A task system for the agents' tests: it answers requests on the bus as orchestra-tasking's
 desk does (``request.done`` with the result, ``request.refused`` with why), for milestones and
-tickets only, kept in memory. It speaks the protocol (orchestra_agents.protocol), nothing else."""
+tickets only, kept in memory. It speaks the protocol (orchestra_agents.protocol), nothing else:
+like the task system's scheduler it is no machine, so it answers as the asker, and what it
+announces itself goes out as its gate (``merge_gate``)."""
 
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ OPS = {v: k for k, v in REQUESTS.items()}
 
 class FakeTasks:
     def __init__(self, project):
-        self.events = Events.for_project(project, source="task_scheduler")
+        self.events = Events.for_project(project, source="merge_gate")
         self.milestones: dict[str, dict] = {}
         self.tickets: dict[str, dict] = {}
         self.seen: list[dict] = []
@@ -40,9 +42,9 @@ class FakeTasks:
                 self.seen.append({"op": op, "by": ev.get("by"), "args": ev.get("args") or {}})
                 try:
                     result = self.answer(op, ev.get("args") or {})
-                    self.events.publish(DONE, {"request": ev.get("request"), "result": result})
+                    self.events.publish(DONE, {"request": ev.get("request"), "result": result}, source=ev.get("source"))
                 except ValueError as e:
-                    self.events.publish(REFUSED, {"request": ev.get("request"), "error": str(e)})
+                    self.events.publish(REFUSED, {"request": ev.get("request"), "error": str(e)}, source=ev.get("source"))
 
     def answer(self, op: str, a: dict) -> dict:
         if op == "create_milestone":

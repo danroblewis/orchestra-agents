@@ -79,7 +79,7 @@ flowchart LR
   end
 
   subgraph Tasking["Task system (orchestra-tasking)"]
-    SCHED[task_scheduler]
+    SCHED[task system<br/>publishes as worker, reviewer,<br/>merge_gate or the asker]
   end
 
   subgraph Agents["orchestra-agents"]
@@ -123,7 +123,7 @@ flowchart LR
   TOOL -- reads --> RT
   HOST <-- events --> BUS
   RUN <-- task.* --> BUS
-  SCHED <-- task.*, ticket.* --> BUS
+  SCHED <-- task.*, request.*, gate.* --> BUS
   HOST --> STORE
   STORE -- agents_working, turn counters --> MET
   LAUNCH --> RT
@@ -204,7 +204,9 @@ project. On the bus it is the machine `agents`.
 4. **Finish an interrupted restart.** `restart.recover` puts back a `[[machines]]` entry that an
    interrupted `restart_machine` took out ([section 10](#10-the-supervisor-as-the-humans-operator)).
 5. **Announce** `orchestra.machine.started` from `agents` with
-   `{package: agents, mode: continuous, kind: program, listens_for: [ticket.transitioned], log}`.
+   `{package: agents, mode: continuous, kind: program, listens_for: [gate.landed, request.done, review.approved, ticket.created], log}`: what it acts on as itself
+   (a finished ticket's sessions go to the archive, `protocol.ended`; the human's tickets are
+   followed, `landings.py`).
 6. **Load the organisation** (`_refresh_org`) and start the resident sessions
    (`Residents.start_missing`).
 7. **Write idle metric points** for every measured role (`store.measure_idle`).
@@ -286,8 +288,19 @@ not an agent here.
 - `continuous` requires `resident`. `ad_hoc` requires `ephemeral` and has no `every` or `at`.
   `scheduled` needs `every` or `at`.
 - `wake_on` entries must be known event types (`org.EVENT_TYPES`) or types a team declares in
-  `emits`. A filter after the colon (`type:x`) matches the event's `to`, `status`, `probe` or
-  `subject` (`org.event_matches`).
+  `emits`. A filter after the colon (`type:x`) matches the event's `to`, `status`, `probe`,
+  `subject`, `report.state` (`task.reported:BLOCKED`) or `result.ticket.state`
+  (`request.done:CANCELLED`) (`org.event_matches`). The task system's removed echo types
+  (`ticket.transitioned`, `ticket.note_added`, `ticket.updated`, `milestone.updated`,
+  `milestone.closed`, `scheduler.stopped`) are not in `EVENT_TYPES`, so a new agent naming one
+  is refused.
+- An agent's record saved before 2026-10-27 is read with its retired entries replaced
+  (`AgentDef.from_dict` → `org.current_wake_on`, the table `org.RETIRED`):
+  `ticket.transitioned:DONE` → `gate.landed`; `:BLOCKED` → `task.reported:BLOCKED`;
+  `:REJECTED` → `changes.requested`, `gate.rejected`, `gate.conflict`; `:APPROVED` →
+  `review.approved`; `:CANCELLED` → `request.done:CANCELLED`. Any other entry of a removed type
+  is dropped (`org.GONE`). A retired `:DONE` is `gate.landed` only: in tasks mode, where nothing
+  lands, such an agent needs `review.approved` added.
 - A team's `emits` must be new lowercase names, never Orchestra's or the task system's types.
 - **Tool groups are granted by roles and teams** (`org.effective_tools`). Every agent in a team,
   and every team lead, also gets `team`. A per-ticket worker or reviewer gets only its exit tool.
@@ -567,7 +580,7 @@ dashes). An ephemeral agent gets a new session for each run: `<name>-<YYYYmmdd-H
 | `message_agent`, `run_agent` | `api_org._handle` |
 | Agent created or changed; team created or changed (wakes the lead); role updated | `api_org._handle` |
 | A crash loop (wakes the Supervisor) | `residents.reap` |
-| A ticket the Supervisor created for the human reaches DONE | `landings.Landings.see` |
+| A ticket the Supervisor created for the human ends DONE (`gate.landed`, or `review.approved` in tasks mode: `protocol.ended`) | `landings.Landings.see` |
 
 **A wake-up turn** (`host._wake_turn`):
 
@@ -610,10 +623,10 @@ back what a silent machine holds; it relays nothing and confirms nothing.
 
 | Step | Event (source → bus) | Data this side sends or reads |
 |---|---|---|
-| Offer | `task.assigned` (task_scheduler), `review.requested` (a worker), `changes.requested` (a reviewer, `to` one worker instance) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` and `base` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`, `feedback`), `unit_command` (code), `review {summary, commit, test_output, worker}` (reviewer), `to` |
+| Offer | `task.assigned` (the role's queue: source `worker` or `reviewer`, no instance), `review.requested` (a worker), `changes.requested` (a reviewer, `to` one worker instance) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` and `base` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`, `feedback`), `unit_command` (code), `review {summary, commit, test_output, worker}` (reviewer), `to` |
 | Claim | `task.accepted` (instance, e.g. `worker/1`; subject = ticket; causationid = the offer) | `{assignment, ticket, role, instance}` |
 | Held? | the bus itself | Read back from where the offer was read: the first valid claim of the offer (`protocol.holder`) is this one, and no `task.released` of it came first |
-| Taken back | `task.released` (task_scheduler) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
+| Taken back | `task.released` (the role's queue) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
 | Heartbeat | `task.working` (instance) | `{assignment, ticket, role, text}`: at least every `HEARTBEAT_S` (30 s), and sooner (checked every 2 s) when the agent's latest text changes. `text` is the last 160 characters of `partial_text` or `last_text`. |
 | A worker passes on | `review.requested` (instance) | The offer fields for the reviewers' turn: a new `assignment`, `role: reviewer`, `ends` (its own), `review {summary, commit, test_output, worker: this instance}` |
 | A reviewer rejects | `changes.requested` (instance) | A new `assignment`, `role: worker`, `to` (the offer's `review.worker`), `ends`, the brief with `feedback` and `rejected_by`, `summary`, `feedback`, `commit` |
@@ -651,14 +664,14 @@ slots, so its old rejections reach the queue after that timeout.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant S as task_scheduler
+  participant S as task system (as the role's queue)
   participant B as Orchestra bus
   participant W as runner as worker/1
   participant O as other machine (worker/shell)
   participant V as runner as reviewer/1
   participant G as merge_gate
 
-  S->>B: task.assigned {assignment A1, role worker, ticket T1, workspace, branch, lease_s, brief}
+  S->>B: task.assigned (source worker) {assignment A1, role worker, ticket T1, workspace, branch, lease_s, brief}
   W->>B: task.accepted {A1, instance worker/1}
   O->>B: task.accepted {A1, instance worker/shell}
   Note over W,O: each reads its claim back: worker/1's is first. worker/shell starts nothing; nobody tells it
@@ -673,12 +686,12 @@ sequenceDiagram
   W->>B: review.requested {assignment R2, ends C1, ...}
   V->>B: task.accepted {R2}
   V->>B: review.approved {ends R2, commit}
-  G->>B: gate.started ... gate.landed, ticket.transitioned {to DONE}
-  Note over W,V: the sessions go to the archive; slot worker/1 is let go
-  Note over S: recorded every step (ticket.transitioned with no subject, causationid = the step)
+  G->>B: gate.started ... gate.landed
+  Note over W,V: gate.landed ends T1 (protocol.ended): the sessions go to the archive; slot worker/1 is let go
+  Note over S: records every step in its store and publishes no echo of it
 
   opt released mid-turn
-    S->>B: task.released {A1, reason ...}
+    S->>B: task.released (source worker) {A1, reason ...}
     W->>W: kill the turn (runner.tick); session.interrupted, nothing more said
   end
 ```
@@ -695,8 +708,16 @@ sequenceDiagram
 - **The nudge** (`turns.prompt_with_retry`). If the first turn ends with no report and no
   error, one more prompt asks for the exit tool, with a 300 s cap. If the assignment was released
   in between, the nudge is not sent.
-- **Archive.** A `ticket.transitioned` to `DONE` or `CANCELLED` moves `worker-<T>` and
-  `reviewer-<T>` to `archived_sessions` (`store.purge_ticket_sessions`).
+- **Archive.** When a ticket ends, `worker-<T>` and `reviewer-<T>` move to `archived_sessions`
+  (`store.purge_ticket_sessions`) and its kept worker slot is let go. The task system publishes no
+  state change, so the end is heard from the act that ends it (`protocol.ended`): `gate.landed`
+  (DONE); in tasks mode `review.approved` (DONE, nothing to merge); `request.done` whose result is
+  the ticket in DONE or CANCELLED (a planner's cancel).
+- **Sources.** The task system's scheduler is no machine and never publishes as itself. Offers
+  and releases come from the role's queue (`worker`, `reviewer`; a release addressed to an
+  instance names it in `instance`), answers from the asker, the gate's events from `merge_gate`.
+  The runner reads neither an offer's nor a release's source: the bus's order of claims decides
+  (`protocol.holder`).
 - **Host crash.** The host reports nothing it did not see end. The task system takes the ticket
   back when its lease runs out (it saw the claim, whoever offered the turn) and offers it again.
 - **Who fills the roles** (`fillers.py`). `Fillers` watches `task.accepted` and
@@ -872,7 +893,8 @@ The `observe` group only reads, through Orchestra as a library. See the table in
 1. Refuse unless the caller's role is `supervisor`.
 2. `restart.recover`: put back an entry that an interrupted restart left out.
 3. Build the `Plan` (validate the arguments).
-4. `gate_busy.landing`: if a `task_scheduler` was seen on the bus, ask `list_gate_runs` (10 s).
+4. `gate_busy.landing`: if `merge_gate` was seen on the bus (in the last 5,000 events), ask
+   `list_gate_runs` (10 s).
    Refuse while a run is `running`, because a commit to the base branch would make the landing
    fail.
 5. `toml_edit.change`:
@@ -1041,7 +1063,8 @@ Before the message, the host puts these in the prompt (`prompting.supervisor_con
 - the project context, if it changed since last seen;
 - who fills the roles, if that changed;
 - a digest of the events since the last turn: counts per type, plus at most 8 that concern the
-  Supervisor (`prompting.CONCERNS`, attention addressed to it, tickets moving to BLOCKED);
+  Supervisor (`prompting.CONCERNS`, attention addressed to it, a worker's `task.reported` whose
+  report's state is BLOCKED);
 - the facts from [section 11](#11-the-supervisors-facts-and-checks);
 - `CHAT_SEAM`, then `[The human's message]` and the message itself.
 
@@ -1122,7 +1145,7 @@ Every event is a CloudEvent written through `orchestra.events`. The fields below
 
 | Type | Source | Data |
 |---|---|---|
-| `orchestra.machine.started` | `agents` | `{package: agents, mode: continuous, kind: program, listens_for: [ticket.transitioned], log}` |
+| `orchestra.machine.started` | `agents` | `{package: agents, mode: continuous, kind: program, listens_for: [gate.landed, request.done, review.approved, ticket.created], log}` |
 | `orchestra.machine.started` | the instance (once per source, harness and model in the host's lifetime) | `{package: agents, mode: continuous \| ad hoc, listens_for, kind: agent, role, harness, model}` |
 | `task.accepted`, `task.working`, `review.requested`, `changes.requested`, `review.approved`, `task.reported` | the instance | See [section 8](#8-filling-the-task-systems-roles-the-runner) |
 | `task.requested`, `task.change_requested`, `task.note_requested`, `task.cancel_requested`, `task.unblock_requested`, `milestone.requested`, `milestone.change_requested`, `milestone.close_requested`, `capacity.change_requested`, `pipeline.resume_requested` | the instance | `{request, args, by}`; subject = `args.id` or `args.milestone_id` |
@@ -1154,7 +1177,7 @@ The web plugin publishes nothing.
 | `task.assigned`, `review.requested`, `changes.requested` | `runner.tick` | Offers for the served roles (one addressed `to` an instance only for that slot) |
 | `task.accepted` | `runner._held`, `runner.tick`, `fillers.py` | Whose claim was first; another worker taking a ticket whose slot is kept |
 | `task.released` | `runner.tick`, `runner._held` | The assignment taken back, or rejected work the queue took back |
-| `ticket.transitioned` | `runner.tick`, `landings.py` | A move to DONE or CANCELLED archives sessions, lets the slot go and settles a landing. |
+| `gate.landed`; `review.approved` (tasks mode); `request.done` whose result is a ticket in DONE or CANCELLED | `runner.tick`, `landings.py` (`protocol.ended`) | A ticket's end archives its sessions, lets the slot go and settles a landing. |
 | `ticket.created` with `by=supervisor` | `landings.py` | Remember the human's tickets |
 | `task.accepted`, `orchestra.machine.started` | `fillers.py`, `observe._announced_log` | Who fills the roles, and where a machine's log is |
 | `request.done`, `request.refused` | `protocol.TaskClient` | Answers to requests and queries |
@@ -1162,7 +1185,7 @@ The web plugin publishes nothing.
 | `orchestra.process.gave_up` | `host._wake_on_events` | Wake the Supervisor |
 | Any type in a custom agent's `wake_on` | `host._wake_on_events` | Custom wake rules |
 | Every event since the last turn | `host._supervisor_turn` | The Supervisor's digest |
-| Any event from a `task_scheduler` source | `gate_busy.landing` | Whether a task system is present |
+| Any event from a `merge_gate` source | `gate_busy.landing` | Whether a gate is present to ask about |
 
 Wake-ups that are **not** bus events: a human chat message, `escalate_to_supervisor`,
 `message_agent`, `run_agent`, a crash loop, a landing, a change to an agent or team.

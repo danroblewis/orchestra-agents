@@ -60,10 +60,19 @@ def test_validation():
 
 
 def test_event_matching_and_daily_due():
-    wake_on = ["ticket.transitioned:DONE", "gate.landed"]
-    assert event_matches(wake_on, {"type": "ticket.transitioned", "to": "DONE"})
-    assert not event_matches(wake_on, {"type": "ticket.transitioned", "to": "OPEN"})
+    wake_on = ["task.reported:BLOCKED", "gate.landed", "request.done:CANCELLED", "task.attention_needed:coordinator"]
+    assert event_matches(wake_on, {"type": "task.reported", "report": {"state": "BLOCKED", "blocked_reason": "x"}})
+    assert not event_matches(wake_on, {"type": "task.reported", "report": None, "failed": True})
     assert event_matches(wake_on, {"type": "gate.landed"})
+    assert event_matches(wake_on, {"type": "request.done", "result": {"ok": True, "ticket": {"id": "T-1", "state": "CANCELLED"}}})
+    assert not event_matches(wake_on, {"type": "request.done", "result": {"ok": True, "ticket": {"id": "T-1", "state": "OPEN"}}})
+    assert event_matches(wake_on, {"type": "task.attention_needed", "to": "coordinator"})
+    # an agent saved when the task system still echoed state changes wakes on the acts themselves
+    from orchestra_agents.org import AgentDef
+    old = AgentDef.from_dict({"name": "old_one", "roles": ["r"], "kind": "ad_hoc", "session": "ephemeral",
+                              "wake_on": ["ticket.transitioned:DONE", "ticket.transitioned:BLOCKED", "ticket.note_added", "gate.conflict"]})
+    assert old.wake_on == ["gate.landed", "task.reported:BLOCKED", "gate.conflict"]
+    old.validate()
     noon_today = time.mktime(time.localtime()[:3] + (12, 0, 0, 0, 0, -1))
     assert due_at("12:00", None, noon_today + 60)
     assert not due_at("12:00", noon_today + 30, noon_today + 60)   # already fired today

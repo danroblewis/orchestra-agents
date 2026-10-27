@@ -198,12 +198,12 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         if not d.get("ok"):
             return False
         seen.update({m["id"]: m for m in d["machines"]})
-        return {"agents", "supervisor", "coordinator", "reviewer", "worker", "task_scheduler"} <= set(seen) \
+        return {"agents", "supervisor", "coordinator", "reviewer", "worker"} <= set(seen) \
             and bool({"review.approved", "changes.requested"} & {p["type"] for p in seen["reviewer"]["publishes"]})   # a review ended
     wait_until("the machines", observed, timeout_s=120)
     host = seen["agents"]
     assert host["package"] == "agents" and host["mode"] == "continuous" and host["kind"] == "program" and host["active"]
-    assert host["subscribes"] == ["ticket.transitioned"]            # what the host acts on as itself; the agents announce their own
+    assert host["subscribes"] == ["gate.landed", "request.done", "review.approved", "ticket.created"]   # what the host acts on as itself; the agents announce their own
     log = get(url + "/api/machines/agents/log")
     assert log["ok"] and any("control endpoint" in line for line in log["lines"])
     for name in ("supervisor", "coordinator"):                                              # resident: continuous, whatever wakes them
@@ -223,5 +223,5 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     started = {e["source"]: e["data"] for e in all_events(url) if e["type"] == "orchestra.machine.started"}
     assert started["worker/shell"]["kind"] == "program" and "task.assigned" in started["worker/shell"]["listens_for"]
     assert "review.requested" in reviewer["subscribes"] and "changes.requested" in worker["subscribes"]
-    assert seen["task_scheduler"]["package"] == "tasks"
+    assert "task_scheduler" not in seen                               # the task system's scheduler is no machine
     assert seen["planner"]["mode"] == "ad hoc" and seen["planner"]["kind"] == "program"

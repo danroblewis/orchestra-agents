@@ -3,8 +3,10 @@ contract: the table in orchestra-tasking's tasking/assignments.py and the reques
 tasking/requests.py; nothing is imported from it.
 
 - Assignment (the owner's decision D17: the task system is the record, not the hub). Work passes
-  directly between the machines that do it. An offer opens a turn: ``task.assigned`` from the task
-  system's queue, ``review.requested`` from the worker that finished (for any reviewer), or
+  directly between the machines that do it. An offer opens a turn: ``task.assigned`` from the
+  role's queue (published as ``worker`` or ``reviewer``: the task system's scheduler is no machine
+  and stands in for each role's own queue, so it publishes as the machine it acts for and never as
+  ``task_scheduler``), ``review.requested`` from the worker that finished (for any reviewer), or
   ``changes.requested`` from the reviewer that rejected (``to`` the worker instance that did the
   work, which takes it back in the same session). A machine claims an offer
   (``task.accepted``); the first valid claim on the bus holds it, and the claimant knows by
@@ -14,22 +16,34 @@ tasking/requests.py; nothing is imported from it.
   ``review.approved`` for the task system's gate) or with ``task.reported`` when it passes to no
   machine (a worker's BLOCKED, or no report). Every event of a turn names the offer as its
   ``causationid``. The task system listens, records, and may take a turn back
-  (``task.released``: a silent holder, an offer nobody took, rejected work its worker did not
-  take back within the return timeout, the operator, a restart). There is no machine-sent
+  (``task.released``, as the role's queue: a silent holder, an offer nobody took, rejected work its
+  worker did not take back within the return timeout, the operator, a restart; ``instance`` names
+  the holder when it is addressed to one). Nothing here reads an offer's or a release's source:
+  the claim rule (``holder``) is the bus's order of claims. There is no machine-sent
   release in the contract: a stop of the host reports every open assignment as ``failed``. The
   task system counts a worker's failed report against the ticket's crash budget (the ticket goes
   back to OPEN); a reviewer's is a review that ended without a verdict (the review is redone, up
   to its no-verdict budget).
 - Requests: a planner asks the task system to change tickets (``task.requested``,
   ``task.unblock_requested``, …) or to read them (``task.query_requested``, the operation named in
-  it); it answers ``request.done`` with the result or ``request.refused`` with why.
+  it); it answers ``request.done`` with the result or ``request.refused`` with why, published as
+  the asker (the task system stands in for the asker's own request handling), with the request as
+  its causationid. What a request made says so too, as the asker: ``ticket.created``,
+  ``milestone.created``.
 - Attention: the task system asks a planner to look at something (``task.attention_needed``,
-  to a role, with the reason).
+  to a role, with the reason), published as the machine whose work is stuck (a blocked ticket:
+  ``worker``) or whose responsibility raised it (``merge_gate``: the pipeline, staging).
+- No echoes: the task system's record is its store. It never publishes a ticket's state change or
+  note (there is no ``ticket.transitioned``); what a machine did, that machine announced. So a
+  ticket ends when the gate lands it (``gate.landed``), when its reviewer approves it in tasks mode
+  (``review.approved``: nothing to merge), or when a planner's cancel is done (``request.done``
+  whose result is the ticket, CANCELLED): ``ended``. Its state otherwise is the record's, read
+  with the ``get_ticket``, ``list_tickets`` or ``snapshot`` query.
 
 The names: ``task.*`` is the protocol between the task system and the machines that fill roles
-(assignment, requests, attention); ``ticket.*`` and ``milestone.*`` are the facts the task
-system records about its own objects (``TASK_EVENTS``). So a request to create a ticket is
-``task.requested`` and the fact is ``ticket.created``.
+(assignment, requests, attention); ``ticket.created`` and ``milestone.created`` say what a
+planner's request made (``TASK_EVENTS``). So a request to create a ticket is ``task.requested``
+and what it made is ``ticket.created``.
 
 The snapshot (the ``snapshot`` query's answer) is read by the prompts (prompting.py) in these
 fields and no others: ``counts``; ``tickets[]`` with ``id``, ``state``, ``title``, ``priority``,
@@ -51,22 +65,21 @@ ATTENTION = "task.attention_needed"
 COORDINATOR, SUPERVISOR = "coordinator", "supervisor"
 PLANNER_ROLES = (COORDINATOR, SUPERVISOR)
 HEARTBEAT_S = 30.0
-TRANSITIONED = "ticket.transitioned"
+CREATED, LANDED = "ticket.created", "gate.landed"
 # The task system's ticket states (its ``State``), copied by hand like the event names below.
 STATES = ("OPEN", "BLOCKED", "IN_PROGRESS", "READY_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED", "MERGING", "DONE", "CANCELLED")
-TERMINAL = STATES[-2:]                # DONE and CANCELLED: a transition to one of these ends the ticket; the runner archives its sessions
+TERMINAL = STATES[-2:]                # DONE and CANCELLED: a ticket in one of these has ended; the runner archives its sessions
 
 # The task system's other event types, which an agent may wake on. Copied by hand; the truth is
 # orchestra-tasking's emit calls (nothing is imported from it); tests/unit/test_protocol_drift.py
 # checks the copy against its source when it is installed. Both packages emit probe.failed and
 # probe.recovered: the task system for its [[probes]], the agents' host for a team's.
 TASK_EVENTS = (
-    "ticket.created", "ticket.updated", TRANSITIONED, "ticket.note_added",
-    "milestone.created", "milestone.updated", "milestone.closed",
-    "gate.started", "gate.landed", "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
+    CREATED, "milestone.created",
+    "gate.started", LANDED, "gate.rejected", "gate.conflict", "gate.error", "gate.base_broken",
     "staging.deployed", "staging.failed", "staging.restarted",
     "pipeline.paused", "pipeline.resumed", "pickup.paused", "pickup.resumed", "capacity.changed", "kill.requested",
-    "scheduler.stopped", "probe.failed", "probe.recovered",
+    "probe.failed", "probe.recovered",
 )
 
 REQUESTS = {"create_ticket": "task.requested", "update_ticket": "task.change_requested", "add_note": "task.note_requested",
@@ -79,6 +92,23 @@ QUERIES = ("list_tickets", "get_ticket", "project_status", "list_milestones", "g
            "list_gate_runs", "get_gate_run", "get_staging_status")
 DONE, REFUSED = "request.done", "request.refused"
 WAIT_S = 30.0
+
+
+def ended(ev: dict, work: str) -> tuple[str, str] | None:
+    """The ticket an event ends and how, (id, DONE or CANCELLED), or None: the gate landed it;
+    in tasks mode (``work`` != "code", nothing merged) its reviewer approved it; a planner's cancel
+    is done (``request.done`` whose result is the ticket, CANCELLED). The task system publishes no
+    state change of its own (no echoes), so these acts are how a ticket's end is heard."""
+    kind, tid = ev.get("type"), ev.get("ticket")
+    if kind == LANDED and tid:
+        return tid, "DONE"
+    if kind == APPROVED and tid and work != "code":
+        return tid, "DONE"
+    if kind == DONE:
+        t = (ev.get("result") or {}).get("ticket") if isinstance(ev.get("result"), dict) else None
+        if isinstance(t, dict) and t.get("id") and t.get("state") in TERMINAL:
+            return t["id"], t["state"]
+    return None
 
 
 def valid_claim(ev: dict, offer: dict) -> bool:

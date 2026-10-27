@@ -108,4 +108,10 @@ and `demo/dummy.toml` as a worked example.
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
 protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`
-runs the whole demo on dummy agents with no API key and no network.
+runs the whole demo on dummy agents with no API key and no network. Its
+`test_what_the_owner_sees` lands twelve tickets, five of them rejected once (a rule appended to
+the target's `dummy.toml`), and checks what the owner would see: `task_scheduler` is in no
+event's source and no machine, edge or hand-off of `/api/machines`; a reworked ticket's hand-offs
+are planner → worker → reviewer → worker → reviewer → merge_gate; discovery hypothesises no flow
+on `task_scheduler`; and the ticket metrics arrive with `instrument=tasks.tickets` (the
+instrument the task system's plugin declares, `tasking metrics`).

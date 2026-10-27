@@ -31,9 +31,9 @@ def test_context_document_is_sent_once_until_it_changes(project):
     assert again.startswith("[Orchestra: project context, updated]") and "ship it" in again
     assert agents.supervisor_context(snap, [], project, store) == ""
     # events still arrive, as a digest
-    evs = [{"type": "ticket.transitioned", "ticket": "T-1", "from": "OPEN", "to": "BLOCKED"}]
+    evs = [{"type": "task.reported", "ticket": "T-1", "report": {"state": "BLOCKED", "blocked_reason": "no creds"}}]
     out = agents.supervisor_context(snap, evs, project, store)
-    assert "[Orchestra: project context" not in out and "ticket.transitioned ticket=T-1" in out
+    assert "[Orchestra: project context" not in out and "task.reported ticket=T-1" in out
     # without a store (the CLI's temporary session) the document is always included
     assert agents.supervisor_context(snap, [], project).startswith("[Orchestra: project context]")
 
@@ -64,7 +64,7 @@ def test_the_digest_stays_short_however_busy_the_bus_was(project):
     the Supervisor, not the event list: a long digest on every turn filled its context."""
     snap = {"counts": {"OPEN": 3}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {}, "assignments": []}
     evs = [{"type": "task.working", "ticket": f"T-{i % 5}", "text": "x" * 200} for i in range(500)]
-    evs += [{"type": "ticket.transitioned", "ticket": f"T-{i}", "from": "OPEN", "to": "IN_PROGRESS"} for i in range(50)]
+    evs += [{"type": "task.accepted", "ticket": f"T-{i}", "role": "worker", "to": "IN_PROGRESS"} for i in range(50)]
     evs += [{"type": "task.attention_needed", "to": "coordinator", "reason": "T-2 BLOCKED"}]
     evs += [{"type": "task.attention_needed", "to": "supervisor", "reason": f"decide {i}"} for i in range(12)]
     evs += [{"type": "orchestra.process.gave_up", "name": "telemetry"}]
@@ -72,7 +72,7 @@ def test_the_digest_stays_short_however_busy_the_bus_was(project):
     agents.supervisor_context(snap, [], project, store)                     # the context document, seen once
     out = agents.supervisor_context(snap, evs, project, store)
     lines = out.strip().splitlines()
-    assert lines[0].startswith("[Orchestra: 564 events since your last turn: task.working=500, ticket.transitioned=50, task.attention_needed=13")
+    assert lines[0].startswith("[Orchestra: 564 events since your last turn: task.working=500, task.accepted=50, task.attention_needed=13")
     named = [ln for ln in lines if ln.startswith("- ")]
     assert len(named) == agents.DIGEST_EVENTS and named[-1] == "- orchestra.process.gave_up name=telemetry"
     assert not any("coordinator" in ln or "IN_PROGRESS" in ln or "task.working " in ln for ln in named)

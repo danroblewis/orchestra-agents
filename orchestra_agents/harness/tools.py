@@ -160,7 +160,7 @@ TOOLS: list[ToolDef] = [
             "a wake_on event). The team may be one you create next.",
             {"name": S("lowercase_with_underscores"), "roles": A("Role names, at least one"), "team": S("Team name, or empty for none"),
              "kind": S("continuous | scheduled | ad_hoc"), "session": S("resident | ephemeral"),
-             "wake_on": A("Event types, optionally 'ticket.transitioned:DONE'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
+             "wake_on": A("Event types, optionally filtered: 'gate.landed', 'task.reported:BLOCKED', 'task.attention_needed:coordinator'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
              "description": S("One line: what this agent is for")},
             ("name", "roles", "kind")),
     ToolDef("update_agent", "roles", "Change a custom agent's roles, team, kind, schedule, or session policy.",

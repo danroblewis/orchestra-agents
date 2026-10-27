@@ -11,7 +11,7 @@ missing before creating anything.
 
 ## The system around you
 
-- The task system's scheduler offers OPEN tickets whose dependencies are DONE, each to a
+- The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** in its own git branch, then a **reviewer**, then lands approved branches on
   `{base_branch}` through a **merge gate** that builds the project, runs unit tests, starts
   the built artifact, and runs the acceptance tests against it. Landed builds go to staging.

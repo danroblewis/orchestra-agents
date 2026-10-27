@@ -32,7 +32,7 @@ from .landings import Landings
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
-from .protocol import TRANSITIONED
+from .protocol import APPROVED, CREATED, DONE, LANDED
 from .residents import Residents
 from .restart import recover as recover_restart
 from .roles import all_roles
@@ -126,9 +126,11 @@ class AgentHost:
         if put_back := recover_restart(self.project):      # a restart_machine the last host was killed in
             log(put_back)
         # the host announces what it acts on as itself: a finished ticket's sessions go to the
-        # archive. Assignments, releases and attention are the agents', which announce their own
+        # archive (protocol.ended: landed, approved in tasks mode, cancelled), and the human's
+        # tickets are remembered (landings.py). Assignments, releases and attention are the
+        # agents', which announce their own
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",
-                                                          "listens_for": [TRANSITIONED], "log": str(HOST_LOG)})
+                                                          "listens_for": sorted({LANDED, APPROVED, DONE, CREATED}), "log": str(HOST_LOG)})
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
         self._refresh_org(self.store.runtime()["agent_state"])
         self.store.measure_idle(self.measured_roles())           # no agent is in a turn at the start: the level is live from here

@@ -157,7 +157,10 @@ def env(tmp_path, monkeypatch, request):
     th.start()
     try:
         deadline = time.time() + 30
-        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "task_scheduler" for e in events.after(0)[0]):
+        # the scheduler is no machine and announces nothing of itself; it says, as the worker's queue,
+        # what makes that queue act, once it is up
+        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "worker" and "ticket.created" in (e.get("listens_for") or [])
+                      for e in events.after(0)[0]):
             assert scheduler.poll() is None, "tasking run exited; see scheduler.log"
             assert time.time() < deadline, "the scheduler did not start"
             time.sleep(0.2)
@@ -247,8 +250,8 @@ def test_rejection_loops_back_to_worker(env, monkeypatch):
     check_protocol(env.events, t, WORK_READY, REJECTED, WORK_READY, APPROVED)          # reworked by the same instance, worker/1
     msgs = read_transcript(agent_store(env).runtime()["archived_sessions"][f"worker-{t}"])
     assert sum(1 for m in msgs if m["role"] == "user") == 2                              # the same worker session, re-engaged
-    # the work passed between the machines: the scheduler only offered it first, and the gate took the approval
-    assert handoffs(env.events, t) == [("task_scheduler", "task.assigned", "worker"), ("worker", "review.requested", "reviewer"),
+    # the work passed between the machines: from the planner (its queue offered it first), and the gate took the approval
+    assert handoffs(env.events, t) == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
                                        ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
                                        ("reviewer", "review.approved", "merge_gate")]
 
@@ -296,7 +299,7 @@ def test_team_lead_is_woken_in_its_space(env):
     api.handle(agents, astore, "create_role", {"name": "owner", "description": "Owns the backlog",
                                                "prompt": "# You own the backlog\n\n" + "Keep it full and honest. " * 4, "tools": ["tickets"]}, role="supervisor")
     api.handle(agents, astore, "create_agent", {"name": "po", "roles": ["owner"], "team": "product", "kind": "scheduled", "every": "1d",
-                                                "wake_on": ["ticket.transitioned:DONE"]}, role="supervisor")
+                                                "wake_on": ["gate.landed"]}, role="supervisor")     # a ticket is done: the gate landed it
     api.handle(agents, astore, "create_team", {"name": "product", "lead": "po", "responsibilities": "# Product\n\n1. The backlog is never empty.",
                                                "access": [{"tools": ["events"]}]}, role="supervisor")
     astore.drain_wakeups("po")   # the creation introduction; this test is about the landing
@@ -305,7 +308,7 @@ def test_team_lead_is_woken_in_its_space(env):
     assert env.state(t) == "DONE"
     sess = next(s for s in astore.sessions() if s["id"] == "po")
     texts = [m["text"] for m in read_transcript(sess) if m["role"] == "user"]
-    assert any("event ticket.transitioned" in x and "to=DONE" in x for x in texts)
+    assert any("event gate.landed" in x and f"ticket={t}" in x for x in texts)
     assert (env.repo / ".orchestra" / "spaces" / "product" / "tools").is_dir()
     assert "The backlog is never empty" in (agents.logs_dir / "agents" / "po.prompt.md").read_text()   # what it was started with
     assert astore.agent_state("po").get("last_woken")

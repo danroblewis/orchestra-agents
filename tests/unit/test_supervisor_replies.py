@@ -106,8 +106,13 @@ def test_the_humans_ticket_that_is_done_wakes_the_supervisor_to_say_so(project):
     events.publish("ticket.created", {"ticket": "DEMO-4", "title": "Measure the repository", "by": "planner"}, subject="DEMO-4")
     events.publish("ticket.created", {"ticket": "DEMO-5", "title": "Measure the disk", "by": "supervisor"}, subject="DEMO-5")
     events.publish("ticket.created", {"ticket": "DEMO-7", "title": "Dropped", "by": "supervisor"}, subject="DEMO-7")
-    for tid, to in (("DEMO-4", "DONE"), ("DEMO-5", "IN_PROGRESS"), ("DEMO-7", "CANCELLED"), ("DEMO-5", "DONE")):
-        events.publish("ticket.transitioned", {"ticket": tid, "from": "X", "to": to}, subject=tid)
+    # how a ticket's end is heard, the task system publishing no state change (protocol.ended): the
+    # gate's landing, a cancel request done; a step on the way (a review requested) is no end
+    events.publish("gate.landed", {"ticket": "DEMO-4", "gate_run": "g1"}, source="merge_gate", subject="DEMO-4")
+    events.publish("review.requested", {"ticket": "DEMO-5"}, source="worker/1", subject="DEMO-5")
+    events.publish("request.done", {"request": "r1", "result": {"ok": True, "ticket": {"id": "DEMO-7", "state": "CANCELLED"}}},
+                   source="supervisor", subject="DEMO-7")
+    events.publish("gate.landed", {"ticket": "DEMO-5", "gate_run": "g2"}, source="merge_gate", subject="DEMO-5")
     host._wake_on_events()
     [w] = [w for w in store.runtime()["wakeups"] if w["target"] == "supervisor"]
     assert w["reason"].startswith("ticket DEMO-5 (Measure the disk), which you created for the human, is DONE")

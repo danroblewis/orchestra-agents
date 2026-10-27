@@ -254,7 +254,10 @@ def reviewer_task(project: Project, t: TicketView, commit: str, diff: str, files
 def org_reference() -> str:
     """What an agent can watch and do, appended to the design guide."""
     return ("Tool groups: " + ", ".join(TOOL_GROUPS) + ".\nEvent types that can wake an agent: " + ", ".join(EVENT_TYPES)
-            + ".\nA wake_on entry may filter transitions, e.g. 'ticket.transitioned:DONE' or 'ticket.transitioned:BLOCKED'.")
+            + ".\nA wake_on entry may filter: 'task.reported:BLOCKED' (a worker's turn ended blocked), "
+              "'task.attention_needed:coordinator' (a planner is asked to decide), 'request.done:CANCELLED' (a ticket was cancelled), "
+              "'probe.failed:<probe>'. A ticket is done when 'gate.landed' (code) or, in tasks mode, 'review.approved'. "
+              "The task system publishes no ticket state changes: ask it (get_ticket, list_tickets) for a ticket's state.")
 
 
 WAKE_TICKETS = 40          # open tickets listed in a wake-up; the rest are a count, and `list_tickets` has them
@@ -360,8 +363,9 @@ def chat_turn(context: str, message: str) -> str:
 
 def concerns_supervisor(e: dict) -> bool:
     t = e.get("type")
+    report = e.get("report") if isinstance(e.get("report"), dict) else {}
     return (t in CONCERNS or (t == "task.attention_needed" and e.get("to") == "supervisor")
-            or (t == "ticket.transitioned" and e.get("to") == "BLOCKED"))
+            or (t == "task.reported" and report.get("state") == "BLOCKED"))     # a worker's turn ended blocked
 
 
 def supervisor_context(snapshot: dict, events: list[dict], project: Project | None = None, store=None,

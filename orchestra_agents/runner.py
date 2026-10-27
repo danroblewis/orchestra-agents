@@ -33,9 +33,8 @@ from .protocol import (
     RELEASED,
     REPORTED,
     REVIEW_REQUESTED,
-    TERMINAL,
-    TRANSITIONED,
     WORKING,
+    ended,
     holder,
 )
 
@@ -72,9 +71,9 @@ class AgentRunner:
             kind = ev.get("type")
             if kind in OFFERS and ev.get("role") in serves and ev.get("assignment") not in self.threads:
                 self._offered(ev, start)
-            elif kind == TRANSITIONED and ev.get("to") in TERMINAL and ev.get("ticket"):
-                self._let_go(ev["ticket"])
-                self.host.store.purge_ticket_sessions(ev["ticket"])     # a finished ticket's sessions go to the archive
+            elif end := ended(ev, self.host.cfg.work):                  # the gate landed it, its reviewer approved it (tasks), it was cancelled
+                self._let_go(end[0])
+                self.host.store.purge_ticket_sessions(end[0])           # a finished ticket's sessions go to the archive
             elif kind == RELEASED and ev.get("assignment") in self.sessions \
                     and ev.get("instance") in (None, self.instances.get(ev["assignment"])):     # a release for another machine is not ours
                 self.released[ev["assignment"]] = ev.get("reason") or "no reason given"

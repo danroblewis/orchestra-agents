@@ -11,10 +11,20 @@ that only note that they ran, and every Python process unable to reach beyond th
   computes are worker → reviewer → worker → reviewer → merge_gate, the task system only where it
   acted (the first offer);
 - the Supervisor answers a chat turn through the web's /supervisor;
-- no model was run and nothing tried the network."""
+- no model was run and nothing tried the network.
 
+And what the owner sees (``test_what_the_owner_sees``), after more tickets, five of them rejected
+once: the task system's scheduler is nowhere (no event is its, it is no machine, no edge or
+hand-off names it), every hand-off of a reworked ticket is one machine to the next with nothing in
+between (planner → worker → reviewer → worker → reviewer → merge_gate), discovery hypothesises no
+machine on a ticket flow for acts it did not take, and the ticket measurements arrive through the
+task system's instrument."""
+
+import math
 import os
 import stat
+import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -23,6 +33,36 @@ from orchestra.web.machines import MachineIndex
 from test_demo_e2e import AGENTS, TASKS, all_events, chat, git, reported_by, settled, states
 
 from demo.run import get, make_project, plan, start, stop, wait_for, wait_until
+
+# Extra tickets for the owner's view (rules added to the target's dummy.toml, matching only their
+# titles): the reviewer rejects a "Rework" ticket's first round and approves the rest. Each turn
+# takes a few seconds, more than a discovery step (5 s), as real work would: a counter whose
+# moves all fall in one step cannot be told from another's, and attribution would be noise.
+REWORK_RULE = """
+
+[[rule]]
+role = "reviewer"
+prompt = "Rework item"
+turn = 1
+steps = [{ sleep = 6 }, { tool = "report_review", args = { verdict = "REJECTED", summary = "Not yet.", feedback = "1. Do it again." } }]
+
+[[rule]]
+role = "reviewer"
+prompt = " item "
+steps = [{ sleep = 6 }, { tool = "report_review", args = { verdict = "APPROVED", summary = "Good." } }]
+
+[[rule]]
+role = "worker"
+prompt = " item "
+checkout = true
+steps = [
+  { sleep = 6 },
+  { write = "work/{ticket}.md", text = "Work on {ticket}, turn {turn}. ", append = true },
+  { commit = "{ticket}: work" },
+  { tool = "report_ticket", args = { state = "READY_FOR_REVIEW", summary = "Wrote work/{ticket}.md." } },
+]
+"""
+EXTRA = [f"Rework item {i}" for i in range(5)] + [f"Extra item {i}" for i in range(3)]
 
 GUARD = Path(__file__).parent / "no_network"
 KEYS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY",
@@ -70,6 +110,9 @@ def free_demo(tmp_path, monkeypatch):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     target = make_project(tmp_path / "project", dummy=True)
+    with (target / "dummy.toml").open("a", encoding="utf-8") as f:     # only "Rework" tickets match it
+        f.write(REWORK_RULE)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-qam", "a rule for rework tickets"], cwd=target, check=True)
     port = free_port()
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
@@ -115,7 +158,7 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     assert by["DEMO-3"][0] == by["DEMO-3"][2] and by["DEMO-3"][0].startswith("worker/")     # reworked by the same worker instance
     back = [e for e in events if e["type"] == "changes.requested" and e["subject"] == "DEMO-3"]
     assert [e["data"]["to"] for e in back] == [by["DEMO-3"][0]]                             # the rejection went to it, not to a queue
-    assert handoffs(events, "DEMO-3") == [("task_scheduler", "task.assigned", "worker"), ("worker", "review.requested", "reviewer"),
+    assert handoffs(events, "DEMO-3") == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
                                           ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
                                           ("reviewer", "review.approved", "merge_gate")]
     assert "def test_longest_first" in git(target, "show", "main:tests/test_line_counts.py")
@@ -136,3 +179,78 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     assert not [ln for ln in network if " refused " in ln], [ln for ln in network if " refused " in ln]
     assert any("orchestra_agents.harness.dummy_agent" in ln for ln in network)
     assert any("tasking" in ln for ln in network) and any("orchestra web" in ln or "orchestra run" in ln or "-m orchestra" in ln for ln in network)
+
+
+def flow_hypotheses(target: Path) -> dict[tuple[str, str, str], list[tuple[str, float]]]:
+    """Discovery's machine hypotheses (orchestra.sd.attribute, as discovery runs it) on each ticket
+    transition counter in the project's metrics: {(from, to, by): [(machine, confidence)]}."""
+    from orchestra.config import load_project
+    from orchestra.metrics import for_project
+    from orchestra.sd.attribute import associate, candidates
+    from orchestra.sd.series import sample, sum_instances
+    from orchestra.sources.catalogue import Catalogue
+
+    project = load_project(target)
+    step = project.config.discovery_step
+    end = math.floor(time.time() / step) * step
+    start = end - project.config.discovery_window
+    reading = Catalogue(project, for_project(project)).read(start, end, step)
+    series, _ = sum_instances(sample(reading.dump, start, step, int((end - start) // step), reading.kinds))   # as discovery does
+    on_bus = candidates(series)
+    return {(s.labels["from"], s.labels["to"], s.labels["by"]): [(h["machine"], h["confidence"]) for h in associate(s, on_bus)["hypotheses"]]
+            for s in series if s.name == "tasks_ticket_transitions_total"}
+
+
+def test_what_the_owner_sees(free_demo):
+    url, target, _logs = free_demo
+    ids = plan(target)
+    from orchestra_agents.config import load_project
+    from orchestra_agents.events import Events
+    from orchestra_agents.protocol import TaskClient
+    ask = TaskClient(Events.for_project(load_project(target), source="planner"), "planner")
+    for title in EXTRA:
+        made = ask("create_ticket", {"title": title, "milestone_id": "M1", "description": "Write a note.", "acceptance": "- a note"})
+        assert made.get("ok"), made
+        ids.append(made["ticket"]["id"])
+    wait_until("the tickets", lambda: settled(url) and len(states(url)) == len(ids), timeout_s=900)
+    assert states(url) == dict.fromkeys(ids, "DONE")
+    events = all_events(url)
+
+    # the scheduler is nowhere: no event is its, and it is no machine, edge or hand-off
+    assert not [e for e in events if e["source"].partition("/")[0] == "task_scheduler"]
+    assert not [e for e in events if e["type"] in ("ticket.transitioned", "ticket.note_added")]      # no echoes
+    d = get(url + "/api/machines")
+    assert "task_scheduler" not in {m["id"] for m in d["machines"]}
+    assert not [e for e in d["edges"] if "task_scheduler" in (e["from"], e["to"])]
+    assert not [h for h in d["handoffs"] if "task_scheduler" in (h["from"], h["to"])]
+
+    # a reworked ticket passes from machine to machine with nothing in between
+    rework = ids[len(ids) - len(EXTRA)]
+    assert handoffs(events, rework) == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
+                                        ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
+                                        ("reviewer", "review.approved", "merge_gate")]
+    edges = {(h["from"], h["via"], h["to"]) for h in d["handoffs"]}
+    assert {("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"), ("reviewer", "changes.requested", "worker"),
+            ("reviewer", "review.approved", "merge_gate")} <= edges, edges
+
+    # what each machine published: the worker's queue (offers, as worker) adds one offer per ticket from the queue
+    published = {m["id"]: {p["type"]: p["count"] for p in m["publishes"]} for m in d["machines"]}
+    print("published:", {m: sum(c.values()) for m, c in published.items()})
+    print("degrees:", {m["id"]: {"publishes": len(m["publishes"]), "listens_for": len(m["subscribes"])} for m in d["machines"]})
+    assert published["worker"].get("task.assigned") == len(ids)                            # one offer per ticket: rework went to the worker directly
+    assert "ticket.created" in published["planner"] and "gate.landed" in published["merge_gate"]
+
+    # discovery hypothesises no machine on a ticket flow for acts it did not take: the scheduler on
+    # none; each counter's moves are by the machine named in it, and that machine is the only one
+    # whose own events can explain the counter with no other machine's act between
+    hyps = flow_hypotheses(target)
+    print("hypotheses:", hyps)
+    assert hyps, "no ticket transition counter was read"
+    assert not [k for k, hs in hyps.items() for m, _ in hs if m == "task_scheduler"]
+    assert not [k for k in hyps if k[2] == "task_scheduler"]                                 # no move is counted as the scheduler's
+
+    # the ticket measurements arrive through the task system's instrument, with its provenance
+    from orchestra.config import load_project as orchestra_project
+    from orchestra.metrics import for_project
+    dump = for_project(orchestra_project(target)).dump("tasks_tickets", {})
+    assert dump and all(labels.get("instrument") == "tasks.tickets" and "machine" not in labels for _, labels, _ in dump)

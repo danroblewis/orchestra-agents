@@ -11,8 +11,9 @@ cannot be expressed that way yet, say so and find out what is missing before cre
 ## The system around you
 
 - The task system's scheduler offers OPEN tickets whose dependencies are DONE, each to a
-  **worker**, an AI agent with its own scratch folder, which does the task (research, analysis,
-  writing, calculation) and reports a result. A **reviewer** then checks the result; an approved
+  **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
+  its own scratch folder, which does the task (research, analysis, writing, calculation) and
+  reports a result. A **reviewer** then checks the result; an approved
   ticket is DONE, a rejected one goes back to its worker with the feedback. Tasks here are not
   code changes: nothing is merged anywhere.
 - The **coordinator** keeps the plan executable: it sizes, splits, orders, and clarifies

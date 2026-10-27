@@ -114,8 +114,8 @@ def _set_work_mode(project: Project, store: AgentStore, a: dict) -> Plan:
                 + "; tickets already assigned keep what they have."
                 + (f" The resident sessions of {', '.join(residents)} restart after their current turn, to take the "
                    f"prompts for {work} work." if residents else "")
-                + (" There is no [[gate.unit]]: the gate lands a branch without running any test; set one with "
-                   "set_gate_unit." if no_gate else ""))
+                + (" There is no [[gate.unit]]: branches land untested. Ask the human which test a branch must pass; "
+                   "do not guess one." if no_gate else ""))
 
     def then():
         for n in residents:

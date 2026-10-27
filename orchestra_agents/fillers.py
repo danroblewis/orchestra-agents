@@ -22,6 +22,7 @@ KEEP_S = 6 * 3600.0       # an instance not seen taking an assignment for this l
 class Fillers:
     def __init__(self, events):
         self.kinds: dict[str, str] = {}                   # source -> the kind it announced
+        self.logs: dict[str, str] = {}                    # source -> the log it announced (a launched program's: the launcher's)
         self.seen: dict[tuple[str, str], float] = {}      # (role, instance) -> when it last accepted or announced
         end = events.end()
         evs, _ = events.read(max(0, end - LOOK_BACK), LOOK_BACK)
@@ -32,11 +33,20 @@ class Fillers:
             at = event_time(ev) or time.time()
             if ev.get("type") == STARTED and ev.get("source"):
                 self.kinds[ev["source"]] = str(ev.get("kind") or "program")
+                if ev.get("log"):
+                    self.logs[ev["source"]] = str(ev["log"])
+                else:
+                    self.logs.pop(ev["source"], None)
                 role, _ = machine_and_instance(ev["source"])
                 if role in PER_TICKET_ROLES and ASSIGNED in (ev.get("listens_for") or []):
                     self.seen[(role, ev["source"])] = at
             elif ev.get("type") == ACCEPTED and ev.get("role") and ev.get("instance"):
                 self.seen[(ev["role"], ev["instance"])] = at
+
+    def programs(self) -> list[tuple[str, str]]:
+        """(role, instance) of every machine seen filling a role lately that did not say it is an AI agent."""
+        now = time.time()
+        return [(role, inst) for (role, inst), at in sorted(self.seen.items()) if now - at < KEEP_S and self.kinds.get(inst) != "agent"]
 
     def lines(self, serves: list[str]) -> list[str]:
         """Plain statements: the roles the AI agents here fill, and the instances seen taking each

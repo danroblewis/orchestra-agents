@@ -105,6 +105,7 @@ def test_set_work_mode_restarts_the_residents_and_says_the_gate_has_no_test(proj
     out = call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
     assert toml(project)["project"]["work"] == "code"
     assert "supervisor" in out["applies"] and "coordinator" in out["applies"] and "no [[gate.unit]]" in out["applies"]
+    assert "Ask the human which test" in out["applies"] and "do not guess" in out["applies"]
     states = store.runtime()["agent_state"]
     assert states["supervisor"]["restart_requested"] and states["coordinator"]["restart_requested"]
     assert "work is code" in last_commit(project)[0]

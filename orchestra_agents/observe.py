@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 import tomllib
+from pathlib import Path
 
 from orchestra import runtime
 from orchestra.collect import spec as collect_spec
@@ -96,17 +97,40 @@ def read_machine_log(project: Project, store: AgentStore, a: dict) -> dict:
                      "and orchestra-host")
 
 
+def _not_launched(project: Project, fillers: Fillers, procs: dict) -> list[str]:
+    """The programs seen filling a role that Orchestra's launcher does not run: no ``[[machines]]``
+    entry and no plugin's process announced their log (the launcher gives each the log it keeps,
+    ``ORCHESTRA_MACHINE_LOG``). Someone started them by hand; the Supervisor can neither restart
+    nor change them, and they take tickets they may not be written for."""
+    def real(p: str) -> str:
+        q = Path(p)
+        return str((q if q.is_absolute() else project.repo_root / q).resolve())
+    launched = {real(x["log"]) for x in procs["processes"] if x.get("log")}
+    out = []
+    for role, inst in fillers.programs():
+        log = fillers.logs.get(inst)
+        if log and real(log) in launched:
+            continue
+        out.append(f"{inst} fills the {role} role but is not a [[machines]] entry or a plugin's process (started by hand"
+                   + (f", its log {log}" if log else ", it announced no log") + "): you cannot restart or change it with your "
+                   "tools; tell the human which process to stop, or have it run from [[machines]] (set_machine)")
+    return out
+
+
 def check_setup(project: Project, store: AgentStore) -> dict:
-    """Whether the system can do what is asked of it: which machines fill the task system's roles,
-    the kind of work, the gate's tests, the capacity, and what the launcher runs."""
+    """Whether the system can do what is asked of it: which machines fill the task system's roles
+    (and which of them Orchestra does not run), the kind of work, the gate's tests, the capacity,
+    and what the launcher runs."""
     raw = tomllib.loads(path(project).read_text(encoding="utf-8"))
     p, t, g = raw.get("project") or {}, raw.get("tasks") or {}, raw.get("gate") or {}
     procs = list_processes(project)
+    fillers = Fillers(store.events)
     return {"ok": True,
             "work": p.get("work", "tasks") + (" (a branch per ticket, reviewed and landed through the merge gate)"
                                               if p.get("work") == "code" else
                                               " (a scratch folder per ticket; nothing a worker makes lands in the repository)"),
-            "roles": Fillers(store.events).lines(project.config.serves),
+            "roles": fillers.lines(project.config.serves),
+            "not_launched": _not_launched(project, fillers, procs),
             "gate_tests": [{"name": u.get("name"), "command": u.get("command")} for u in g.get("unit") or []],
             "capacity_limit": {"workers": t.get("workers", 1), "reviewers": t.get("reviewers", 1)},
             "launcher": procs["launcher"],

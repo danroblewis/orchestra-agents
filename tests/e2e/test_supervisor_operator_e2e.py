@@ -1,18 +1,23 @@
 """The Supervisor fixes a setup that cannot do what the human asks, through a real Orchestra.
 
-The demo starts in the setup the owner's metrics request failed in (2026-10-26): `work = "tasks"`
-(nothing a worker makes lands) and `[agents] serves = ["reviewer"]` (the only worker is the shell
-program, which cannot write a collector). The human asks for a measurement; the Supervisor, played
-by the fake Claude Code from a script, looks (`check_setup`), makes the AI agents fill the worker
-role and switches to code work (each a commit of orchestra.toml with its reason, announced on the
-bus), restarts the shell worker through Orchestra's launcher, and files the collector ticket. An
-AI worker writes the collector, the reviewer approves, the gate lands it, and `orchestra run`
-starts it: its series reach the project's store."""
+The demo starts in the setup the owner's metrics request failed in (2026-10-26, a0953ac's
+demo/run.py): `work = "tasks"` (nothing a worker makes lands), `[agents] serves = ["reviewer"]`,
+and the shell worker started by hand, outside `[[machines]]` and without `--only-commands`, so it
+takes any ticket and blocks the ones it cannot do. The human asks for a measurement; the
+Supervisor, played by the fake Claude Code from a script, looks (`check_setup`, which names the
+shell worker as a program Orchestra does not run), makes the AI agents fill the worker role and
+switches to code work (each a commit of orchestra.toml with its reason, announced on the bus), and
+tells the human which process to stop, as its prompt says for a program it cannot change. The
+human stops it and says so; the Supervisor files the collector ticket. An AI worker writes the
+collector, the reviewer approves, the gate lands it, and `orchestra run` starts it: its series
+reach the project's store."""
 
 import json
+import os
 import shutil
 import stat
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -26,12 +31,13 @@ from demo.run import PLAN, get, make_project, start, stop, wait_for, wait_until
 AGENTS, TASKS = "/api/plugins/agents", "/api/plugins/tasks"
 FAKE = Path(__file__).parent / "fake_claude.py"
 COLLECTOR = PLAN["tickets"][3]                    # "Measure the repository": the fake worker writes a real collector
-STEPS = [
+LOOK = [  # the first chat turn: see, fix what the tools can, and name what the human must stop
     {"tool": "check_setup", "args": {}},
     {"tool": "set_agent_roles", "args": {"serves": ["worker", "reviewer"],
                                          "reason": "a collector is code: only an AI worker can write it, and none filled the role"}},
     {"tool": "set_work_mode", "args": {"work": "code", "reason": "a collector must land in the repository for Orchestra to run it"}},
-    {"tool": "restart_machine", "args": {"name": "shell_worker", "reason": "it should pick up the new setup from a fresh start"}},
+]
+FILE = [  # the second, once the human stopped the shell worker
     {"tool": "create_ticket", "args": {**{k: COLLECTOR[k] for k in ("title", "objective", "description", "acceptance")},
                                        "verification": "The reviewer reads the diff and runs the script once.", "milestone_id": "M1"}},
 ]
@@ -65,7 +71,7 @@ def broken(tmp_path, monkeypatch):
     shutil.copy(FAKE, fake)
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     script = tmp_path / "supervisor.json"
-    script.write_text(json.dumps(STEPS))
+    script.write_text(json.dumps(LOOK))
     env = {"ORCHESTRATOR_HOME": str(tmp_path / "home"), "CLAUDE_BINARY": str(fake),
            "CLAUDE_CONFIG_DIR": str(tmp_path / "claude-home"), "FAKE_CLAUDE_SUPERVISOR": str(script)}
     for k, v in env.items():
@@ -74,14 +80,22 @@ def broken(tmp_path, monkeypatch):
     toml = target / "orchestra.toml"
     text = toml.read_text()
     assert 'work = "code"' in text and 'serves = ["worker", "reviewer"]' in text
-    toml.write_text(text.replace('work = "code"', 'work = "tasks"').replace('serves = ["worker", "reviewer"]', 'serves = ["reviewer"]'))
+    entry = text[text.index('[[machines]]\nname = "shell_worker"'):text.index("# ---- the task system")]
+    toml.write_text(text.replace('work = "code"', 'work = "tasks"').replace('serves = ["worker", "reviewer"]', 'serves = ["reviewer"]')
+                    .replace(entry, ""))
     git(target, "-c", "user.name=owner", "-c", "user.email=owner@example.invalid", "commit", "-qam", "last night's setup")
     port = free_port()
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
+    # the shell worker started by hand beside Orchestra, as a0953ac's run.py did: no [[machines]]
+    # entry and no --only-commands (instance "shell": the AI workers are worker/1, worker/2)
+    with (target / "run" / "shell_worker.log").open("ab") as log:
+        procs["shell_worker"] = subprocess.Popen([sys.executable, str(target / "machines" / "shell_worker.py"), "shell"], cwd=target,
+                                                 env={**os.environ, "ORCHESTRA_LOG": str(target / "run" / "shell_worker.log")},
+                                                 stdout=log, stderr=subprocess.STDOUT)
     try:
         wait_for(url, procs)
-        yield url, target
+        yield url, target, script, procs["shell_worker"]
     finally:
         stop(procs)
         left = runtime.read(load_project(target)).get("processes") or {}
@@ -89,35 +103,41 @@ def broken(tmp_path, monkeypatch):
 
 
 def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
-    url, target = broken
+    url, target, script, shell = broken
     from orchestra_agents.config import load_project as agents_project
     from orchestra_agents.events import Events
     from orchestra_agents.protocol import TaskClient
     ask = TaskClient(Events.for_project(agents_project(target), source="planner"), "planner")
     assert ask("create_milestone", {"name": "Measurements"})["milestone"]["id"] == "M1"
-    project = load_project(target)
-    wait_until("the shell worker", lambda: (runtime.read(project).get("processes") or {})["shell_worker"]["state"] == "running")
-    shell_pid = runtime.read(project)["processes"]["shell_worker"]["pid"]
+
+    def announced() -> bool:
+        return any(e["type"] == "orchestra.machine.started" and e["source"] == "worker/shell" for e in all_events(url))
+    wait_until("the shell worker", announced)
 
     lines = chat(url, "Add a measurement of the repository: how many files git tracks, logged to Orchestra's metrics.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
     reply = "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
     assert reply, lines
     assert "The AI agents here fill: reviewer" in reply               # check_setup saw what was wrong
-    assert '"commit"' in reply and "DEMO-1" in reply and "shell_worker was stopped and started again" in reply
+    assert "worker/shell fills the worker role but is not a [[machines]] entry" in reply     # ... and the program it cannot change
+    assert '"commit"' in reply
 
     # each change is a commit of orchestra.toml alone on main, with its reason, and on the bus
     log = git(target, "log", "--format=%s|%b", "main")
     assert "Supervisor: the AI agents fill worker, reviewer ([agents] serves)|a collector is code" in log
     assert "Supervisor: work is code ([project] work)|a collector must land in the repository" in log
     assert 'serves = ["worker", "reviewer"]' in git(target, "show", "main:orchestra.toml")
-    evs = all_events(url)
-    changed = [e for e in evs if e["type"] == "config.changed"]
+    changed = [e for e in all_events(url) if e["type"] == "config.changed"]
     assert [e["source"] for e in changed] == ["supervisor", "supervisor"]
     assert [e["data"]["section"] for e in changed] == ["agents", "project"]
-    [restarted] = [e for e in evs if e["type"] == "machine.restarted"]
-    assert restarted["data"]["pid_before"] == shell_pid and restarted["data"]["pid"] != shell_pid
-    assert runtime.alive(runtime.read(project)["processes"]["shell_worker"]["pid"])
+
+    # the human stops the program, as the Supervisor asked, and says so; the Supervisor files the ticket
+    shell.terminate()
+    shell.wait(timeout=10)
+    script.write_text(json.dumps(FILE))
+    lines = chat(url, "I stopped the shell worker. Go ahead with the measurement.")
+    assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
+    assert "DEMO-1" in "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
 
     # an AI worker takes the collector ticket, the reviewer approves, the gate lands it on main
     def done() -> bool:

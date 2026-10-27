@@ -147,6 +147,22 @@ def test_check_setup_says_who_fills_the_roles_and_what_runs(project, store):
     assert out["collectors"] == ["disk: (no log yet: it has not run)"]
 
 
+def test_check_setup_names_a_program_filling_a_role_that_orchestra_does_not_run(project, store):
+    from orchestra import runtime
+
+    launched = project.orchestra.logs_dir / "machines" / "shell_worker.log"
+    runtime.update(project.orchestra, lambda d: d.setdefault("processes", {}).__setitem__(
+        "shell_worker", {"owner": "project", "state": "running", "pid": 1, "log": str(launched)}))
+    store.events.publish("orchestra.machine.started", {"kind": "program", "listens_for": ["task.assigned"], "log": str(launched)},
+                         source="worker/shell")
+    store.events.publish("orchestra.machine.started", {"kind": "program", "listens_for": ["task.assigned"],
+                                                       "log": "run/worker.log"}, source="worker/1")
+    store.events.publish("orchestra.machine.started", {"kind": "agent", "listens_for": ["task.assigned"]}, source="worker/2")
+    [line] = see(project, store, "check_setup")["not_launched"]
+    assert line.startswith("worker/1 fills the worker role but is not a [[machines]] entry") and "run/worker.log" in line
+    assert "cannot restart or change it" in line
+
+
 def test_the_task_systems_snapshot_is_a_query_on_the_bus(project, store):
     with FakeTasks(project) as tasks:
         see(project, store, "create_milestone", name="M")

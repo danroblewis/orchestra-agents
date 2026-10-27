@@ -7,6 +7,8 @@ task system (orchestra-tasking) assigns one over Orchestra's event bus. Which pr
 session is a setting: Pi, Claude Code or Codex. An Orchestra plugin (`agents`) adds the Agents
 page, the Supervisor chat, and the agents' machine cards to Orchestra's web UI.
 
+How it works, with diagrams, the tools and the protocols: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 The agents change no ticket themselves and manage no branches: every ticket change is a request
 on the bus that the task system applies, and the task system prepares the workspace. The two
 packages import nothing from each other; the contract is `orchestra_agents/protocol.py`.

@@ -13,6 +13,7 @@ import tomllib
 from typing import Any
 
 import tomlkit
+from tomlkit.items import AoT
 from tomlkit.toml_document import TOMLDocument
 
 from .store import StoreError
@@ -36,13 +37,21 @@ def set_key(tbl, key: str, value: Any) -> None:
 
 
 def entries(doc: TOMLDocument, section: str, create: bool = False):
-    """The array of tables ``[[section]]`` (``gate.unit``: ``unit`` under ``[gate]``), or None."""
+    """The array of tables ``[[section]]`` (``gate.unit``: ``unit`` under ``[gate]``), or None.
+    Raises StoreError when the key holds something else (``[gate]`` with ``unit = "make test"``):
+    an entry cannot be added to it or found in it."""
     holder, key = (doc.get("gate"), "unit") if section == "gate.unit" else (doc, section)
+    if holder is not None and not isinstance(holder, dict):
+        raise StoreError(f"{section.split('.')[0]} is not a table; write [{section.split('.')[0]}] with [[{section}]] entries")
     if holder is None or key not in holder:
         if not create:
             return None
         holder = table(doc, "gate") if section == "gate.unit" else doc
         holder[key] = tomlkit.aot()
+    if not isinstance(holder[key], AoT):
+        where = "[gate] unit" if section == "gate.unit" else section
+        raise StoreError(f"{where} is not an array of tables; write each {'test' if section == 'gate.unit' else 'entry'} "
+                         f"as [[{section}]]")
     return holder[key]
 
 

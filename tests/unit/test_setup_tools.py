@@ -282,3 +282,27 @@ def test_a_task_system_that_does_not_know_the_query_does_not_stop_a_change(proje
         tasks.events.publish("orchestra.machine.started", {"package": "tasks", "mode": "continuous"})
         out = call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
     assert out["commit"] and [x["op"] for x in tasks.seen] == ["list_gate_runs"]
+
+
+@pytest.mark.parametrize("written,tool,args,said", [
+    ('\n[gate]\nunit = "make test"\n', "set_gate_unit", {"command": "make check"}, r"\[gate\] unit is not an array of tables; write each test as \[\[gate.unit\]\]"),
+    ('\ncollect = "machines/x.sh"\n', "set_collector", {"name": "disk", "command": "machines/disk.sh"}, r"collect is not an array of tables"),
+    ('\nscrape = []\n', "set_collector", {"name": "app", "url": "http://127.0.0.1:9100/metrics"}, r"scrape is not an array of tables"),
+])
+def test_an_entry_key_that_is_not_an_array_of_tables_is_refused_with_how_to_write_it(project, store, written, tool, args, said):
+    toml_path = project.repo_root / "orchestra.toml"
+    text = toml_path.read_text()
+    toml_path.write_text(written.lstrip("\n") + "\n" + text if not written.startswith("\n[") else text + written)
+    git(project.repo_root, "commit", "-qam", "written by hand")
+    with pytest.raises(StoreError, match=said):
+        call(project, store, tool, reason="the owner wants this measured", **args)
+
+
+def test_what_fails_after_the_commit_is_said_and_the_commit_is_still_announced(project, store, monkeypatch):
+    def broken(*a, **k):
+        raise RuntimeError("the runtime record is locked")
+    monkeypatch.setattr(store, "set_agent_state", broken)
+    out = call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
+    assert out["commit"] and "the runtime record is locked" in out["then_failed"]
+    [ev] = changed_events(store)
+    assert ev["commit"] == out["commit"] and ev["section"] == "project"

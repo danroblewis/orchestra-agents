@@ -239,10 +239,18 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
         done["recovered"] = recovered
     if done["commit"] is None:
         return {"ok": True, **done, "applies": "Nothing changed, so nothing applies or restarts."}
-    if plan.then:
-        plan.then()
-    applies = plan.applies()
+    # the commit is made: it is announced whatever happens after, and what fails after is said
+    try:
+        applies = plan.applies()
+    except Exception as e:  # noqa: BLE001 - the commit stands; only the description of it failed
+        applies = f"Committed; what applies now could not be worked out ({e}): read_config and check_setup show it."
     store.events.emit(CHANGED, section=plan.section, change=done["changed"], reason=a["reason"].strip(),
                       commit=done["commit"], applies=applies, by=author)
-    return {"ok": True, **done, "applies": applies,
-            "next": "Tell the human what you changed and why, the commit, and what applies now."}
+    out = {"ok": True, **done, "applies": applies,
+           "next": "Tell the human what you changed and why, the commit, and what applies now."}
+    if plan.then:
+        try:
+            plan.then()
+        except Exception as e:  # noqa: BLE001 - the commit stands and was announced
+            out["then_failed"] = f"the change is committed and announced, but what the agents do about it failed: {e}"
+    return out

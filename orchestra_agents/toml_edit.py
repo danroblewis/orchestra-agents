@@ -12,7 +12,10 @@ A change is made only when the checkout can take it as a commit of its own: the 
 is a git checkout on the base branch, and ``orchestra.toml`` has no uncommitted change (someone's
 edit in progress is never mixed into the Supervisor's). The commit holds ``orchestra.toml`` and
 nothing else, whatever else is changed in the checkout. When the commit fails the file is put
-back as it was, so a refused change leaves nothing behind.
+back as it was, so a refused change leaves nothing behind in the end; but the new text is written
+before it is committed, so for the moment between the two (a pre-commit hook's run, then the
+restore) the file holds a change that never became a commit, and Orchestra's launcher, which reads
+the file again within a second, may act on it (start an added machine, then stop it again).
 
 Nothing that looks like a secret is ever added (``secret_shapes``): the file is committed and
 every change is announced on the bus, so a change whose new lines hold a password, a token or a

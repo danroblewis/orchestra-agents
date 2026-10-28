@@ -21,6 +21,7 @@ Tool groups:
   roles        design the organisation: roles, agents, teams (the Supervisor)
   observe      read the whole system: the configuration, processes, logs, metrics, instruments, other
                time-series stores ([[sources]]), the model, the snapshot
+  flows        find_balance: the counters in the stores that fill and drain a given level (read only)
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
                overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
                collectors, any key), try a collector once, and restart a machine (the Supervisor only)
@@ -78,8 +79,8 @@ def register(role: Role) -> Role:
 
 register(Role(
     name="supervisor", prompt="supervisor",
-    tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "setup", "model",
-           "experiments", "replay", "predict"),
+    tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
+           "model", "experiments", "replay", "predict"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}"),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
               "the project not set up yet, when the host starts (first_run.py)"),
@@ -92,7 +93,7 @@ register(Role(
 ))
 register(Role(
     name="coordinator", prompt="coordinator",
-    tools=("tickets", "planning", "guides", "capacity", "escalate", "model", "experiments", "replay"),
+    tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model", "experiments", "replay"),
     wake_on=(f"{ATTENTION}:{COORDINATOR}", f"{REQUESTED}:{COORDINATOR}"),
     emits=(REQUESTS["create_milestone"], REQUESTS["create_ticket"], PLANNED, REQUESTS["update_ticket"],
            REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"], REQUESTS["set_capacity"]),

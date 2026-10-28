@@ -265,8 +265,8 @@ TOOLS: list[ToolDef] = [
              "auth": O("With url: as [[sources]] writes it: {\"bearer_file\": \"~/path/to/token\"} for a token in a file, "
                        "{\"bearer_env\": \"WORK_TOKEN\"} for one in the environment; never the token itself")}),
     ToolDef("source_schema", "observe",
-            "What a store has: without match, every metric name on one line (its type, or a guess from its name; how many "
-            "series; each label with how many values); with match, those metrics in detail (help, label values).",
+            "What a store has: without match, every metric name with its type (or a guess from its name), and its levels (gauges "
+            "of amounts held, with what each holds); with match, those metrics in detail (series, labels, help, label values).",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
              "match": A("PromQL selectors, e.g. {__name__=~\"http_.*\"}"), "minutes": I("The window, default 60"),
              "limit": I("Most series read, default 20000")}),
@@ -280,7 +280,27 @@ TOOLS: list[ToolDef] = [
             "What Orchestra infers to read from a store for discovery: its metric families (kind, stats, interval, labels "
             "and their roles), the definitions it keeps (query, view, kind, score) and those it leaves out with why.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
-             "match": A("PromQL selectors to narrow it")}),
+             "match": A("PromQL selectors to narrow it"),
+             "refresh": B("Infer again now (it reads the store's schema); by default a recent inference is reused")}),
+    # flows: one level's flows, searched for in the stores (read only)
+    ToolDef("find_balance", "flows",
+            "The counters that fill and drain a level (or each of a list), searched for in the stores with Orchestra's own discovery: candidates "
+            "that share a word with the level (its queue, topic, pool, service) in its unit, in every declared store or the ones "
+            "given, read for one window; for each balance found, the counters with their sign (inflow +, outflow −), the fit "
+            "(R², exact share, held-out R², running residual, shift null), whether discovery would accept it and why not, what "
+            "stays unmeasured, and the [[series]] entries that declare it (stock, role) for set_setting key series.",
+            {"level": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                       "description": "The level, a PromQL selector (e.g. rabbitmq_queue_messages{queue=\"email\"}; it is "
+                                      "summed), a list of them (source_schema's levels as written), or \"all\": every "
+                                      "level of the stores searched, each searched in turn"},
+             "source": S("The level's store, a [[sources]] name (default: the first declared)"),
+             "url": S("Or the level's store by URL"), "auth": O("With url: as [[sources]] writes it"),
+             "sources": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}, "description": "The stores to search: [[sources]] names, or "
+                         "{\"url\": ..., \"auth\": ...} objects (default: every declared one, and the level's)"},
+             "candidates": A("Test these counters instead of searching (selectors; prefix one with <store>: for another store)"),
+             "max_candidates": I("Most metric names read as candidates, default 16"), "stock": S("The stock's name in the declarations"),
+             "minutes": I("The window, default 60"), "step_s": I("Seconds per step, default the discovery step")},
+            ("level",)),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment."),

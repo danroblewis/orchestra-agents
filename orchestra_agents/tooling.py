@@ -20,6 +20,7 @@ from typing import Any
 
 from . import (
     access,
+    balance_tools,
     guides,
     handoff,
     instruments,
@@ -160,6 +161,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return instruments.try_collector(project, a)
     if command in source_tools.COMMANDS:
         return source_tools.COMMANDS[command](project, a)
+    if command in balance_tools.COMMANDS:
+        return balance_tools.COMMANDS[command](project, a)
     if command == "list_guides":
         return guides.list_guides(project)
     if command == "read_guide":
@@ -185,7 +188,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
 PLANNERS = set(PLANNER_ROLES)
 SYSTEM_COMMANDS = frozenset({"restart_machine", "check_setup", "read_config", "list_processes", "read_machine_log",
-                             "list_metrics", "get_model", "read_instrument", "try_collector", *source_tools.COMMANDS})
+                             "list_metrics", "get_model", "read_instrument", "try_collector", *source_tools.COMMANDS,
+                             *balance_tools.COMMANDS})
 PLANNING = frozenset({"create_ticket", "create_milestone", "update_milestone", "close_milestone"})   # the Coordinator's          # they read the setup (observe.py, restart.py)
 
 

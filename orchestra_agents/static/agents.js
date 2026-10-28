@@ -135,10 +135,15 @@ async function loadOlderTranscript() {
     $("transcript-more").textContent = p.hasMore ? "scroll for older messages…" : "beginning of session";
   } finally { p.loading = false; }
 }
-document.addEventListener("DOMContentLoaded", () => {
+// An open transcript follows its session and pages back as the drawer scrolls. On the pages that
+// load this file late (every page but the Agents page: attention.js and machine-cards.js load it
+// on demand, after the page has loaded) DOMContentLoaded has passed, so it starts at once there.
+function agentsFollowTranscripts() {
   $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && el.scrollTop + el.clientHeight > el.scrollHeight - 300) loadOlderTranscript(); });
   setInterval(refreshTranscript, TRANSCRIPT_POLL_MS);
-});
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", agentsFollowTranscripts);
+else agentsFollowTranscripts();
 
 async function sendToSupervisor(ev) {
   ev.preventDefault();
@@ -236,21 +241,72 @@ function splitSupervisorPrompt(text) {
   const context = lines.slice(0, cut).join("\n").trimEnd();
   return { context, contextLines: context.split("\n").length, human: lines.slice(cut).join("\n") };
 }
+// A wake-up is Orchestra's prompt to an agent the human did not write: what woke it, then the
+// whole project snapshot. In a transcript it is one line, the reasons, with the prompt folded under
+// it, so what the agent answered is what the eye lands on.
+function wakeReasons(text) {
+  const at = text.indexOf("## Why you were woken");
+  if (at < 0) return [];
+  return text.slice(at).split("\n## ")[0].split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).trim()).filter(Boolean);
+}
+function renderWake(m) {
+  const who = (m.text.match(/# Wake-up for the ([^\n]+)/) || [])[1] || "agent";
+  const why = wakeReasons(m.text), first = why.slice(0, 2).map((r) => esc(r.slice(0, 160))).join("; ") || "an event";
+  return `<details class="msg marker wake"${m.i != null ? ` data-i="${m.i}"` : ""}><summary><b>Orchestra woke the ${esc(who)}</b>, not a message from you: ${first}${why.length > 2 ? ` · and ${why.length - 2} more` : ""}${msgTime(m)}</summary>
+    <div class="prompt md">${md(m.text.slice(0, 12000))}</div></details>`;
+}
 function renderMessage(m) {
   if (m._marker) return renderMarker(m);
+  const at = m.i != null ? ` data-i="${m.i}"` : "";
   if (m.role === "toolResult") {
     const shell = SHELL_TOOLS.has(m.tool_name);
     const body = shell ? `<pre class="term">${highlightLog(m.text)}</pre>` : `<pre><code>${esc(m.text)}</code></pre>`;
-    return `<div class="msg toolResult ${m.is_error ? "err" : ""}"><div class="r">result · ${esc(m.tool_name || "tool")}${m.is_error ? ' <span class="bad">error</span>' : ""}${msgTime(m)}</div>${body}</div>`;
+    return `<div class="msg toolResult ${m.is_error ? "err" : ""}"${at}><div class="r">result · ${esc(m.tool_name || "tool")}${m.is_error ? ' <span class="bad">error</span>' : ""}${msgTime(m)}</div>${body}</div>`;
   }
   if (m.role === "user") {
+    if (m.text.startsWith("# Wake-up for ") || (m.text.startsWith("[Orchestra:") && m.text.includes("\n# Wake-up for "))) return renderWake(m);
     const split = splitSupervisorPrompt(m.text);
     if (split) return `<details class="msg marker context"><summary>context the Supervisor was given (${split.contextLines} lines)</summary><div class="prompt md">${md(split.context.slice(0, 12000))}</div></details>
-      <div class="msg user"><div class="r">you${msgTime(m)}</div>${md(split.human.slice(0, 12000))}</div>`;
+      <div class="msg user"${at}><div class="r">you${msgTime(m)}</div>${md(split.human.slice(0, 12000))}</div>`;
     const who = FROM_ORCHESTRA.test(m.text) ? "orchestra" : "you";
-    return `<div class="msg user"><div class="r">${who}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}</div>`;
+    return `<div class="msg user"${at}><div class="r">${who}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}</div>`;
   }
-  return `<div class="msg ${m.role}"><div class="r">${m.role}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}${m.tool_calls.map(renderToolCall).join("")}</div>`;
+  return `<div class="msg ${m.role}"${at}><div class="r">${m.role}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}${m.tool_calls.map(renderToolCall).join("")}</div>`;
+}
+
+// One turn of a session, in order, for reading at a glance (the ticket drawer's agent sessions,
+// ticket-sessions.js): the prompt folded to its first line, what the agent wrote, each tool call
+// folded to its name and gist with its result inside, the host's stops, and the last words open.
+function toolGist(c) {
+  const a = c.args && typeof c.args === "object" ? c.args : {};
+  const v = a.command || a.path || a.file_path || a.state || a.verdict || a.message || a.summary || a.pattern || a.query || "";
+  return typeof v === "string" ? v.split("\n")[0].slice(0, 90) : "";
+}
+function renderTurn(msgs, markers) {
+  const out = [];
+  const lastText = [...msgs].reverse().find((m) => m.role === "assistant" && m.text.trim());
+  const pending = [];   // tool results waiting for the call they answer: in order, one per call
+  msgs.forEach((m) => {
+    if (m.role === "user") {
+      const first = m.text.split("\n").find((l) => l.trim() && !l.startsWith("[Orchestra:")) || m.text.split("\n")[0];
+      out.push(`<details class="tt-prompt"><summary><span class="muted">${FROM_ORCHESTRA.test(m.text) ? "prompt" : "message"}${msgTime(m)}</span> ${esc(first.replace(/^#+\s*/, "").slice(0, 140))}</summary><div class="prompt md">${md(m.text.slice(0, 12000))}</div></details>`);
+    } else if (m.role === "assistant") {
+      if (m.text.trim()) out.push(`<div class="tt-say ${m === lastText ? "last" : ""}">${md(m.text.slice(0, 12000))}</div>`);
+      (m.tool_calls || []).forEach((c) => { const slot = { c, res: null }; pending.push(slot); out.push(slot); });
+    } else if (m.role === "toolResult") {
+      const slot = pending.find((x) => !x.res && (x.c.name === m.tool_name || m.tool_name === "?")) || pending.find((x) => !x.res);
+      if (slot) slot.res = m; else out.push({ c: { name: m.tool_name || "tool", args: {} }, res: m });
+    }
+  });
+  const html = out.map((x) => {
+    if (typeof x === "string") return x;
+    const { c, res } = x, gist = toolGist(c), err = res && res.is_error;
+    const shown = c.args && typeof c.args === "object" && Object.keys(c.args).length ? JSON.stringify(c.args, null, 1) : "";
+    return `<details class="tt-tool ${err ? "err" : ""}"><summary>⚙ <b>${esc(c.name)}</b>${gist ? ` <code>${esc(gist)}</code>` : ""}${res ? (err ? ' <span class="bad">error</span>' : "") : ' <span class="muted">· no result yet</span>'}</summary>
+      ${shown ? `<pre><code class="language-json">${esc(shown.slice(0, 3000))}</code></pre>` : ""}${res ? `<div class="r muted">result</div><pre class="term">${esc((res.text || "(empty)").slice(0, 6000))}</pre>` : ""}</details>`;
+  });
+  (markers || []).forEach((e) => html.push(renderMarker(e)));
+  return html.join("") || '<div class="empty">No messages in this turn yet.</div>';
 }
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });

@@ -110,8 +110,25 @@ def agents_status(project: Project, store: AgentStore) -> dict:
                          "ticket": ({"id": x["ticket_id"], "title": x.get("ticket_title") or "", "state": x.get("ticket_state") or "IN_PROGRESS",
                                      "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})
     cfg = project.config
-    return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "now": time.time(),
-            "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
+    return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "recent": recent_sessions(rt),
+            "now": time.time(), "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
+
+
+def recent_sessions(rt: dict, per_role: int = 8) -> list[dict]:
+    """The per-ticket sessions that are over (their ticket finished, or their turn ended), newest
+    first, a few per role: the machine cards' "finished" list, so a worker's or reviewer's
+    transcript is a click away after its instance has moved on."""
+    done = [x for x in [*rt["sessions"].values(), *rt.get("archived_sessions", {}).values()]
+            if x.get("ticket_id") and x.get("status") != "running"]
+    done.sort(key=lambda x: x.get("settled_at") or x.get("started_at") or 0, reverse=True)
+    out, per = [], {}
+    for x in done:
+        role = x.get("kind") or ""
+        per[role] = per.get(role, 0) + 1
+        if per[role] <= per_role:
+            out.append({"session": x["id"], "role": role, "instance": x.get("instance") or role, "ticket": x["ticket_id"],
+                        "title": x.get("ticket_title") or "", "settled_at": x.get("settled_at"), "last_text": (x.get("last_text") or "")[-200:]})
+    return out
 
 
 def measured_roles(project: Project) -> list[str]:

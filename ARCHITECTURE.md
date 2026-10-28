@@ -159,7 +159,8 @@ The modules, grouped by job:
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
 | Bus, state, settings, metrics | `events.py`, `store.py`, `config.py`, `measures.py`, `listening.py` |
-| UI | `static/agents.html`, `static/agents.js`, `static/agents.css`, `static/attention.js`, `static/machine-cards.js` |
+| UI | `static/agents.html`, `static/agents.js`, `static/agents.css`, `static/attention.js`, `static/machine-cards.js`, `static/ticket-sessions.js` |
+| What the UI reads of transcripts | `session_turns.py` (a transcript as turns; the turns on a ticket), `attention.py` (the Supervisor's unread message) |
 
 ---
 
@@ -178,7 +179,7 @@ agents = "orchestra_agents.web:plugin"
 |---|---|---|
 | Name | `agents` (API at `/api/plugins/agents`, static files at `/plugins/agents/static/`) | `web.plugin` |
 | Pages | `/agents`, titled "Agents" (`static/agents.html`) | `web.plugin` |
-| Scripts on every page | `attention.js`, `machine-cards.js` | `web.plugin` |
+| Scripts on every page | `attention.js`, `machine-cards.js`, `ticket-sessions.js` | `web.plugin` |
 | Stylesheets on every page | `agents.css` | `web.plugin` |
 | API router | see [section 13](#13-web-panels-and-machine-cards) | `web.router` |
 | Declared machines | every agent from `org_store.all_agents` (kind `agent`, `continuous` if resident or `ad hoc`, and what it listens for, `listening.listens_for`). The host is not one. | `web.declared` |
@@ -1137,9 +1138,11 @@ The router is `web.router`. The organisation, agents and chat endpoints reload `
 | `GET /roles/{name}`, `/agents/{name}`, `/teams/{name:path}` | The organisation views, or 404 |
 | `GET /agents` | `org_views.agents_status`: host `{port, pid, alive}`, agents, every session as an instance with its ticket (`{id, title, state, worker_turns}`), harness, model, serves |
 | `GET /state` | Sessions with `alive`, the probes, and the control record |
-| `GET /sessions/{id}/transcript?before=&limit=&after=` | A page of the harness transcript, newest first, plus `markers`, `started_with` (the prompt) and the host |
+| `GET /sessions/{id}/transcript?before=&limit=&after=` | A page of the harness transcript, newest first (each message with its index `i`), plus `markers`, `started_with` (the prompt) and the host |
+| `GET /sessions?ticket=<id>` | `session_turns.ticket_sessions`: every agent turn on the ticket, oldest first: `{session, role, instance, turn, kind, own, started, ended, running, outcome, reply, touched, start, end, archived}` |
+| `GET /sessions/{id}/messages?start=&end=` | One turn's messages in order (`end` omitted: to the end), with the markers of its time |
 | `GET /metrics` | The agents' measurements as Prometheus text (`measures.exposition`), what the instrument reads |
-| `GET /attention` | `{message (Supervisor text not yet read), working, count, host.alive}` |
+| `GET /attention` | `{message, working, count, host.alive}`; `message` (`attention.unread`) is the newest Supervisor reply for the human since `supervisor_seen_at`: `{text, at, index (in the transcript), count, kind, woken_by, in_chat}`, or null |
 | `POST /attention/seen` | Marks the Supervisor as read (`supervisor_seen_at`) |
 | `POST /supervisor` | The chat (see above) |
 
@@ -1152,12 +1155,25 @@ The screens:
   cdnjs.
 - **Attention** (`static/attention.js`, on every page): a Supervisor button in the navigation,
   and a banner when a message is unread or tickets are blocked. Blocked tickets are read from the
-  task plugin when it is installed, and that plugin's own banner is asked to stand aside.
+  task plugin when it is installed, and that plugin's own banner is asked to stand aside. A
+  message is only a reply the human can see and answer (`attention.py`): a turn an event woke
+  that ends empty or with a bare acknowledgement is not one, nor the turn still running. Opening
+  the chat marks the reply "for you" in the transcript (by its index), or shows its text when the
+  transcript does not hold it; a reply that arrives while the chat is open and visible is read.
+  A wake-up prompt in a transcript is one line (why the agent was woken) with the prompt folded.
+- **Agent sessions in the ticket drawer** (`static/ticket-sessions.js`): the task system
+  announces each ticket drawer as `tasks:ticket-drawer` on `document` (`{id, ticket, mount}`);
+  this fills `mount` from `GET /sessions?ticket=`, polls while the drawer is open, and opens a
+  turn inline (`agents.js` `renderTurn`: the prompt and each tool call with its result folded,
+  the last words open) or the whole session (`openTranscript`, whose ticket link leads back).
 - **Machine cards** (`static/machine-cards.js`, inside Orchestra's `machineCards` frame):
   - A resident agent is a row with what it last said and a session chip.
   - A worker or reviewer role shows a card per ticket an instance is on, in the ticket's state
     colour, with a "↺n" badge when `worker_turns ≥ 2` and a lane with what the agent is saying
-    now.
+    now, and under it "finished sessions": the role's recent per-ticket sessions that are over
+    (`org_views.recent_sessions`, `recent` in `GET /agents`), each opening its transcript.
+  - A per-ticket role's machine shows its tickets even when a program fills the role beside the
+    agents (its mode is then mixed).
   - The host has no card: it is no machine.
   - A machine that has any agent instance is shown as an agent (`kindOf`).
 

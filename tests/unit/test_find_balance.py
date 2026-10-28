@@ -52,3 +52,13 @@ def test_a_level_with_a_staging_copy_is_kept_to_production():
     assert _production("queue_depth", sets) == 'queue_depth{env="prod"}'
     assert _production('queue_depth{env="staging"}', sets) == 'queue_depth{env="staging"}'   # named: kept as asked
     assert _production("queue_depth", [{"env": "prod"}]) == "queue_depth"
+
+
+def test_the_store_listing_names_its_levels_with_what_each_holds():
+    from orchestra_agents.source_tools import _levels
+    fams = {"rabbitmq_queue_messages": 2, "rabbitmq_queue_messages_published_total": 2, "envoy_http_downstream_cx_active": 1,
+            "process_resident_memory_bytes": 1, "http_request_duration_seconds_bucket": 9, "fulfilment_email_queueDepth": 1}
+    values = {"rabbitmq_queue_messages": {"queue": {"a", "b"}}, "rabbitmq_queue_messages_published_total": {"queue": {"a", "b"}}}
+    values = {n: values.get(n, {}) for n in fams}
+    got = _levels(fams, values, lambda n: "counter" if n.endswith("_total") else "gauge")
+    assert got == ["envoy_http_downstream_cx_active", "fulfilment_email_queueDepth", "rabbitmq_queue_messages by queue: a, b"]

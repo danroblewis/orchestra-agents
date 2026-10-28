@@ -180,11 +180,10 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    them, then requests and their errors. Production only: a staging or test twin is never read.
    One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
    flags, timestamps and the exporters' own timings as stocks.
-   **A stock is only half found without its flows.** Go through the whole name list for levels:
-   every gauge of an amount held (a queue's depth or messages, a consumer group's lag, open or
-   active connections, sessions, a volume's used bytes, an inventory, jobs in progress), in every
-   family, including proxies' and the platform's. Call `find_balance` on each **before declaring
-   it** (one call per queue, group or volume, never one summed over several): it searches every
+   **A stock is only half found without its flows.** `source_schema` lists the store's `levels`,
+   gauges of amounts held (queues, consumer lag, open connections, sessions, volumes' used
+   bytes, inventories), proxies' and the platform's included. Call `find_balance` on each one the
+   system's work fills and drains **before choosing what to read** (one call per queue, group or volume, never one summed over several): it searches every
    declared store, or those you pass in `sources` (`{"url", "auth"}` for one not declared yet),
    for the counters that fill and drain it, and returns the balance, its fit and the
    `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list), and

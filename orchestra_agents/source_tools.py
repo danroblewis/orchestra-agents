@@ -111,6 +111,10 @@ def source_schema(project: Project, a: dict) -> dict:
     else:
         out["names"] = [f"{n} [{kind(n)}] {fams[n]} series" + ("; " + ", ".join(f"{k}={len(v)}" for k, v in sorted(values[n].items()))
                                                              if values[n] else "") for n in sorted(fams)][:SHOWN_NAMES]
+        if lv := _levels(fams, values, kind):
+            out["levels"] = lv
+            out["levels_note"] = ("gauges of amounts held: each may be a stock. Call find_balance on each that the system's "
+                                  "work fills and drains (one per queue, group or volume), before choosing what to read")
         idle = sorted(set(meta) - set(fams))
         if idle:
             out["described_but_no_series_in_window"] = idle[:100]
@@ -134,6 +138,31 @@ def source_schema(project: Project, a: dict) -> dict:
                     "as increments or a rate. A label with many values (ids, paths, pods) multiplies series: sum it away unless "
                     "it names the thing you model.")
     return out
+
+
+LEVEL_WORDS = re.compile(r"(^|_)(depth|messages|lag|active|open|inflight|in_flight|pending|backlog|queued|ready|unacked|"
+                         r"waiting|used|inventory|units|sessions|connections|items|jobs|size)($|_)", re.IGNORECASE)
+NOT_LEVELS = re.compile(r"_(total|bucket|count|sum|created|seconds|ratio|percent|timestamp|info)$|(^|_)(cpu|memory|heap|gc|"
+                        r"threads?|goroutines|fds|scrape|up)($|_)", re.IGNORECASE)
+SUBJECTS = ("queue", "consumergroup", "group", "topic", "persistentvolumeclaim", "volume", "pool", "warehouse",
+            "cluster_name", "envoy_cluster_name", "deployment")
+
+
+def _levels(fams: dict, values: dict, kind) -> list[str]:
+    """The gauges that look like amounts held (``LEVEL_WORDS``, not ``NOT_LEVELS``), each with the
+    label that names what it holds and a few of its values: the levels to search flows for."""
+    out = []
+    for n in sorted(fams):
+        snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", n)
+        if not LEVEL_WORDS.search(snake) or NOT_LEVELS.search(snake) or "counter" in kind(n):
+            continue
+        sub = next((k for k in SUBJECTS if k in values[n]), None)
+        if sub:
+            vals = sorted(values[n][sub])
+            out.append(f"{n} by {sub}: " + ", ".join(vals[:6]) + (f" (+{len(vals) - 6})" if len(vals) > 6 else ""))
+        else:
+            out.append(n)
+    return out[:40]
 
 
 def _lateness(src, names: list[str], now: float) -> dict[str, float]:

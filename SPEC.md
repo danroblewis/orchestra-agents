@@ -11,6 +11,27 @@ agents cost nothing.
 It meets the task system (orchestra-tasking) only on Orchestra's bus. This file is the design;
 `AGENTS.md` is the short list of rules that must not be broken.
 
+**What the Agents plugin is** (the owner, 2026-10-27). A target repository normally defines its
+own machines: its author writes programs that publish and listen on the bus under the machine's
+own `source`, or a bridge relays another system's actors as machines. The Agents plugin is a
+common resource for the same thing. It provides four things:
+
+- an **implementation of a machine**: the AI agent, a universal machine that does whatever its
+  role's prompt and tools make it do;
+- the **means to configure one**: roles (its job and tools), the harness and the model that run
+  it, how it is engaged (resident, scheduled, ad hoc; its `wake_on` events), and its permissions
+  (tool groups, access, the team it answers to);
+- a **shared runtime** that runs the configured agents: the host (`orchestra-agents run`). The
+  host is **not a machine**. It never announces itself, never publishes under its own name
+  (`agents`) and writes no metrics; everything it does on the bus it does as the agent it is
+  running (section 4);
+- **UI additions** to Orchestra's web app: the Agents page, transcripts, the Supervisor chat and
+  the agents' machine cards (section 8).
+
+So the machines are the configured agents (`supervisor`, `coordinator`, `worker/1`, a custom
+agent): each announces itself, publishes as itself and is known by what it publishes. The plugin
+that provides them is never one of them.
+
 ## 1. What it is, and is not
 
 - It knows **roles, agents, teams, sessions, transcripts, harnesses and tools**: who an agent is,
@@ -24,6 +45,8 @@ It meets the task system (orchestra-tasking) only on Orchestra's bus. This file 
 - Everything an agent does to the project is **visible on the bus**: its turns, its requests, its
   reports, with the ticket as subject and the agent's instance as source, so Orchestra's
   Machines page shows the agents as machines without reading any payload.
+- It is **not a machine itself**, and neither is its host (above): Orchestra's Machines page shows
+  the configured agents and nothing named `agents`.
 
 ## 2. The organisation (`builtins.py`, `roles.py`, `org.py`, `org_store.py`, `prompts/`)
 
@@ -165,7 +188,8 @@ given `review.approved` as well.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
-`orchestra-agents run` is one process per project, the machine `agents`. Orchestra's launcher
+`orchestra-agents run` is one process per project, and no machine: the runtime the configured
+agents run in (section 1). Orchestra's launcher
 starts it: the plugin declares it in `Plugin.processes` when the project's `orchestra.toml` has an
 `[agents]` section (`web.processes`), so `orchestra run` keeps it running in the interpreter
 Orchestra runs in, as the process `agents.host`; a project without the section gets the pages and
@@ -176,11 +200,26 @@ to `SHUTDOWN_REPORTS_S` (10 s) for their reports, then closes the resident sessi
 close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace it declares
 (`web.STOP_GRACE_S`), so Orchestra's launcher never kills it mid-way. It:
 
-- announces itself with `orchestra.machine.started` (package `agents`, continuous, what it
-  acts on as itself: `gate.landed`, `request.done`, `review.approved` and `ticket.created`, by
-  which it archives a finished ticket's sessions and follows the human's tickets; its log), and announces every agent instance it starts (an AI agent, on which
-  harness and model; a resident agent is continuous, its session always up, a per-ticket or
-  ephemeral one ad hoc), so Orchestra's Machines page shows each agent as a machine;
+- never announces itself and never publishes as itself (`events.py` refuses a publish as
+  `agents`, or with no source). It announces every agent instance it starts, as that instance
+  (an AI agent, on which harness and model; a resident agent is continuous, its session always
+  up, a per-ticket or ephemeral one ad hoc), so Orchestra's Machines page shows each agent as a
+  machine. Each announcement's `listens_for` is what the host watches on that agent's behalf
+  (`listening.py`), so every subscription is drawn to the agent that reacts:
+
+  | Agent | Listens for | Why |
+  |---|---|---|
+  | each agent | its `wake_on` types | its wake-ups |
+  | each agent the host wakes (every resident, scheduled or ad hoc agent; not a worker or reviewer) | `request.done`, `request.refused` | the answers to its own requests: the snapshot each wake-up asks for as the agent, and its tools' requests. The task system publishes the answer as the asker (its D17) |
+  | the Supervisor | `gate.landed`, `request.done`, and in tasks mode `review.approved` (`protocol.endings`) | the end of a ticket it created for the human, which it then tells the human about (`landings.py`) |
+  | the Supervisor | `ticket.created` | how it remembers which tickets were its own (`by` = supervisor) |
+  | a worker, a reviewer | `task.assigned`, `review.requested` or `changes.requested`, `task.released` | its role's `wake_on`: the offers it answers (runner.py) |
+
+  What wakes an agent without an event on the bus is not listed (a human's message, another
+  agent's brief or message, a crash loop: `builtins.Role.triggers`), and neither is what the host
+  reads only for its own bookkeeping (a finished ticket's sessions go to the archive). The plugin
+  declares the same agents and lists for the Machines page before they run (`web.declared`), and
+  declares no machine for the host;
 - opens the resident sessions up front and keeps them up: a process that exits between turns is
   recorded (`agent.crashed`) and restarted; three exits in fifteen minutes pause the agent
   (`agent.crash_loop`) and wake the Supervisor;
@@ -264,21 +303,36 @@ Events the host and the agents publish: `session.started`, `session.settled`, `a
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, `config.changed` and `machine.restarted` from the Supervisor's setup tools
 (section 10), and a team's own declared types raised with `emit_event` (rate-limited, and
-refused when the cause chain is three deep). The source of a session's events is the agent's
-instance; the host's own are `agents`. The web plugin publishes nothing.
+refused when the cause chain is three deep). The source of every one of them is an agent: a
+session's events are the agent's instance (the slot bound to the session, or after the slot was
+given back the instance its record names: a turn the previous host left running is cut as
+`worker/3`, not as the host); an agent's tool calls are `ORCHESTRA_SOURCE`, the same instance; a
+team's probe is the team's lead's (section 5). The host has no source of its own. The web plugin
+publishes nothing.
 
-Metrics (`measures.py`, Orchestra's metrics store): `agents_working{role, machine}` and the
-counters `agent_turns_started_total{role, machine}`, `agent_turns_finished_total{role, machine}`,
-named for what they measure: `role` names the series, `machine` (the instance's machine,
-`worker` for `worker/1`) lets discovery attribute it to that machine; the model generator decides
-what is a stock or a flow.
+Metrics (`measures.py`): the host writes none. It keeps the counters in its runtime record, moved
+in the same write as the session's status, and the plugin declares the instrument that reads
+them (`Plugin.collectors`, `web.collectors`): `orchestra run` runs `orchestra-agents metrics`
+every discovery step, which prints them as Prometheus text from the record, and Orchestra labels
+every point `instrument=agents.turns` (and `project`). The same text is served at
+`GET /api/plugins/agents/metrics`. The series: `agents_working{role, machine}` (every measured
+role: the resident agents and the roles `serves`, even at 0) and the counters
+`agent_turns_started_total{role, machine}`, `agent_turns_finished_total{role, machine}`, named for
+what they measure: `role` names the series, and `machine` (the instance's machine, `worker` for
+`worker/1`) is the measured system's own dimension, which discovery may read as attribution; the
+model generator decides what is a stock or a flow. Until 2026-10-27 the host wrote these points
+itself at each turn's start and end; the names and the `role` and `machine` labels are kept,
+`instrument` is new, and the level is sampled each discovery step instead of at each change, so a
+turn shorter than a step may not move it (the counters still count every turn).
 
 ## 5. Probes (`probes.py`)
 
 A team may declare probes: a command with an interval, run in the team's space with the team
 chain's tools on PATH. Exit 0 means the condition holds. The host remembers each probe's last
 result and emits `probe.failed:<name>` and `probe.recovered:<name>` only on the transition, so an
-agent subscribed to a probe wakes once per failure. (The task system's own probes, `[[probes]]`
+agent subscribed to a probe wakes once per failure. The host is no machine, so the event is
+published as the agent whose responsibility the team is: its lead, or the Supervisor for a team
+with none. (The task system's own probes, `[[probes]]`
 in `orchestra.toml`, are its; they are not these.)
 
 ## 6. Harnesses and tools (`harness/`)
@@ -400,7 +454,8 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
   (read from its plugin when installed; its own banner is asked to stand aside) (`attention.js`);
 - the agents' **machine cards** on the Dashboard and the Machines page (`machine-cards.js`): a
   resident agent is a row with what it last said; a worker or reviewer role is the tickets its
-  instances are on, with what each is saying now; the host is a line.
+  instances are on, with what each is saying now. The host has no card: it is no machine (whether
+  it is up shows on the Agents page and on each agent's session chip).
 
 The agents' look, `agents.css`, is a stylesheet the plugin declares, which Orchestra links in every
 page's head. `agents.js` renders markdown itself (marked and DOMPurify, code coloured by
@@ -409,7 +464,8 @@ highlight.js, each loaded once from cdnjs); Orchestra renders none.
 API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
 (the organisation); `GET /agents` (every agent and every session as the instance it runs as,
 with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
-`GET /sessions/{id}/transcript` (paged, with the markers); `GET /attention`
+`GET /sessions/{id}/transcript` (paged, with the markers); `GET /metrics` (the agents'
+measurements as Prometheus text, as the instrument reads them); `GET /attention`
 (the unread message, and whether the host that answers is up: with it down the banner and the
 button stop offering an answer) and `POST /attention/seen`; `POST /supervisor` (a message to the
 Supervisor, proxied to the host, streamed). Every read re-reads `[agents]` from `orchestra.toml`,

@@ -88,10 +88,13 @@ def _announced_log(store: AgentStore, name: str) -> str | None:
 
 def read_machine_log(project: Project, store: AgentStore, a: dict) -> dict:
     """The end of a machine's log: a launched process's or a collector's (``logs/machines/<name>.log``),
-    Orchestra's host's (``orchestra-host``), or the log a machine announced when it started."""
+    Orchestra's host's (``orchestra-host``), the agents' host's (``agents.host``: no machine, so it
+    announces no log), or the log a machine announced when it started."""
     name, lines = (a.get("name") or "").strip(), max(1, min(int(a.get("lines") or 80), 400))
     o = project.orchestra
     candidates = [o.logs_dir / "orchestra-host.log"] if name in ("orchestra-host", "orchestra") else []
+    if name in ("agents", "agents.host"):
+        candidates.append(project.logs_dir / "agents-host.log")
     candidates.append(o.logs_dir / "machines" / f"{name}.log")
     if announced := _announced_log(store, name):
         candidates.append(announced)

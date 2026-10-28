@@ -53,6 +53,7 @@ def test_team_probe_runs_in_the_space_with_tools_on_path(project):
     tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
     specs = team_probes(project, all_teams(project))
     assert [s.name for s in specs] == ["docs_budget"] and specs[0].every == 1800 and specs[0].team == "product"
+    assert specs[0].source == "po"                                   # its events are the team lead's: the host is no machine
     prober = Prober(project, store, events)
     run_probe(prober, specs[0])
     assert store.probe_state("docs_budget")["status"] == "ok", store.probe_state("docs_budget")["output"]

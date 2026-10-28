@@ -50,20 +50,20 @@ def wait_for(events, type_, n=1, timeout=10):
 
 def assigned(events, aid, ticket, workspace, role="worker"):
     events.publish("task.assigned", {"assignment": aid, "role": role, "ticket": ticket, "kind": "work", "workspace": str(workspace),
-                                     "branch": None, "lease_s": 180, "brief": {"id": ticket, "title": "t", "description": "d"}}, subject=ticket)
+                                     "branch": None, "lease_s": 180, "brief": {"id": ticket, "title": "t", "description": "d"}}, source=role, subject=ticket)
 
 
 def test_attention_wakes_the_planner_it_names(project):
     host, store, events = host_with(project, FakeHarness(reply="ok"))
     host._refresh_org(store.runtime()["agent_state"])
-    events.publish("task.attention_needed", {"to": "coordinator", "reason": "DEMO-3 is blocked", "ticket": "DEMO-3"}, subject="DEMO-3")
-    events.publish("task.assigned", {"assignment": "a1", "role": "reviewer", "ticket": "DEMO-1"}, subject="DEMO-1")
+    events.publish("task.attention_needed", {"to": "coordinator", "reason": "DEMO-3 is blocked", "ticket": "DEMO-3"}, source="worker", subject="DEMO-3")
+    events.publish("task.assigned", {"assignment": "a1", "role": "reviewer", "ticket": "DEMO-1"}, source="reviewer", subject="DEMO-1")
     events.publish("task.accepted", {"assignment": "a1", "ticket": "DEMO-1", "role": "reviewer"}, source="reviewer/1", subject="DEMO-1")
     host._wake_on_events()
     pending = store.runtime()["wakeups"]
     assert [w["target"] for w in pending] == ["coordinator"]
     assert "task.attention_needed" in pending[0]["reason"] and "DEMO-3 is blocked" in pending[0]["reason"]
-    events.publish("task.attention_needed", {"to": "supervisor", "reason": "the base branch is broken"})
+    events.publish("task.attention_needed", {"to": "supervisor", "reason": "the base branch is broken"}, source="merge_gate")
     host._wake_on_events()
     assert [w["target"] for w in store.runtime()["wakeups"]] == ["coordinator", "supervisor"]
     assert set(host.residents.procs) == {"supervisor", "coordinator"}         # the built-in residents came up with the org
@@ -75,8 +75,8 @@ def test_a_role_another_machine_fills_is_not_an_agent_here(project):
     project.reload_config()
     assert project.config.serves == ["reviewer"]
     assert set(all_agents(project)) == {"supervisor", "coordinator", "reviewer"}
-    assert [d.id for d in declared(project)] == ["agents", "supervisor", "coordinator", "reviewer"]
-    assert {d.kind for d in declared(project)} == {"program", "agent"} and declared(project)[1].mode == "continuous"
+    assert [d.id for d in declared(project)] == ["supervisor", "coordinator", "reviewer"]      # the host is no machine
+    assert {d.kind for d in declared(project)} == {"agent"} and declared(project)[0].mode == "continuous"
 
 
 def test_a_finished_ticket_has_its_sessions_archived(project):
@@ -112,7 +112,7 @@ def test_a_released_assignment_is_an_interruption_not_a_failure(project, tmp_pat
     assigned(events, "a1", "T-1", tmp_path / "w")
     host.runner.tick()
     wait_for(events, "session.started")                                  # confirmed, and the turn is running
-    events.publish("task.released", {"assignment": "a1", "ticket": "T-1", "role": "worker", "reason": "operator stopped it"}, subject="T-1")
+    events.publish("task.released", {"assignment": "a1", "ticket": "T-1", "role": "worker", "reason": "operator stopped it"}, source="worker", subject="T-1")
     host.runner.tick()
     host.runner.threads["a1"].join(20)
     evs = events.read(0)[0]
@@ -268,32 +268,6 @@ def test_a_per_ticket_instance_announces_itself_once_per_source_not_per_session(
     assert len([e for e in events.read(0)[0] if e["type"] == "task.reported"]) == 2
 
 
-def test_the_hosts_start_says_no_agent_of_any_role_is_working(project):
-    # the level agents_working{role} is written as 0 for every resident role and every role
-    # served when the host starts, so the level is live (and every flow fitted) from the run's
-    # start, not from the first turn
-    from orchestra.sd.series import sample, writer_of
-    host, store, _events = host_with(project, FakeHarness(reply="ok"))
-    host.stop.set()
-    t0 = time.time()
-    host.run(once=True)
-    dump = store.measures._metrics().dump("agents_working", {"project": project.key})
-    assert sorted((lab["role"], lab["machine"], [v for _, v in pts]) for _, lab, pts in dump) == \
-        [(r, r, [0.0]) for r in ("coordinator", "reviewer", "supervisor", "worker")]
-    for ser in sample(dump, t0 - 60, 5, 24):
-        assert writer_of(ser) == ser.labels["role"] and abs(ser.intervals[0][0] - t0) < 2, (ser.key, ser.intervals)   # live from the start
-
-
-def test_the_host_announces_only_what_it_acts_on_as_itself(project):
-    # a finished ticket's sessions are archived when it ends (protocol.ended), the human's tickets
-    # remembered; assignments, releases and attention are the agents', which announce their own
-    host, _store, events = host_with(project, FakeHarness(reply="ok"))
-    host.stop.set()
-    host.run(once=True)
-    [ann] = [e for e in events.read(0)[0] if e["type"] == "orchestra.machine.started" and e["source"] == "agents"]
-    assert ann["listens_for"] == ["gate.landed", "request.done", "review.approved", "ticket.created"]
-
-
 def test_a_wake_ups_snapshot_query_comes_from_the_agent_woken(project):
     from fake_tasks import FakeTasks
     host, store, events = host_with(project, FakeHarness(reply="ok"))
@@ -309,7 +283,7 @@ def test_a_process_orchestra_gave_up_on_wakes_the_supervisor_with_its_log(projec
     launcher; the Supervisor is woken with what to read, so it can file a bug ticket."""
     host, store, events = host_with(project, FakeHarness(reply="ok"))
     host._refresh_org(store.runtime()["agent_state"])
-    events.publish("orchestra.process.gave_up", {"name": "repo_stats", "code": 1, "failures": 5})
+    events.publish("orchestra.process.gave_up", {"name": "repo_stats", "code": 1, "failures": 5}, source="orchestra-host")
     host._wake_on_events()
     [w] = store.runtime()["wakeups"]
     assert w["target"] == "supervisor"

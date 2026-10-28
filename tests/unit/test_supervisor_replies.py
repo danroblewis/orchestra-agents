@@ -103,9 +103,9 @@ def test_an_honest_reply_is_one_turn(project):
 def test_the_humans_ticket_that_is_done_wakes_the_supervisor_to_say_so(project):
     harness = ScriptedHarness([("DEMO-5 is done: the disk and git collectors are running; their series are on the Core page.", 0)])
     host, store, events = host_with(project, harness)
-    events.publish("ticket.created", {"ticket": "DEMO-4", "title": "Measure the repository", "by": "planner"}, subject="DEMO-4")
-    events.publish("ticket.created", {"ticket": "DEMO-5", "title": "Measure the disk", "by": "supervisor"}, subject="DEMO-5")
-    events.publish("ticket.created", {"ticket": "DEMO-7", "title": "Dropped", "by": "supervisor"}, subject="DEMO-7")
+    events.publish("ticket.created", {"ticket": "DEMO-4", "title": "Measure the repository", "by": "planner"}, source="planner", subject="DEMO-4")
+    events.publish("ticket.created", {"ticket": "DEMO-5", "title": "Measure the disk", "by": "supervisor"}, source="supervisor", subject="DEMO-5")
+    events.publish("ticket.created", {"ticket": "DEMO-7", "title": "Dropped", "by": "supervisor"}, source="supervisor", subject="DEMO-7")
     # how a ticket's end is heard, the task system publishing no state change (protocol.ended): the
     # gate's landing, a cancel request done; a step on the way (a review requested) is no end
     events.publish("gate.landed", {"ticket": "DEMO-4", "gate_run": "g1"}, source="merge_gate", subject="DEMO-4")

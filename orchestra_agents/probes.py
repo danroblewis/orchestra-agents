@@ -4,7 +4,9 @@ A probe is a command with a schedule, declared by a team (``probes`` in its reco
 team's space with the team chain's tools on PATH. Exit 0 means the condition holds. The host
 remembers each probe's last state and emits ``probe.failed`` and ``probe.recovered`` only on the
 transition, so a failing probe wakes the agents subscribed to it once, not every interval. Agents
-never run probes; the host supplies the clock and the event, the team supplies the check.
+never run probes; the host supplies the clock and the event, the team supplies the check. The host
+is no machine (events.py): the event is published as the agent responsible for the team, its lead,
+or the Supervisor when the team has none (``source``).
 (The probes in ``orchestra.toml``, ``[[probes]]``, are the task system's.)"""
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ class ProbeSpec:
     cwd: Path | None = None
     team: str | None = None
     path_dirs: tuple[str, ...] = ()
+    source: str = "supervisor"   # the agent whose responsibility the probe is: the team's lead, or the Supervisor
 
 
 def _spec(d: dict, project: Project, team=None, path_dirs: tuple[str, ...] = ()) -> ProbeSpec:
@@ -43,7 +46,8 @@ def _spec(d: dict, project: Project, team=None, path_dirs: tuple[str, ...] = ())
     secs = parse_interval(every) if isinstance(every, str) else float(every)
     cwd = team.space_dir(project) if team is not None else project.repo_root
     return ProbeSpec(name=d["name"], command=d["command"], every=secs, timeout=float(d.get("timeout", 120)),
-                     cwd=cwd, team=team.name if team is not None else None, path_dirs=path_dirs)
+                     cwd=cwd, team=team.name if team is not None else None, path_dirs=path_dirs,
+                     source=(team.lead if team is not None and team.lead else "supervisor"))
 
 
 def team_probes(project: Project, teams: dict) -> list[ProbeSpec]:
@@ -104,6 +108,6 @@ class Prober:
             fields["since"] = started
         self.store.set_probe_state(s.name, **fields)
         if status == "failed" and prev != "failed":
-            self.events.emit("probe.failed", probe=s.name, team=s.team, output=output[-600:])
+            self.events.emit("probe.failed", src=s.source, probe=s.name, team=s.team, output=output[-600:])
         elif status == "ok" and prev == "failed":
-            self.events.emit("probe.recovered", probe=s.name, team=s.team)
+            self.events.emit("probe.recovered", src=s.source, probe=s.name, team=s.team)

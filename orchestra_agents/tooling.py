@@ -53,7 +53,8 @@ def handle(project: Project, store: AgentStore, command: str, args: dict[str, An
     changed something is answered with what it changed, and the change is kept in the agent's
     record (ledger.py), whatever the model says about it later."""
     access.authorize(project, command, role)
-    return ledger.record(store, role, command, args or {}, _handle(project, store, command, args, role, ticket_env))
+    with store.events.acting_as(role):          # what the call publishes is the caller's, never the host's
+        return ledger.record(store, role, command, args or {}, _handle(project, store, command, args, role, ticket_env))
 
 
 def _handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:

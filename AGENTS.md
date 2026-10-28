@@ -24,7 +24,12 @@ broken without updating the spec and saying so in the commit.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
-   subject and the agent's instance (`supervisor`, `worker/1`) the source.
+   subject and the agent's instance (`supervisor`, `worker/1`) the source. **The host is no
+   machine** (Orchestra's rule for a plugin's infrastructure; the owner, 2026-10-27): it never
+   announces itself, never publishes as `agents` or with no source (`events.py` refuses both),
+   and writes no metrics (the plugin's instrument `agents.turns` reads them from the record). It
+   acts on the bus only as the agents it runs, and each agent's announcement lists what the host
+   watches on its behalf (`listening.py`). `tests/unit/test_host_is_no_machine.py` holds it.
 5. **Nothing outside `harness/` knows which product runs an agent.** The host, the CLI, the web
    plugin and the store use `AgentSession`, the normalized events and `read_transcript`. A
    harness-specific branch anywhere else is a bug. The tools are defined once, in

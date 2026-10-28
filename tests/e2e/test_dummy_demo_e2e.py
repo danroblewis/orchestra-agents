@@ -64,6 +64,22 @@ steps = [
 """
 EXTRA = [f"Rework item {i}" for i in range(5)] + [f"Extra item {i}" for i in range(3)]
 
+# The Supervisor files a ticket for the human when asked to, and says so when it lands (the host
+# wakes it: landings.py). Put before the demo's own Supervisor rule, which answers every turn.
+SUPERVISOR_RULES = """# (the tests' rules, matching only their own prompts)
+[[rule]]
+role = "supervisor"
+prompt = "Please file the note ticket"
+steps = [{ tool = "create_ticket", args = { title = "Supervisor item", objective = "The human asked for a note.", description = "Write a note.", acceptance = "- a note", verification = "The reviewer reads the note.", milestone_id = "M1" } }]
+reply = "I filed the ticket."
+
+[[rule]]
+role = "supervisor"
+prompt = "which you created for the human"
+reply = "Your note ticket landed."
+
+"""
+
 GUARD = Path(__file__).parent / "no_network"
 KEYS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY",
         "GEMINI_API_KEY", "OPENROUTER_API_KEY")
@@ -110,8 +126,8 @@ def free_demo(tmp_path, monkeypatch):
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     target = make_project(tmp_path / "project", dummy=True)
-    with (target / "dummy.toml").open("a", encoding="utf-8") as f:     # only "Rework" tickets match it
-        f.write(REWORK_RULE)
+    script = target / "dummy.toml"
+    script.write_text(SUPERVISOR_RULES + script.read_text(encoding="utf-8") + REWORK_RULE, encoding="utf-8")   # only "Rework" tickets match it
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-qam", "a rule for rework tickets"], cwd=target, check=True)
     port = free_port()
     url = f"http://127.0.0.1:{port}"
@@ -254,3 +270,47 @@ def test_what_the_owner_sees(free_demo):
     from orchestra.metrics import for_project
     dump = for_project(orchestra_project(target)).dump("tasks_tickets", {})
     assert dump and all(labels.get("instrument") == "tasks.tickets" and "machine" not in labels for _, labels, _ in dump)
+
+
+def test_the_agents_host_is_no_machine(free_demo):
+    """The owner, 2026-10-27: the agents' host is the shared runtime that runs the configured
+    agents, no machine. After a run: no machine ``agents``, no edge to it and no event from it; the
+    Supervisor announces what the host watches for it, so the map shows merge_gate's gate.landed
+    reaching the Supervisor; it is still told when its ticket lands; and the agents' measurements
+    arrive through the plugin's instrument."""
+    url, target, _logs = free_demo
+    ids = plan(target)
+    lines = chat(url, "Please file the note ticket.")
+    assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
+    assert any(ln["type"] == "tool_start" and ln.get("name") == "create_ticket" for ln in lines)
+    wait_until("the tickets", lambda: settled(url) and len(states(url)) == len(ids) + 1, timeout_s=400)
+    assert set(states(url).values()) == {"DONE"}
+    # the Supervisor is told its ticket landed: the host heard the gate for it and woke it
+    wait_until("the Supervisor told", lambda: ((get(url + f"{AGENTS}/attention").get("message") or {}).get("text") or "") == "Your note ticket landed.",
+               timeout_s=60)
+
+    events = all_events(url)
+    assert not [e for e in events if e["source"].partition("/")[0] == "agents"]
+    [made] = [e for e in events if e["type"] == "ticket.created" and e["data"].get("by") == "supervisor"]
+    assert made["source"] == "supervisor"                                   # the answer to its request, as the asker
+    d = get(url + "/api/machines")
+    assert "agents" not in {m["id"] for m in d["machines"]}
+    assert not [e for e in d["edges"] if "agents" in (e["from"], e["to"])]
+    assert not [h for h in d["handoffs"] if "agents" in (h["from"], h["to"])]
+    sup = next(m for m in d["machines"] if m["id"] == "supervisor")
+    assert {"gate.landed", "ticket.created", "request.done", "request.refused", "task.attention_needed"} <= set(sup["subscribes"]), sup["subscribes"]
+    assert {"from": "gate.landed", "to": "supervisor", "kind": "subscribes"} in d["edges"]
+    assert "gate.landed" in {p["type"] for p in next(m for m in d["machines"] if m["id"] == "merge_gate")["publishes"]}
+    coord = next(m for m in d["machines"] if m["id"] == "coordinator")
+    assert "request.done" in coord["subscribes"]
+
+    # the measurements: through the plugin's instrument, the host writing none
+    from orchestra.config import load_project as orchestra_project
+    from orchestra.metrics import for_project
+    store = for_project(orchestra_project(target))
+    wait_until("the agents' measurements", lambda: bool(store.dump("agent_turns_finished_total", {})), timeout_s=30)
+    for name in ("agents_working", "agent_turns_started_total", "agent_turns_finished_total"):
+        dump = store.dump(name, {})
+        assert dump and all(labels.get("instrument") == "agents.turns" for _, labels, _ in dump), (name, [lab for _, lab, _ in dump])
+    roles = {labels["role"] for _, labels, _ in store.dump("agents_working", {})}
+    assert {"supervisor", "coordinator", "worker", "reviewer"} <= roles

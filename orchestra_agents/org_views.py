@@ -112,3 +112,14 @@ def agents_status(project: Project, store: AgentStore) -> dict:
     cfg = project.config
     return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "now": time.time(),
             "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
+
+
+def measured_roles(project: Project) -> list[str]:
+    """The roles whose sessions are measured (``agents_working{role}``, measures.py): the resident
+    agents and the task system's roles the agents serve."""
+    return sorted({name for name, a in all_agents(project).items() if a.resident} | set(project.config.serves))
+
+
+def metrics_text(project: Project, store: AgentStore) -> str:
+    """The agents' measurements as Prometheus text, for the instrument and the plugin's /metrics."""
+    return store.metrics_text(measured_roles(project))

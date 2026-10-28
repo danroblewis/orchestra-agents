@@ -1,4 +1,9 @@
-"""The agents' host (``orchestra-agents run``): the process that runs the AI agents as machines.
+"""The agents' host (``orchestra-agents run``): the shared runtime that runs the configured AI
+agents, each as the machine it is. The host is no machine itself (the owner, 2026-10-27): it never
+announces itself, never publishes under its own name (events.py refuses ``agents``) and writes no
+metrics (the plugin's instrument reads them, measures.py); every event it sends goes out as the
+agent it is about or acts for, and each agent's announcement lists what the host watches on its
+behalf (listening.py).
 
 Each second it matches new events on the bus against every agent's wake rules and queues wake-ups,
 queues the scheduled ones, runs the teams' probes, answers the task system's assignments for the
@@ -29,10 +34,10 @@ from .facts import SupervisorFacts
 from .fillers import Fillers
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
+from .listening import listens_for
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
-from .protocol import APPROVED, CREATED, DONE, LANDED
 from .residents import Residents
 from .restart import recover as recover_restart
 from .roles import all_roles
@@ -125,15 +130,10 @@ class AgentHost:
         self.recover()
         if put_back := recover_restart(self.project):      # a restart_machine the last host was killed in
             log(put_back)
-        # the host announces what it acts on as itself: a finished ticket's sessions go to the
-        # archive (protocol.ended: landed, approved in tasks mode, cancelled), and the human's
-        # tickets are remembered (landings.py). Assignments, releases and attention are the
-        # agents', which announce their own
-        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": "continuous", "kind": "program",
-                                                          "listens_for": sorted({LANDED, APPROVED, DONE, CREATED}), "log": str(HOST_LOG)})
+        # no announcement of the host's own: it is no machine. Each agent announces itself when its
+        # session opens (_announce), with what the host watches for it (listening.py)
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
         self._refresh_org(self.store.runtime()["agent_state"])
-        self.store.measure_idle(self.measured_roles())           # no agent is in a turn at the start: the level is live from here
         try:
             while not self.stop.is_set():
                 try:
@@ -157,11 +157,6 @@ class AgentHost:
                     self.control.stop()
                 self.store.clear_control(os.getpid())
         return 0
-
-    def measured_roles(self) -> list[str]:
-        """The roles whose sessions are measured (``agents_working{role}``): the resident agents
-        and the task system's roles this host serves."""
-        return sorted({name for name, a in self.agents.items() if a.resident} | set(self.cfg.serves))
 
     def _busy(self) -> bool:
         return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
@@ -217,9 +212,19 @@ class AgentHost:
 
     def _mark(self, type: str, **data) -> dict:
         """An event about a session that its transcript should show (web.py overlays it)."""
-        ev = self.events.emit(type, **data)
+        ev = self._say(type, **data)
         self.store.add_marker(data["session"], ev)
         return ev
+
+    def _say(self, type: str, **data) -> dict:
+        """An event about a session, published as the agent it is about (``source_of``)."""
+        return self.events.emit(type, src=self.source_of(data["session"]), **data)
+
+    def source_of(self, session_id: str) -> str:
+        """The agent instance a session runs (or last ran) as: the slot bound to it now, else the
+        instance its record names, else its kind, else its id. Never the host's own name."""
+        s = self.store.find_session(session_id) or {}
+        return self.events.bound(session_id) or s.get("instance") or s.get("kind") or session_id
 
     def _shutdown_markers(self) -> None:
         """Every turn still running is about to be cut off by this shutdown. Say so in the
@@ -315,8 +320,8 @@ class AgentHost:
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
         mode = "continuous" if agent is not None and agent.resident else "ad hoc"
-        listens = sorted({w.split(":")[0] for w in (agent.wake_on if agent is not None else [])})
-        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": listens, "kind": "agent", "role": role,
+        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": listens_for(agent, self.cfg.work),
+                                                          "kind": "agent", "role": role,
                                                           "harness": self.harness.name, "model": self.cfg.model},
                             source=source)
 
@@ -390,7 +395,7 @@ class AgentHost:
                                last_output_at=None, phase="prompting", phase_since=time.time(),
                                last_token_at=None, tool_name=None)
         self._mark("session.started", session=sid, kind=role, ticket=ticket_id)
-        self.store.measure_turn(role, self._slots.get(sid, role), started=True)
+        self.store.count_turn(role, self._slots.get(sid, role), started=True)
 
     def _session_idle(self, sid: str, text: str, resident: bool = False, release: bool = True) -> None:
         """A turn ended. A per-ticket session's slot is given back here unless ``release`` is
@@ -401,9 +406,9 @@ class AgentHost:
             fields["session_file"] = proc.session_file   # some harnesses only name the transcript after the first turn
         self.store.set_session(sid, status="idle", last_text=(text or "")[-500:], settled_at=time.time(), phase="idle", tool_name=None,
                                **fields)
-        self.events.emit("session.settled", session=sid)
+        self._say("session.settled", session=sid)
         s = self.store.find_session(sid) or {}
-        self.store.measure_turn(s.get("kind") or sid, self._slots.get(sid, s.get("kind") or sid), started=False)
+        self.store.count_turn(s.get("kind") or sid, self._slots.get(sid, s.get("kind") or sid), started=False)
         if not resident and release:
             self._release(sid)
 
@@ -490,7 +495,7 @@ class AgentHost:
         res = self._checked(res, began, message, emit)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
-        self.events.emit("agent.said", session="supervisor", summary=(res.text or "")[:500])
+        self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])
         return {"text": res.text, "error": res.error, "timed_out": res.timed_out}
 
     def _honest(self, proc: AgentSession, text: str, on_event) -> TurnResult:
@@ -568,5 +573,5 @@ class AgentHost:
         if ephemeral:
             proc.close()
             access.revoke(self.store, sid)
-        self.events.emit("agent.said", session=sid, summary=(res.text or "")[:500])
+        self._say("agent.said", session=sid, summary=(res.text or "")[:500])
         log(f"{sid}: {(res.text or '(no text)')[:160]!r}")

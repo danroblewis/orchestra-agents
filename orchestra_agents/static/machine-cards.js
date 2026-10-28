@@ -4,8 +4,9 @@
 //   what it last said, and its session chip (resident, working, waiting);
 // - workers and reviewers are the tickets they were assigned: a card per ticket an instance is on,
 //   in the ticket's state colour, with its id, title, re-engagement badge and state, and a lane
-//   with what the agent is saying now;
-// - the agents' host is a line: alive or not, and which product runs the agents.
+//   with what the agent is saying now.
+// The agents' host is no machine (it never announces itself or publishes as itself), so it has no
+// card; whether it is up is on the Agents page and on each agent's session chip.
 // A click opens the agent's transcript (the ticket id opens the ticket, when a task system with a
 // ticket view is loaded); "machine details", on the Machines page, opens Orchestra's own view.
 (async function () {
@@ -17,7 +18,7 @@
   let D = null, last = "";
   const e_ = (s) => esc(s);
   const ROLE_C = { supervisor: "var(--r-supervisor)", coordinator: "var(--r-coordinator)", worker: "var(--r-worker)", reviewer: "var(--r-reviewer)" };
-  const RANK = { supervisor: 10, coordinator: 11, agents: 15, worker: 30, reviewer: 31 };
+  const RANK = { supervisor: 10, coordinator: 11, worker: 30, reviewer: 31 };
   const stateColor = (st) => (typeof color === "function" ? color(st) : "var(--muted)");
   const kindOf = (m) => (m.kinds && m.kinds.agent ? "agent" : m.kind);   // a machine with any agent instance is an agent here (worker: agent ×2, program ×1)
   const roleOf = (m) => (m.about && m.about.role) || m.id;
@@ -65,13 +66,6 @@
     return `<h2><span>${e_(m.id)} <span class="muted">· on tickets</span></span><span class="hctl"><span class="count">${live.length}</span></span></h2>${cards || empty}${more(m, compact)}`;
   }
 
-  function hostCard(m, compact) {
-    const h = (D && D.host) || {};
-    const what = !D ? "reading…" : h.alive ? `running ${e_(D.harness || "")}${D.model ? " · " + e_(D.model) : ""} · fills ${e_((D.serves || []).join(", ") || "no task roles")}`
-      : m.unseen ? "declared, not run yet (orchestra-agents run)" : "not running";
-    return `<div class="agent ${h.alive ? "" : "unseen-agent"}" style="--rc:#94a3b8"><div class="av">A</div><div class="name">agents</div><div class="say">${what}</div></div>${more(m, compact)}`;
-  }
-
   window.AgentCards = {
     transcript: (sid) => openTranscript(sid),
     ticket: (id) => (typeof window.openTicket === "function" ? window.openTicket(id) : null),
@@ -81,7 +75,6 @@
     rank: (m) => RANK[roleOf(m)] ?? (kindOf(m) === "agent" ? 12 : 25),
     // a few words for the Dashboard's machine list: what the machine is on now
     summary(m) {
-      if (m.id === "agents") return D ? (D.host.alive ? `running · fills ${e_((D.serves || []).join(", ") || "no task roles")}` : "not running") : null;
       if (kindOf(m) !== "agent") return null;
       const live = sessionsOf(m).filter((s) => s.status === "running");
       if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0], m);
@@ -89,7 +82,6 @@
       return s || m.mode === "ad hoc" ? chip(s || null, m) : null;
     },
     card(m, { compact } = {}) {
-      if (m.id === "agents") return hostCard(m, compact);
       if (kindOf(m) !== "agent") return null;
       return m.mode === "ad hoc" ? ticketsCard(m, compact) : residentCard(m, compact);
     },

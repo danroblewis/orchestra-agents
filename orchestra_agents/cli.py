@@ -14,7 +14,7 @@ from .api_org import read_org
 from .config import ConfigError, Project, load_project
 from .events import Events
 from .harness.base import assistant_text
-from .org_views import agents_status
+from .org_views import agents_status, metrics_text
 from .store import AgentStore, StoreError
 
 
@@ -35,6 +35,15 @@ def cmd_run(args) -> int:
     project = _project(args)
     store, events = _store(project)
     return AgentHost(project, store, events).run(wait=args.wait)
+
+
+def cmd_metrics(args) -> int:
+    """The agents' measurements as Prometheus text, from the runtime record (measures.py): the
+    instrument the plugin declares runs this (web.py). Reads only; the host need not be up."""
+    project = _project(args)
+    store, _ = _store(project)
+    sys.stdout.write(metrics_text(project, store))
+    return 0
 
 
 def _ago(seconds: float) -> str:
@@ -218,6 +227,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="while another host holds the project or the control port is taken, wait for it to clear instead of "
                         "exiting (how Orchestra's launcher starts it, so a restart outlasts the previous host's shutdown)")
     s.set_defaults(fn=cmd_run)
+    s = sub.add_parser("metrics", help="the measurements (agents working, turns started and finished) as Prometheus text, for the instrument")
+    s.set_defaults(fn=cmd_metrics)
     s = sub.add_parser("chat", help="talk to the Supervisor")
     s.set_defaults(fn=cmd_chat)
     s = sub.add_parser("status", help="is the agents' host up, and what are its agents doing",

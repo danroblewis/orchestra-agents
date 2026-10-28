@@ -198,14 +198,11 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         if not d.get("ok"):
             return False
         seen.update({m["id"]: m for m in d["machines"]})
-        return {"agents", "supervisor", "coordinator", "reviewer", "worker"} <= set(seen) \
+        return {"supervisor", "coordinator", "reviewer", "worker"} <= set(seen) \
             and bool({"review.approved", "changes.requested"} & {p["type"] for p in seen["reviewer"]["publishes"]})   # a review ended
     wait_until("the machines", observed, timeout_s=120)
-    host = seen["agents"]
-    assert host["package"] == "agents" and host["mode"] == "continuous" and host["kind"] == "program" and host["active"]
-    assert host["subscribes"] == ["gate.landed", "request.done", "review.approved", "ticket.created"]   # what the host acts on as itself; the agents announce their own
-    log = get(url + "/api/machines/agents/log")
-    assert log["ok"] and any("control endpoint" in line for line in log["lines"])
+    assert "agents" not in seen                                      # the agents' host is no machine: the agents it runs are
+    assert {"gate.landed", "ticket.created", "request.done"} <= set(seen["supervisor"]["subscribes"])   # what the host watches for it
     for name in ("supervisor", "coordinator"):                                              # resident: continuous, whatever wakes them
         m = seen[name]
         assert m["package"] == "agents" and m["mode"] == "continuous" and m["kind"] == "agent" and not m.get("unseen")

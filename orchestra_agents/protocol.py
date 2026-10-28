@@ -94,6 +94,11 @@ DONE, REFUSED = "request.done", "request.refused"
 WAIT_S = 30.0
 
 
+def endings(work: str) -> tuple[str, ...]:
+    """The event types ``ended`` reads in this mode: whoever follows a ticket's end listens for these."""
+    return (LANDED, DONE) if work == "code" else (LANDED, APPROVED, DONE)
+
+
 def ended(ev: dict, work: str) -> tuple[str, str] | None:
     """The ticket an event ends and how, (id, DONE or CANCELLED), or None: the gate landed it;
     in tasks mode (``work`` != "code", nothing merged) its reviewer approved it; a planner's cancel

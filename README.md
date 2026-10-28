@@ -8,6 +8,16 @@ session is a setting: Pi, Claude Code or Codex, or `dummy`, scripted agents with
 network and no cost, for demos and tests. An Orchestra plugin (`agents`) adds the Agents
 page, the Supervisor chat, and the agents' machine cards to Orchestra's web UI.
 
+What the plugin is: a target repository normally defines its own machines, as code that
+publishes and listens on the bus under its own `source`, or through a bridge. The Agents plugin
+is a common resource for that: it provides an **implementation of a machine** (the AI agent, a
+universal machine), the **means to configure one** (roles, harness, model, how it is engaged,
+permissions), a **shared runtime** that runs the configured agents (the host, which is not a
+machine: it never announces itself, never publishes as `agents` and writes no metrics; its
+measurements reach Orchestra through the instrument `agents.turns`), and **UI additions**. The
+machines on Orchestra's Machines page are the configured agents (`supervisor`, `coordinator`,
+`worker/1`, ...), never the plugin.
+
 How it works, with diagrams, the tools and the protocols: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 The agents change no ticket themselves and manage no branches: every ticket change is a request
@@ -114,4 +124,8 @@ the target's `dummy.toml`), and checks what the owner would see: `task_scheduler
 event's source and no machine, edge or hand-off of `/api/machines`; a reworked ticket's hand-offs
 are planner → worker → reviewer → worker → reviewer → merge_gate; discovery hypothesises no flow
 on `task_scheduler`; and the ticket metrics arrive with `instrument=tasks.tickets` (the
-instrument the task system's plugin declares, `tasking metrics`).
+instrument the task system's plugin declares, `tasking metrics`). Its `test_the_agents_host_is_no_machine` has the
+Supervisor file a ticket and checks that no machine, edge or event is `agents`, that the
+Supervisor announces what the host watches for it (merge_gate's `gate.landed` reaches it on the
+map), that it is woken when its ticket lands, and that the agents' metrics arrive with
+`instrument=agents.turns`; `tests/unit/test_host_is_no_machine.py` is the same rule in process.

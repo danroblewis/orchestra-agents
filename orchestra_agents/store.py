@@ -1,7 +1,7 @@
 """The agents' own state, in ``~/.orchestrator/<key>/agents/runtime.json``, behind one file lock:
 their sessions (live and archived, each with the host's markers for its transcript), the reports
 an agent's tool hands to the agent that runs it, wake-ups queued for an agent, each agent's state
-(paused, crashes, schedules, the changes its tools made), the grants of the live sessions' tokens (access.py), the probes' states, the control endpoint, the metric counters and
+(paused, crashes, schedules, the changes its tools made), the grants of the live sessions' tokens (access.py), the probes' states, the control endpoint, the metric counters (measures.py) and
 when the human last read the Supervisor. Nothing of the task system's is here: tickets are the
 task system's, reached over the bus (protocol.TaskClient)."""
 
@@ -16,10 +16,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from . import measures
 from .clock import now
 from .config import Project
 from .events import Events
-from .measures import Measures
 
 
 class StoreError(Exception):
@@ -40,7 +40,6 @@ class AgentStore:
     def __init__(self, project: Project, events: Events | None = None):
         self.project = project
         self.events = events or Events.for_project(project)
-        self.measures = Measures(project)
         project.ensure_dirs()
 
     @contextmanager
@@ -123,13 +122,15 @@ class AgentStore:
             return archived_id
         return self._mutate_runtime(fn)
 
-    def measure_idle(self, roles: list[str]) -> None:
-        self.measures.write(self.measures.idle_points(roles))
+    def count_turn(self, role: str, source: str, started: bool) -> None:
+        """One turn of ``role`` (run as ``source``) started or finished: its counter moves in the
+        record (measures.py), which the plugin's instrument reads; nothing is written elsewhere."""
+        name = measures.STARTED if started else measures.FINISHED
+        self._mutate_runtime(lambda d: measures.count(d.setdefault("metric_counts", {}), name, role, source))
 
-    def measure_turn(self, role: str, source: str, started: bool) -> None:
-        points = self._mutate_runtime(lambda d: self.measures.turn_points(
-            list(d["sessions"].values()), d.setdefault("metric_counts", {}), role=role, source=source, started=started))
-        self.measures.write(points)
+    def metrics_text(self, roles: list[str]) -> str:
+        """The agents' measurements as Prometheus text (measures.py), ``roles`` the measured ones."""
+        return measures.exposition(self.runtime(), roles)
 
     def set_report(self, ticket_id: str, report: dict) -> None:
         """What an agent's exit tool hands to the session that runs it; it goes on the bus as is."""

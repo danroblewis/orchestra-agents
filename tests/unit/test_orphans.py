@@ -124,7 +124,8 @@ def test_with_wait_a_second_host_waits_for_the_first_and_then_takes_over(project
         other.wait()
         th.join(timeout=20)
         assert out == {"rc": 0}
-        assert [e["source"] for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"][:1] == ["agents"]
+        started = [e["source"] for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"]
+        assert started and "agents" not in started                       # the agents announce themselves; the host never does
     finally:
         if other.poll() is None:
             other.kill()

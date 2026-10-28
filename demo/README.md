@@ -38,7 +38,7 @@ escalation and the Coordinator's per attention event (it has no schedule here:
 | `orchestra run` | Orchestra's host: starts what the plugins declare and `[[machines]]` names, and rediscovers the system dynamics model from the metrics |
 | `orchestra web --port 8072` | Orchestra's web UI with both plugins: the task system's Tickets page and Tasks panel; the agents' Agents page, Supervisor button and agent cards |
 | `tasking run --wait` | the task system's scheduler (the process `tasks.scheduler`, declared by its plugin; no machine of its own): offers ready tickets over the bus as each role's queue (`worker`, `reviewer`), records what comes back, answers requests as the asker, lands reviewed branches as `merge_gate` |
-| `orchestra-agents run --wait` | the agents' host (the machine `agents`, the process `agents.host`, declared by its plugin): the Supervisor and the Coordinator resident, an AI worker per ticket it takes (`worker/1`, `worker/2`), a reviewer per ticket (`reviewer/1`), the Supervisor chat |
+| `orchestra-agents run --wait` | the agents' host (the process `agents.host`, declared by its plugin; no machine: the agents it runs are): the Supervisor and the Coordinator resident, an AI worker per ticket it takes (`worker/1`, `worker/2`), a reviewer per ticket (`reviewer/1`), the Supervisor chat |
 | `machines/shell_worker.py shell --only-commands` | the program worker (`worker/shell`, from `[[machines]]`): answers only offers whose description gives `sh` blocks, runs them in the ticket's worktree and commits what they changed |
 
 The program worker has its own instance, `shell`: the agents' host names its AI workers
@@ -83,7 +83,8 @@ repository. Series never start with `orchestra_`: the prefix is Orchestra's own.
 Where to look, at http://127.0.0.1:8072:
 
 - **Dashboard**: the Machines panel lists the Supervisor and the Coordinator (AI agents,
-  resident), the host `agents`, the worker, the reviewer and the merge gate (`merge_gate`).
+  resident), the worker, the reviewer and the merge gate (`merge_gate`). The agents' host is not
+  among them: it is no machine.
   The task system's scheduler is not among them: it publishes as the machine it acts for.
   Orchestra lists an ad hoc machine while it is active and for two minutes after its last
   event. The Tasks panel shows each ticket in flight with the instance that holds it, since when,
@@ -95,7 +96,7 @@ Where to look, at http://127.0.0.1:8072:
   snapshot and the events since its last turn. A message it leaves while you are away is a
   banner and a count on the button until you read it.
 - **Machines**: `worker` with its instances (`shell`, the program; `1`, `2`, the AI workers),
-  `reviewer`, `supervisor`, `coordinator`, `agents`, `merge_gate`, `planner` (`run.py`'s
+  `reviewer`, `supervisor`, `coordinator`, `merge_gate`, `planner` (`run.py`'s
   requests, and the tickets they created), `orchestra-host`, and the event map between them.
 - **Tickets**: click a ticket for its description, acceptance and notes (the worker's summary,
   the reviewer's verdict). `git log main` in the target shows each ticket landed.
@@ -105,5 +106,5 @@ Where to look, at http://127.0.0.1:8072:
 
 Logs: `run/host.log` and `run/web.log` in the target; what the host starts logs to
 `~/.orchestrator/<name>-<hash>/logs/machines/`; the agents' own under
-`~/.orchestrator/<name>-<hash>/agents/logs/` (the host's `agents-host.log`, which the Machines
-page opens, and each session's stderr and starting prompt).
+`~/.orchestrator/<name>-<hash>/agents/logs/` (the host's `agents-host.log`, which the Supervisor
+reads with `read_machine_log agents.host`, and each session's stderr and starting prompt).

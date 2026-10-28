@@ -1,12 +1,17 @@
 """The agents in Orchestra's web app (an Orchestra plugin, ``orchestra/plugins.py``): the Agents
 page (who is in the project, their roles, teams, wake-ups and the event map), the agents' session
 transcripts, the Supervisor chat and the way to it on every page, and the agents' machine cards.
-Its API is at ``/api/plugins/agents``."""
+Its API is at ``/api/plugins/agents``. Besides the pages, the plugin declares the configured
+agents (the machines it implements, for the Machines page before they run), the host that runs
+them (``Plugin.processes``), which is no machine and so is declared as none, and the instrument
+that reads their measurements (``Plugin.collectors``: ``agents.turns``, measures.py), also served
+at ``/metrics``."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 import sys
 import threading
 import time
@@ -15,7 +20,8 @@ import urllib.request
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from orchestra.collect.spec import Collector
 from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
@@ -24,9 +30,10 @@ from .api_org import read_org
 from .config import ConfigError, Project
 from .events import Events
 from .harness import read_transcript
+from .listening import listens_for
 from .org import EVENT_HELP
 from .org_store import all_agents
-from .org_views import agents_status, residents_of, session_alive
+from .org_views import agents_status, metrics_text, residents_of, session_alive
 from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
@@ -40,31 +47,46 @@ def plugin(orchestra_project) -> Plugin:
     project.ensure_dirs()
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
                   scripts=["attention.js", "machine-cards.js"], stylesheets=["agents.css"],
-                  machines=declared(project), processes=processes(project))
+                  machines=declared(project), processes=processes(project), collectors=collectors(project))
+
+
+def set_up(project) -> bool:
+    """Whether the project runs agents: its configuration has an ``[agents]`` section (in
+    orchestra.toml or the owner's overlay; read through Orchestra, ``project.orchestra.config``)."""
+    return "agents" in project.orchestra.config.raw
 
 
 def processes(project) -> list[Process]:
-    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run --wait`,
-    the machine `agents`; Orchestra names the process `agents.host`), in the environment this
-    package is installed in, when the project's configuration has an `[agents]` section (in
-    orchestra.toml or the owner's overlay; read through Orchestra, `project.orchestra.config`). A project
-    without one has the pages and no host: installing the package beside Orchestra starts no AI.
+    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run --wait`;
+    Orchestra names the process `agents.host`, which is no machine: the agents it runs are), in the
+    environment this package is installed in, when the project is set up for agents (``set_up``). A
+    project without it has the pages and no host: installing the package beside Orchestra starts no AI.
     ``--wait``: a host restarted while the previous one still shuts down waits for it. The stop
     grace outlasts the host's own shutdown, so Orchestra never kills it mid-way and leaves its
     sessions' processes behind."""
-    raw = project.orchestra.config.raw
     return ([Process("host", [sys.executable, "-m", "orchestra_agents", "run", "--wait"], stop_grace_s=STOP_GRACE_S)]
-            if "agents" in raw else [])
+            if set_up(project) else [])
+
+
+def collectors(project) -> list[Collector]:
+    """The instrument that measures the agents (``agents.turns``): ``orchestra run`` runs
+    ``orchestra-agents metrics`` every discovery step, which prints the level and the counters from
+    the agents' runtime record (measures.py), and labels each point ``instrument=agents.turns``. A
+    command, not a scrape of ``/metrics``: the web server's port is not known to ``orchestra run``."""
+    if not set_up(project):
+        return []
+    step = max(1.0, float(project.orchestra.config.discovery_step))
+    return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra_agents metrics", every_s=step, timeout_s=min(step, 10.0))]
 
 
 def declared(project) -> list[Declared]:
-    """The agents, for Orchestra's Machines page before they run: the host, the resident and
-    custom agents, and the per-ticket roles the agents serve (a role another machine fills is
-    that machine's, not declared here)."""
-    out = [Declared("agents", "program", "continuous")]
-    for a in all_agents(project).values():
-        out.append(Declared(a.name, "agent", "continuous" if a.resident else "ad hoc", sorted({w.split(":")[0] for w in a.wake_on})))
-    return out
+    """The agents, for Orchestra's Machines page before they run: the resident and custom agents,
+    and the per-ticket roles the agents serve (a role another machine fills is that machine's, not
+    declared here), each with what it listens for (listening.py), as it announces itself. The host
+    that runs them is no machine and is not declared."""
+    work = project.config.work
+    return [Declared(a.name, "agent", "continuous" if a.resident else "ad hoc", listens_for(a, work))
+            for a in all_agents(project).values()]
 
 
 def current(project: Project) -> Project:
@@ -221,6 +243,11 @@ def router(project) -> APIRouter:
         return {"session": s, "messages": page, "total": total, "before": before, "next_before": total - (end - len(page)) if page else before,
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
                 "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive}}
+
+    @r.get("/metrics", response_class=PlainTextResponse)
+    async def metrics() -> str:
+        """The agents' measurements in the Prometheus text format (measures.py)."""
+        return metrics_text(current(project), store)
 
     @r.get("/agents")
     async def agents_view() -> dict:

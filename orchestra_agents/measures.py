@@ -1,67 +1,85 @@
-"""The agents' measurements, written to Orchestra's metrics store, named for what they measure:
+"""The agents' measurements, served in the Prometheus text format and read by an instrument
+(Orchestra's rule 7: the metrics store is filled by instruments; the host writes none itself, as it
+is no machine). Named for what they measure:
 
-- ``agents_working{role}``: agent sessions of a role in a turn now;
-- ``agent_turns_started_total{role}`` and ``agent_turns_finished_total{role}``.
+- ``agents_working{role, machine}``: agent sessions of a role in a turn now, every measured role
+  (the resident agents and the task system's roles the agents serve) even at 0, so the level is
+  live from the first read and not from the first turn;
+- ``agent_turns_started_total{role, machine}`` and ``agent_turns_finished_total{role, machine}``.
 
-The level and the counters that move it come from the same change, at the same instant, so they
-balance; counters are kept in the agents' runtime record, so they carry on across restarts. A
-metrics store that cannot be reached loses the points, never a turn."""
+``machine`` is the agent the turn ran as, without its instance (``worker`` for ``worker/1``): the
+measured system's own dimension, not who wrote the point. It equals ``role`` for every agent.
+
+Where they come from: the counters are cumulative across restarts, kept in the agents' runtime
+record (``metric_counts``) under the store's lock and moved in the same write as the session's
+status, so a level and the counters read from one record balance. The plugin declares the
+instrument (``Plugin.collectors``, web.py): ``orchestra run`` runs ``orchestra-agents metrics``
+every discovery step, which prints them from the record, and labels every point
+``instrument=agents.turns`` (and ``project``). The same text is served at the plugin's ``/metrics``
+(``/api/plugins/agents/metrics``) for anyone to read.
+
+Until 2026-10-27 the host wrote these points itself, each at the moment of a turn's start or end.
+The series' names and their ``role`` and ``machine`` labels are kept; ``instrument`` is new. A
+level is now sampled every discovery step, so a turn shorter than a step may not show in it; the
+counters still count every turn."""
 
 from __future__ import annotations
 
-import sys
-import time
-from typing import TYPE_CHECKING
-
 from orchestra.events import machine_and_instance
-from orchestra.metrics import Point
-from orchestra.metrics import for_project as metrics_for
 
-if TYPE_CHECKING:
-    from .config import Project
+WORKING, STARTED, FINISHED = "agents_working", "agent_turns_started_total", "agent_turns_finished_total"
+HELP = {WORKING: ("gauge", "agent sessions of a role in a turn now"),
+        STARTED: ("counter", "agent turns started"),
+        FINISHED: ("counter", "agent turns finished")}
 
 
-class Measures:
-    def __init__(self, project: Project):
-        self.project = project
-        self._store = None
+def count(counts: dict, name: str, role: str, source: str) -> None:
+    """Add one to a cumulative counter kept in ``counts`` (a dict saved in the runtime record, under
+    the store's lock). ``source``: the instance the turn ran as."""
+    labels = {"role": role, "machine": machine_and_instance(source)[0] or "unknown"}
+    key = name + "|" + "|".join(f"{k}={v}" for k, v in sorted(labels.items()))
+    counts[key] = counts.get(key, 0) + 1
 
-    def _metrics(self):
-        if self._store is None:
-            self._store = metrics_for(self.project.orchestra)
-        return self._store
 
-    def write(self, points: list[Point]) -> None:
-        if not points:
-            return
-        try:
-            self._metrics().write(points)
-        except Exception as e:  # noqa: BLE001 - measuring never breaks the work
-            print(f"orchestra-agents: metrics not written ({type(e).__name__}: {e})", file=sys.stderr)
+def counters(counts: dict) -> dict[tuple[str, tuple], int]:
+    """The kept counters by (series name, labels)."""
+    out: dict[tuple[str, tuple], int] = {}
+    for key, n in counts.items():
+        name, *parts = key.split("|")
+        if name in (STARTED, FINISHED):
+            labels = tuple(sorted((k, v) for k, _, v in (p.partition("=") for p in parts)))
+            out[(name, labels)] = out.get((name, labels), 0) + int(n)
+    return out
 
-    def _labels(self, **labels: str) -> dict[str, str]:
-        return {"project": self.project.key, **labels}
 
-    @staticmethod
-    def count(counts: dict, name: str, labels: dict) -> int:
-        """Add one to a cumulative counter kept in ``counts`` (a dict saved under the store's lock)."""
-        key = name + "|" + "|".join(f"{k}={v}" for k, v in sorted(labels.items()))
-        counts[key] = counts.get(key, 0) + 1
-        return counts[key]
+def working(sessions: list[dict], roles: list[str]) -> dict[str, int]:
+    """Each measured role's sessions in a turn now (``kind`` is the role, ``status`` running)."""
+    out = dict.fromkeys(roles, 0)
+    for s in sessions:
+        if s.get("status") == "running" and s.get("kind"):
+            out[s["kind"]] = out.get(s["kind"], 0) + 1
+    return out
 
-    def idle_points(self, roles: list[str]) -> list[Point]:
-        """The points that say no agent of these roles is in a turn, written when the host starts:
-        a gauge is live from its first write, so without them the level would be live, and every
-        flow fitted, only from the first turn, and a run's opening burst would be cut from every
-        equation. The machine is the role, as ``turn_points`` labels it."""
-        t = time.time()
-        return [Point("agents_working", 0.0, t, self._labels(role=role, machine=role)) for role in roles]
 
-    def turn_points(self, sessions: list[dict], counts: dict, *, role: str, source: str, started: bool) -> list[Point]:
-        """The points for an agent turn starting or finishing."""
-        t = time.time()
-        labels = {"role": role, "machine": machine_and_instance(source)[0] or "unknown"}   # role names the series (discovery reads machine as attribution only)
-        name = "agent_turns_started_total" if started else "agent_turns_finished_total"
-        working = sum(1 for s in sessions if s.get("kind") == role and s.get("status") == "running")
-        return [Point(name, float(self.count(counts, name, labels)), t, self._labels(**labels)),
-                Point("agents_working", float(working), t, self._labels(role=role, machine=machine_and_instance(source)[0] or "unknown"))]
+def _line(name: str, labels: tuple | dict, value: float) -> str:
+    items = labels.items() if isinstance(labels, dict) else labels
+    inner = ",".join(f'{k}="{_escape(str(v))}"' for k, v in items)
+    return f"{name}{{{inner}}} {value:g}" if inner else f"{name} {value:g}"
+
+
+def _escape(v: str) -> str:
+    return v.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def exposition(runtime: dict, roles: list[str]) -> str:
+    """The measurements as Prometheus text, from the agents' runtime record (``runtime``) and the
+    measured roles (``roles``)."""
+    series: dict[str, list[str]] = {WORKING: [_line(WORKING, {"role": r, "machine": r}, n)
+                                              for r, n in sorted(working(list(runtime.get("sessions", {}).values()), roles).items())]}
+    for (name, labels), n in sorted(counters(runtime.get("metric_counts") or {}).items()):
+        series.setdefault(name, []).append(_line(name, labels, n))
+    lines: list[str] = []
+    for name, rows in series.items():
+        kind, text = HELP[name]
+        lines += [f"# HELP {name} {text}", f"# TYPE {name} {kind}", *rows]
+    return "\n".join(lines) + "\n"

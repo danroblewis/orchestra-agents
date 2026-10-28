@@ -33,6 +33,21 @@ Contents:
 orchestra-agents runs AI agents as Orchestra machines. It is an Orchestra plugin, and it also
 has a long-running process of its own, the **host**.
 
+What the plugin is (the owner, 2026-10-27): a target repository usually defines its own machines,
+as programs that publish and listen on the bus under their own `source`, or through a bridge that
+relays another system's actors. The Agents plugin is a common resource for the same thing:
+
+- an **implementation of a machine**, the AI agent (a universal machine: its role's prompt and
+  tools decide what it does);
+- the **means to configure one**: roles, the harness and model, how it is engaged (resident,
+  scheduled, ad hoc, its `wake_on`), and its permissions (tool groups, access, team);
+- a **shared runtime** that runs the configured agents, the host, which is **no machine**: it
+  never announces itself, never publishes as `agents` and writes no metrics, and acts on the bus
+  only as the agents it runs;
+- **UI additions**: the Agents page, transcripts, the Supervisor chat, the machine cards.
+
+The machines are the configured agents. The plugin that provides them is never one.
+
 - The host keeps the **resident agents** up: the Supervisor (the human's one point of
   contact), the Coordinator (keeps the plan executable), and any custom agent.
 - It wakes agents on the bus events they listen for, on their schedules, and on notes from
@@ -49,7 +64,8 @@ The guarantees we care about, and where each one comes from:
 
 | What we care about | How the code delivers it |
 |---|---|
-| Agents are machines Orchestra can see | Every event goes on Orchestra's bus as a CloudEvent, with the agent's instance (`supervisor`, `worker/1`) as `source` (`events.py`). Each instance announces itself with `orchestra.machine.started` (`host.py` `_announce`). |
+| Agents are machines Orchestra can see | Every event goes on Orchestra's bus as a CloudEvent, with the agent's instance (`supervisor`, `worker/1`) as `source` (`events.py`). Each instance announces itself with `orchestra.machine.started` (`host.py` `_announce`), listing what the host watches on its behalf (`listening.py`). |
+| The host is no machine | `events.py` refuses a publish as `agents` or with no source; the host announces nothing of its own, the plugin declares no machine for it, and its measurements reach the store through the plugin's instrument (`measures.py`, `web.collectors`). `tests/unit/test_host_is_no_machine.py` fails otherwise. |
 | The agents never change a ticket directly | Ticket and milestone tools are requests on the bus, and the task system applies them (`protocol.py` `TaskClient`). Nothing imports `tasking`. |
 | No branching or worktree management | The task system names the workspace in the offer. The runner only runs a session in it (`runner.py`). |
 | A lost race costs nothing | The runner starts a session only after it has read its claim back from the bus as the first valid claim of the offer (`runner.py` `_held`): the bus's order decides, and the task system confirms nothing. |
@@ -85,7 +101,7 @@ flowchart LR
   subgraph Agents["orchestra-agents"]
     direction TB
     PLUGIN["web.py plugin<br/>pages, API, scripts"]
-    subgraph HostProc["host process: orchestra-agents run (machine agents)"]
+    subgraph HostProc["host process: orchestra-agents run (no machine)"]
       HOST[host.py AgentHost<br/>tick loop]
       CTRL[control.py<br/>127.0.0.1 control endpoint]
       RUN[runner.py AgentRunner]
@@ -125,7 +141,9 @@ flowchart LR
   RUN <-- task.* --> BUS
   SCHED <-- task.*, request.*, gate.* --> BUS
   HOST --> STORE
-  STORE -- agents_working, turn counters --> MET
+  INSTR[instrument agents.turns<br/>orchestra-agents metrics] -- reads --> STORE
+  LAUNCH -- runs every step --> INSTR
+  INSTR -- agents_working, turn counters --> MET
   LAUNCH --> RT
 ```
 
@@ -140,7 +158,7 @@ The modules, grouped by job:
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
-| Bus, state, settings, metrics | `events.py`, `store.py`, `config.py`, `measures.py` |
+| Bus, state, settings, metrics | `events.py`, `store.py`, `config.py`, `measures.py`, `listening.py` |
 | UI | `static/agents.html`, `static/agents.js`, `static/agents.css`, `static/attention.js`, `static/machine-cards.js` |
 
 ---
@@ -163,8 +181,9 @@ agents = "orchestra_agents.web:plugin"
 | Scripts on every page | `attention.js`, `machine-cards.js` | `web.plugin` |
 | Stylesheets on every page | `agents.css` | `web.plugin` |
 | API router | see [section 13](#13-web-panels-and-machine-cards) | `web.router` |
-| Declared machines | `agents` (program, continuous), plus every agent from `org_store.all_agents` (kind `agent`, `continuous` if resident or `ad hoc`, and what it wakes on) | `web.declared` |
+| Declared machines | every agent from `org_store.all_agents` (kind `agent`, `continuous` if resident or `ad hoc`, and what it listens for, `listening.listens_for`). The host is not one. | `web.declared` |
 | Processes | `host`: `[sys.executable, -m, orchestra_agents, run, --wait]` with `stop_grace_s=30`, **only when `orchestra.toml` has an `[agents]` section** | `web.processes` |
+| Collectors | `turns` (Orchestra names it `agents.turns`): the command `orchestra-agents metrics`, every discovery step, same condition | `web.collectors` |
 
 So `orchestra run` starts the host as the process `agents.host`, keeps it running and stops it.
 A project without `[agents]` still gets the pages, but no host runs and no AI is started.
@@ -175,7 +194,8 @@ what it observes on the bus (Orchestra rule 2).
 The host uses Orchestra only as a library:
 
 - the bus, through `orchestra.events.Events` (wrapped by `events.py`);
-- the metrics store, through `orchestra.metrics.for_project` (`measures.py`, `observe_model.py`);
+- the metrics store, through `orchestra.metrics.for_project`, to read only (`observe_model.py`):
+  the agents' own measurements reach it through the instrument the plugin declares;
 - the runtime record, through `orchestra.runtime` (`restart.py`, `observe.py`, `setup_tools.py`);
 - the configuration, only through Orchestra's objects: `project.orchestra.config` to read it (the
   private overlay merged), `project.orchestra.config_edit` to change it (`config_change.py`,
@@ -188,7 +208,8 @@ The host uses Orchestra only as a library:
 ## 4. The host and its control endpoint
 
 `orchestra-agents run` creates `host.AgentHost` and calls `run(wait=...)`. There is one host per
-project. On the bus it is the machine `agents`.
+project. On the bus it is nobody: every event it sends is an agent's (`host._say`,
+`host.source_of`), and it never announces itself.
 
 ### Start-up
 
@@ -204,13 +225,10 @@ project. On the bus it is the machine `agents`.
    to idle.
 4. **Finish an interrupted restart.** `restart.recover` puts back a `[[machines]]` entry that an
    interrupted `restart_machine` took out ([section 10](#10-the-supervisor-as-the-humans-operator)).
-5. **Announce** `orchestra.machine.started` from `agents` with
-   `{package: agents, mode: continuous, kind: program, listens_for: [gate.landed, request.done, review.approved, ticket.created], log}`: what it acts on as itself
-   (a finished ticket's sessions go to the archive, `protocol.ended`; the human's tickets are
-   followed, `landings.py`).
-6. **Load the organisation** (`_refresh_org`) and start the resident sessions
-   (`Residents.start_missing`).
-7. **Write idle metric points** for every measured role (`store.measure_idle`).
+5. **Load the organisation** (`_refresh_org`) and start the resident sessions
+   (`Residents.start_missing`). Each session's agent announces itself as it opens (`_announce`).
+   There is no announcement of the host's own and no metric point: the instrument reports every
+   measured role at 0 until a turn starts.
 
 ### The tick (once a second)
 
@@ -347,7 +365,8 @@ A team's `probes` entries look like `{name, command, every, timeout?}`.
   thread of its own.
 - Exit 0 means the condition holds.
 - The prober emits `probe.failed` (`{probe, team, output}`) or `probe.recovered`
-  (`{probe, team}`) only when the state changes.
+  (`{probe, team}`) only when the state changes, as the team's lead (or the Supervisor, for a
+  team without one): the host is no machine (`ProbeSpec.source`).
 
 The task system's own `[[probes]]` are separate.
 
@@ -1087,6 +1106,7 @@ The router is `web.router`. The organisation, agents and chat endpoints reload `
 | `GET /agents` | `org_views.agents_status`: host `{port, pid, alive}`, agents, every session as an instance with its ticket (`{id, title, state, worker_turns}`), harness, model, serves |
 | `GET /state` | Sessions with `alive`, the probes, and the control record |
 | `GET /sessions/{id}/transcript?before=&limit=&after=` | A page of the harness transcript, newest first, plus `markers`, `started_with` (the prompt) and the host |
+| `GET /metrics` | The agents' measurements as Prometheus text (`measures.exposition`), what the instrument reads |
 | `GET /attention` | `{message (Supervisor text not yet read), working, count, host.alive}` |
 | `POST /attention/seen` | Marks the Supervisor as read (`supervisor_seen_at`) |
 | `POST /supervisor` | The chat (see above) |
@@ -1106,7 +1126,7 @@ The screens:
   - A worker or reviewer role shows a card per ticket an instance is on, in the ticket's state
     colour, with a "↺n" badge when `worker_turns ≥ 2` and a lane with what the agent is saying
     now.
-  - The host is a single line.
+  - The host has no card: it is no machine.
   - A machine that has any agent instance is shown as an agent (`kindOf`).
 
 The UI writes nothing except the chat and the "seen" mark.
@@ -1115,20 +1135,26 @@ The UI writes nothing except the chat and the "seen" mark.
 
 ## 14. Metrics
 
-`measures.py` writes to Orchestra's metrics store, through `store.measure_turn` and
-`measure_idle`. Every point has the label `project=<key>`.
+The host writes no metrics. It moves counters in `runtime.json` (`store.count_turn`), and the
+plugin's instrument reads them: `orchestra run` runs `orchestra-agents metrics` every discovery
+step (`web.collectors`), which prints Prometheus text from the record (`measures.exposition`,
+`org_views.metrics_text`). Orchestra adds `project=<key>` and `instrument=agents.turns` to every
+point. `GET /api/plugins/agents/metrics` serves the same text.
 
-| Series | Type | Labels | When |
+| Series | Type | Labels | Value |
 |---|---|---|---|
-| `agents_working` | Gauge | `role`, `machine` | `0` for each measured role at host start. Then, at each turn start and end, the number of `running` sessions of that role. |
-| `agent_turns_started_total` | Counter | `role`, `machine` | Each turn start |
-| `agent_turns_finished_total` | Counter | `role`, `machine` | Each turn end |
+| `agents_working` | Gauge | `role`, `machine` | The `running` sessions of that role when the instrument reads. Every measured role (resident agents and the roles `serves`) is reported, at 0 when idle. |
+| `agent_turns_started_total` | Counter | `role`, `machine` | Turns started |
+| `agent_turns_finished_total` | Counter | `role`, `machine` | Turns finished |
 
 - `role` is the session's kind (`supervisor`, `worker`, a custom agent).
-- `machine` is the instance's machine (`worker` for `worker/1`).
+- `machine` is the instance's machine (`worker` for `worker/1`): the measured system's own
+  dimension, not the writer.
 - The counters are kept in `runtime.json` `metric_counts`, so they continue across restarts.
-- The gauge and the counter change in the same write, so they balance.
-- If the metrics store cannot be reached, the points are lost but the turn goes on.
+- The level and the counters are read from one record, so they balance; the level is sampled each
+  discovery step, so a turn shorter than a step may not show in it.
+- Until 2026-10-27 the host wrote these points itself. Names and the `role` and `machine` labels
+  are unchanged; `instrument` is new.
 
 Orchestra's model generator decides which series are stocks and which are flows.
 
@@ -1141,16 +1167,16 @@ Every event is a CloudEvent written through `orchestra.events`. The fields below
 - `events.Events.emit` sets `subject` to the event's `ticket`, `milestone` or `session`, in that
   order.
 - `source` is the instance bound to the session (`supervisor`, `worker/1`) when the event is
-  about a session. Otherwise it is the process's default: `ORCHESTRA_SOURCE`, else
-  `ORCHESTRA_ROLE`, else `agents`. For the host that is `agents`. For a tool call it is the
-  agent's instance.
+  about a session, or, once the slot is given back, the instance the session's record names
+  (`host.source_of`). A probe's is the team's lead. Otherwise it is the process's own:
+  `ORCHESTRA_SOURCE`, else `ORCHESTRA_ROLE` (a tool call: the agent's instance). The host has
+  none: a publish as `agents`, or with no source, raises (`events.Events.publish`).
 
 ### Published
 
 | Type | Source | Data |
 |---|---|---|
-| `orchestra.machine.started` | `agents` | `{package: agents, mode: continuous, kind: program, listens_for: [gate.landed, request.done, review.approved, ticket.created], log}` |
-| `orchestra.machine.started` | the instance (once per source, harness and model in the host's lifetime) | `{package: agents, mode: continuous \| ad hoc, listens_for, kind: agent, role, harness, model}` |
+| `orchestra.machine.started` | the instance (once per source, harness and model in the host's lifetime) | `{package: agents, mode: continuous \| ad hoc, listens_for, kind: agent, role, harness, model}`; `listens_for` from `listening.listens_for` (section 15, "Listened for") |
 | `task.accepted`, `task.working`, `review.requested`, `changes.requested`, `review.approved`, `task.reported` | the instance | See [section 8](#8-filling-the-task-systems-roles-the-runner) |
 | `task.requested`, `task.change_requested`, `task.note_requested`, `task.cancel_requested`, `task.unblock_requested`, `milestone.requested`, `milestone.change_requested`, `milestone.close_requested`, `capacity.change_requested`, `pipeline.resume_requested` | the instance | `{request, args, by}`; subject = `args.id` or `args.milestone_id` |
 | `task.query_requested` | the instance (or the woken agent's name, for host snapshots) | `{request, args, by, op}`. `op` is one of `list_tickets`, `get_ticket`, `project_status`, `list_milestones`, `get_capacity`, `snapshot`, `list_gate_runs`, `get_gate_run`, `get_staging_status`. |
@@ -1169,7 +1195,7 @@ Every event is a CloudEvent written through `orchestra.events`. The fields below
 | `context.updated` | `supervisor` | `{by}` |
 | `config.changed` | `supervisor` | `{section, change, reason, commit, applies, by}` |
 | `machine.restarted` | `supervisor` | `{name, reason, by, pid_before, pid}` |
-| `probe.failed`, `probe.recovered` | `agents` | `{probe, team, output?}` |
+| `probe.failed`, `probe.recovered` | the team's lead, or `supervisor` | `{probe, team, output?}` |
 | A team's declared type | the caller | `{by, subject, note, depth, team}` |
 
 The web plugin publishes nothing.
@@ -1181,8 +1207,8 @@ The web plugin publishes nothing.
 | `task.assigned`, `review.requested`, `changes.requested` | `runner.tick` | Offers for the served roles (one addressed `to` an instance only for that slot) |
 | `task.accepted` | `runner._held`, `runner.tick`, `fillers.py` | Whose claim was first; another worker taking a ticket whose slot is kept |
 | `task.released` | `runner.tick`, `runner._held` | The assignment taken back, or rejected work the queue took back |
-| `gate.landed`; `review.approved` (tasks mode); `request.done` whose result is a ticket in DONE or CANCELLED | `runner.tick`, `landings.py` (`protocol.ended`) | A ticket's end archives its sessions, lets the slot go and settles a landing. |
-| `ticket.created` with `by=supervisor` | `landings.py` | Remember the human's tickets |
+| `gate.landed`; `review.approved` (tasks mode); `request.done` whose result is a ticket in DONE or CANCELLED | `runner.tick`, `landings.py` (`protocol.ended`) | A ticket's end archives its sessions, lets the slot go (bookkeeping, announced by nobody) and settles a landing (announced by the Supervisor) |
+| `ticket.created` with `by=supervisor` | `landings.py` | Remember the human's tickets (announced by the Supervisor) |
 | `task.accepted`, `orchestra.machine.started` | `fillers.py`, `observe._announced_log` | Who fills the roles, and where a machine's log is |
 | `request.done`, `request.refused` | `protocol.TaskClient` | Answers to requests and queries |
 | `task.attention_needed` (`to`: supervisor or coordinator) | `host._wake_on_events` | Wake a planner |
@@ -1192,7 +1218,15 @@ The web plugin publishes nothing.
 | Any event from a `merge_gate` source | `gate_busy.landing` | Whether a gate is present to ask about |
 
 Wake-ups that are **not** bus events: a human chat message, `escalate_to_supervisor`,
-`message_agent`, `run_agent`, a crash loop, a landing, a change to an agent or team.
+`message_agent`, `run_agent`, a crash loop, a change to an agent or team.
+
+Who announces each subscription (`listening.listens_for`; the host announces nothing):
+
+| Agent | `listens_for` |
+|---|---|
+| every agent | the types of its `wake_on` |
+| every agent the host wakes (not a worker or reviewer) | `request.done`, `request.refused`: answers to its own requests and snapshot queries, which the task system publishes as the asker |
+| the Supervisor | also `gate.landed`, `ticket.created`, and in tasks mode `review.approved` (`protocol.endings`) |
 
 ---
 

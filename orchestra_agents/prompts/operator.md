@@ -165,8 +165,13 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    When the store refuses without a credential and the human named none, ask where it is (a file
    or a variable), never for its value.
 3. **Look, with `url` and `auth`, before declaring:** `check_sources` (does it answer; is the
-   credential there), `source_schema` (what it has; narrow with `match` to what bears on the
-   human's question), `preview_query` (a candidate's shape, scale, labels and units). A slow,
+   credential there; give `auth` only when the human named a credential for this store or it
+   refuses without one), then `source_schema` **without `match` first**: every metric name, one
+   line each, cheap even on a big store. Read the whole list before choosing: names rarely start
+   with the word you would guess (`shop_orders_placed_total`, `fulfilment_…`), so never conclude a
+   store lacks something from a `match` you guessed. Then `source_schema` with `match` for the
+   details of the names you chose, and `preview_query` for a candidate's shape, scale, labels and
+   units. A slow,
    rate-limited or size-limited store is no reason to stop or to ask: read it narrowly (a `match`
    per family you need), and Orchestra waits out its 429s and 503s and narrows what it refuses.
 4. **Choose a first selection yourself**, from the question asked or, without one, from what carries
@@ -179,9 +184,12 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    for what fills and drains it (`source_schema` with a `match` on its subject: a queue's
    published, delivered and acknowledged counters; a topic's produced and consumed offsets, which
    are counters even when typed gauges; sessions or connections started and ended, opened and
-   destroyed; units received) and read them too. Never tell the human a flow is not measured
-   until you have searched for it; when it truly is not, say the level's change less its measured
-   flows is that flow (a residual).
+   destroyed; units received) and read them too. A counter missing per queue may exist only
+   globally (`…_global_…`): when one queue carries the traffic, it is that queue's drain; check
+   with `preview_query` that the level's change over an hour is about its inflow less that
+   counter. Never tell the human a flow is not measured until you have searched the whole name
+   list for it; when it truly is not, say the level's change less its measured flows is that
+   flow (a residual).
 5. **Declare it** with `set_setting` key `sources` (the whole list of `[[sources]]` tables as
    JSON, the ones already there included): a `name` for what the store is (it prefixes every
    series read from it), the `url`, the `auth`, a narrow `match` (a list of selectors), the

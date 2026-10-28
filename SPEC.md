@@ -401,6 +401,17 @@ withholds its file-editing tools (Claude Code: `--disallowedTools Edit,Write,Not
 `--exclude-tools edit,write`). Codex has no per-tool switch short of a sandbox that would also stop
 the agents' own tools from committing `orchestra.toml`, so there it is the prompt's rule only. The
 shell stays: a command can still write, and the prompts say it must not.
+Every Claude Code session, whatever its role, is also without the product's own tools that stand in
+for Orchestra's work (`TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, `TodoWrite`, the `Cron*`
+tools, `ScheduleWakeup`, `RemoteTrigger`: a private todo list and schedules that die with the
+process); subagents (`Task`) stay. A Claude Code turn whose first event (`system`/`init`) does not
+list the `orchestra` MCP server as `connected` is stopped there, before the model runs, as a
+failed turn whose reason names the server's status, the managed settings that can block MCP
+servers and the command to start the server by hand (`harness/mcp_status.py`); it is a
+`session.error` in the transcript, the host log and the attention banner. No Claude Code turn
+starts again for five minutes, doubling to an hour, unless those settings change or the host
+restarts. The MCP server that cannot load its tools exits non-zero and writes why to the session's
+log. Every session's prompt ends with the rule: without Orchestra's tools, say so and stop.
 
 - **Dummy** (`dummy.py`, `dummy_agent.py`, `dummy_script.py`): a scripted agent with no model, no
   network and no cost. Each turn is one `python -m orchestra_agents.harness.dummy_agent` process

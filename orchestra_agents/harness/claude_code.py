@@ -30,8 +30,16 @@ from .base import (
     records,
     resolve_binary,
 )
+from .mcp_status import BACKOFF, policy_files, problem, try_command, until
 
 TOOL_PREFIX = "mcp__orchestra__"
+# Claude Code's own tools that stand in for Orchestra's work: a private todo list the model can
+# "create a task" in, and schedules that die with the one-shot process. With them, a turn without
+# Orchestra's tools reports work nobody will ever see; without them, it can only say it has none.
+# Subagents (Task/Agent) stay: they research inside the turn, and their work is in the transcript.
+NOT_ORCHESTRA = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
+                 "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "RemoteTrigger")
+EDITS = ("Edit", "Write", "NotebookEdit")    # taken from a read-only agent: it reads, searches and runs read-only commands
 
 
 def claude_config_dir() -> Path:
@@ -81,12 +89,17 @@ class ClaudeCodeSession(AgentSession):
     def alive(self) -> bool:
         return not self._closed
 
-    def _mcp_config(self) -> Path:
+    def _mcp_env(self) -> dict[str, str]:
         env = {k: v for k, v in self.spec.env.items()}
         env["ORCHESTRA_TOOLS"] = ",".join(self.spec.tool_groups)
+        env["ORCHESTRA_MCP_LOG"] = str(self.spec.log_path)      # where the server says why it could not start
         for k in ("ORCHESTRATOR_HOME", "PATH", "HOME"):
             if os.environ.get(k):
                 env[k] = os.environ[k]
+        return env
+
+    def _mcp_config(self) -> Path:
+        env = self._mcp_env()
         cfg = {"mcpServers": {"orchestra": {"command": sys.executable, "args": ["-m", "orchestra_agents.harness.mcp"], "env": env}}}
         p = self._dir / f"{self.spec.session_id}.mcp.json"
         p.write_text(json.dumps(cfg, indent=1) + "\n", encoding="utf-8")
@@ -109,8 +122,7 @@ class ClaudeCodeSession(AgentSession):
                 "--dangerously-skip-permissions", "--strict-mcp-config", "--mcp-config", str(self._mcp_config())]
         if self.spec.model:
             args += ["--model", self.spec.model]
-        if self.spec.read_only:                  # reads, searches and runs read-only commands; edits no file
-            args += ["--disallowedTools", "Edit,Write,NotebookEdit"]
+        args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(max(100_000, int(self.spec.compact_tokens)))]
         if self.spec.system_prompt:
@@ -124,6 +136,10 @@ class ClaudeCodeSession(AgentSession):
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
             result = TurnResult()
+            refused = BACKOFF.refusal(self._policy_files())
+            if refused:
+                result.error = refused
+                return result
             emit = _Normalizer(on_event)
             self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
             stderr = self.spec.log_path.open("a", encoding="utf-8")
@@ -161,8 +177,11 @@ class ClaudeCodeSession(AgentSession):
                         ev = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    emit(ev)
                     t = ev.get("type")
+                    if t == "system" and ev.get("subtype") == "init" and self._no_orchestra(ev, result):
+                        self.kill()
+                        return result
+                    emit(ev)
                     if t == "assistant":
                         for part in (ev.get("message") or {}).get("content") or []:
                             if part.get("type") == "text" and part.get("text", "").strip():
@@ -184,6 +203,22 @@ class ClaudeCodeSession(AgentSession):
             finally:
                 self.proc = None
                 stderr.close()
+
+    def _policy_files(self) -> list[Path]:
+        return policy_files(claude_config_dir())
+
+    def _no_orchestra(self, init: dict, result: TurnResult) -> bool:
+        """The turn's first event: when Orchestra's MCP server is not connected, the turn ends
+        here, before the model runs, as a failure that says why; and no turn starts again for a
+        while (mcp_status.Backoff)."""
+        why = problem(init, config_dir=claude_config_dir(), try_cmd=try_command(sys.executable, self._mcp_env()),
+                      log_path=self.spec.log_path)
+        if why is None:
+            BACKOFF.ok()
+            return False
+        at = BACKOFF.failed(why, self._policy_files())
+        result.error = f"{why}\n\n{until(at)}"
+        return True
 
     def kill(self) -> None:
         p = self.proc

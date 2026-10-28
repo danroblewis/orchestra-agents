@@ -99,3 +99,23 @@ def test_the_endpoint_answers_with_it_and_reading_clears_it(project):
 ])
 def test_only_a_bare_acknowledgement_says_nothing(text, says_nothing):
     assert quiet(text) is says_nothing
+
+
+def test_a_supervisor_turn_that_failed_calls_with_the_reason(project):
+    """Claude Code without Orchestra's MCP server: the turn is stopped at its start (the harness's
+    mcp_status), and the banner says so instead of staying quiet."""
+    store = supervisor(project, [u(CHAT, 0), a("All fine.", 1)], seen=2, last_text="", settled_at=T0 + 9)
+    store.add_marker("supervisor", {"type": "session.error", "ts": T0 + 9, "session": "supervisor",
+                                    "error": "Orchestra's tools are not available to Claude Code: the MCP server `orchestra` did not connect"})
+    m = unread(store.runtime())
+    assert m["kind"] == "failed" and not m["in_chat"] and m["count"] == 1 and m["at"] == T0 + 9
+    assert "could not run the Supervisor's turn" in m["text"] and "did not connect" in m["text"]
+    store._mutate_runtime(lambda d: d.__setitem__("supervisor_seen_at", T0 + 10))
+    assert unread(store.runtime()) is None                       # read: it does not call again
+
+
+def test_a_reply_newer_than_a_failure_is_the_message(project):
+    store = supervisor(project, [u(CHAT, 0), a("All fine.", 1), u(WAKE, 10), a("The prediction held.", 12)], seen=2,
+                       last_text="The prediction held.", settled_at=T0 + 12)
+    store.add_marker("supervisor", {"type": "session.error", "ts": T0 + 5, "session": "supervisor", "error": "x"})
+    assert unread(store.runtime())["text"] == "The prediction held."

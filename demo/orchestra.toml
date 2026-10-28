@@ -1,5 +1,5 @@
 # The agents' demo project: Orchestra, the task system and AI agents (Claude Code, Haiku) as
-# worker and reviewer, beside a program worker (machines/shell_worker.py) that takes only tickets
+# worker and reviewer, beside a program worker (the task system's tasking.machines.shell_worker) that takes only tickets
 # written as shell commands. demo/run.py copies this folder to a fresh git repository and starts
 # Orchestra; `orchestra run` starts the rest. See README.md.
 
@@ -32,7 +32,7 @@ every = "5m"
 name = "shell_worker"
 # instance "shell" (source worker/shell): the agents' host names its AI workers worker/1, worker/2,
 # and two machines sharing a source would both hold one assignment
-command = "python machines/shell_worker.py shell --only-commands"   # takes only tickets whose description gives `sh` blocks
+command = "python -m tasking.machines.shell_worker shell --only-commands"   # takes only tickets whose description gives `sh` blocks
 
 # ---- the task system (orchestra-tasking; sections Orchestra itself ignores) ----
 

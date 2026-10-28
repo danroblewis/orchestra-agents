@@ -5,12 +5,12 @@
     # --dummy: scripted agents (the dummy harness, dummy.toml beside this file): no model, no cost
 
 It copies the template beside it (orchestra.toml, README.md, .gitignore), a project context for
-the Supervisor (CONTEXT, as .orchestra/PROJECT.md) and the task system's own shell worker (orchestra-tasking's demo/machines/shell_worker.py, from the checkout the dev
-extra installs) to the target, makes it a git repository (Orchestra wants orchestra.toml at a
+the Supervisor (CONTEXT, as .orchestra/PROJECT.md) to the target, makes it a git repository (Orchestra wants orchestra.toml at a
 repository root; the task system lands each ticket's branch on its main), removes any state a
 previous run left for it, and starts Orchestra: its host (`orchestra run`) and its web UI. The
 host starts the rest: the task system's scheduler and the agents' host (each plugin declares
-its own) and the shell worker (`[[machines]]` in orchestra.toml). Then it creates a milestone
+its own) and the task system's shell worker (`[[machines]]` in orchestra.toml: `python -m
+tasking.machines.shell_worker`, from the orchestra-tasking package the dev extra installs). Then it creates a milestone
 and its tickets as a planner would (requests over the bus, protocol.py), prints the URL with a
 link that logs in (every page of `orchestra web` asks for the project's web token) and stops
 everything on Ctrl-C. Orchestra's output goes to run/*.log in the target; what the host
@@ -137,8 +137,6 @@ def make_project(target: Path, dummy: bool = False) -> Path:
         assert agents in text, "demo/orchestra.toml's [agents] changed; update make_project"
         toml.write_text(text.replace(agents, f'harness = "dummy"        # scripted agents: no model, no cost\ndummy_script = "{DUMMY_SCRIPT}"\n'),
                         encoding="utf-8")
-    (target / "machines").mkdir()
-    shutil.copy(shell_worker(), target / "machines" / "shell_worker.py")
     (target / ".orchestra").mkdir()
     (target / ".orchestra" / "PROJECT.md").write_text(CONTEXT, encoding="utf-8")
     git = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.invalid"]
@@ -150,15 +148,6 @@ def make_project(target: Path, dummy: bool = False) -> Path:
         shutil.rmtree(state)
         print(f"removed the state a previous run left in {state}", flush=True)
     return target
-
-
-def shell_worker() -> Path:
-    """The task system's own program worker, from its checkout: the wheel does not ship the demo."""
-    import tasking
-    src = Path(tasking.__file__).resolve().parents[1] / "demo" / "machines" / "shell_worker.py"
-    if not src.exists():
-        sys.exit(f"the demo needs the orchestra-tasking checkout (uv sync --extra dev): no shell worker at {src}")
-    return src
 
 
 def start(target: Path, port: int, env: dict[str, str] | None = None) -> dict[str, subprocess.Popen]:

@@ -37,7 +37,8 @@ from .store import StoreError
 MAX_CANDIDATES = 16       # metric names read as candidates, over every store
 SAME_SCALE = 0.1          # two levels within this share of each other on average ...
 SAME_CORR = 0.98          # ... whose values move together this closely are one quantity read twice
-MAX_LEVELS = 24           # levels searched in one call
+PARTS = re.compile(r"_(ready|unacked|bytes|max|pending|in_flight)$")   # a part or aspect of another level
+MAX_LEVELS = 32           # levels searched in one call
 MAX_GROUPS = 8            # series per candidate name, when read per value of a label naming the level's subject
 WINDOW_MIN = 60
 SETTLE = 90.0             # every read ends at least this long before now (a store written a minute late)
@@ -348,7 +349,7 @@ def all_levels(stores: list[Store], start: float, end: float) -> list[str]:
     from orchestra.sources.listing import listing
 
     from .source_tools import _guess, _levels
-    out: list[str] = []
+    per: list[list[str]] = []
     for st in stores:
         try:
             got = listing(st.src, ['{__name__=~".+"}'], start, end, concurrency=st.spec.concurrency)
@@ -361,7 +362,11 @@ def all_levels(stores: list[Store], start: float, end: float) -> list[str]:
             for labels in sets:
                 for k, v in labels.items():
                     values[n].setdefault(k, set()).add(v)
-        out += _levels(fams, values, lambda n, meta=meta: (meta.get(n) or {}).get("type") or _guess(n))
+        got = expand(_levels(fams, values, lambda n, meta=meta: (meta.get(n) or {}).get("type") or _guess(n)))
+        per.append(sorted(got, key=lambda x: bool(PARTS.search(metric_of(x)))))      # a part of another level last
+    out = []                                     # the stores taken in turn, so a cap cuts each store's least
+    for i in range(max(map(len, per), default=0)):
+        out += [lv[i] for lv in per if i < len(lv)]
     return out
 
 
@@ -371,7 +376,7 @@ def find_balance(project: Project, a: dict) -> dict:
         raise StoreError("give the level: a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}, or a list of them")
     home, stores = _stores(project, a)
     if levels == ["all"]:
-        levels = expand(all_levels(stores, time.time() - WINDOW_MIN * 60, time.time()))
+        levels = all_levels(stores, time.time() - WINDOW_MIN * 60, time.time())
         if not levels:
             raise StoreError("no store searched has a gauge that looks like an amount held: give the levels")
     later = levels[MAX_LEVELS:]

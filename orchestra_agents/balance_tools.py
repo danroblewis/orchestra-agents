@@ -313,7 +313,7 @@ def _kind(store: Store, name: str, meta: dict) -> str:
 def _stock_name(given: str, level: str) -> str:
     """The stock's name: the one given, else the values the level is selected by (its queue, its
     volume), else its metric's name; lower case, at most 40 characters, cut at a word."""
-    own = [v for k, v in matchers(level).items() if k != "__name__"]
+    own = [v for k, v in matchers(level).items() if k != "__name__" and k not in ENV_LABELS]
     raw = given or ("_".join(own) if own else metric_of(level) or "level")
     name = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
     while len(name) > 40 and "_" in name:
@@ -388,28 +388,43 @@ def find_balance(project: Project, a: dict) -> dict:
         got = _one(levels[0], home, stores, a, window)
         got.pop("_rows", None)
         return got
-    out: dict = {"ok": True, "window": f"{round((end - start) / 60)} min, {step:g} s steps", "levels": []}
-    rows = []
+    briefs, rows = [], []
     for level in levels:
         try:
             got = _one(level, home, stores, a | {"stock": ""}, window)
         except StoreError as e:
-            out["levels"].append({"level": level, "result": str(e)})
+            briefs.append({"level": level, "result": str(e)})
             continue
-        rows.append((len(out["levels"]), got.pop("_rows")))
-        out["levels"].append(_brief(got))
+        rows.append((len(briefs), got.pop("_rows")))
+        briefs.append(_brief(got))
     for (i, ra), (j, rb) in combinations(rows, 2):
         if _same_quantity(ra, rb):
             for x, y in ((i, j), (j, i)):
-                other = out["levels"][y]
-                out["levels"][x].setdefault("same_as", []).append(f"{other['store']}:{other['level']}")
+                briefs[x].setdefault("same_as", []).append(f"{briefs[y]['store']}:{briefs[y]['level']}")
+    balanced = [b for b in briefs if b.get("accepted")]
+    declare, taken = [], set()
+    for b in sorted(balanced, key=lambda b: b["_score"], reverse=True):     # of one quantity read twice, the better fit
+        me = f"{b['store']}:{b['level']}"
+        if not taken & set(b.get("same_as", [])):
+            declare += b["declare"]
+            taken.add(me)
+        else:
+            b["not_declared"] = "the same quantity as a level declared here: declare only one"
+    for b in briefs:
+        b.pop("_score", None)
+        b.pop("accepted", None)
+    out: dict = {"ok": True, "window": f"{round((end - start) / 60)} min, {step:g} s steps",
+                 "balanced": balanced,
+                 "not_balanced": [f"{b['level']} ({b.get('store') or '?'}): {b.get('result') or b.get('fit')}"
+                                  + (f"; one side: {'; '.join(b['one_sided'])}" if b.get("one_sided") else "")
+                                  for b in briefs if b not in balanced],
+                 "declare_all": declare}
     if later:
         out["not_searched_yet"] = later
         out["not_searched_note"] = f"at most {MAX_LEVELS} levels a call: call again with not_searched_yet"
-    out["next"] = ("for each level with a balance, declare its declare list (all in one set_setting key series, with the "
-                   "[[series]] already there); with bursts or one_sided, declare the level and that side and name the "
-                   "residual; levels marked same_as are one quantity read twice (a copy in another store, a replica): "
-                   "declare one of them, the one whose balance is accepted")
+    out["next"] = (f"{len(balanced)} level(s) balanced. Declare declare_all (with the [[series]] already there) in one "
+                   "set_setting key series, and read each level and counter in it in its store's match. A level of "
+                   "not_balanced with one side: declare the level and that side and name the residual")
     return out
 
 
@@ -436,6 +451,8 @@ def _brief(got: dict) -> dict:
     b = next(iter(got.get("balances") or []), None)
     out = {"level": got["level"], "store": got["store"]}
     if b:
+        out["accepted"] = b["accepted"]
+        out["_score"] = (b["accepted"], b["fit"]["r2"], b["fit"]["exact_share"])
         f = b["fit"]
         out["balance"] = b["balance"]
         out["fit"] = (f"{'accepted' if b['accepted'] else 'not accepted: ' + b.get('why_not', '')}; R² {f['r2']}, held out "

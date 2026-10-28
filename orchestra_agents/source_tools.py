@@ -105,7 +105,7 @@ def source_schema(project: Project, a: dict) -> dict:
     if not detail and (lv := _levels(fams, values, kind)):           # first: what the answer is read for
         out["levels"] = lv
         out["levels_next"] = ("these gauges hold amounts (queues, lags, connections, volumes, inventories): each may be a "
-                              "stock. Call find_balance with level \"all\" (or this list) before choosing what to read")
+                              "stock. Call find_balance with level \"all\" before choosing what to read")
     if got.notes:
         out["notes"] = got.notes
     if detail:

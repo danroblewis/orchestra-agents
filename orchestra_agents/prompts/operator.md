@@ -187,8 +187,9 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    in `sources` (`{"url", "auth"}` for one not declared yet), for the counters that fill and
    drain each (each queue, group or volume apart), and returns each balance, its fit and the
    `[[series]]` that declare it. Read every level it balances, with its counters. Each time you
-   add a store, call it with `"all"` again: a level's flows may be in the new store. Levels
-   marked `same_as` are one quantity read twice: declare only one. Declare an accepted balance as given (its `declare` list), and
+   add a store, call it with `"all"` again (never a list of your own: a level's flows may be in
+   the new store, and a level in the old one). Its `declare_all` holds one of each quantity read
+   twice (`same_as`): declare that. Declare an accepted balance as given (its `declare` list), and
    read its counters in that store's `match`. One with `bursts` or `one_sided` is the level, its
    measured side and a residual: declare those and name the residual. When it finds nothing,
    say the flow is not measured. A level both stores hold is one stock: declare it once, from

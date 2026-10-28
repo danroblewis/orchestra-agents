@@ -133,12 +133,15 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     # the levels source_schema lists, passed as written, are searched each in turn
     listed = tooling.handle(project, sup, "source_schema", {"source": "shop"}, role="supervisor")["levels"]
     assert listed == ["jobs_queue_messages by queue: jobs, other"]
-    each = tooling.handle(project, sup, "find_balance", {"level": listed, "step_s": 30}, role="supervisor")["levels"]
-    assert [x["level"] for x in each] == ['jobs_queue_messages{queue="jobs"}', 'jobs_queue_messages{queue="other"}']
-    assert "jobs_done_total" in each[0]["balance"] and each[1]["balance"] == "+shop:jobs_published_total"
-    every = tooling.handle(project, sup, "find_balance", {"level": "all", "source": "biz", "step_s": 30}, role="supervisor")["levels"]
-    assert [x["level"] for x in every] == [x["level"] for x in each]    # biz holds no level
-    assert [d["query"] for d in each[1]["declare"]] == ['sum(jobs_queue_messages{queue="other"})', 'sum(jobs_published_total{queue="other"})']
+    each = tooling.handle(project, sup, "find_balance", {"level": listed, "step_s": 30}, role="supervisor")
+    assert [x["level"] for x in each["balanced"]] == ['jobs_queue_messages{queue="jobs"}', 'jobs_queue_messages{queue="other"}']
+    jobs, other = each["balanced"]
+    assert "jobs_done_total" in jobs["balance"] and other["balance"] == "+shop:jobs_published_total"
+    assert [d["query"] for d in other["declare"]] == ['sum(jobs_queue_messages{queue="other"})', 'sum(jobs_published_total{queue="other"})']
+    assert sorted(d["name"] for d in each["declare_all"]) == sorted(d["name"] for d in jobs["declare"] + other["declare"])
+    assert each["not_balanced"] == []
+    every = tooling.handle(project, sup, "find_balance", {"level": "all", "source": "biz", "step_s": 30}, role="supervisor")
+    assert [x["level"] for x in every["balanced"]] == [x["level"] for x in each["balanced"]]    # biz holds no level
 
     # a worker has no such tool
     with pytest.raises(Exception, match="find_balance"):

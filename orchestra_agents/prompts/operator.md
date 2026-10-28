@@ -205,8 +205,9 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    it left out and why; fix the selection where it reads wrongly), and `read_instrument` with its
    name once a discovery has read it. A second store is a second entry; a quantity both stores
    hold is read from one of them. Decide which yourself, never ask the human: preview both over
-   one window (the same shape and scale is one quantity) and keep the copy with the finer
-   resolution and production explicit; leave the other out of `match` and the pins.
+   one window (the same shape and scale is one quantity; compare two counters by their rates,
+   `rate(x[5m])`, never their totals, which count from different starts) and keep the copy with
+   the finer resolution and production explicit; leave the other out of `match` and the pins.
 7. **See it reach the model.** A translation is done when discovery makes stocks of it. Wait for
    the next discovery (`read_instrument` with the source's name and `wait_s`; again if it has not
    run yet), then `get_model`: each level you meant as a stock should be one. For one in

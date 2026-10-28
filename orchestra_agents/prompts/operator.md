@@ -196,8 +196,19 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
 6. **Check it**: `check_sources` and `infer_source` with its name (what Orchestra will read, what
    it left out and why; fix the selection where it reads wrongly), and `read_instrument` with its
    name once a discovery has read it. A second store is a second entry; a quantity both stores
-   hold is read from one of them (pin the better copy, leave the other out).
-7. **Tell the human** in a few lines: what you read and why, the series names discovery will see
+   hold is read from one of them. Decide which yourself, never ask the human: preview both over
+   one window (the same shape and scale is one quantity) and keep the copy with the finer
+   resolution and production explicit; leave the other out of `match` and the pins.
+7. **See it reach the model.** A translation is done when discovery makes stocks of it. Wait for
+   the next discovery (`read_instrument` with the source's name and `wait_s`; again if it has not
+   run yet), then `get_model`: each level you meant as a stock should be one. For one in
+   `left_out`, its reason says what is wrong: "no counters balance it" means a flow is missing or
+   counts other things: a level summed over several queues or consumer groups beside one's
+   counter, a global counter beside one queue's level. Keep separate backlogs separate (group a
+   level and its flows by the same label, `by (consumergroup)`, `by (queue)`; never sum two into
+   one), add the missing flow, and look again. A translation that leaves fewer stocks than the
+   reading before it is worse: undo that part.
+8. **Tell the human** in a few lines: what you read and why, the series names discovery will see
    (`<name>:<series>`), what you left out (and what is not measured at all, such as an outflow no
    series counts), and the commit.
 

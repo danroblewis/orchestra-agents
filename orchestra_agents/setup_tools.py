@@ -224,6 +224,20 @@ def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
                 lambda: said + ("" if section == "gate.unit" else _unless_launching(project)))
 
 
+def _check_sources(project: Project, key: str, value: list) -> None:
+    """Refuse a [[sources]] or [[series]] list Orchestra would refuse when it reads it (a bad name,
+    a literal secret, a series of no source): config_edit does not check sources, so without this
+    a refused source would be committed and only seen missing at the next discovery."""
+    from orchestra.sources.spec import load
+    raw = dict(project.orchestra.config.raw)
+    raw[key] = value
+    refused = load(raw, project.repo_root).refused
+    mine = {k: v for k, v in refused.items() if k.startswith("series[") == (key == "series")}
+    if mine:
+        raise StoreError(f"Orchestra would refuse these [[{key}]] entries, so nothing was written: "
+                         + "; ".join(f"{k}: {v}" for k, v in mine.items()))
+
+
 def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     key = (a.get("key") or "").strip()
     if not key or "value" not in a:
@@ -235,6 +249,8 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
         except ValueError:
             pass
     head = key.split(".")[0]
+    if key in ("sources", "series") and isinstance(value, list):
+        _check_sources(project, key, value)
 
     def edit(ed, kw):
         return ed.unset(key, **kw) if value is None else ed.set(key, value, **kw)

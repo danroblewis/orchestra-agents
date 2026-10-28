@@ -117,9 +117,35 @@ def source_schema(project: Project, a: dict) -> dict:
         out["more"] = "more names than shown: narrow with match"
     if len(sets) >= limit:
         out["capped"] = f"the read hit its limit of {limit} series: the counts are a lower bound and some names may be missing; narrow with match"
+    if late := _lateness(src, sorted(fams, key=lambda n: -fams[n])[:3], now):
+        out["newest_sample_age_s"] = late
+        worst = max(late.values())
+        if worst > 30:
+            out["late"] = (f"the newest samples are up to {worst:.0f} s old: the store writes late or reports coarsely. "
+                           "Set settle on its [[sources]] entry above that plus the store's own 30 s "
+                           f"(here settle = \"{int((worst + 30) // 30 + 1) * 30}s\"), or the latest steps of every "
+                           "discovery read as gaps")
     out["hints"] = ("type 'guessed:' is from the name only (the store keeps no metadata for it). A counter only goes up; read it "
                     "as increments or a rate. A label with many values (ids, paths, pods) multiplies series: sum it away unless "
                     "it names the thing you model.")
+    return out
+
+
+def _lateness(src, names: list[str], now: float) -> dict[str, float]:
+    """How old each metric's newest sample is now, in seconds: how late the store writes (a store
+    written a minute late needs ``settle`` above it). Empty when the store cannot say."""
+    from orchestra.sources import SourceError
+    out = {}
+    for n in names:
+        if not re.fullmatch(r"[A-Za-z_:][A-Za-z0-9_:]*", n or ""):
+            continue
+        try:
+            got = _ask(src.query_range, f"time() - max(timestamp({n}))", now - 120, now, 60)
+        except SourceError:
+            continue
+        pts = [v for _, p in got for _, v in p[-1:]]
+        if pts:
+            out[n] = round(max(pts), 1)
     return out
 
 

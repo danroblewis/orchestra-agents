@@ -104,7 +104,7 @@ def test_a_new_project_is_set_up_by_the_supervisor_with_no_configuration(fresh):
     store = AgentStore(project)
     wait_until("the setup recorded", lambda: bool(store.agent_state("supervisor").get("setup")), timeout_s=120)
 
-    [changed] = events_of(repo, "config.changed")
+    [changed] = events_of(repo, "instruments.changed")              # a measurement added: no new era of the model
     assert changed["source"] == "supervisor" and changed["section"] == "collect"
     assert git(repo, "log", "-1", "--format=%s", "--", "orchestra.toml").startswith("Supervisor: added the collector todos")
     assert not git(repo, "status", "--porcelain", "--", "orchestra.toml")    # the untracked file `orchestra init` wrote, committed with it

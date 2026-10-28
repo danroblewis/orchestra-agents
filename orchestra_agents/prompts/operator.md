@@ -175,15 +175,24 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    them, then requests and their errors. Production only: a staging or test twin is never read.
    One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
    flags, timestamps and the exporters' own timings as stocks.
+   **A stock is only half found without its flows.** For each level you choose, search the store
+   for what fills and drains it (`source_schema` with a `match` on its subject: a queue's
+   published, delivered and acknowledged counters; a topic's produced and consumed offsets, which
+   are counters even when typed gauges; sessions or connections started and ended, opened and
+   destroyed; units received) and read them too. Never tell the human a flow is not measured
+   until you have searched for it; when it truly is not, say the level's change less its measured
+   flows is that flow (a residual).
 5. **Declare it** with `set_setting` key `sources` (the whole list of `[[sources]]` tables as
    JSON, the ones already there included): a `name` for what the store is (it prefixes every
    series read from it), the `url`, the `auth`, a narrow `match` (a list of selectors), the
    `machine` label (the one that names the service doing the work: `service`, `job`, `app`;
    never a pod or an instance), `[sources.labels]` for spellings of one label, and `settle` for a
-   store that writes late. Then key `series` for the `[[series]]` that pin what inference does not
-   rank or reads wrongly (the guide's "Translate into quantities of the system"): each with a
-   plain name for what it measures and its `kind`, previewed first. `target` repo, or overlay when
-   the store is only the owner's.
+   store that writes late (`source_schema` says how late its newest samples are: `late`). Then key
+   `series` for the `[[series]]` that pin what inference does not rank or reads wrongly (the
+   guide's "Translate into quantities of the system"): each with a plain name for what it measures
+   and its `kind`, previewed first. A pin is read beside what inference keeps: once a store is
+   translated into pins, set `infer = false` on its entry so only the pins are read, never a raw
+   copy beside each. `target` repo, or overlay when the store is only the owner's.
 6. **Check it**: `check_sources` and `infer_source` with its name (what Orchestra will read, what
    it left out and why; fix the selection where it reads wrongly), and `read_instrument` with its
    name once a discovery has read it. A second store is a second entry; a quantity both stores

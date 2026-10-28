@@ -1,6 +1,7 @@
 """The Supervisor's configuration tools: the setup of the project, changed one entry at a time
 through Orchestra's own objects (``project.orchestra.config_edit``; ``config_change.change``),
-announced on the bus (``config.changed``) and answered with what applies now and what restarts.
+announced on the bus (``config.changed``; ``instruments.changed`` for a change of what is measured
+only, which begins no era of the model) and answered with what applies now and what restarts.
 
 Each tool takes a ``target``: ``repo`` (the default), the repository's ``orchestra.toml``, where
 the project's settings go, each change committed with its reason; or ``overlay``, the owner's
@@ -51,6 +52,11 @@ SETUP_COMMANDS = frozenset({"set_agent_roles", "set_work_mode", "set_gate_unit",
                             "set_machine", "set_collector", "remove_entry", "set_setting"})
 SECTIONS = ("machines", "collect", "scrape", "gate.unit")
 CHANGED = "config.changed"
+# A change of what is measured only: announced as its own type, which begins no era in Orchestra's model
+# (only config.changed does, by default): measuring more is observation, not a change to the system, and an
+# era begun by it would throw away the history a new source brings (the model reads only the current era).
+INSTRUMENTS_CHANGED = "instruments.changed"
+INSTRUMENT_SECTIONS = frozenset({"collect", "scrape", "sources", "series"})
 
 
 @dataclass
@@ -268,7 +274,7 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     if claim_change(store, role, a.get("change")):     # the change a prediction of the Supervisor's waits for: Orchestra judges it from here
         store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"])
     else:
-        store.events.emit(CHANGED, **data)
+        store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED, **data)
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, the commit, and what applies now." if target == "repo" else
                     "Tell the human what you changed in their private overlay (not committed) and why, and what applies now.")}

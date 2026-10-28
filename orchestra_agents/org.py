@@ -58,7 +58,7 @@ AGENT_EVENT_TYPES = (
     "session.timed_out", "session.error", "session.interrupted", "agent.crashed", "agent.crash_loop", "agent.reset", "agent.compacted",
     "role.created", "role.changed", "role.deleted", "agent.created", "agent.changed", "agent.deleted",
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
-    "config.changed", "machine.restarted", "work.requested", "work.planned",
+    "config.changed", "instruments.changed", "machine.restarted", "work.requested", "work.planned",
 )
 JUDGED = "orchestra.prediction.judged"     # Orchestra's: a prediction's verdict (verdicts.py wakes the agent that made it)
 ORCHESTRA_EVENT_TYPES = (JUDGED,)
@@ -98,6 +98,7 @@ EVENT_HELP = {
     "agent.messaged": "an agent gets a message or brief",
     "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
     "config.changed": "the Supervisor changes the configuration (orchestra.toml, committed with the reason, or the owner's private overlay)",
+    "instruments.changed": "the Supervisor changes only what is measured ([[collect]], [[scrape]], [[sources]], [[series]]): no change to the system, so no new era",
     "machine.restarted": "the Supervisor restarts one of the project's programs",
     "work.requested": "the Supervisor hands the human's requirements to a planner (filter with :coordinator)",
     "work.planned": "the Coordinator reports how it planned a request (filter with :supervisor)",

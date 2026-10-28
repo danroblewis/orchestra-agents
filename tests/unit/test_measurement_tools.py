@@ -261,3 +261,14 @@ def test_an_orchestra_toml_git_does_not_track_yet_is_committed_with_the_first_ch
     out = call(project, store, "set_collector", name="todos", command=TODOS, shell=True, reason=WHY)
     assert out["commit"] and git(project.repo_root, "ls-files", "orchestra.toml").strip() == "orchestra.toml"
     assert not git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml")
+
+
+def test_how_late_a_store_writes_is_measured_from_its_newest_samples():
+    from orchestra_agents.source_tools import _lateness
+
+    class Late:
+        def query_range(self, q, start, end, step, until=None):
+            assert q.startswith("time() - max(timestamp(")
+            return [({}, [(end - 60, 30.0), (end, 75.0)])]
+
+    assert _lateness(Late(), ["shop_orders", "not a name{}"], 1000.0) == {"shop_orders": 75.0}

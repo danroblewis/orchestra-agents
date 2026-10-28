@@ -172,7 +172,8 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     assert plugins["errors"] == []
     assert sorted(plugins["pages"], key=lambda p: p["plugin"]) == [{"plugin": "agents", "path": "/agents", "title": "Agents"},
                                                                     {"plugin": "tasks", "path": "/tickets", "title": "Tickets"}]
-    assert set(plugins["scripts"]) == {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js", "/plugins/tasks/static/tasks-boot.js"}
+    assert set(plugins["scripts"]) == {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js",
+                                      "/plugins/agents/static/ticket-sessions.js", "/plugins/tasks/static/tasks-boot.js"}
     html = web.text("/agents")
     assert "<title>Agents</title>" in html and "/plugins/agents/static/agents.js" in html
     head = web.text("/").split("</head>")[0]                # each plugin's look, linked on every page

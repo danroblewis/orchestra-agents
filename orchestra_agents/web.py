@@ -27,6 +27,7 @@ from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
 from .api_org import read_org
+from .attention import unread
 from .config import ConfigError, Project
 from .control import bearer as control_bearer
 from .events import Events
@@ -36,6 +37,7 @@ from .org import EVENT_HELP, effective_tools
 from .org_store import all_agents, all_teams
 from .org_views import agents_status, metrics_text, residents_of, session_alive
 from .roles import all_roles
+from .session_turns import epoch, messages, ticket_sessions
 from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
@@ -48,7 +50,7 @@ def plugin(orchestra_project) -> Plugin:
     project = Project.of(orchestra_project)
     project.ensure_dirs()
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
-                  scripts=["attention.js", "machine-cards.js"], stylesheets=["agents.css"],
+                  scripts=["attention.js", "machine-cards.js", "ticket-sessions.js"], stylesheets=["agents.css"],
                   machines=declared(project), processes=processes(project), collectors=collectors(project))
 
 
@@ -155,13 +157,12 @@ def router(project) -> APIRouter:
 
     @r.get("/attention")
     async def attention() -> dict:
-        """A Supervisor message the human has not read (shown on every page, static/attention.js),
-        and whether the host that answers the chat is up."""
+        """The Supervisor's newest message for the human that the human has not read
+        (attention.py; shown on every page, static/attention.js), and whether the host that
+        answers the chat is up."""
         rt = store.runtime()
         s = rt["sessions"].get("supervisor") or {}
-        seen = float(rt.get("supervisor_seen_at") or 0)
-        settled = float(s.get("settled_at") or 0)
-        message = {"text": s.get("last_text") or "", "at": settled} if settled > seen and s.get("last_text") else None
+        message = unread(rt)
         return {"ok": True, "message": message, "working": s.get("status") == "running", "count": 1 if message else 0,
                 "host": {"alive": alive((rt.get("control") or {}).get("pid"))}}
 
@@ -234,6 +235,7 @@ def router(project) -> APIRouter:
         else:
             end = max(0, total - max(0, before))
             page = msgs[max(0, end - max(1, min(limit, 200))):end]
+        page = [{**m, "i": i} for i, m in enumerate(page, end - len(page) if after is None else max(0, after))]
         page.reverse()
         ctl = store.runtime().get("control") or {}
         host_alive = alive(ctl.get("pid"))
@@ -245,6 +247,30 @@ def router(project) -> APIRouter:
         return {"session": s, "messages": page, "total": total, "before": before, "next_before": total - (end - len(page)) if page else before,
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
                 "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive}}
+
+    @r.get("/sessions")
+    async def sessions_on(ticket: str) -> dict:
+        """Every agent turn that worked on a ticket (session_turns.ticket_sessions): its worker
+        turns, its review rounds, and the other agents' turns about it, live or archived. The
+        task system's ticket drawer shows them (static/ticket-sessions.js)."""
+        return {"ok": True, "now": time.time(), "ticket": ticket, "turns": ticket_sessions(store, ticket)}
+
+    @r.get("/sessions/{session_id}/messages")
+    async def session_messages(session_id: str, start: int = 0, end: int | None = None) -> dict:
+        """A stretch of a session's transcript in order, ``start`` to ``end`` (exclusive; to the
+        end without it): one turn, as ``/sessions?ticket=`` places it, with the host's markers
+        from its time."""
+        s = store.find_session(session_id)
+        if not s:
+            raise HTTPException(404)
+        msgs = messages(s)
+        stop = len(msgs) if end is None else max(0, min(end, len(msgs)))
+        page = [{**m, "i": i} for i, m in enumerate(msgs[max(0, start):stop], max(0, start))]
+        lo = epoch(page[0].get("ts")) - 1 if page else 0
+        hi = epoch(page[-1].get("ts")) + 5 if page and end is not None and end < len(msgs) else float("inf")
+        markers = [m for m in s.get("markers") or [] if lo <= epoch(m.get("ts")) <= hi and m.get("type") != "session.started"]
+        return {"ok": True, "session": {k: s.get(k) for k in ("id", "kind", "instance", "ticket_id", "status", "harness")},
+                "messages": page, "markers": markers, "total": len(msgs)}
 
     @r.get("/metrics", response_class=PlainTextResponse)
     async def metrics() -> str:

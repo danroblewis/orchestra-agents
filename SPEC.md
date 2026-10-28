@@ -459,10 +459,24 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
   cut-off turns, and the Supervisor's chat);
 - the **Supervisor button** in every page's navigation and a banner when something waits on the
   human: a message from the Supervisor not yet read, and the task system's blocked tickets
-  (read from its plugin when installed; its own banner is asked to stand aside) (`attention.js`);
+  (read from its plugin when installed; its own banner is asked to stand aside) (`attention.js`).
+  A message is a reply in the Supervisor's transcript written for the human since the human last
+  read the chat (`attention.py`): a chat reply, or a reply to a wake-up that says something (an
+  empty reply or a bare acknowledgement, "Nothing to do.", calls nobody); the chat it opens marks
+  that reply "for you", and shows in full what the Supervisor said that its transcript does not
+  hold. A reply that arrives while the chat is open in front of the human is read there. In a
+  transcript a wake-up is one line, what woke the agent, with Orchestra's prompt folded under it;
+- the **agent sessions in the task system's ticket drawer** (`ticket-sessions.js`, through the
+  drawer's extension point, the DOM event `tasks:ticket-drawer`): every agent turn that worked on
+  the ticket (each worker turn, each review round, and the Coordinator's, the Supervisor's or
+  another agent's turns about it: why it was woken, the human's words, what it wrote or a tool
+  call names the ticket), with role, instance, when, outcome and last words, live while one runs
+  and kept after the ticket is done; each opens inline as one turn read at a glance (the prompt
+  and each tool call folded, the last words open) or as the whole session;
 - the agents' **machine cards** on the Dashboard and the Machines page (`machine-cards.js`): a
   resident agent is a row with what it last said; a worker or reviewer role is the tickets its
-  instances are on, with what each is saying now. The host has no card: it is no machine (whether
+  instances are on, with what each is saying now, and the sessions it finished, a click from their
+  transcripts after the instance has moved on. The host has no card: it is no machine (whether
   it is up shows on the Agents page and on each agent's session chip).
 
 The agents' look, `agents.css`, is a stylesheet the plugin declares, which Orchestra links in every
@@ -472,7 +486,10 @@ highlight.js, each loaded once from cdnjs); Orchestra renders none.
 API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
 (the organisation); `GET /agents` (every agent and every session as the instance it runs as,
 with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
-`GET /sessions/{id}/transcript` (paged, with the markers); `GET /metrics` (the agents'
+`GET /sessions/{id}/transcript` (paged, with the markers; each message carries its index `i`);
+`GET /sessions?ticket=<id>` (the agent turns on a ticket, `session_turns.ticket_sessions`) and
+`GET /sessions/{id}/messages?start=&end=` (one turn's messages in order, with its markers);
+`GET /metrics` (the agents'
 measurements as Prometheus text, as the instrument reads them); `GET /attention`
 (the unread message, and whether the host that answers is up: with it down the banner and the
 button stop offering an answer) and `POST /attention/seen`; `POST /supervisor` (a message to the

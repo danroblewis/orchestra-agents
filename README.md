@@ -115,8 +115,11 @@ commit of `orchestra.toml` alone on the base branch with the reason, and a `conf
 on the bus; it tells you in the chat what it changed and why. It never changes code: that is a
 worker's, through a ticket, a review and the merge gate.
 
-Without the task plugin in the same `orchestra web`, the agents still run, but a ticket link on
-the Agents page opens no ticket drawer and no banner says a ticket is blocked.
+With the task plugin in the same `orchestra web`, a ticket's drawer lists every agent turn that
+worked on it (the worker's turns, each review round, the Coordinator's and the Supervisor's turns
+about it), each with its outcome and its transcript a click away, while it runs and after it is
+done; a ticket link on a transcript leads back. Without it, the agents still run, but a ticket
+link on the Agents page opens no ticket drawer and no banner says a ticket is blocked.
 
 State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in the repository
 under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page

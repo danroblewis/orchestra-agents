@@ -9,6 +9,8 @@
 // card; whether it is up is on the Agents page and on each agent's session chip.
 // A click opens the agent's transcript (the ticket id opens the ticket, when a task system with a
 // ticket view is loaded); "machine details", on the Machines page, opens Orchestra's own view.
+// Under the live cards, "finished sessions" lists the role's recent sessions that are over, whose
+// instance has moved on, each a click from its transcript.
 (async function () {
   if (!window.Orchestra || !Orchestra.machineCards) return;
   const API = "/api/plugins/agents";
@@ -25,6 +27,8 @@
   const sessionsOf = (m) => (D ? D.sessions.filter((s) => s.role === roleOf(m)) : []);
   // what is known of the agent beyond its sessions, for its status (agents.js agentStatus)
   const agentOf = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? { ...a, host_alive: D.host.alive } : { host_alive: D ? D.host.alive : undefined }; };
+  // a per-ticket role's machine shows the tickets it is on, even when a program fills the role beside the agents (its mode is then mixed)
+  const perTicket = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? !a.resident : m.mode === "ad hoc"; };
   const chip = (s, m) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000, m ? agentOf(m) : undefined) : "");
   const more = (m, compact) => (compact ? "" : `<div class="tkc-more" onclick="event.stopPropagation();Orchestra.machineCards.openDefault('${e_(m.id)}')">machine details</div>`);
 
@@ -63,7 +67,19 @@
     }).join("");
     const empty = m.unseen ? `<div class="empty">Declared, not run yet: ${e_(role)}s start when a ticket is ready${role === "reviewer" ? " for review" : ""}.</div>`
       : `<div class="empty">No ${e_(role)} is on a ticket right now.${role === "worker" ? " Ready tickets start as soon as a worker slot is free." : ""}</div>`;
-    return `<h2><span>${e_(m.id)} <span class="muted">· on tickets</span></span><span class="hctl"><span class="count">${live.length}</span></span></h2>${cards || empty}${more(m, compact)}`;
+    return `<h2><span>${e_(m.id)} <span class="muted">· on tickets</span></span><span class="hctl"><span class="count">${live.length}</span></span></h2>${cards || empty}${compact ? "" : past(role)}${more(m, compact)}`;
+  }
+
+  // the sessions this role finished, newest first: an instance moves on to its next ticket (or is
+  // gone), and its transcript stays a click away here and in the ticket's drawer
+  function past(role) {
+    const done = ((D && D.recent) || []).filter((x) => x.role === role);
+    if (!done.length) return "";
+    return `<details class="tkc-past" onclick="event.stopPropagation()"><summary>finished sessions (${done.length})</summary>${done.map((x) => `
+      <div class="row" onclick="event.stopPropagation();AgentCards.transcript('${e_(x.session)}')" title="Open this session's transcript">
+        <span class="id" onclick="event.stopPropagation();AgentCards.ticket('${e_(x.ticket)}')" title="Open the ticket">${e_(x.ticket)}</span>
+        <span class="muted">${e_(x.instance)}</span><span>${e_(x.title || (x.last_text || "").replace(/\s+/g, " "))}</span>
+        <span class="muted">${x.settled_at ? ago(D.now - x.settled_at) + " ago" : ""}</span></div>`).join("")}</details>`;
   }
 
   window.AgentCards = {
@@ -83,7 +99,7 @@
     },
     card(m, { compact } = {}) {
       if (kindOf(m) !== "agent") return null;
-      return m.mode === "ad hoc" ? ticketsCard(m, compact) : residentCard(m, compact);
+      return perTicket(m) ? ticketsCard(m, compact) : residentCard(m, compact);
     },
     open(m) {
       if (kindOf(m) !== "agent" || m.unseen) return false;
@@ -98,7 +114,7 @@
     try {
       const d = await (await fetch(API + "/agents")).json();
       if (!d.ok) return;
-      const sig = JSON.stringify([d.sessions.map((s) => [s.session, s.status, s.phase, s.last_text, s.tool_name]), d.host.alive]);
+      const sig = JSON.stringify([d.sessions.map((s) => [s.session, s.status, s.phase, s.last_text, s.tool_name]), (d.recent || []).map((x) => x.session), d.host.alive]);
       D = d;
       if (force || sig !== last) { last = sig; Orchestra.machineCards.changed(); }
     } catch (e) {}

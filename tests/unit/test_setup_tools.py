@@ -273,7 +273,7 @@ def test_the_supervisor_is_told_to_look_fix_the_setup_and_name_only_real_paths(p
     assert "{operator}" not in text and "## When the system cannot do what is asked" in text
     for tool in ("check_setup", "set_agent_roles", "set_work_mode", "set_gate_unit", "restart_machine", "list_metrics"):
         assert f"`{tool}`" in text
-    assert "You never change code" in text and "Never suggest any other control on a page" in text
+    assert "You never edit a file in the checkout" in text and "propose_patch" in text and "Never suggest any other control on a page" in text
     assert "only the human can set" not in text and "Never restart or run the program yourself" not in text
 
 

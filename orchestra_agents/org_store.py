@@ -150,4 +150,10 @@ def all_agents(project: Project) -> dict[str, AgentDef]:
         for name in t.agents:
             if name in out and not out[name].builtin and out[name].team != t.name:
                 out[name].team = t.name
+    # A machine spec (.orchestra/machines/<name>/) is the contract of the agent of its name: its
+    # duties' wake-ups are the agent's too (machine_spec.apply). A spec that names no agent is not one.
+    from .machine_spec import apply, load_all
+    for name, spec in load_all(project).items():
+        if name in out:
+            apply(out[name], spec)
     return out

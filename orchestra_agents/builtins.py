@@ -28,7 +28,10 @@ Tool groups:
                predictions and their verdicts; the modeling guide (modeling.py)
   experiments  make, edit, run forward and inverse, and discard one's own experiments
   replay       replay any experiment over a past window
-  predict      commit one's own experiment as the prediction of one's own change, and announce it
+  predict      commit one's own experiment (or a fix's expected effect, predict_fix) as the prediction of
+               one's own change, and announce it
+  patch        repair a bug: a patch in a scratch worktree landed through the gate, a project-local override
+               of an installed plugin, an upstream issue drafted in the outbox (the Supervisor only)
   report_ticket / report_review   the worker's and the reviewer's exit tools
 """
 
@@ -79,13 +82,14 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "setup", "model",
-           "experiments", "replay", "predict"),
+           "experiments", "replay", "predict", "patch"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}"),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
-              "the project not set up yet, when the host starts (first_run.py)"),
+              "the project not set up yet, when the host starts (first_run.py)",
+              "its review round, when the round's quick check finds something (review.py)"),
     emits=(REQUESTED, REQUESTS["update_ticket"], REQUESTS["cancel_ticket"], REQUESTS["unblock_ticket"],
            "context.updated", "role.created", "agent.created", "team.created", "agent.messaged",
-           "config.changed", "instruments.changed", "machine.restarted"),
+           "config.changed", "instruments.changed", "machine.restarted", "role.changed", "orchestra.prediction.made"),
     read_only=True,
     description="Talks to the human; sets the project up; translates requests into requirements and hands them to the "
                 "Coordinator; keeps the project's setup able to do them.",

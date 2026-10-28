@@ -281,6 +281,12 @@ TOOLS: list[ToolDef] = [
             "and their roles), the definitions it keeps (query, view, kind, score) and those it leaves out with why.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
              "match": A("PromQL selectors to narrow it")}),
+    ToolDef("read_transcript", "observe",
+            "An agent's transcript, trimmed to the turns you ask for: what it was told, what it called and what it said. By "
+            "agent (its latest session) or by session id, around a time.",
+            {"agent": S("The agent (supervisor, coordinator, worker, ...)"), "session": S("Or a session id (worker-ORC-3)"),
+             "around": S("A time (ISO or unix seconds): the turns nearest it; default the latest"),
+             "turns": I("How many turns, default 2, at most 6")}),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment."),
@@ -428,6 +434,14 @@ TOOLS: list[ToolDef] = [
             {"id": EXPERIMENT, "horizon": S("How long after the change to judge it, such as 30m or 2h: long enough for the "
                                             "flows you changed to count a few dozen events"),
              "subject": S("What the change is about (default: your ticket, or the experiment)")}, ("id", "horizon")),
+    ToolDef("predict_fix", "predict",
+            "State what a fix will do before you make it, without an experiment: which stocks or flows move and which way, "
+            "and what must not change. Commits orchestra.prediction.made and returns its change id: pass it to the fix (a "
+            "setup tool's change) or announce it with announce_change once the fix is made. Orchestra judges it.",
+            {"expect": OS("Each one of: {flow, factor} (its rate times factor; 0 stops it), {flow, unchanged: true}, "
+                          "{stock, below: x}, {stock, above: x}. Empty: the fix should change nothing measured"),
+             "horizon": S("When to judge it, such as 30m or 2h"), "subject": S("What it is about (a stock, a ticket)"),
+             "note": S("The fix, in a sentence")}, ("expect", "horizon", "note")),
     ToolDef("announce_change", "predict",
             "Announce that the change you predicted is made (system.changed, carrying its change id): a new era begins and the "
             "prediction is judged from it. when: now (it is in effect) or landed (code that takes effect when your ticket lands).",
@@ -456,6 +470,58 @@ TOOLS: list[ToolDef] = [
              "milestone": S("The milestone id the tickets are in"), "tickets": A("The ids of the tickets you created"),
              "questions": S("What the human must decide before (some of) the work can go ahead; empty when nothing")},
             ("request", "summary")),
+    # your own spec: the duties under .orchestra/machines/supervisor/ (duties.py), the Supervisor's alone
+    ToolDef("list_duties", "roles",
+            "Your machine spec: your duties (built-in and your own, with their text, what wakes each and its tool groups), "
+            "your loop, your model, the spec's commits (newest first), how many changes you have left today, and what is "
+            "wrong with it."),
+    ToolDef("add_duty", "roles",
+            "Add a standing duty to your own spec, when the owner gives you a standing instruction (\"from now on ...\", "
+            "\"whenever ...\", \"every morning ...\") or a review round finds a kind of work that will come again. One "
+            "commit with the reason; your session starts again after this turn with it in your prompt.",
+            {"name": S("lowercase_name, e.g. keep_gate_moving"),
+             "text": S("The duty: what it keeps true, what wakes it, the fixes it may make, what it must never do, how "
+                       "success is measured"),
+             "about": S("One line: what it keeps true"),
+             "listens": A("Events that wake you for it: type or type:filter (orchestra.model.stalled:stock:review_queue, "
+                          "gate.rejected)"),
+             "tools": A("The tool groups it needs, all of them yours already"),
+             "reason": S("Why: the owner's own words, or what the review round found")}, ("name", "text", "reason")),
+    ToolDef("edit_duty", "roles", "Change one of your own duties: its text, wake-ups, tool groups or line. One commit with the reason.",
+            {"name": S("The duty"), "text": S("The whole new text"), "about": S("One line"), "listens": A("The new wake-ups, whole"),
+             "tools": A("The new tool groups, whole"), "reason": S("Why, in a sentence")}, ("name", "reason")),
+    ToolDef("remove_duty", "roles", "Remove one of your own duties (never a built-in one). One commit with the reason.",
+            {"name": S("The duty"), "reason": S("Why, in a sentence")}, ("name", "reason")),
+    ToolDef("revert_change", "roles",
+            "Undo one commit of your spec (list_duties' history), as a new commit with the reason; never refused for the "
+            "day's cap. Use it when the owner asks, or when a change of yours made things worse.",
+            {"commit": S("The commit's id"), "reason": S("Why, in a sentence")}, ("commit", "reason")),
+    # patch: self-healing, the Supervisor's alone (patching.py, upstream.py)
+    ToolDef("propose_patch", "patch",
+            "Repair a bug in the project's own code (work = code): your unified diff is applied and committed in a scratch "
+            "worktree on a branch of its own (supervisor/patch-<name>), never in the checkout, and the Coordinator is "
+            "handed a ticket to land that commit through a review and the gate, whose tests run on it.",
+            {"name": S("lowercase_name for the patch"), "diff": S("A unified diff against the base branch (git apply)"),
+             "why": S("What broke and why, with the evidence (the log line, the event)"),
+             "test": S("How it is shown fixed: the test the diff adds or the command to run"),
+             "reason": S("Why you patch it now rather than ask, in a sentence")}, ("name", "diff", "why", "reason")),
+    ToolDef("write_override", "patch",
+            "Repair a bug in an installed plugin in place, for this project only: .orchestra/overrides/<name>.py wraps or "
+            "replaces one function, pinned to the installed version (Orchestra stops applying it when the package changes), "
+            "committed with the reason; then draft the upstream issue (draft_upstream_issue).",
+            {"name": S("lowercase_name"), "target": S("module:attribute, e.g. tasking.gate:run_specs"),
+             "kind": {"type": "string", "enum": ["wrap", "replace"], "description": "wrap: def override(original) returns the "
+                      "replacement; replace: def override(...) is the replacement"},
+             "code": S("The Python body: imports and def override(...)"),
+             "issue": S("The upstream issue, once drafted (owner/repo#n), if known"),
+             "why": S("What broke and why"), "change": CHANGE, "reason": S("Why now, in a sentence")},
+            ("name", "target", "kind", "code", "why", "reason")),
+    ToolDef("draft_upstream_issue", "patch",
+            "Draft an issue for an upstream repository, with the patch, as the owner: an outbox draft (kind upstream.issue) "
+            "the owner approves; nothing is sent without them.",
+            {"repo": S("owner/name"), "title": S("The issue's title"),
+             "body": S("What broke, why, the reproduction (recorded events) and the patch"),
+             "override": S("The override this issue is for, if any: its diff is added to the body")}, ("repo", "title", "body")),
     # escalate
     ToolDef("escalate_to_supervisor", "escalate",
             "Wake the Supervisor with a note when a decision about intent, scope, or priorities is needed.",

@@ -20,6 +20,7 @@ from typing import Any
 
 from . import (
     access,
+    duties,
     guides,
     handoff,
     instruments,
@@ -27,8 +28,11 @@ from . import (
     modeling,
     observe,
     observe_model,
+    patching,
     prompting,
     source_tools,
+    transcripts,
+    upstream,
 )
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
@@ -168,6 +172,20 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handoff.hand_to_coordinator(store, a, role)
     if command == "report_plan":
         return handoff.report_plan(store, a, role)
+
+    if command in duties.COMMANDS:
+        return duties.handle(project, store, command, a, role)
+    if command == "read_transcript":
+        return transcripts.read_transcript(project, store, a)
+    if command == "predict_fix":
+        return modeling.predict_fix(project, store, a, role, ticket_env)
+    if command in patching.COMMANDS or command in upstream.COMMANDS:
+        if role != "supervisor":
+            raise StoreError(f"refused {command}: repairs are the Supervisor's alone")
+        project.reload_config()
+        if command in upstream.COMMANDS:
+            return upstream.handle(project, store, command, a)
+        return patching.handle(project, store, command, a)
 
     if command in modeling.COMMANDS:
         return modeling.handle_model(project, store, command, a, role, ticket_env)

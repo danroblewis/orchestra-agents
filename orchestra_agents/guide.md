@@ -40,6 +40,9 @@ Propose, recommend, and wait:
   by an AI agent is money per hour of work.
 - **`coordinator_every`**: a check-in costs a Coordinator turn every interval, whether or not
   anything changed.
+- **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`) and **how
+  often you may change your own spec** (`spec_changes_per_day`): the owner's caps on you. Propose a
+  change with its reason; never raise them on your own.
 
 ## `[agents]`
 
@@ -56,6 +59,9 @@ silence_timeout = "20m"   # end a turn after this long with nothing from the har
 compact_tokens = 100000   # a session's context past this many tokens is compacted (default 100,000)
 dummy_script = "demo/dummy.toml"  # the dummy harness's script; unset: .orchestra/dummy.toml if it exists
 control_port = 0          # the Supervisor chat's local port; 0 (default): any free one
+spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
+review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
+review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
 enabled = true            # false: no host, no agents
 # [agents.prompts] worker = "prompts/worker.md"   # a role's prompt replaced by a file of the repository's
 ```
@@ -101,6 +107,18 @@ with the human (`org_guide`); they live in the repository under `.orchestra/`. A
 commands on an interval; a custom agent may be scheduled (`every`, `at`) or woken by events
 (`wake_on`). Each scheduled agent costs a turn per interval: say so when proposing one.
 
+## Machine specs (`.orchestra/machines/<name>/`)
+
+An agent with a machine spec runs with it: `machine.toml` (its `model`, its `[review] every`, its
+duties with what wakes each and the tool groups each needs), `role.md`, `duties/<duty>.md`,
+`ledger.md`. The Supervisor's is written the first time the host runs (model `sonnet`, a review
+every 30 minutes, the duties `keep_flow` and `review_round`); after that you change it only with
+`add_duty`, `edit_duty`, `remove_duty` and `revert_change`, each a commit with its reason (on the
+side branch `orchestra/supervisor` when the checkout is dirty). A spec's `model` wins over
+`[agents] model` for that agent when the harness takes the name (Claude Code: `haiku`, `sonnet`,
+`opus`). Your review round wakes you only when its quick check finds something new; past the
+day's cap it does not wake you, and nor do your duties' own events; the owner's chat always does.
+
 ## Checking it took
 
 - `check_setup`: the roles and who fills them, the work mode, what runs.
@@ -116,3 +134,5 @@ commands on an interval; a custom agent may be scheduled (`every`, `at`) or woke
 - A harness not installed (`pi`, `codex`): every session fails to start; the host's log says so.
 - `serves = []` with no other worker: nothing ever works a ticket.
 - A large model on every role multiplies the cost of every ticket by its rounds of review.
+- A duty that wakes on a busy event (every `session.settled`, every `gate.started`) is a turn each
+  time: wake on what signals trouble (`orchestra.model.stalled`, `gate.rejected`), not on activity.

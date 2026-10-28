@@ -84,6 +84,28 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     responsibilities and those of the teams above it, then where it works (its space, its tools
     and its teams' path grants, which are instructions here and enforced nowhere). Built-in
     agents outside a custom team get exactly their role prompt."""
+    return _core(agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent)
+
+
+def _core(agent) -> str:
+    """The Supervisor's fixed core (prompts/supervisor_core.md), always first: it ships with the
+    plugin, so nothing the Supervisor writes in its spec can remove its guardrails."""
+    if agent.name != "supervisor":
+        return ""
+    return (PROMPTS_DIR / "supervisor_core.md").read_text(encoding="utf-8").strip() + "\n\n---\n\n"
+
+
+def _spec(project: Project, agent) -> str:
+    """What the agent's machine spec adds (``.orchestra/machines/<name>/``): its loop and duties."""
+    from .machine_spec import load, prompt_part
+    try:
+        spec = load(project, agent.name)
+    except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the prompt as the record says
+        return ""
+    return "\n" + _fill(project, prompt_part(spec)) if spec is not None else ""
+
+
+def _agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict | None = None) -> str:
     roles = roles if roles is not None else all_roles(project)
     teams = teams if teams is not None else all_teams(project)
     chain = team_chain(teams, agent.team)

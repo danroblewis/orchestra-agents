@@ -43,7 +43,7 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
             "team_exists": ag.team is None or ag.team in teams,   # an agent may be created before its team (the guide's order)
             "resident": ag.resident, "paused": bool(st.get("paused")), "deleted": bool(st.get("deleted")),
             "crash_loop": st.get("crash_loop") if st.get("paused") else None,
-            "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"),
+            "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"), "next_review_at": st.get("next_review_at"),
             "every_seconds": parse_interval(ag.every) if ag.every else None}
 
 
@@ -55,7 +55,23 @@ def agent_definition(project: Project, store: AgentStore, ag: AgentDef) -> dict:
             "team_chain": [t.name for t in team_chain(teams, ag.team)],
             "leads": [t.name for t in teams.values() if t.lead == ag.name],
             "tool_groups": list(tools), "tool_names": {g: [t.name for t in tools_for([g])] for g in tools},
-            "prompt": prompting.agent_prompt(project, ag, roles, teams)}
+            "prompt": prompting.agent_prompt(project, ag, roles, teams), "machine": machine_view(project, store, ag.name)}
+
+
+def machine_view(project: Project, store: AgentStore, name: str) -> dict | None:
+    """The agent's machine spec (``.orchestra/machines/<name>/``), when it has one: its model, its
+    duties, its spec's commits, its last review round and its overload signals."""
+    from . import spec_git
+    from .machine_spec import load
+    spec = load(project, name)
+    if spec is None:
+        return None
+    st = store.agent_state(name)
+    return {"dir": spec.dir, "model": spec.model, "review_every": spec.review_every, "next_review_at": st.get("next_review_at"),
+            "duties": [{"name": d.name, "about": d.about, "builtin": d.builtin, "listens": d.listens, "tools": d.tools,
+                        "reason": d.reason} for d in spec.duties],
+            "history": spec_git.history(project, 10), "review": {k: v for k, v in (st.get("review") or {}).items() if k != "seen"},
+            "load": st.get("load"), "split_proposal": st.get("split_proposal")}
 
 
 def team_view(project: Project, store: AgentStore, t: TeamDef) -> dict:

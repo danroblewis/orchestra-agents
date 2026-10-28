@@ -150,6 +150,10 @@ class DummyHarness(Harness):
     def start(self, spec: SessionSpec) -> DummySession:
         return DummySession(spec)
 
+    def model_for(self, wanted: str | None) -> str | None:
+        """No model runs: the name is recorded as asked, so a spec's model shows as it would run."""
+        return (wanted or "").strip() or None
+
     @staticmethod
     def read_transcript(session_file: str | Path) -> list[dict]:
         """The agent writes the common shape already: {role, text, tool_calls, ts, ...}."""

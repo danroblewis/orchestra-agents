@@ -180,15 +180,18 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    them, then requests and their errors. Production only: a staging or test twin is never read.
    One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
    flags, timestamps and the exporters' own timings as stocks.
-   **A stock is only half found without its flows.** For each level that matters (every queue,
-   consumer lag, connection pool, volume, inventory, session count; one call per queue, group or
-   volume, never one summed over several), call `find_balance` with it **before declaring it**:
-   it searches every declared store (pass `sources` with `url` and `auth` for stores not declared
-   yet) for the counters that fill and drain it and returns the balance, its fit and the
-   `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list). One
-   with `bursts` or `one_sided` is the level, its measured side and a residual: declare those and
-   name the residual. When it finds nothing, say the flow is not measured. Two balances of one
-   level are one flow measured twice: keep one.
+   **A stock is only half found without its flows.** Go through the whole name list for levels:
+   every gauge of an amount held (a queue's depth or messages, a consumer group's lag, open or
+   active connections, sessions, a volume's used bytes, an inventory, jobs in progress), in every
+   family, including proxies' and the platform's. Call `find_balance` on each **before declaring
+   it** (one call per queue, group or volume, never one summed over several): it searches every
+   declared store, or those you pass in `sources` (`{"url", "auth"}` for one not declared yet),
+   for the counters that fill and drain it, and returns the balance, its fit and the
+   `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list), and
+   read its counters in that store's `match`. One with `bursts` or `one_sided` is the level, its
+   measured side and a residual: declare those and name the residual. When it finds nothing,
+   say the flow is not measured. A level both stores hold is one stock: declare it once, from
+   the store whose balance is accepted; two balances of one level are one flow measured twice.
 5. **Declare it** with `set_setting` key `sources` (the whole list of `[[sources]]` tables as
    JSON, the ones already there included): a `name` for what the store is (it prefixes every
    series read from it), the `url`, the `auth`, a narrow `match` (a list of selectors), the

@@ -112,7 +112,8 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     proc, rpc = _mcp(project, tmp_path, "coordinator")
     try:
         assert "find_balance" in {t["name"] for t in rpc("tools/list")["result"]["tools"]}
-        r = rpc("tools/call", {"name": "find_balance", "arguments": {"level": 'jobs_queue_messages{queue="jobs"}', "step_s": 30}})
+        r = rpc("tools/call", {"name": "find_balance", "arguments": {"level": 'jobs_queue_messages{queue="jobs"}', "step_s": 30,
+                                                                     "sources": [{"name": "biz"}, {"name": "shop"}]}})
         r = r["result"]
         assert not r.get("isError"), r
         got = json.loads(r["content"][0]["text"])

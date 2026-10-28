@@ -108,7 +108,9 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
     trial: list[dict] = []
 
     def ref(x) -> str:
-        if isinstance(x, dict) and x.get("url"):
+        if isinstance(x, dict) and not x.get("url"):
+            x = x.get("name") or x.get("source") or ""
+        if isinstance(x, dict):
             name = "undeclared" if not trial else f"undeclared_{len(trial) + 1}"
             trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {})})
             return name
@@ -136,6 +138,20 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
     cat = Catalogue(project.orchestra, metrics_for(project.orchestra), Specs(sources=[declared[n] for n in names]))
     stores = [Store(n, cat.remotes[n], declared[n], not n.startswith("undeclared")) for n in names]
     return stores[0], stores
+
+
+def _production(level: str, sets: list[dict]) -> str:
+    """The level, kept to production when its series carry an environment label with a staging
+    or test value beside one other (``env="prod"`` added), unless the selector names one."""
+    pinned = matchers(level)
+    for k in ENV_LABELS:
+        vals = {x[k] for x in sets if k in x}
+        if k in pinned or not any(NOT_PROD.match(v) for v in vals):
+            continue
+        prod = sorted(v for v in vals if not NOT_PROD.match(v))
+        if len(prod) == 1:
+            return _with(level, {k: prod[0]})
+    return level
 
 
 def _budget(stores: list[Store]) -> None:
@@ -321,13 +337,24 @@ def find_balance(project: Project, a: dict) -> dict:
     start = end - float(a.get("minutes") or WINDOW_MIN) * 60
     n = int((end - start) // step)
     end = start + n * step
-    try:
-        lv_sets = home.src.series([level], start, end, 2000) if metric_of(level) else []
-        lv_rows = home.src.query_range(f"sum({level})", math.floor(start / step) * step, end, step)
-    except SourceError as e:
-        raise StoreError(f"the level could not be read from {home.name}: {e}") from e
-    if not lv_rows or not lv_rows[0][1]:
-        raise StoreError(f"{level} has no points in {home.name} over the window: check it with preview_query")
+    # the level's store: the one given, else the first searched store that has it
+    tried = [home] if a.get("url") or a.get("source") else stores
+    lv_rows, lv_sets, errors = [], [], []
+    for cand in tried:
+        try:
+            sets = cand.src.series([level], start, end, 2000) if metric_of(level) else []
+            level = _production(level, sets)
+            rows = cand.src.query_range(f"sum({level})", math.floor(start / step) * step, end, step)
+        except SourceError as e:
+            errors.append(f"{cand.name}: {e}")
+            continue
+        if rows and rows[0][1]:
+            home, lv_rows, lv_sets = cand, rows, sets
+            break
+    if not lv_rows:
+        where = ", ".join(c.name for c in tried)
+        raise StoreError(f"{level} has no points in {where} over the window: check it with preview_query"
+                         + (f" ({'; '.join(errors)})" if errors else ""))
     words = _level_tokens(level, lv_sets)
     unit = name_unit(metric_of(level) or "level", {})
     level_labels = {k: v for k, v in matchers(level).items() if k != "__name__" and k not in GENERIC}

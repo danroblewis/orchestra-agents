@@ -44,3 +44,11 @@ def test_a_gauge_that_is_the_level_again_is_a_copy():
     level = [(t * 30.0, float(v)) for t, v in enumerate([3, 5, 9, 12, 12, 15])]
     assert _copy_of([(t, v + 7) for t, v in level], level)
     assert not _copy_of([(t, v * 2) for t, v in level], level)
+
+
+def test_a_level_with_a_staging_copy_is_kept_to_production():
+    from orchestra_agents.balance_tools import _production
+    sets = [{"env": "prod"}, {"env": "staging"}]
+    assert _production("queue_depth", sets) == 'queue_depth{env="prod"}'
+    assert _production('queue_depth{env="staging"}', sets) == 'queue_depth{env="staging"}'   # named: kept as asked
+    assert _production("queue_depth", [{"env": "prod"}]) == "queue_depth"

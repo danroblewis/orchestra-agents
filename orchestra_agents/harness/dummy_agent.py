@@ -103,9 +103,9 @@ class Agent:
 
     def play(self, rule: Rule, t: Turn) -> str:
         """The rule's steps in order; the turn's last message. A ``fail`` step raises."""
-        said, kept = "", {}
+        said, kept, groups = "", {}, rule.groups(t)
         for raw in rule.steps:
-            step = dummy_script.fill_kept(t.fill(raw), kept)
+            step = dummy_script.fill_kept(dummy_script.fill_match(t.fill(raw), groups), kept)
             if "say" in step:
                 said = step["say"]
                 self.say(said)
@@ -126,7 +126,7 @@ class Agent:
                 time.sleep(float(step["sleep"]))
             elif "fail" in step:
                 raise TurnFailed(step["fail"])
-        return str(dummy_script.fill_kept(t.fill(rule.reply), kept)) if rule.reply is not None else (said or "Done.")
+        return str(dummy_script.fill_kept(dummy_script.fill_match(t.fill(rule.reply), groups), kept)) if rule.reply is not None else (said or "Done.")
 
 
 class TurnFailed(RuntimeError):
@@ -147,13 +147,17 @@ def turns_so_far(transcript: Path) -> int:
 
 def script_path() -> Path | None:
     """``[agents] dummy_script`` of the project (read through Orchestra, the overlay merged),
-    relative to its repository; None when unset."""
+    relative to its repository; when unset, ``.orchestra/dummy.toml`` if the repository has one;
+    else None."""
     from orchestra.config import load_project
 
     from ..config import Config
     o = load_project(os.environ.get("ORCHESTRA_REPO") or None)
     name = Config.from_raw(o.config.raw).dummy_script
-    return (o.repo_root / name) if name else None
+    if name:
+        return o.repo_root / name
+    default = o.repo_root / ".orchestra" / "dummy.toml"
+    return default if default.is_file() else None
 
 
 def main(argv: list[str] | None = None) -> int:

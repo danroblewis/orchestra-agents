@@ -115,7 +115,7 @@ def test_the_humans_ticket_that_is_done_wakes_the_supervisor_to_say_so(project):
     events.publish("gate.landed", {"ticket": "DEMO-5", "gate_run": "g2"}, source="merge_gate", subject="DEMO-5")
     host._wake_on_events()
     [w] = [w for w in store.runtime()["wakeups"] if w["target"] == "supervisor"]
-    assert w["reason"].startswith("ticket DEMO-5 (Measure the disk), which you created for the human, is DONE")
+    assert w["reason"].startswith("ticket DEMO-5 (Measure the disk), which was made for the human's request, is DONE")
     assert store.agent_state("supervisor")["asked_tickets"] == {}                 # followed until done or cancelled, then forgotten
     host._wake("supervisor", [w["reason"]])
     prompt = harness.sessions[0].prompts[-1]

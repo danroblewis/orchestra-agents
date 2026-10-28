@@ -212,6 +212,9 @@ def test_codex_session_identity_resume_and_args(tmp_path, monkeypatch):
     assert again._args()[-3:] == ["resume", "abc", "-"]
     assert again.pid is None and again.alive()
     again.close()
+    assert "--disallowedTools" not in args                      # a worker edits files
+    ro = ClaudeCodeSession(spec(tmp_path, session_id="supervisor", read_only=True))._args()
+    assert ro[ro.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"   # the Supervisor reads, searches, runs; edits nothing
     assert not again.alive()
 
 
@@ -233,7 +236,8 @@ def spec(tmp_path, **kw) -> SessionSpec:
     return SessionSpec(session_id=kw.get("session_id", "worker-T-1"), session_dir=tmp_path / "sessions", cwd=tmp_path / "wt",
                        system_prompt="be good", role="worker", tool_groups=("report_ticket",),
                        env={"ORCHESTRA_ROLE": "worker", "ORCHESTRA_REPO": str(tmp_path), "ORCHESTRA_TICKET": "T-1"},
-                       log_path=tmp_path / "logs" / "x.log", model="haiku", compact_tokens=kw.get("compact_tokens", 50_000))
+                       log_path=tmp_path / "logs" / "x.log", model="haiku", compact_tokens=kw.get("compact_tokens", 50_000),
+                       read_only=kw.get("read_only", False))
 
 
 def test_claude_session_identity_and_resume(tmp_path, monkeypatch):
@@ -304,9 +308,9 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
     base = {**os.environ, "ORCHESTRATOR_HOME": str(tmp_path / "home"), "ORCHESTRA_REPO": str(project.repo_root)}
     from orchestra_agents import access
     store = AgentStore(project)
-    sup_token, worker_token = access.issue(store, "supervisor", "supervisor"), access.issue(store, "worker-T-1", "worker", "T-1")
+    sup_token, worker_token = access.issue(store, "coordinator", "coordinator"), access.issue(store, "worker-T-1", "worker", "T-1")
     with FakeTasks(project) as tasks:
-        c = McpClient({**base, "ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_TOOLS": "tickets,context", access.TOKEN_ENV: sup_token})
+        c = McpClient({**base, "ORCHESTRA_ROLE": "coordinator", "ORCHESTRA_TOOLS": "tickets,planning,context", access.TOKEN_ENV: sup_token})
         try:
             init = c.rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}})
             assert init["result"]["serverInfo"]["name"] == "orchestra" and "tools" in init["result"]["capabilities"]
@@ -324,7 +328,7 @@ def test_mcp_server_serves_the_role_tools(project, tmp_path):
             assert "error" in c.rpc("nonsense")
         finally:
             c.close()
-        assert tasks.milestones["M1"]["name"] == "Via MCP" and tasks.seen[0]["by"] == "supervisor"
+        assert tasks.milestones["M1"]["name"] == "Via MCP" and tasks.seen[0]["by"] == "coordinator"
     # The worker's exit tool goes through the same server with the ticket from the env.
     w = McpClient({**base, "ORCHESTRA_ROLE": "worker", "ORCHESTRA_TOOLS": "report_ticket", "ORCHESTRA_TICKET": "T-1",
                    access.TOKEN_ENV: worker_token})

@@ -91,7 +91,7 @@ def test_processes_and_collectors_with_their_last_round(project, store):
     assert out["launcher"].startswith("no orchestra run") and out["processes"] == []
     assert out["collectors"][0]["name"] == "disk" and "has not run" in out["collectors"][0]["last_log_line"]
     assert any("bad name" in e for e in out["entries_left_out"])
-    log = project.orchestra.logs_dir / "machines" / "disk.log"
+    log = project.orchestra.logs_dir / "instruments" / "disk.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text("round ok\nround failed: exit 127: machines/disk.sh: not found\n")
     assert see(project, store, "list_processes")["collectors"][0]["last_log_line"].endswith("not found")
@@ -165,8 +165,8 @@ def test_check_setup_names_a_program_filling_a_role_that_orchestra_does_not_run(
 
 def test_the_task_systems_snapshot_is_a_query_on_the_bus(project, store):
     with FakeTasks(project) as tasks:
-        see(project, store, "create_milestone", name="M")
-        see(project, store, "create_ticket", title="t", objective="o", description="d", acceptance="a", verification="v",
-            milestone_id="M1")
+        for tool, args in (("create_milestone", {"name": "M"}), ("create_ticket", {
+                "title": "t", "objective": "o", "description": "d", "acceptance": "a", "verification": "v", "milestone_id": "M1"})):
+            tooling.handle(project, store, tool, args, role="coordinator")      # the Coordinator plans; the Supervisor reads
         out = see(project, store, "snapshot")
     assert out["snapshot"]["counts"] == {"OPEN": 1} and tasks.seen[-1] == {"op": "snapshot", "by": "supervisor", "args": {}}

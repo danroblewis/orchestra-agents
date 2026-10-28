@@ -25,7 +25,8 @@ import psutil
 from orchestra.runtime import alive
 from orchestra.tokens import owner_only
 
-from . import access, promises, prompting, tooling
+from . import access, handoff, promises, prompting, tooling
+from .builtins import ROLES as BUILTIN_ROLES
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
@@ -33,6 +34,7 @@ from .control import ControlServer, token_file
 from .events import GAVE_UP, Events
 from .facts import SupervisorFacts
 from .fillers import Fillers
+from .first_run import FirstRun
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
 from .listening import listens_for
@@ -77,6 +79,7 @@ class AgentHost:
         self.project, self.store, self.events = project, store, events
         self.cfg = project.config
         self.harness = get_harness(self.cfg.harness)
+        self._running_with = self._harness_settings()   # what the sessions were started with; a change restarts them
         self.stop = threading.Event()
         self.agent_threads: dict[str, threading.Thread] = {}   # agent name -> the thread running its turn (a wake-up, or the Supervisor chat)
         self._turn_locks: dict[str, threading.Lock] = {}        # agent name -> one turn at a time on its session
@@ -100,6 +103,7 @@ class AgentHost:
         self.turns = Turns(self)                       # a turn's progress and how it ended
         self.prober = Prober(project, store, events)   # the teams' probes
         self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
+        self.first_run = FirstRun(self)                # a project not set up wakes the Supervisor to set it up
 
     def recover(self) -> None:
         """Turns the previous host left running: their processes are stopped (no orphans) and
@@ -135,8 +139,15 @@ class AgentHost:
             log(put_back)
         # no announcement of the host's own: it is no machine. Each agent announces itself when its
         # session opens (_announce), with what the host watches for it (listening.py)
-        log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}; serving {', '.join(self.cfg.serves) or 'no role'}")
+        log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}"
+            f"{' (' + self.cfg.model + ')' if self.cfg.model else ''}; serving {', '.join(self.cfg.serves) or 'no role'}")
+        if self.cfg.harness_note:
+            log(self.cfg.harness_note)
         self._refresh_org(self.store.runtime()["agent_state"])
+        try:
+            self.first_run.offer()
+        except Exception as e:  # noqa: BLE001 - the host runs whether or not the setup could be offered
+            log(f"first run: {e!r}")
         try:
             while not self.stop.is_set():
                 try:
@@ -175,6 +186,7 @@ class AgentHost:
         self.cfg = self.project.config
         for k in [k for k, th in self.agent_threads.items() if not th.is_alive()]:
             self.agent_threads.pop(k)
+        self._follow_harness()
         self.residents.reap()
         states = self.store.runtime()["agent_state"]      # one read per tick: the agents' paused, deleted, requested flags
         self._refresh_org(states)
@@ -198,6 +210,28 @@ class AgentHost:
                 if reasons:
                     self._spawn(self.agent_threads, target, self._wake, target, reasons)
         self.runner.tick()
+
+    def _harness_settings(self) -> tuple:
+        return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking)
+
+    def _follow_harness(self) -> None:
+        """``[agents]`` harness, model, provider or thinking changed (the Supervisor sets them at the
+        human's choice): once no turn runs, the resident sessions are closed and the next tick opens
+        them on what is configured now. A session on another harness is a new conversation."""
+        want = self._harness_settings()
+        if want == self._running_with or self._busy():
+            return
+        try:
+            harness = get_harness(self.cfg.harness)
+        except ValueError as e:
+            if self._running_with != ("refused", *want):
+                log(f"[agents] harness: {e}; the agents keep running on {self.harness.name}")
+            self._running_with = ("refused", *want)
+            return
+        log(f"the agents' harness changed to {harness.name}{' (' + self.cfg.model + ')' if self.cfg.model else ''}: "
+            "the resident sessions start again on it")
+        self.residents.close_all()
+        self.harness, self._running_with = harness, want
 
     @staticmethod
     def _kill_orphan(pid: int, session_id: str) -> None:
@@ -265,11 +299,12 @@ class AgentHost:
             dirs = [str(p) for p in tools_path(self.project, self.teams, agent)]
             extra["PATH"] = os.pathsep.join(dirs + [os.environ.get("PATH", "")])
             extra["ORCHESTRA_TEAM"] = team.name
+        read_only = agent.builtin and any(BUILTIN_ROLES[r].read_only for r in agent.roles if r in BUILTIN_ROLES)
         return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, self.role_defs, self.teams),
-                                  effective_tools(agent, self.role_defs, self.teams), cwd, extra_env=extra)
+                                  effective_tools(agent, self.role_defs, self.teams), cwd, extra_env=extra, read_only=read_only)
 
     def _open_session(self, session_id: str, role: str, system_prompt: str, tools: tuple[str, ...], cwd: Path,
-                      ticket_id: str = "", extra_env: dict[str, str] | None = None) -> AgentSession:
+                      ticket_id: str = "", extra_env: dict[str, str] | None = None, read_only: bool = False) -> AgentSession:
         """Start a session on the configured harness. Which product runs the agent is
         invisible past this point: the host only sees the AgentSession interface. The
         prompt the session starts with is kept beside its stderr log, so a transcript can
@@ -285,7 +320,8 @@ class AgentHost:
             env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
                  "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token},
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
-            model=self.cfg.model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens))
+            model=self.cfg.model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
+            read_only=read_only))
         self._announce(source, role)               # once it exists: a session that failed to start is no machine
         return proc
 
@@ -359,6 +395,8 @@ class AgentHost:
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
+        if said := handoff.wake_reason(ev):
+            return said
         if ev["type"] == GAVE_UP:
             name = ev.get("name")
             log = self.project.orchestra.logs_dir / "machines" / f"{name}.log"
@@ -576,6 +614,7 @@ class AgentHost:
             facts, began = self.facts.before(snap)
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
+            self.first_run.ended(reasons, ok=not (res.error or res.timed_out))
         else:
             res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)

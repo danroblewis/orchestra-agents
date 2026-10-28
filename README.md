@@ -49,40 +49,42 @@ That puts one executable on your PATH, `orchestra`. The agents' command line com
 `orchestra agents …` and the task system's as `orchestra tasks …`; neither has an executable of
 its own. Installing the tool again replaces it, so name every plugin on each install.
 
-In the repository (a git repository), set up the task system, then add the agents to its
-`orchestra.toml`. Start with the dummy harness: scripted agents with no model, no network and no
-cost, so you can see the whole loop work first:
+In the repository (a git repository), start Orchestra and its UI. You configure nothing: the
+Supervisor does.
 
     cd <repo>
-    orchestra tasks init         # orchestra.toml (if there is none) with the task system's sections
+    orchestra init               # orchestra.toml with Orchestra's own sections, if there is none
+    orchestra run                # Orchestra's host; it starts the agents' host (and the task system's scheduler once set up)
+    orchestra web                # Orchestra's UI with the Agents page; open the login link it prints
 
-    # then add to orchestra.toml:
-    [agents]
-    harness = "dummy"            # pi | claude_code | codex | dummy
-    serves = ["worker", "reviewer"]   # the task system's roles these agents fill
-
-Run Orchestra, open its UI, and give it a ticket:
-
-    orchestra run                # Orchestra's host; it starts the task system's scheduler and the agents' host
-    orchestra web                # Orchestra's UI with the Tickets and Agents pages; open the login link it prints
-    orchestra tasks api --as planner create_milestone --args '{"name": "First"}'
-    orchestra tasks api --as planner create_ticket --args '{"title": "Say hello", "milestone_id": "M1", "description": "Write hello.", "acceptance": "It says hello."}'
-    orchestra tasks status       # the ticket moves to DONE: a dummy worker did it, a dummy reviewer approved it
-
-Then switch to a real model. The `claude_code` harness runs Claude Code, so `claude` must be
-installed, on the PATH `orchestra run` has, and logged in (`claude` once by hand). Change the
-section to:
-
-    [agents]
-    harness = "claude_code"
-    model = "haiku"
-    serves = ["worker", "reviewer"]
-
-Restart `orchestra run` (Ctrl-C, then start it again) so that every agent, the resident
-Supervisor and Coordinator included, comes up on the new harness. Talk to the Supervisor on the Agents page of `orchestra web`, or in the terminal:
+With no `[agents]` section the agents run on Claude Code with Haiku when the `claude` command is on
+the PATH `orchestra run` has (installed, and logged in once with `claude` by hand), and otherwise on
+the dummy harness (scripted, no model, no cost); the Agents page says which, and how to change it.
+On a project that is not set up yet (no task system `[project]`, no instruments), the Supervisor is
+woken at once to set it up: it reads the operator's guides Orchestra and each plugin serve, explores
+the repository read-only (how its tests run, how it builds and is served), sets what is plainly
+right (the task system's `[project]`, the test-report instrument, the gate's stages), each a commit
+of `orchestra.toml` with its reason, and leaves you one message: what it set and why, and the few
+choices that are yours (whether the agents may change code, pushing, the model and its cost), each
+with its recommendation. Answer it on the Agents page, or in the terminal:
 
     orchestra agents chat        # the Supervisor; Ctrl-D leaves
     orchestra agents status      # the host, what it runs the agents on, what each agent is doing
+
+Ask it for what you want: "measure the open orders every minute" (it sets up and checks the
+collector itself), "re-check the setup", or work ("add a page that lists the orders"), which it
+hands to the Coordinator as requirements; the Coordinator plans the milestone and tickets, the
+workers and reviewers do them, and the Supervisor tells you the plan and when it is done. You make
+no tickets yourself. To choose the harness and model yourself, tell the Supervisor, or set
+`[agents]` (the agents' guide, `orchestra_agents/guide.md`, says what each setting does):
+
+    [agents]
+    harness = "claude_code"      # pi | claude_code | codex | dummy
+    model = "haiku"
+    serves = ["worker", "reviewer"]   # the task system's roles these agents fill
+
+The host follows a change of harness or model once no turn runs. `enabled = false` turns the
+agents off.
 
 If your tasks live seconds, set `[discovery] step = "5s"` (with a window of 30–60 m) in
 `orchestra.toml` too: Orchestra's default grid is 30 s, and a level that changes inside one
@@ -90,21 +92,20 @@ step is not a stock.
 
 `orchestra run` starts the agents' host (`orchestra agents run --wait`, the process
 `agents.host`, run with Orchestra's own Python) because the plugin declares it for Orchestra's
-launcher when `orchestra.toml` has `[agents]`, keeps it running and stops it with itself, giving
+launcher (with or without an `[agents]` section), keeps it running and stops it with itself, giving
 it 30 s to shut down; its output is in `~/.orchestrator/<key>/logs/machines/agents.host.log`. To
 run the host by hand instead, leave `orchestra run` out and run `orchestra agents run`; two hosts
 of one project refuse to run side by side (with `--wait`, the second waits for the first to stop).
 The agents' tools call back into Orchestra's Python by its full path, which the host gives each
 session, so a session's own PATH never matters.
 
-A measurement the project wants taken over time is a collector of the project's own: the
-Supervisor has a worker write a small script under `machines/` (shell or any language, importing
-nothing of Orchestra's) that prints Prometheus text, and declare it in `orchestra.toml` under
-`[[collect]]` with an interval (or a `[[scrape]]` of a URL that already serves Prometheus
-metrics); once the branch lands, `orchestra run` runs it and stores what it prints in the
-project's metrics store (Orchestra's `docs/machines.md`). That needs `work = "code"` in
-`[project]` and an AI agent among the workers; when the project is not set up that way, the
-Supervisor changes it.
+A measurement the project wants taken over time is an instrument the Supervisor adds when you ask:
+a one-liner over tools already there (`git grep`, `sqlite3`, `curl`) it tries once as Orchestra
+would, declares under `[[collect]]` itself and reads back once Orchestra stored its first points;
+a `[[scrape]]` of a URL that already serves Prometheus metrics; a `[[sources]]` read of another
+metrics store; or, when it takes a script, a small program under `machines/` (shell or any
+language, importing nothing of Orchestra's) that a worker writes through the Coordinator, which
+needs `work = "code"` (Orchestra's `docs/machines.md`).
 
 The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
 processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
@@ -130,7 +131,8 @@ shows it.
 `harness = "dummy"` runs every agent from a script instead of a model: each turn plays the first
 matching rule of the file `[agents] dummy_script` names (TOML), then the built-in rules, so the
 setting alone is a working team (a worker commits a token file and reports ready, a reviewer
-approves, the Supervisor answers that it is scripted). A rule matches on the role, the ticket, a
+approves, the Supervisor hands a chat message to the Coordinator, which plans it into a milestone and
+a ticket). A rule matches on the role, the ticket, a
 pattern in the prompt and the turn's number, and its steps write files, run commands, commit,
 call the agents' tools, wait or fail:
 
@@ -158,7 +160,7 @@ are planner → coordinator → worker → reviewer → worker → reviewer → 
 the task system's dispatch, an instance of the coordinator); discovery hypothesises no flow
 on `task_scheduler`; and the ticket metrics arrive with `instrument=tasks.tickets` (the
 instrument the task system's plugin declares, `orchestra tasks metrics`). Its `test_the_agents_host_is_no_machine` has the
-Supervisor file a ticket and checks that no machine, edge or event is `agents`, that the
+Supervisor hand a request to the Coordinator, which files the ticket, and checks that no machine, edge or event is `agents`, that the
 Supervisor announces what the host watches for it (merge_gate's `gate.landed` reaches it on the
 map), that it is woken when its ticket lands, and that the agents' metrics arrive with
 `instrument=agents.turns`; `tests/unit/test_host_is_no_machine.py` is the same rule in process.

@@ -59,7 +59,12 @@ broken without updating the spec and saying so in the commit.
     deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration,
-    never code: code is a worker's, through a ticket, a review and the gate. `orchestra agents api` runs only inside an agent's session
+    never code: code is a worker's, through a ticket, a review and the gate. Nor does it make
+    tickets: it hands the human's requirements to the Coordinator (`work.requested`,
+    `handoff.py`), which plans them into milestones and tickets (the `planning` group) and reports
+    back (`work.planned`); the Supervisor keeps only the human's decisions on existing tickets
+    (priority, cancel, unblock, a note). Its and the Coordinator's sessions have no file-editing
+    tools (`Role.read_only`). `orchestra agents api` runs only inside an agent's session
     (with the session's token); without a role the tool interface reads and changes nothing. The
     pages and the CLI read the organisation through `api_org.read_org`, never an agent's tool.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`

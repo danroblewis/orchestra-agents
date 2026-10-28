@@ -47,6 +47,8 @@ class PiSession(AgentSession):
             args += ["--provider", spec.provider]
         if spec.model:
             args += ["--model", spec.model]
+        if spec.read_only:                       # reads, searches and runs commands; edits no file
+            args += ["--exclude-tools", "edit,write"]
         if spec.thinking:
             args += ["--thinking", spec.thinking]
         if spec.system_prompt:

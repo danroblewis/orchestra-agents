@@ -18,7 +18,18 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from . import access, ledger, modeling, observe, observe_model, prompting
+from . import (
+    access,
+    guides,
+    handoff,
+    instruments,
+    ledger,
+    modeling,
+    observe,
+    observe_model,
+    prompting,
+    source_tools,
+)
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
@@ -141,12 +152,28 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return observe_model.list_metrics(project, a)
     if command == "get_model":
         return observe_model.get_model(project)
+    if command == "read_instrument":
+        return instruments.read_instrument(project, a)
+    if command == "try_collector":
+        if role != "supervisor":
+            raise StoreError("only the supervisor tries collectors (it sets them up)")
+        return instruments.try_collector(project, a)
+    if command in source_tools.COMMANDS:
+        return source_tools.COMMANDS[command](project, a)
+    if command == "list_guides":
+        return guides.list_guides(project)
+    if command == "read_guide":
+        return guides.read_guide(project, a)
+    if command == "hand_to_coordinator":
+        return handoff.hand_to_coordinator(store, a, role)
+    if command == "report_plan":
+        return handoff.report_plan(store, a, role)
 
     if command in modeling.COMMANDS:
         return modeling.handle_model(project, store, command, a, role, ticket_env)
 
     if command in REQUESTS or command in QUERIES:                 # the task system's
-        if command in REQUESTS and not may_change_tickets(project, role):
+        if command in REQUESTS and not may_change_tickets(project, role, command):
             raise StoreError(f"role {role} may not change tickets or milestones ({command})")
         got = TaskClient(store.events, role)(command, a)
         if got.get("ok") is False:                                # refused, or no answer: the tool failed
@@ -158,28 +185,43 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
 PLANNERS = set(PLANNER_ROLES)
 SYSTEM_COMMANDS = frozenset({"restart_machine", "check_setup", "read_config", "list_processes", "read_machine_log",
-                             "list_metrics", "get_model"})          # they read the setup (observe.py, restart.py)
+                             "list_metrics", "get_model", "read_instrument", "try_collector", *source_tools.COMMANDS})
+PLANNING = frozenset({"create_ticket", "create_milestone", "update_milestone", "close_milestone"})   # the Coordinator's          # they read the setup (observe.py, restart.py)
 
 
-def may_change_tickets(project: Project, role: str) -> bool:
-    """Whether an agent may ask the task system to change tickets: the Supervisor and the
-    Coordinator, and a custom agent whose roles or team grant it the ``tickets`` tools (the same
-    grant the harness started it with). Without a role, nothing."""
+def may_change_tickets(project: Project, role: str, command: str = "") -> bool:
+    """Whether an agent may ask the task system for ``command``: creating tickets and milestones
+    (``planning``) is the Coordinator's, and a custom agent's whose roles or team grant it
+    ``planning``; the other changes (an update, a note, a cancel, an unblock) need ``tickets``, which
+    the Supervisor holds too (the same grants the harness started it with). Without a role, nothing."""
     if not role:
         return False
+    group = "planning" if command in PLANNING else "tickets"
     if role in PLANNERS:
-        return True
+        return role == "coordinator" or group == "tickets"
     ag = all_agents(project).get(role)
-    return bool(ag) and not ag.builtin and "tickets" in effective_tools(ag, all_roles(project), all_teams(project))
+    return bool(ag) and not ag.builtin and group in effective_tools(ag, all_roles(project), all_teams(project))
+
+
+_UNANSWERED: dict[str, float] = {}     # project key -> when the task system last left a snapshot unanswered
+SILENT_FOR_S, SILENT_WAIT_S = 600.0, 3.0   # after a snapshot nobody answered, the next ones wait this long, for this long
 
 
 def snapshot(store: AgentStore, role: str, wait_s: float | None = None) -> dict:
     """The task system's snapshot (a query; the fields the prompts read are listed in protocol.py)
     for a wake-up's or the Supervisor's prompt, asked as the agent being woken (the query's
     source is its instance, which for a resident is its name), waiting ``wait_s`` for the answer
-    (protocol.WAIT_S by default). When the task system does not answer, an empty one that says so."""
+    (protocol.WAIT_S by default; SILENT_WAIT_S for ten minutes after one went unanswered, so a project
+    without the task system, as before its setup, does not hold every turn for half a minute). When the
+    task system does not answer, an empty one that says so."""
+    if wait_s is None and time.time() - _UNANSWERED.get(store.project.key, 0.0) < SILENT_FOR_S:
+        wait_s = SILENT_WAIT_S                    # it did not answer a moment ago: no task system runs, most likely
     got = TaskClient(store.events, role, source=role, wait_s=wait_s)("snapshot")
     snap = got.get("snapshot") if got.get("ok") else None
+    if snap:
+        _UNANSWERED.pop(store.project.key, None)
+    else:
+        _UNANSWERED[store.project.key] = time.time()
     if not snap:
         snap = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {},
                 "assignments": [], "unavailable": got.get("error") or "the task system did not answer"}

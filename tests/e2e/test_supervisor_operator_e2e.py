@@ -8,7 +8,8 @@ Supervisor, played by the fake Claude Code from a script, looks (`check_setup`, 
 shell worker as a program Orchestra does not run), makes the AI agents fill the worker role and
 switches to code work (each a commit of orchestra.toml with its reason, announced on the bus), and
 tells the human which process to stop, as its prompt says for a program it cannot change. The
-human stops it and says so; the Supervisor files the collector ticket. An AI worker writes the
+human stops it and says so; the Supervisor hands the collector to the Coordinator, which files the
+ticket. An AI worker writes the
 collector, the reviewer approves, the gate lands it, and `orchestra run` starts it: its series
 reach the project's store."""
 
@@ -36,9 +37,15 @@ LOOK = [  # the first chat turn: see, fix what the tools can, and name what the 
                                          "reason": "a collector is code: only an AI worker can write it, and none filled the role"}},
     {"tool": "set_work_mode", "args": {"work": "code", "reason": "a collector must land in the repository for Orchestra to run it"}},
 ]
-FILE = [  # the second, once the human stopped the shell worker
+FILE = [  # the second, once the human stopped the shell worker: the requirements, handed to the Coordinator
+    {"tool": "hand_to_coordinator", "args": {"requirements": COLLECTOR["description"] + "\nAcceptance: " + COLLECTOR["acceptance"],
+                                             "context": COLLECTOR["objective"]}},
+]
+PLANNED = [  # the Coordinator plans the hand-off into the collector ticket and reports it
     {"tool": "create_ticket", "args": {**{k: COLLECTOR[k] for k in ("title", "objective", "description", "acceptance")},
                                        "verification": "The reviewer reads the diff and runs the script once.", "milestone_id": "M1"}},
+    {"tool": "report_plan", "args": {"request": "{request}", "summary": "One ticket: the collector.", "milestone": "M1",
+                                     "tickets": ["DEMO-1"]}},
 ]
 
 
@@ -69,8 +76,10 @@ def broken(tmp_path, monkeypatch):
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     script = tmp_path / "supervisor.json"
     script.write_text(json.dumps(LOOK))
+    (tmp_path / "coordinator.json").write_text(json.dumps(PLANNED))
     env = {"ORCHESTRATOR_HOME": str(tmp_path / "home"), "CLAUDE_BINARY": str(fake),
-           "CLAUDE_CONFIG_DIR": str(tmp_path / "claude-home"), "FAKE_CLAUDE_SUPERVISOR": str(script)}
+           "CLAUDE_CONFIG_DIR": str(tmp_path / "claude-home"), "FAKE_CLAUDE_SUPERVISOR": str(script),
+           "FAKE_CLAUDE_COORDINATOR": str(tmp_path / "coordinator.json")}
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     target = make_project(tmp_path / "project")
@@ -135,7 +144,8 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     script.write_text(json.dumps(FILE))
     lines = chat(web, "I stopped the shell worker. Go ahead with the measurement.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
-    assert "DEMO-1" in "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
+    assert "handed request r-" in "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
+    wait_until("the Coordinator's plan", lambda: any(e["type"] == "work.planned" for e in all_events(web)), timeout_s=60)
 
     # an AI worker takes the collector ticket, the reviewer approves, the gate lands it on main
     def done() -> bool:

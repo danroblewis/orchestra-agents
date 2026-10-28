@@ -97,17 +97,17 @@ TOOLS: list[ToolDef] = [
     # tickets
     ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, capacity, pipeline state."),
     ToolDef("list_milestones", "tickets", "List all milestones with id, name, status, and ticket counts."),
-    ToolDef("create_milestone", "tickets", "Create a milestone to group tickets. Returns its id (M1, M2, ...).",
+    ToolDef("create_milestone", "planning", "Create a milestone to group tickets. Returns its id (M1, M2, ...).",
             {"name": S("Short name"), "description": S("What this milestone is for")}, ("name",)),
-    ToolDef("update_milestone", "tickets", "Rename or re-describe a milestone.",
+    ToolDef("update_milestone", "planning", "Rename or re-describe a milestone.",
             {"id": S("Milestone id"), "name": S("New name"), "description": S("New description"), "order": I()}, ("id",)),
-    ToolDef("close_milestone", "tickets",
+    ToolDef("close_milestone", "planning",
             "Close a milestone. Only allowed when every ticket in it is DONE or CANCELLED. Irreversible.",
             {"id": S("Milestone id")}, ("id",)),
     ToolDef("list_tickets", "tickets", "List tickets, optionally filtered by state or milestone.",
             {"state": S(f"One of {STATES}"), "milestone_id": S("Milestone id")}),
     ToolDef("get_ticket", "tickets", "Full detail of one ticket including its notes.", {"id": S("Ticket id like ORC-12")}, ("id",)),
-    ToolDef("create_ticket", "tickets",
+    ToolDef("create_ticket", "planning",
             "Create a ticket in an open milestone. objective says why (which project objective it serves); "
             "description is a self-contained brief a worker can do without asking; acceptance is what a "
             "reviewer checks in the result; verification is how it is proved: the merge gate's tests for code "
@@ -182,7 +182,7 @@ TOOLS: list[ToolDef] = [
             "what it never does, how it reports). No schedule, no team: those belong to agents and teams.",
             {"name": S("lowercase_with_underscores"), "description": S("One line: what this kind of agent is good at"),
              "prompt": S("The job description in markdown, under sixty lines"),
-             "tools": A("Tool groups the role needs: tickets, context, pipeline, capacity, escalate, events, model, experiments, replay, predict")},
+             "tools": A("Tool groups the role needs: tickets, planning, guides, context, pipeline, capacity, escalate, events, model, experiments, replay, predict")},
             ("name", "description", "prompt")),
     ToolDef("update_role", "roles", "Change a custom role's description, tools, or prompt.",
             {"name": S("Role name"), "description": S(""), "prompt": S("New full prompt"), "tools": A()}, ("name",)),
@@ -251,6 +251,35 @@ TOOLS: list[ToolDef] = [
             "The system dynamics model Orchestra discovered from the metrics, for a diagnosis: the series each stock is, flows "
             "with their equations and the machines attributed to them, and the series the last discovery left out, with why. "
             "To experiment on the model, read_model."),
+    ToolDef("read_instrument", "observe",
+            "A declared instrument ([[collect]], [[scrape]] or [[sources]]) as Orchestra sees it: when it last wrote, how "
+            "many points, failures and its last error, the end of its log, and the latest values of each series it stored "
+            "in the last minutes. Use it after set_collector to see that the measurement is being stored.",
+            {"name": S("The instrument's name"), "minutes": I("How far back to look for points, default 30"),
+             "wait_s": I("Wait up to this many seconds (at most 120) for its next round to end first: right after set_collector")},
+            ("name",)),
+    ToolDef("check_sources", "observe",
+            "Another time-series store ([[sources]], or a url before declaring one): where it is, whether its credentials "
+            "are present (never their values), whether it answers and which API endpoints work.",
+            {"source": S("A [[sources]] name"), "url": S("Or a store's URL, to look before declaring it"),
+             "auth": O("With url: as [[sources]] writes it, e.g. {\"bearer_env\": \"WORK_TOKEN\"}")}),
+    ToolDef("source_schema", "observe",
+            "What a store has: without match, every metric name on one line (its type, or a guess from its name; how many "
+            "series; each label with how many values); with match, those metrics in detail (help, label values).",
+            {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
+             "match": A("PromQL selectors, e.g. {__name__=~\"http_.*\"}"), "minutes": I("The window, default 60"),
+             "limit": I("Most series read, default 20000")}),
+    ToolDef("preview_query", "observe",
+            "What a PromQL query returns over a recent window: each series' labels, points, min, max, last and a sparkline. "
+            "From a source, or with neither source nor url from the project's own store.",
+            {"query": S("PromQL"), "source": S("A [[sources]] name"), "url": S("Or a store's URL"),
+             "auth": O("With url: as [[sources]] writes it"), "minutes": I("The window, default the discovery window"),
+             "step_s": I("Seconds per step, default the discovery step")}, ("query",)),
+    ToolDef("infer_source", "observe",
+            "What Orchestra infers to read from a store for discovery: its metric families (kind, stats, interval, labels "
+            "and their roles), the definitions it keeps (query, view, kind, score) and those it leaves out with why.",
+            {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
+             "match": A("PromQL selectors to narrow it")}),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment."),
@@ -289,12 +318,21 @@ TOOLS: list[ToolDef] = [
              "restart": S("always (default), on-failure or never"), "stop_grace": I("Seconds from SIGTERM to SIGKILL"),
              "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("name", "command", "reason")),
     ToolDef("set_collector", "setup",
-            "Add or change a collector: a command under machines/ that prints Prometheus text ([[collect]]), or a url "
-            "that serves it ([[scrape]]). Orchestra runs it on its interval and stores what it prints. The script itself "
-            "is a worker's to write.",
-            {"name": S("The machine's id"), "command": S("The script, e.g. machines/disk.sh"), "url": S("Or a URL"),
-             "every": S("How often, e.g. 60s"), "timeout": S("For a round that may take more than 10 s"),
+            "Add or change an instrument: a command that prints Prometheus text ([[collect]]), or a url that serves it "
+            "([[scrape]]). Orchestra runs it on its interval and stores what it prints, labelled instrument=<name>. The "
+            "command is a script in the repository (machines/disk.sh, a worker's to write), an existing tool's command "
+            "(python -m orchestra.instruments.test_reports ...), or with shell: true a one-liner run by sh -c. Try it "
+            "first with try_collector; after, check it with read_instrument.",
+            {"name": S("The instrument's name: letters, digits, . _ -"), "command": S("The command, e.g. machines/disk.sh"),
+             "shell": B("Run command with sh -c: a one-liner with pipes, $(...) or &&, at most 300 characters"),
+             "url": S("Or a URL"), "every": S("How often, e.g. 60s"), "timeout": S("For a round that may take more than 10 s"),
              "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("name", "reason")),
+    ToolDef("try_collector", "setup",
+            "Run a collector's command once (or read a url once) exactly as Orchestra would, without declaring or storing "
+            "anything: the series it would store, the lines Orchestra cannot parse, names it refuses, how long it took, "
+            "its stderr. Use it before set_collector, until it works.",
+            {"command": S("The command, as set_collector would take it"), "shell": B("Run it with sh -c (a one-liner)"),
+             "url": S("Or a URL serving Prometheus text"), "timeout": S("How long it may take, default 10s")}),
     ToolDef("remove_entry", "setup",
             "Remove a [[machines]], [[collect]], [[scrape]] or [[gate.unit]] entry by name. A removed machine is stopped.",
             {"section": {"type": "string", "enum": ["machines", "collect", "scrape", "gate.unit"]}, "name": S("Entry name"),
@@ -394,6 +432,29 @@ TOOLS: list[ToolDef] = [
             "prediction is judged from it. when: now (it is in effect) or landed (code that takes effect when your ticket lands).",
             {"change": S("The change id commit_prediction gave you"), "note": S("What changed, in a sentence"),
              "when": {"type": "string", "enum": ["now", "landed"], "description": "now (default) or landed"}}, ("change",)),
+    # guides: how to configure Orchestra and each installed plugin (orchestra.guides)
+    ToolDef("list_guides", "guides",
+            "The operator's guides to configuring Orchestra and each installed plugin: each one's name, what it is about, "
+            "its size and its sections. Read the one you need with read_guide before you change a setting it covers."),
+    ToolDef("read_guide", "guides", "One guide in full, or one of its sections.",
+            {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
+             "section": S("A section's heading (or part of it), to read only that part")}, ("name",)),
+    # handoff: the Supervisor passes the human's requirements to the Coordinator, who plans them
+    ToolDef("hand_to_coordinator", "handoff",
+            "Hand the human's requirements to the Coordinator, who plans them into a milestone and tickets and reports "
+            "the plan back to you (you are woken with it). Write the requirements so a planner who never met the human can "
+            "plan them: the outcome wanted, what will be observably true, how it is verified, constraints, the human's "
+            "choices already made, and the priority.",
+            {"requirements": S("What is wanted: outcome, acceptance, verification, constraints, priority"),
+             "context": S("What the Coordinator should know: the objective it serves, what you found in the repository, "
+                          "related tickets")}, ("requirements",)),
+    ToolDef("report_plan", "planning",
+            "Tell the Supervisor how you planned its request (work.requested): the milestone, the tickets you created, and "
+            "any question only the human can answer. Call it once per request, after creating the tickets.",
+            {"request": S("The request's id (r-...), from the wake-up"), "summary": S("The plan in a few sentences"),
+             "milestone": S("The milestone id the tickets are in"), "tickets": A("The ids of the tickets you created"),
+             "questions": S("What the human must decide before (some of) the work can go ahead; empty when nothing")},
+            ("request", "summary")),
     # escalate
     ToolDef("escalate_to_supervisor", "escalate",
             "Wake the Supervisor with a note when a decision about intent, scope, or priorities is needed.",

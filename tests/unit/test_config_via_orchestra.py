@@ -125,18 +125,25 @@ def test_a_section_set_only_in_the_overlay_reaches_the_host(project, monkeypatch
     monkeypatch.setenv("ORCHESTRA_REPO", str(project.repo_root))
     overlay(project, '[agents]\ndummy_script = "mine.toml"\n')
     assert dummy_agent.script_path() == project.repo_root / "mine.toml"
+    overlay(project, '[agents]\nserves = ["worker"]\n')
+    assert dummy_agent.script_path() is None
+    (project.repo_root / ".orchestra").mkdir(exist_ok=True)
+    (project.repo_root / ".orchestra" / "dummy.toml").write_text("")
+    assert dummy_agent.script_path() == project.repo_root / ".orchestra" / "dummy.toml"     # the repository's own, by default
 
 
-def test_a_project_with_agents_only_in_the_overlay_runs_the_host(tmp_path, monkeypatch):
+def test_the_host_runs_without_an_agents_section_and_enabled_false_in_the_overlay_stops_it(tmp_path, monkeypatch):
+    """[agents] is optional (the owner, 2026-10-28): installing the plugin runs the host, so the
+    Supervisor can set a new project up; enabled = false, wherever it is set, turns it off."""
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
     repo = tmp_path / "bare"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     (repo / "orchestra.toml").write_text('[events]\nurl = "file"\n')
     o = load_orchestra_project(repo)
-    assert processes(load_project(repo)) == []
-    o.config_edit.set("agents.harness", "dummy", target="overlay")
-    assert [x.name for x in plugin(load_orchestra_project(repo)).processes] == ["host"]
+    assert [x.name for x in processes(load_project(repo))] == ["host"]
+    o.config_edit.set("agents.enabled", False, target="overlay")
+    assert plugin(load_orchestra_project(repo)).processes == []
 
 
 def call(project, store, tool, **args):

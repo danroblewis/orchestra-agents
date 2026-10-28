@@ -27,12 +27,16 @@ from collections.abc import Callable
 
 from orchestra.config_edit import Change, ConfigEdit
 from orchestra.overlay import OVERLAY, REPO
+from orchestra.plugins import Plugin
 
 from .config import Config, ConfigError, Project
 from .secret_shapes import secret_in
 from .store import StoreError
 
 TARGETS = (REPO, OVERLAY)
+# Orchestra runs every plugin's check, this one's (web.check) included, on every change, when it has
+# Plugin.check; before that the agents' reader is passed with each change.
+PLUGIN_CHECKS = "check" in getattr(Plugin, "__dataclass_fields__", {})
 AUTHOR = ("Orchestra Supervisor", "supervisor@orchestra.invalid")   # only when the checkout names no committer
 
 Edit = Callable[[ConfigEdit, dict], Change]     # Orchestra's editor, its keyword arguments -> the change
@@ -56,7 +60,8 @@ def why_not_committable(project: Project) -> str | None:
     if branch.stdout.strip() != base:
         return (f"the repository root has {branch.stdout.strip()!r} checked out, not {base}: a change committed there "
                 f"would not be on {base}; the human checks out {base} in the root first")
-    if git(project, "status", "--porcelain", "--", name).stdout.strip():
+    status = git(project, "status", "--porcelain", "--", name).stdout.strip()
+    if status and not status.startswith("??"):        # untracked: as `orchestra init` left it, nobody's edit; the commit adds it
         return (f"{name} has an uncommitted change in the repository root (someone is editing it); the human commits or "
                 "drops it first")
     return None
@@ -81,12 +86,20 @@ def no_secret(before: str, after: str) -> None:
 
 
 def commit(project: Project, message: str) -> str:
-    """Commit orchestra.toml alone; returns the commit's short id. Raises with git's words."""
+    """Commit orchestra.toml alone (adding it first when git does not track it yet, as after
+    `orchestra init`); returns the commit's short id. Raises with git's words."""
     name = file_name(project)
+    new = git(project, "ls-files", "--error-unmatch", "--", name).returncode != 0
+    if new:
+        added = git(project, "add", "--", name)
+        if added.returncode != 0:
+            raise StoreError(f"git could not add {name}: {(added.stderr or added.stdout).strip()}")
     who = [] if git(project, "config", "user.email").stdout.strip() else ["-c", f"user.name={AUTHOR[0]}", "-c", f"user.email={AUTHOR[1]}"]
     p = subprocess.run(["git", "-C", str(project.repo_root), *who, "commit", "-q", "-m", message, "--", name],
                        capture_output=True, text=True, check=False)
     if p.returncode != 0:
+        if new:
+            git(project, "reset", "-q", "--", name)       # untracked again, as it was
         raise StoreError(f"git could not commit {name}: {(p.stderr or p.stdout).strip()}")
     return git(project, "rev-parse", "--short", "HEAD").stdout.strip()
 
@@ -111,7 +124,7 @@ def change(project: Project, edit: Edit, describe: Callable[[Change], str], reas
         raise StoreError(why)
     ed = project.orchestra.config_edit
     try:
-        c = edit(ed, {"target": target, "check": agents_check, "dry_run": True})
+        c = edit(ed, {"target": target, "check": None if PLUGIN_CHECKS else agents_check, "dry_run": True})
     except ConfigError as e:
         raise StoreError(str(e)) from e
     what = describe(c)

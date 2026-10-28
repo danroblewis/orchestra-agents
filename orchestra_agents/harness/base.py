@@ -145,6 +145,7 @@ class SessionSpec:
     provider: str | None = None
     thinking: str | None = None
     compact_tokens: int | None = None   # ask the harness to compact its own context past this many tokens, if it can
+    read_only: bool = False    # the agent reads the checkout and never edits a file: its harness's file-editing tools are taken away
 
 
 class AgentSession(ABC):

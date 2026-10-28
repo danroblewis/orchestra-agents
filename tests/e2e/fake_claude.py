@@ -20,7 +20,9 @@ verdict, so what it is doing can be seen while it holds the ticket.
 FAKE_CLAUDE_SUPERVISOR=<file>: in a chat turn (one with the human's message) the Supervisor calls
 the tools the file lists, a JSON list of {"tool", "args"}, in order, and replies with what each
 answered, or with the text of a {"reply"} step when the list has one (a reply as a model might
-get it wrong); without it, a Supervisor only acknowledges."""
+get it wrong); without it, a Supervisor only acknowledges.
+FAKE_CLAUDE_COORDINATOR=<file>: woken with a Supervisor's hand-off (work.requested), the Coordinator
+calls the tools the file lists the same way, with {request} replaced by the request's id."""
 
 from __future__ import annotations
 
@@ -222,6 +224,11 @@ def main() -> None:
         else:
             use_tool("report_review", {"verdict": "APPROVED", "summary": "looks good"})
             text = "Approved."
+    elif role == "coordinator" and os.environ.get("FAKE_CLAUDE_COORDINATOR") and (
+            asked := re.search(r"event work\.requested request=(r-[0-9a-f]+)", prompt)):
+        steps = json.loads(Path(os.environ["FAKE_CLAUDE_COORDINATOR"]).read_text().replace("{request}", asked.group(1)))
+        said = [f"- {s['tool']}: {use_tool(s['tool'], s.get('args', {}))}" for s in steps if "tool" in s]
+        text = "Planned:\n" + "\n".join(said)
     elif role == "supervisor" and os.environ.get("FAKE_CLAUDE_SUPERVISOR") and "[The human's message]" in prompt:
         steps = json.loads(Path(os.environ["FAKE_CLAUDE_SUPERVISOR"]).read_text())
         said = [f"- {s['tool']}: {use_tool(s['tool'], s.get('args', {}))}" for s in steps if "tool" in s]

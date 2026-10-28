@@ -65,18 +65,13 @@ steps = [
 """
 EXTRA = [f"Rework item {i}" for i in range(5)] + [f"Extra item {i}" for i in range(3)]
 
-# The Supervisor files a ticket for the human when asked to, and says so when it lands (the host
-# wakes it: landings.py). Put before the demo's own Supervisor rule, which answers every turn.
+# The Supervisor hands the human's request to the Coordinator (the built-in rules), which plans it
+# into a milestone and a ticket; the Supervisor says so when it lands (the host wakes it:
+# landings.py). Put before the demo's own Supervisor rule.
 SUPERVISOR_RULES = """# (the tests' rules, matching only their own prompts)
 [[rule]]
 role = "supervisor"
-prompt = "Please file the note ticket"
-steps = [{ tool = "create_ticket", args = { title = "Supervisor item", objective = "The human asked for a note.", description = "Write a note.", acceptance = "- a note", verification = "The reviewer reads the note.", milestone_id = "M1" } }]
-reply = "I filed the ticket."
-
-[[rule]]
-role = "supervisor"
-prompt = "which you created for the human"
+prompt = "made for the human.s request"
 reply = "Your note ticket landed."
 
 """
@@ -295,7 +290,7 @@ def test_the_agents_host_is_no_machine(free_demo):
     ids = plan(target)
     lines = chat(web, "Please file the note ticket.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
-    assert any(ln["type"] == "tool_start" and ln.get("name") == "create_ticket" for ln in lines)
+    assert any(ln["type"] == "tool_start" and ln.get("name") == "hand_to_coordinator" for ln in lines)
     wait_until("the tickets", lambda: settled(web) and len(states(web)) == len(ids) + 1, timeout_s=400)
     assert set(states(web).values()) == {"DONE"}
     # the Supervisor is told its ticket landed: the host heard the gate for it and woke it
@@ -304,8 +299,11 @@ def test_the_agents_host_is_no_machine(free_demo):
 
     events = all_events(web)
     assert not [e for e in events if e["source"].partition("/")[0] == "agents"]
-    [made] = [e for e in events if e["type"] == "ticket.created" and e["data"].get("by") == "supervisor"]
-    assert made["source"] == "supervisor"                                   # the answer to its request, as the asker
+    [asked] = [e for e in events if e["type"] == "work.requested"]
+    [planned] = [e for e in events if e["type"] == "work.planned"]
+    assert (asked["source"], planned["source"], planned["data"]["request"]) == ("supervisor", "coordinator", asked["data"]["request"])
+    [made] = [e for e in events if e["type"] == "ticket.created" and e["data"].get("by") == "coordinator"]
+    assert made["source"] == "coordinator" and planned["data"]["tickets"][0]["id"] == made["subject"]   # the Coordinator planned it
     d = web.get("/api/machines")
     assert "agents" not in {m["id"] for m in d["machines"]}
     assert not [e for e in d["edges"] if "agents" in (e["from"], e["to"])]
@@ -316,8 +314,11 @@ def test_the_agents_host_is_no_machine(free_demo):
     assert "gate.landed" in {p["type"] for p in next(m for m in d["machines"] if m["id"] == "merge_gate")["publishes"]}
     coord = next(m for m in d["machines"] if m["id"] == "coordinator")
     assert "request.done" in coord["subscribes"]
-    # the Supervisor's request reaches the coordinator: its ticket goes to dispatch, which offers it to a worker
-    assert handoffs(events, made["subject"])[:2] == [("supervisor", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker")]
+    # the human's request passes from the Supervisor to the Coordinator and back; its ticket goes to dispatch,
+    # which offers it to a worker
+    assert handoffs(events, asked["subject"])[0] == ("supervisor", "work.requested", "coordinator")
+    assert {"from": "work.planned", "to": "supervisor", "kind": "subscribes"} in d["edges"]           # the plan comes back to it
+    assert ("coordinator", "task.assigned", "worker") in handoffs(events, made["subject"])
 
     # the measurements: through the plugin's instrument, the host writing none
     from orchestra.config import load_project as orchestra_project

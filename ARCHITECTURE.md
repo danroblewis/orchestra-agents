@@ -183,11 +183,15 @@ agents = "orchestra_agents.web:plugin"
 | Stylesheets on every page | `agents.css` | `web.plugin` |
 | API router | see [section 13](#13-web-panels-and-machine-cards) | `web.router` |
 | Declared machines | every agent from `org_store.all_agents` (kind `agent`, `continuous` if resident or `ad hoc`, and what it listens for, `listening.listens_for`). The host is not one. | `web.declared` |
-| Processes | `host`: `[sys.executable, -m, orchestra, agents, run, --wait]` with `stop_grace_s=30`, **only when `orchestra.toml` has an `[agents]` section** | `web.processes` |
+| Processes | `host`: `[sys.executable, -m, orchestra, agents, run, --wait]` with `stop_grace_s=30`, **unless `[agents] enabled = false`** (no `[agents]` section is needed) | `web.processes` |
 | Collectors | `turns` (Orchestra names it `agents.turns`): the command `orchestra agents metrics`, every discovery step, same condition | `web.collectors` |
+| Guide | `orchestra_agents/guide.md`: the `[agents]` settings for the Supervisor (`orchestra.guides`) | `web.GUIDE` |
+| Check | `web.check`: the `[agents]` reader, run by `config_edit` on every change | `web.check` |
 
 So `orchestra run` starts the host as the process `agents.host`, keeps it running and stops it.
-A project without `[agents]` still gets the pages, but no host runs and no AI is started.
+A project without `[agents]` runs it on the default harness (`config.default_harness`: Claude Code
+with Haiku when `claude` is found, else dummy), and on a project not set up the Supervisor is woken
+to set it up (`first_run.py`).
 
 Declared machines only fill gaps on Orchestra's Machines page. What Orchestra shows comes from
 what it observes on the bus (Orchestra rule 2).
@@ -298,8 +302,8 @@ The organisation has three kinds of record, kept apart (`roles.py`, `org.py`):
 
 | Agent | Kind | Tool groups | Woken by | Team |
 |---|---|---|---|---|
-| `supervisor` | continuous, resident | tickets, context, pipeline, roles, team, events, observe, setup, model, experiments, replay, predict | `task.attention_needed:supervisor`, `orchestra.process.gave_up`, a human message, `escalate_to_supervisor`, a crash loop, a landing of a human's ticket | none |
-| `coordinator` | continuous, resident; `scheduled` when `[agents] coordinator_every` is set | tickets, capacity, escalate, model, experiments, replay (+ `team`, because it is in a team) | `task.attention_needed:coordinator`, the optional schedule | `engineering` (lead) |
+| `supervisor` | continuous, resident, read-only | tickets, handoff, guides, context, pipeline, roles, team, events, observe, setup, model, experiments, replay, predict | `task.attention_needed:supervisor`, `orchestra.process.gave_up`, `work.planned:supervisor`, a human message, `escalate_to_supervisor`, a crash loop, a landing of a human's ticket, the first run of a project not set up | none |
+| `coordinator` | continuous, resident, read-only; `scheduled` when `[agents] coordinator_every` is set | tickets, planning, guides, capacity, escalate, model, experiments, replay (+ `team`, because it is in a team) | `task.attention_needed:coordinator`, `work.requested:coordinator`, the optional schedule | `engineering` (lead) |
 | `worker` | ad hoc, one session per ticket | report_ticket, model, experiments, replay, predict | `task.assigned` for `worker`, `changes.requested` to its instance (through the runner) | `engineering` |
 | `reviewer` | ad hoc, one session per ticket | report_review, model, replay | `task.assigned` for `reviewer`, `review.requested` (through the runner) | `engineering` |
 
@@ -806,7 +810,7 @@ Then `handle` checks the role again for these commands:
 | `update_project_context` | `supervisor` |
 | Organisation mutations (`create_`/`update_`/`delete_` role, agent, team) and `pause_agent`, `resume_agent`, `restart_agent`, `reset_agent` (`api_org.MUTATIONS`) | `supervisor`, even for a custom role or team granted `roles` |
 | All `setup` tools and `restart_machine` | `supervisor` |
-| Ticket and milestone **requests** | `supervisor`, `coordinator`, and custom agents whose effective groups include `tickets` (`may_change_tickets`) |
+| Ticket and milestone **requests** | creating tickets and milestones (`planning`): `coordinator`, and custom agents granted `planning`; update, note, cancel, unblock (`tickets`): `supervisor`, `coordinator`, and custom agents granted `tickets` (`may_change_tickets`) |
 | `message_agent`, `run_agent` | Any role, along the tree (`org.may_message`) |
 | `emit_event` | Types declared by the caller's team chain (the Supervisor may raise any non-reserved type). At most 3 deep in a cause chain and 20 per hour. |
 
@@ -828,16 +832,20 @@ task system's `result`. A refusal or no answer raises an error. "Query" works th
 | `report_review` | report_review | verdict* (`APPROVED`\|`REJECTED`), summary*, feedback (required if REJECTED) | Same as above |
 | `project_status` | tickets | — | Query |
 | `list_milestones` | tickets | — | Query |
-| `create_milestone` | tickets | name*, description | Request `milestone.requested` |
-| `update_milestone` | tickets | id*, name, description, order | Request `milestone.change_requested` |
-| `close_milestone` | tickets | id* | Request `milestone.close_requested` |
+| `create_milestone` | planning | name*, description | Request `milestone.requested` |
+| `update_milestone` | planning | id*, name, description, order | Request `milestone.change_requested` |
+| `close_milestone` | planning | id* | Request `milestone.close_requested` |
 | `list_tickets` | tickets | state, milestone_id | Query |
 | `get_ticket` | tickets | id* | Query |
-| `create_ticket` | tickets | title*, objective*, description*, acceptance*, verification*, milestone_id*, priority, depends_on | Request `task.requested` |
+| `create_ticket` | planning | title*, objective*, description*, acceptance*, verification*, milestone_id*, priority, depends_on | Request `task.requested` |
 | `update_ticket` | tickets | id*, title, description, acceptance, verification, objective, priority, milestone_id, depends_on | Request `task.change_requested` |
 | `add_note` | tickets | id*, text* | Request `task.note_requested` |
 | `cancel_ticket` | tickets | id*, reason* | Request `task.cancel_requested` |
 | `unblock_ticket` | tickets | id*, note* | Request `task.unblock_requested` |
+| `report_plan` | planning | request*, summary*, milestone, tickets, questions | Checks the request was handed on and the tickets exist (`list_tickets`); publishes `work.planned` to the Supervisor (`handoff.py`) |
+| `hand_to_coordinator` | handoff | requirements* (≥20 characters), context | Publishes `work.requested {request, requirements, context, to: coordinator, by}`; returns the request id |
+| `list_guides` | guides | — | `{guides[{name, chars, about, sections}]}`: Orchestra's guide and each installed plugin's (`orchestra.guides.collect`) |
+| `read_guide` | guides | name*, section | `{name, text}` whole, or one section's `{section, text}` |
 | `get_project_context` | context | — | `{context}` from `PROJECT.md`, seeded from `.orchestra/PROJECT.md` or a template |
 | `update_project_context` | context | text* (at least 20 characters) | Rewrites `PROJECT.md` and publishes `context.updated {by}` |
 | `get_gate_run` | pipeline | id* | Query |
@@ -866,13 +874,16 @@ task system's `result`. A refusal or no answer raises an error. "Query" works th
 | `read_machine_log` | observe | name*, lines (default 80, at most 400) | `{name, log, lines}`. Reads only inside the repository or Orchestra's state directory. |
 | `list_metrics` | observe | prefix | `{store, names, metrics[{name, series, labels, last_written_s_ago, points_last_hour}]}` |
 | `get_model` | observe | — | `{version, live, as_of, stocks, flows (with equation and origin), machines, discovery, left_out}` |
+| `read_instrument` | observe | name*, minutes, wait_s (at most 120) | `{instrument (the Instruments page's record), series[{name, labels, points, last_s_ago, latest}], log}`, after waiting for its next round when asked |
+| `check_sources` / `source_schema` / `preview_query` / `infer_source` | observe | source **or** url (+ auth), match, minutes, limit; query* for `preview_query` | Another store through `orchestra.sources`: health and credentials present; metric names, types and label cardinality; a query's series; what inference keeps and leaves out (`source_tools.py`) |
 | `snapshot` | observe | — | Query `snapshot` |
 | `set_agent_roles` | setup | serves*, reason* | `[agents] serves` (see [section 10](#10-the-supervisor-as-the-humans-operator)) |
 | `set_work_mode` | setup | work* (`tasks`\|`code`), reason* | `[project] work`. Restarts the residents whose prompt has a `.tasks.md` variant. |
 | `set_gate_unit` | setup | command*, reason*, name (default `unit`), timeout | Upserts a `[[gate.unit]]` entry |
 | `set_capacity_limit` | setup | reason*, workers, reviewers | `[tasks] workers`/`reviewers` |
 | `set_machine` | setup | name*, command*, reason*, restart, stop_grace | Upserts a `[[machines]]` entry |
-| `set_collector` | setup | name*, reason*, command **or** url, every, timeout | Upserts a `[[collect]]` or `[[scrape]]` entry |
+| `set_collector` | setup | name*, reason*, command **or** url, shell, every, timeout | Upserts a `[[collect]]` or `[[scrape]]` entry; `shell` makes the command `["sh", "-c", …]` (one line, at most 300 characters: longer is a script, a worker's) |
+| `try_collector` | setup | command **or** url, shell, timeout | One round as Orchestra runs it (`orchestra.collect.round.collect`), stored nowhere: `{works, series, bad_lines, refused, took_s, stderr}` |
 | `remove_entry` | setup | section* (`machines`\|`collect`\|`scrape`\|`gate.unit`), name*, reason* | Removes the entry from the text |
 | `restart_machine` | setup | name*, reason* | Takes the entry out and puts it back. No commit. Publishes `machine.restarted`. |
 | `escalate_to_supervisor` | escalate | note* | Queues a Supervisor wake-up `[<role>] <note>` |
@@ -1258,7 +1269,8 @@ The web plugin publishes nothing.
 | `task.accepted` | `runner._held`, `runner.tick`, `fillers.py` | Whose claim was first; another worker taking a ticket whose slot is kept |
 | `task.released` | `runner.tick`, `runner._held` | The assignment taken back, or rejected work the queue took back |
 | `gate.landed`; `review.approved` (tasks mode); `request.done` whose result is a ticket in DONE or CANCELLED | `runner.tick`, `landings.py` (`protocol.ended`) | A ticket's end archives its sessions, lets the slot go (bookkeeping, announced by nobody) and settles a landing (announced by the Supervisor) |
-| `ticket.created` with `by=supervisor` | `landings.py` | Remember the human's tickets (announced by the Supervisor) |
+| `ticket.created` with `by=supervisor`; `work.planned` to the Supervisor | `landings.py` | Remember the human's tickets (announced by the Supervisor) |
+| `work.requested` (`to`: coordinator), `work.planned` (`to`: supervisor) | `host._wake_on_events` (`handoff.wake_reason`) | Wake the Coordinator with the requirements whole, and the Supervisor with the plan |
 | `task.accepted`, `orchestra.machine.started` | `fillers.py`, `observe._announced_log` | Who fills the roles, and where a machine's log is |
 | `request.done`, `request.refused` | `protocol.TaskClient` | Answers to requests and queries |
 | `task.attention_needed` (`to`: supervisor or coordinator) | `host._wake_on_events` | Wake a planner |
@@ -1289,9 +1301,10 @@ Who announces each subscription (`listening.listens_for`; the host announces not
 
 | Key | Default | Meaning |
 |---|---|---|
-| `harness` | `pi` | `pi`, `claude_code`, `codex` or `dummy` (dashes are accepted) |
-| `dummy_script` | none | The dummy harness's script, relative to the repository ([section 6](#the-dummy-harness-and-its-scripts)) |
-| `model`, `provider`, `thinking` | none | Passed to the harness |
+| `harness` | `claude_code` when `claude` is found, else `dummy` (`config.default_harness`; the note says which) | `pi`, `claude_code`, `codex` or `dummy` (dashes are accepted). A change applies once no turn runs (`host._follow_harness`). |
+| `enabled` | true | false: no host |
+| `dummy_script` | `.orchestra/dummy.toml` if it exists | The dummy harness's script, relative to the repository ([section 6](#the-dummy-harness-and-its-scripts)) |
+| `model`, `provider`, `thinking` | `haiku` with the default `claude_code`; else none | Passed to the harness |
 | `serves` | `["worker", "reviewer"]` | The task system's roles these agents fill. Validated against `PER_TICKET_ROLES`. |
 | `coordinator_every` | none | Makes the Coordinator `scheduled` |
 | `turn_timeout` | 0 (none) | Hard cap on a turn |
@@ -1307,7 +1320,7 @@ The host also reads `[project] base_branch` (default `main`), `ticket_prefix` (`
 
 | Path | What | Written by |
 |---|---|---|
-| `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, hashes...), `grants` (each live session's token digest, role and ticket), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
+| `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, `handoffs`, `setup`, hashes...), `grants` (each live session's token digest, role and ticket), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
 | `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` and `.system.md`; `codex/<id>.json`; `dummy/<id>.jsonl` and its `archive/` | The harnesses |
 | `logs/agents-host.log` | The host's log (rotated at 5 MB) | `host.log` |
 | `logs/agents/<session>.stderr.log`, `<session>.prompt.md` | Each session's stderr, and the prompt it started with | The harness, and `host._open_session` |

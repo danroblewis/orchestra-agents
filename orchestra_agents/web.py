@@ -49,15 +49,28 @@ def plugin(orchestra_project) -> Plugin:
     """The plugin for the repository Orchestra serves (its entry point, in pyproject.toml)."""
     project = Project.of(orchestra_project)
     project.ensure_dirs()
+    extra = {"check": check} if "check" in getattr(Plugin, "__dataclass_fields__", {}) else {}
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
                   scripts=["attention.js", "machine-cards.js", "ticket-sessions.js"], stylesheets=["agents.css"],
-                  machines=declared(project), processes=processes(project), collectors=collectors(project))
+                  machines=declared(project), processes=processes(project), collectors=collectors(project),
+                  guide=GUIDE, **extra)
+
+
+GUIDE = Path(__file__).with_name("guide.md")     # how to configure the agents, for the Supervisor (orchestra.guides)
+
+
+def check(raw: dict, repo_root=None) -> list[str]:
+    """What the agents' reader says against a merged configuration (``Plugin.check``)."""
+    from .config_change import agents_check
+    return agents_check(raw)
 
 
 def set_up(project) -> bool:
-    """Whether the project runs agents: its configuration has an ``[agents]`` section (in
-    orchestra.toml or the owner's overlay; read through Orchestra, ``project.orchestra.config``)."""
-    return "agents" in project.orchestra.config.raw
+    """Whether the project runs agents: the plugin is installed (it is, or this would not run) and
+    ``[agents]`` does not say ``enabled = false``. No ``[agents]`` at all runs them on the default
+    harness (``config.default_harness``), so a new project needs no configuration for its Supervisor
+    to set it up (the owner, 2026-10-28)."""
+    return project.config.enabled
 
 
 def processes(project) -> list[Process]:
@@ -122,7 +135,9 @@ def router(project) -> APIRouter:
         owns what), which of the task system's roles the agents here serve, and what each event
         an agent may wake on means."""
         current(project)
-        return {"ok": True, "now": time.time(), "serves": project.config.serves, "event_help": EVENT_HELP,
+        cfg = project.config
+        return {"ok": True, "now": time.time(), "serves": cfg.serves, "event_help": EVENT_HELP,
+                "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note,
                 "roles": read_org(project, store, "list_roles", {})["roles"],
                 "agents": read_org(project, store, "list_agents", {})["agents"],
                 "teams": read_org(project, store, "list_teams", {})["teams"]}

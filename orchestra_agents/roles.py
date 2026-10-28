@@ -17,7 +17,7 @@ from .builtins import ROLES as BUILTIN
 from .clock import now
 from .config import Project
 
-TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "model", "experiments",
+TOOL_GROUPS = ("tickets", "planning", "handoff", "guides", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "model", "experiments",
                "replay", "predict")
 # (`setup`, changing orchestra.toml, is the Supervisor's alone: no custom role or team is granted it)
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
@@ -33,7 +33,7 @@ class RoleDef:
 
     name: str
     description: str = ""
-    tools: list[str] = field(default_factory=lambda: ["tickets", "escalate"])
+    tools: list[str] = field(default_factory=lambda: ["tickets", "planning", "escalate"])
     created_by: str | None = "supervisor"      # None for a built-in role: nobody created it
     created_at: str | None = field(default_factory=now)
     updated_at: str | None = field(default_factory=now)

@@ -148,9 +148,11 @@ commit = "{ticket}: measure the repository"
 tool = "report_ticket"
 args = { state = "READY_FOR_REVIEW", summary = "machines/repo_stats.sh prints repo_files and repo_commits; declared under [[collect]] every 30 s." }
 
-# The Supervisor answers a chat (and every wake-up) with the project's status, read with its
-# tool; it does not think, so it says so.
+# The Supervisor answers a question about the project with its status, read with its tool; it does
+# not think, so it says so. Any other message is the human's request: the built-in rules hand it to
+# the Coordinator, which plans it into a milestone and a ticket that a dummy worker then does.
 [[rule]]
 role = "supervisor"
+prompt = "(?i)\\[The human's message\\]\\n.*(going on|status)"
 steps = [{ tool = "project_status" }]
-reply = "I read the project's status with my tool (above). I am the demo's scripted Supervisor: I answer every message the same way and change nothing."
+reply = "I read the project's status with my tool (above). I am the demo's scripted Supervisor: I answer questions about the project this way, and hand any other request to the Coordinator."

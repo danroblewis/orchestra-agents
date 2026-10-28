@@ -9,6 +9,7 @@
 <style>
   .org { max-width:1100px; margin:0 auto; padding:16px }
   .intro { color:var(--text2); font-size:12.5px; margin:0 0 14px }
+  .harness-note { background:var(--panel2); border:1px solid var(--border); border-left:3px solid #92400e; border-radius:6px; padding:8px 12px; margin:0 0 14px; font-size:13px }
   .org h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:18px 0 8px; display:flex; gap:8px; align-items:center }
   .org h2 .count { background:var(--panel3); border-radius:999px; padding:0 7px; font-size:11px }
   .team { background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px }
@@ -255,7 +256,8 @@ async function refresh() {
     // "Here" includes agents whose team does not exist yet (created before the team, which the
     // Supervisor's guide tells it to do), labelled as such.
     const loose = org.agents.filter((a) => (!a.team || a.team_exists === false) && !(a.builtin && !a.resident));
-    let html = timeline(org.agents, org.now);
+    let html = org.harness_note ? `<div class="harness-note" id="harness-note">Running on <b>${esc(org.harness)}</b>${org.model ? " · " + esc(org.model) : ""}. ${esc(org.harness_note)}</div>` : "";
+    html += timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');
     html += `<h2>Agents outside a team <span class="count">${loose.length}</span></h2>` + (loose.map((a) => agentRow(a, false, org.now)).join("") || '<div class="empty">none</div>');
     const probes = st.probes || [];

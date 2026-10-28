@@ -53,7 +53,7 @@ def _collectors(project: Project) -> tuple[list[dict], list[str]]:
     found, errors = collect_spec.from_toml(project.orchestra.config.raw)
     out = []
     for c in found:
-        log = project.orchestra.logs_dir / "machines" / f"{c.name}.log"
+        log = project.orchestra.logs_dir / "instruments" / f"{c.name}.log"
         last = tail(log, 1) if log.exists() else []
         out.append({"name": c.name, "kind": c.kind, "target": c.target, "every_s": c.every_s,
                     "last_log_line": last[-1] if last else "(no log yet: it has not run)"})
@@ -95,7 +95,7 @@ def read_machine_log(project: Project, store: AgentStore, a: dict) -> dict:
     candidates = [o.logs_dir / "orchestra-host.log"] if name in ("orchestra-host", "orchestra") else []
     if name in ("agents", "agents.host"):
         candidates.append(project.logs_dir / "agents-host.log")
-    candidates.append(o.logs_dir / "machines" / f"{name}.log")
+    candidates += [o.logs_dir / "machines" / f"{name}.log", o.logs_dir / "instruments" / f"{name}.log"]
     if announced := _announced_log(store, name):
         candidates.append(announced)
     why = "no log"

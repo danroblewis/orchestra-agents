@@ -24,7 +24,8 @@ KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS)
-           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "commit_prediction", "announce_change"}))
+           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "commit_prediction", "announce_change",
+                         "hand_to_coordinator", "report_plan"}))
 
 PAST = {"create": "created", "update": "updated", "delete": "deleted", "close": "closed", "pause": "paused",
         "resume": "resumed", "restart": "asked for a restart of", "reset": "asked for a reset of", "cancel": "cancelled",
@@ -67,6 +68,10 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return "resumed the pipeline"
     if command in ("message_agent", "run_agent"):
         return f"{'briefed' if command == 'run_agent' else 'left a message for'} {a.get('name')}"
+    if command == "hand_to_coordinator":
+        return f"handed request {result.get('request')} to the Coordinator (work.requested)"
+    if command == "report_plan":
+        return f"reported the plan for request {a.get('request')} to the Supervisor (tickets: {', '.join(result.get('tickets') or []) or 'none'})"
     if command == "escalate_to_supervisor":
         return "escalated to the Supervisor"
     if command == "emit_event":

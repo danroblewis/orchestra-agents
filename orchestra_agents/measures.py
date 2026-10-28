@@ -90,7 +90,7 @@ def exposition(runtime: dict, roles: list[str]) -> str:
         for k, v in sorted((st.get("load") or {}).items()):
             if k != "at" and isinstance(v, int | float) and not isinstance(v, bool):
                 series.setdefault(LOAD, []).append(_line(LOAD, {"machine": agent, "signal": k}, v))
-        if st.get("spend_total") is not None:                    # cumulative, never trimmed (budget.py)
+        if st.get("spend_total"):                                # cumulative, never trimmed (budget.py); none until a harness reports a cost
             series.setdefault(SPEND, []).append(_line(SPEND, {"machine": agent}, float(st["spend_total"])))
     lines: list[str] = []
     for name, rows in series.items():

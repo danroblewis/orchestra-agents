@@ -180,16 +180,15 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    them, then requests and their errors. Production only: a staging or test twin is never read.
    One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
    flags, timestamps and the exporters' own timings as stocks.
-   **A stock is only half found without its flows.** For each level you choose, search the store
-   for what fills and drains it (`source_schema` with a `match` on its subject: a queue's
-   published, delivered and acknowledged counters; a topic's produced and consumed offsets, which
-   are counters even when typed gauges; sessions or connections started and ended, opened and
-   destroyed; units received) and read them too. A counter missing per queue may exist only
-   globally (`…_global_…`): when one queue carries the traffic, it is that queue's drain; check
-   with `preview_query` that the level's change over an hour is about its inflow less that
-   counter. Never tell the human a flow is not measured until you have searched the whole name
-   list for it; when it truly is not, say the level's change less its measured flows is that
-   flow (a residual).
+   **A stock is only half found without its flows.** For each level that matters (every queue,
+   consumer lag, connection pool, volume, inventory, session count; one call per queue, group or
+   volume, never one summed over several), call `find_balance` with it **before declaring it**:
+   it searches every declared store (pass `sources` with `url` and `auth` for stores not declared
+   yet) for the counters that fill and drain it and returns the balance, its fit and the
+   `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list). One
+   with `bursts` or `one_sided` is the level, its measured side and a residual: declare those and
+   name the residual. When it finds nothing, say the flow is not measured. Two balances of one
+   level are one flow measured twice: keep one.
 5. **Declare it** with `set_setting` key `sources` (the whole list of `[[sources]]` tables as
    JSON, the ones already there included): a `name` for what the store is (it prefixes every
    series read from it), the `url`, the `auth`, a narrow `match` (a list of selectors), the

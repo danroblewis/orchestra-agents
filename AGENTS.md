@@ -39,7 +39,7 @@ broken without updating the spec and saying so in the commit.
    the host's events (turn starts, cut-offs, resets) are overlaid on it by the view.
 7. **The role is the session's, as the host issued it**, never the agent's: the host starts each
    session with `ORCHESTRA_ROLE` and a token, `ORCHESTRA_SESSION_TOKEN`, whose digest it records
-   with the role (`access.py`); the MCP server and `orchestra-agents api` take the role from the
+   with the role (`access.py`); the MCP server and `orchestra agents api` take the role from the
    token, and refuse a call whose `ORCHESTRA_ROLE` disagrees. `tooling.handle` checks every call
    against that role's tool groups (`access.authorize`) before it runs.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
@@ -59,7 +59,7 @@ broken without updating the spec and saying so in the commit.
     deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration,
-    never code: code is a worker's, through a ticket, a review and the gate. `orchestra-agents api` runs only inside an agent's session
+    never code: code is a worker's, through a ticket, a review and the gate. `orchestra agents api` runs only inside an agent's session
     (with the session's token); without a role the tool interface reads and changes nothing. The
     pages and the CLI read the organisation through `api_org.read_org`, never an agent's tool.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
@@ -109,8 +109,8 @@ broken without updating the spec and saying so in the commit.
 - Python 3.12+, `uv` for everything, `pytest` (`uv run python -m pytest -q`), `ruff` for lint
   (`uv run ruff check orchestra_agents tests demo`, never `ruff format`).
 - `tests/unit` is fast and in-process (a fake task system answers requests on the bus,
-  `tests/fake_tasks.py`). `tests/e2e/test_agents_e2e.py` runs the real task system (`tasking
-  run`) as a separate process and talks to it only on the bus, with the host beside it, once per
+  `tests/fake_tasks.py`). `tests/e2e/test_agents_e2e.py` runs the real task system (`orchestra
+  tasks run`) as a separate process and talks to it only on the bus, with the host beside it, once per
   harness fake; `tests/e2e/test_demo_e2e.py` runs the demo as processes through a real
   `orchestra run` and `orchestra web`, with the fake Claude Code. Run the tests before every
   commit.

@@ -21,7 +21,7 @@ common resource for the same thing. It provides four things:
 - the **means to configure one**: roles (its job and tools), the harness and the model that run
   it, how it is engaged (resident, scheduled, ad hoc; its `wake_on` events), and its permissions
   (tool groups, access, the team it answers to);
-- a **shared runtime** that runs the configured agents: the host (`orchestra-agents run`). The
+- a **shared runtime** that runs the configured agents: the host (`orchestra agents run`). The
   host is **not a machine**. It never announces itself, never publishes under its own name
   (`agents`) and writes no metrics; everything it does on the bus it does as the agent it is
   running (section 4);
@@ -193,7 +193,7 @@ given `review.approved` as well.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
-`orchestra-agents run` is one process per project, and no machine: the runtime the configured
+`orchestra agents run` is one process per project, and no machine: the runtime the configured
 agents run in (section 1). Orchestra's launcher
 starts it: the plugin declares it in `Plugin.processes` when the project's `orchestra.toml` has an
 `[agents]` section (`web.processes`), so `orchestra run` keeps it running in the interpreter
@@ -293,14 +293,14 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   by Orchestra appended to the reply: the changes, or each ticket's true state (`truth.py`,
   narrow heuristics). The human sees it on the live chat and as an `agent.corrected` marker on
   the transcript. A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause, restart or reset waits for the running one, and a paused
-  Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra-agents chat` attaches to it. A host that cannot
+  Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra agents chat` attaches to it. A host that cannot
   bind the endpoint exits instead of running unreachable;
 - wakes the Supervisor when a ticket it created (`ticket.created` with `by` = supervisor: the
   human's requests) is DONE, to leave the human one short message (`landings.py`); the tickets are
   followed in the Supervisor's agent state until they end, as the runner hears it
   (`protocol.ended`: landed, approved in tasks mode, or cancelled). A landing is otherwise not
   named in the Supervisor's digest;
-- answers `orchestra-agents status` from its records (`org_views.agents_status`, the same
+- answers `orchestra agents status` from its records (`org_views.agents_status`, the same
   picture the machine cards read): the host, the harness and model, the roles it fills, each
   resident agent's state and wake-ups, and the sessions on tickets.
 
@@ -319,7 +319,7 @@ publishes nothing.
 
 Metrics (`measures.py`): the host writes none. It keeps the counters in its runtime record, moved
 in the same write as the session's status, and the plugin declares the instrument that reads
-them (`Plugin.collectors`, `web.collectors`): `orchestra run` runs `orchestra-agents metrics`
+them (`Plugin.collectors`, `web.collectors`): `orchestra run` runs `orchestra agents metrics`
 every discovery step, which prints them as Prometheus text from the record, and Orchestra labels
 every point `instrument=agents.turns` (and `project`). The same text is served at
 `GET /api/plugins/agents/metrics`. The series: `agents_working{role, machine}` (every measured
@@ -351,7 +351,7 @@ and tool groups; run one turn and stream events in one normalized vocabulary (`t
 transcript, which is the only one kept (`read_transcript` parses it); kill a turn; close.
 
 - **Pi** (`pi.py`): one `pi --mode rpc` process per live session, resident between turns; tools
-  through the extension `pi_extension.ts`, which calls `orchestra-agents api`.
+  through the extension `pi_extension.ts`, which calls `orchestra agents api`.
 - **Claude Code** (`claude_code.py`): `claude -p` per turn, resumed by session id, the
   transcript under `$CLAUDE_CONFIG_DIR`; tools through the MCP server `harness/mcp.py`. It
   compacts its own context (`--autocompact`). `CLAUDE_BINARY` names the binary to run.
@@ -395,10 +395,10 @@ against the caller's role before it runs (`access.py`):
 - **Who is calling.** The host gives every session it starts a token,
   `ORCHESTRA_SESSION_TOKEN`, beside `ORCHESTRA_ROLE`, and records only the token's SHA-256 with
   the role and the ticket it was issued for (`runtime.json` `grants`). The MCP server and
-  `orchestra-agents api`, the two ways a tool call reaches `handle` from outside the host, take
+  `orchestra agents api`, the two ways a tool call reaches `handle` from outside the host, take
   the role and the ticket from that record (`access.identify`), never from the environment. The
   environment alone would be cosmetic: every agent has a shell, and a shell inside a worker's
-  session could run `ORCHESTRA_ROLE=supervisor orchestra-agents api pause_agent ...`. Now that
+  session could run `ORCHESTRA_ROLE=supervisor orchestra agents api pause_agent ...`. Now that
   call still carries the worker's token and is refused, saying the session was started as
   `worker`; a missing token, one the host did not issue, and one whose session has ended (closed,
   or a new session of that id opened, or a new host started) are refused too.

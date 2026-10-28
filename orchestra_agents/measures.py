@@ -13,7 +13,7 @@ measured system's own dimension, not who wrote the point. It equals ``role`` for
 Where they come from: the counters are cumulative across restarts, kept in the agents' runtime
 record (``metric_counts``) under the store's lock and moved in the same write as the session's
 status, so a level and the counters read from one record balance. The plugin declares the
-instrument (``Plugin.collectors``, web.py): ``orchestra run`` runs ``orchestra-agents metrics``
+instrument (``Plugin.collectors``, web.py): ``orchestra run`` runs ``orchestra agents metrics``
 every discovery step, which prints them from the record, and labels every point
 ``instrument=agents.turns`` (and ``project``). The same text is served at the plugin's ``/metrics``
 (``/api/plugins/agents/metrics``), behind Orchestra's web login like every route.

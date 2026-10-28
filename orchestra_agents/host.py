@@ -1,4 +1,4 @@
-"""The agents' host (``orchestra-agents run``): the shared runtime that runs the configured AI
+"""The agents' host (``orchestra agents run``): the shared runtime that runs the configured AI
 agents, each as the machine it is. The host is no machine itself (the owner, 2026-10-27): it never
 announces itself, never publishes under its own name (events.py refuses ``agents``) and writes no
 metrics (the plugin's instrument reads them, measures.py); every event it sends goes out as the
@@ -436,7 +436,7 @@ class AgentHost:
             other = (self.store.runtime().get("control") or {}).get("pid")
             why = None
             if other and other != os.getpid() and alive(other):
-                why = f"another orchestra-agents run holds this project (pid {other})"
+                why = f"another orchestra agents run holds this project (pid {other})"
             else:
                 try:
                     self._start_control()
@@ -458,7 +458,7 @@ class AgentHost:
         self.control = ControlServer(port, self.prompt_supervisor, owner_only(token_file(self.project)))
         self.control.start()
         self.store.set_control(self.control.port, os.getpid())
-        log(f"control endpoint on 127.0.0.1:{self.control.port} (orchestra-agents chat and the web attach here)")
+        log(f"control endpoint on 127.0.0.1:{self.control.port} (orchestra agents chat and the web attach here)")
 
     def _turn_lock(self, name: str) -> threading.Lock:
         """One turn at a time on an agent's session: a wake-up (tick) and the Supervisor chat

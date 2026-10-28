@@ -52,7 +52,7 @@ class Role:
     name: str                       # ORCHESTRA_ROLE value, e.g. "coordinator"
     prompt: str                     # prompt file stem under prompts/
     tools: tuple[str, ...]          # tool groups
-    resident: bool = True           # kept alive for the life of `orchestra-agents run`
+    resident: bool = True           # kept alive for the life of `orchestra agents run`
     wake_on: tuple[str, ...] = ()   # events this role is woken for (``type`` or ``type:filter``)
     triggers: tuple[str, ...] = ()  # what else wakes it, which is not an event on the bus
     emits: tuple[str, ...] = ()     # event types this role's actions cause, through its tools or the task system

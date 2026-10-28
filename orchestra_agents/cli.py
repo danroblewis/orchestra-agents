@@ -1,6 +1,11 @@
-"""The `orchestra-agents` command line: the agents' host, the Supervisor chat, what the host and
-its agents are doing, the agents' tool interface (what the Pi extension calls), their sessions
-and roles."""
+"""The agents' command line, `orchestra agents ...`: the agents' host, the Supervisor chat, what
+the host and its agents are doing, the agents' tool interface (what the Pi extension calls), their
+sessions and roles.
+
+It is a subcommand of Orchestra's CLI, not an executable of its own: the entry point
+``orchestra.commands: agents`` names ``main``, which Orchestra calls with the arguments after
+``agents`` and with ``ORCHESTRA_PROG`` set to ``orchestra agents`` (PLUGINS.md §4.10). A process
+that runs it runs ``sys.executable -m orchestra agents ...``, never a command looked up on the PATH."""
 
 from __future__ import annotations
 
@@ -18,11 +23,16 @@ from .org_views import agents_status, metrics_text
 from .store import AgentStore, StoreError
 
 
+def prog() -> str:
+    """How the command is called: ``orchestra agents``, as Orchestra names it in ORCHESTRA_PROG."""
+    return os.environ.get("ORCHESTRA_PROG") or "orchestra agents"
+
+
 def _project(args) -> Project:
     try:
         return load_project(getattr(args, "repo", None))
     except ConfigError as e:
-        sys.exit(f"orchestra-agents: {e}")
+        sys.exit(f"{prog()}: {e}")
 
 
 def _store(project: Project) -> tuple[AgentStore, Events]:
@@ -94,7 +104,7 @@ def cmd_sessions(args) -> int:
         return 0
     s = store.find_session(args.id or "")
     if not s:
-        sys.exit(f"no session {args.id!r}; `orchestra-agents sessions list` names them")
+        sys.exit(f"no session {args.id!r}; `{prog()} sessions list` names them")
     messages = read_transcript(s) if s.get("session_file") else []
     if not messages:
         print(f"{args.id}: no turns yet")
@@ -121,7 +131,7 @@ def cmd_tools(args) -> int:
 
 def cmd_api(args) -> int:
     if not os.environ.get(access.TOKEN_ENV):
-        sys.exit("orchestra-agents api is the agents' tool interface and runs inside an agent's session "
+        sys.exit(f"{prog()} api is the agents' tool interface and runs inside an agent's session "
                  f"(ORCHESTRA_ROLE and {access.TOKEN_ENV} are set by the host)")
     project = _project(args)
     store, _ = _store(project)
@@ -152,7 +162,7 @@ def _chat_attached(project: Project, port: int) -> int:
 
     from .control import bearer
 
-    print(f"Supervisor for {project.key} via orchestra-agents run on 127.0.0.1:{port}. Ctrl-D or 'exit' to leave.\n")
+    print(f"Supervisor for {project.key} via {prog()} run on 127.0.0.1:{port}. Ctrl-D or 'exit' to leave.\n")
     while True:
         try:
             line = input("you> ").strip()
@@ -176,7 +186,7 @@ def _chat_attached(project: Project, port: int) -> int:
                     else:
                         _print_event(ev)
         except Exception as e:  # noqa: BLE001 - whatever cut the connection, say so and leave
-            print(f"[agents] lost the host: {e}. Is `orchestra-agents run` still up?")
+            print(f"[agents] lost the host: {e}. Is the agents' host (`orchestra run`, or `{prog()} run`) still up?")
             return 1
     return 0
 
@@ -194,7 +204,8 @@ def cmd_chat(args) -> int:
             return _chat_attached(project, int(ctl["port"]))
         except OSError:
             print(f"[agents] the host's control endpoint on port {ctl['port']} is not answering.")
-    print("[agents] the Supervisor is reachable while `orchestra-agents run` is up; start it first.")
+    print(f"[agents] the Supervisor is reachable while the agents' host is up: start `orchestra run` in the repository "
+          f"(it runs the host when orchestra.toml has [agents]), or `{prog()} run`.")
     return 1
 
 
@@ -210,7 +221,7 @@ def cmd_roles(args) -> int:
     try:
         r = read_org(project, store, "get_role", {"name": args.name or ""})
     except StoreError as e:
-        sys.exit(f"orchestra-agents: {e}")
+        sys.exit(f"{prog()}: {e}")
     role = r["role"]
     print(f"{role['name']}: {'built in' if role['builtin'] else 'custom'}\nused by: {', '.join(r.get('agents') or []) or '-'}\n"
           f"tools:   {', '.join(role.get('tools') or []) or '-'}\nprompt:  {r.get('prompt_source') or '-'}\n\n{(r.get('prompt') or '').rstrip()}")
@@ -218,7 +229,7 @@ def cmd_roles(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="orchestra-agents", description="AI agents as Orchestra machines: they fill a task system's roles over the bus")
+    p = argparse.ArgumentParser(prog=prog(), description="AI agents as Orchestra machines: they fill a task system's roles over the bus")
     p.add_argument("--repo", help="repository root (default: ORCHESTRA_REPO or cwd)")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("run", help="run the agents' host: resident agents, wake-ups, assignments for the roles they fill",
@@ -249,7 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--groups", help="comma-separated tool groups (default: ORCHESTRA_TOOLS, else all)")
     s.set_defaults(fn=cmd_tools)
     s = sub.add_parser("api", help="the interface the agents' tools call (inside an agent's session: ORCHESTRA_ROLE is set by the host)")
-    s.add_argument("command", help="a tool name from `orchestra-agents tools`")
+    s.add_argument("command", help="a tool name from `orchestra agents tools`")
     s.add_argument("--args", default="{}", help="JSON object of arguments")
     s.add_argument("--compact", action="store_true", help="one line of JSON")
     s.set_defaults(fn=cmd_api)
@@ -261,8 +272,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """``orchestra agents ARGV...``: Orchestra calls this with the arguments after ``agents``
+    (``python -m orchestra_agents`` with ``sys.argv[1:]``)."""
     args = build_parser().parse_args(argv)
     return args.fn(args)
+
+
+main.help = "AI agents as Orchestra machines: their host, the Supervisor chat, sessions, roles"   # `orchestra --help`
 
 
 if __name__ == "__main__":

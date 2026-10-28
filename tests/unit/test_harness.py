@@ -43,7 +43,7 @@ def test_tools_are_grouped_and_schema_shaped():
     assert d["inputSchema"]["type"] == "object" and "milestone_id" in d["inputSchema"]["required"]
     assert d["inputSchema"]["additionalProperties"] is False
     # Pi's extension and other harnesses read the catalogue from the CLI.
-    out = subprocess.run([sys.executable, "-m", "orchestra_agents", "tools", "--json", "--groups", "report_review"],
+    out = subprocess.run([sys.executable, "-m", "orchestra", "agents", "tools", "--json", "--groups", "report_review"],
                          capture_output=True, text=True, check=True).stdout
     assert [t["name"] for t in json.loads(out)] == ["report_review"]
 

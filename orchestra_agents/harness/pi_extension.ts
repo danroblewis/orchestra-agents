@@ -3,10 +3,11 @@
  * the organisation, and the task system's requests, which go over Orchestra's bus).
  *
  * The tool definitions are the agents' (orchestra_agents/harness/tools.py); this file fetches them
- * once at load with `python -m orchestra_agents tools --json`, filtered to the groups in
+ * once at load with `$ORCHESTRA_PYTHON -m orchestra agents tools --json`, filtered to the groups in
  * ORCHESTRA_TOOLS, and registers each one. Every call shells out to
- * `python -m orchestra_agents api <command>` against the project named by ORCHESTRA_REPO, so it
- * works whether or not `orchestra-agents run` is up (a task request still needs the task system).
+ * `$ORCHESTRA_PYTHON -m orchestra agents api <command>` against the project named by ORCHESTRA_REPO
+ * (ORCHESTRA_PYTHON is the host's own interpreter, so the call never depends on the session's PATH);
+ * it works whether or not the agents' host is up (a task request still needs the task system).
  */
 
 import { execFileSync } from "node:child_process";
@@ -23,7 +24,7 @@ const CALL_MS = 420_000;
 
 function api(command: string, args: Record<string, unknown>): string {
   try {
-    const out = execFileSync(PYTHON, ["-m", "orchestra_agents", "api", command, "--args", JSON.stringify(args)], {
+    const out = execFileSync(PYTHON, ["-m", "orchestra", "agents", "api", command, "--args", JSON.stringify(args)], {
       env: ENV, cwd: REPO || process.cwd(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: CALL_MS,
     });
     return out.trim();
@@ -37,7 +38,7 @@ function api(command: string, args: Record<string, unknown>): string {
 interface ToolSpec { name: string; description: string; inputSchema: Record<string, unknown> }
 
 function loadTools(): ToolSpec[] {
-  const out = execFileSync(PYTHON, ["-m", "orchestra_agents", "tools", "--json"], {
+  const out = execFileSync(PYTHON, ["-m", "orchestra", "agents", "tools", "--json"], {
     env: ENV, cwd: REPO || process.cwd(), encoding: "utf8", timeout: 60_000,
   });
   return JSON.parse(out) as ToolSpec[];

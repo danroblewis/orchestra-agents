@@ -59,26 +59,26 @@ def set_up(project) -> bool:
 
 
 def processes(project) -> list[Process]:
-    """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run --wait`;
+    """What `orchestra run` keeps running for the agents: their host (`orchestra agents run --wait`;
     Orchestra names the process `agents.host`, which is no machine: the agents it runs are), in the
     environment this package is installed in, when the project is set up for agents (``set_up``). A
     project without it has the pages and no host: installing the package beside Orchestra starts no AI.
     ``--wait``: a host restarted while the previous one still shuts down waits for it. The stop
     grace outlasts the host's own shutdown, so Orchestra never kills it mid-way and leaves its
     sessions' processes behind."""
-    return ([Process("host", [sys.executable, "-m", "orchestra_agents", "run", "--wait"], stop_grace_s=STOP_GRACE_S)]
+    return ([Process("host", [sys.executable, "-m", "orchestra", "agents", "run", "--wait"], stop_grace_s=STOP_GRACE_S)]
             if set_up(project) else [])
 
 
 def collectors(project) -> list[Collector]:
     """The instrument that measures the agents (``agents.turns``): ``orchestra run`` runs
-    ``orchestra-agents metrics`` every discovery step, which prints the level and the counters from
+    ``orchestra agents metrics`` every discovery step, which prints the level and the counters from
     the agents' runtime record (measures.py), and labels each point ``instrument=agents.turns``. A
     command, not a scrape of ``/metrics``: the web server's port is not known to ``orchestra run``."""
     if not set_up(project):
         return []
     step = max(1.0, float(project.orchestra.config.discovery_step))
-    return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra_agents metrics", every_s=step, timeout_s=min(step, 10.0))]
+    return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra agents metrics", every_s=step, timeout_s=min(step, 10.0))]
 
 
 def declared(project) -> list[Declared]:
@@ -172,12 +172,12 @@ def router(project) -> APIRouter:
     @r.post("/supervisor")
     async def supervisor_message(request: Request):
         """The one write path in the UI: a human message to the resident Supervisor.
-        Proxied to the control endpoint that `orchestra-agents run` serves; streams its NDJSON."""
+        Proxied to the control endpoint that the agents' host (`orchestra agents run`) serves; streams its NDJSON."""
         body = await request.json()
         current(project)
         ctl = store.runtime().get("control") or {}
         if not ctl.get("port"):
-            raise HTTPException(503, "the agents' host (orchestra-agents run) is not running; the Supervisor is only reachable while it is")
+            raise HTTPException(503, "the agents' host (the process agents.host, which orchestra run starts) is not running; the Supervisor is only reachable while it is")
         req = urllib.request.Request(f"http://127.0.0.1:{ctl['port']}/supervisor", method="POST",
                                      data=json.dumps({"message": body.get("message", "")}).encode(),
                                      headers={"Content-Type": "application/json", **control_bearer(project)})

@@ -198,7 +198,7 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     network = (logs / "network.log").read_text().splitlines()
     assert not [ln for ln in network if " refused " in ln], [ln for ln in network if " refused " in ln]
     assert any("orchestra_agents.harness.dummy_agent" in ln for ln in network)
-    assert any("tasking" in ln for ln in network) and any("orchestra web" in ln or "orchestra run" in ln or "-m orchestra" in ln for ln in network)
+    assert any("-m orchestra tasks run" in ln for ln in network) and any("orchestra web" in ln or "orchestra run" in ln or "-m orchestra" in ln for ln in network)
 
 
 def flow_hypotheses(target: Path) -> dict[tuple[str, str, str], list[tuple[str, float]]]:

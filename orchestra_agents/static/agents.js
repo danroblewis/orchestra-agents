@@ -52,7 +52,7 @@ async function openTranscript(id) {
     const perTicket = /^(worker|reviewer)-/.test(id);
     return openDrawer(`<h3>${esc(id)}</h3><div class="empty">${perTicket
       ? "No record of this session (" + esc(id) + "): it never ran, or it was removed."
-      : "This session has not been started. It comes up with <code>orchestra-agents run</code>."}</div>`);
+      : "This session has not been started. It comes up with the agents' host, which <code>orchestra run</code> starts."}</div>`);
   }
   const d = await r.json(); const s = d.session;
   const perTicket = /^(worker|reviewer)-/.test(id);
@@ -60,7 +60,7 @@ async function openTranscript(id) {
   if (id === "supervisor") html += `<form id="chat" class="chat top" onsubmit="return sendToSupervisor(event)">
       <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
       <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
-      ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while <code>orchestra-agents run</code> is up.</div>'}
+      ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
     </form><div id="live"></div>`;
   if (d.started_with) html += `<details class="started"><summary>The prompt this session was started with <span class="muted">(${d.started_with.length.toLocaleString()} chars; roles, team responsibilities, where it works)</span></summary><div class="prompt md">${md(d.started_with)}</div></details>`;
   else if (!perTicket) html += `<div class="empty">The prompt file this session was started with is missing: the agents' state directory was cleaned since. The agent's current prompt is on the Agents page.</div>`;
@@ -83,7 +83,7 @@ function transcriptHead(id, s, d) {
   const perTicket = /^(worker|reviewer)-/.test(id);
   const agentLink = s.kind && !perTicket ? `<a href="/agents#agent=${encodeURIComponent(s.kind)}" class="muted" style="margin-left:auto;font-size:11px" title="The agent's definition, schedule, and every run it has made">↩ ${esc(s.kind)}: definition and all runs</a>` : "";
   // a harness that keeps a process between turns has its own pid; one that starts a process per turn has none between them
-  const process = s.pid ? `pid ${s.pid} (the turn's process)` : s.alive ? "none between turns; the session is kept by orchestra-agents run" : "none";
+  const process = s.pid ? `pid ${s.pid} (the turn's process)` : s.alive ? "none between turns; the session is kept by the agents' host" : "none";
   const kv = `<div class="kv"><div>kind</div><div>${esc(s.kind || "")}</div><div>process</div><div>${esc(process)}</div>
     ${s.ticket_id ? `<div>ticket</div><div><a href="#" onclick="(window.openTicket ? openTicket('${esc(s.ticket_id)}') : (location.href='/tickets#ticket=${esc(s.ticket_id)}'));return false">${esc(s.ticket_id)}</a></div>` : ""}
     <div>last started</div><div>${when(s.started_at)}${s.status === "running" ? ` <span class="muted">(turn running ${ago((Date.now() / 1000) - s.started_at)})</span>` : ""}</div>
@@ -276,7 +276,7 @@ function agentStatus(s, now, a) {
     const last = s && s.settled_at ? `last run ${ago(now - s.settled_at)} ago` : "no run yet";
     return { cls: "", text: "idle", title: s && s.last_text ? `${last}: ${s.last_text.slice(0, 160)}` : last };
   }
-  if (a.host_alive === false || !(s && s.alive)) return { cls: "down", text: "down", title: "the agents' host (orchestra-agents run) is not up" };
+  if (a.host_alive === false || !(s && s.alive)) return { cls: "down", text: "down", title: "the agents' host (agents.host, started by orchestra run) is not up" };
   const name = a.name || (s && s.kind);
   const title = name === "supervisor" ? "waiting for your message" : a.next_scheduled_at ? `next wake-up in ${ago(a.next_scheduled_at - now)}` : "waiting for an event";
   return { cls: "resident", text: "resident", title };

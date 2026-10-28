@@ -9,7 +9,7 @@ predictions of an agent's own changes (``modeling.py``), and the Supervisor's ch
 project's ``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
 about tickets and milestones is the task system's, asked for on the bus (protocol.TaskClient): a
 request it answers, so only it changes them. The role is the session's, as the host issued it
-(access.identify, at the MCP server and `orchestra-agents api`), never the agent's, and every
+(access.identify, at the MCP server and `orchestra agents api`), never the agent's, and every
 call is checked against that role's tool groups before it runs (access.authorize)."""
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .store import AgentStore, StoreError
 
 def check_args(command: str, args: dict[str, Any]) -> None:
     """A model's tool call against the tool's own schema (harness/tools.py), checked where a model's
-    call comes in (the MCP server, `orchestra-agents api`), not in handle(): a model that
+    call comes in (the MCP server, `orchestra agents api`), not in handle(): a model that
     names an argument the tool does not have, or leaves out a required one, is told so, rather
     than the call going through with what it meant to say dropped."""
     from .harness.tools import BY_NAME

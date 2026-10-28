@@ -1,11 +1,11 @@
-"""Local control endpoint served by `orchestra-agents run`.
+"""Local control endpoint served by `orchestra agents run`.
 
-`orchestra-agents chat` attaches here to talk to the Supervisor session that the host keeps
+`orchestra agents chat` attaches here to talk to the Supervisor session that the host keeps
 resident, so there is exactly one session per project agent. Bound to 127.0.0.1 only, and the
 chat asks for the control token (``~/.orchestrator/<key>/agents/control.token``, owner-only, made
 the first time it is asked for): a page of any site the owner visits could otherwise post to a port
 on 127.0.0.1 and talk to the Supervisor, around Orchestra's web login. The web plugin and
-``orchestra-agents chat`` read the file and send ``Authorization: Bearer <token>``.
+``orchestra agents chat`` read the file and send ``Authorization: Bearer <token>``.
 
 POST /supervisor  body {"message": "..."}  -> NDJSON stream of the session's normalized events (harness/base.py;
                                               only tool_start and assistant_end are forwarded, host.py

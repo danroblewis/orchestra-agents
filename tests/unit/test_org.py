@@ -239,7 +239,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
 
 def test_without_a_role_nothing_is_called(project, monkeypatch):
     """An empty role is nobody: every tool, a read too, is refused before it runs, and
-    `orchestra-agents api` refuses to run at all without the role and the token the host sets
+    `orchestra agents api` refuses to run at all without the role and the token the host sets
     inside an agent's session. The pages and the CLI read the organisation through read_org."""
     from orchestra_agents.api_org import read_org
     store = AgentStore(project)

@@ -90,7 +90,7 @@ def agents_status(project: Project, store: AgentStore) -> dict:
     it runs the agents on and which of the task system's roles it fills, every agent with its
     state, and every session as the machine instance it runs (or last ran) as, with the ticket
     it is on (as its assignment named it). The machine cards, the Agents page and
-    ``orchestra-agents status`` read this."""
+    ``orchestra agents status`` read this."""
     rt = store.runtime()
     ctl = rt.get("control") or {}
     host_alive = alive(ctl.get("pid"))

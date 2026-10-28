@@ -33,7 +33,7 @@ def project(tmp_path, monkeypatch):
 
 
 def call_api(project, monkeypatch, capsys, env: dict, command: str, args: dict | None = None) -> tuple[int, dict]:
-    """`orchestra-agents api` as a shell inside a session runs it, with ``env`` as that shell's environment."""
+    """`orchestra agents api` as a shell inside a session runs it, with ``env`` as that shell's environment."""
     for k in ("ORCHESTRA_ROLE", access.TOKEN_ENV, "ORCHESTRA_TICKET"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():

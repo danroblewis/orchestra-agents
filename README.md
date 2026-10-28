@@ -1,6 +1,6 @@
 # orchestra-agents
 
-AI agents as Orchestra machines. A host (`orchestra-agents run`) keeps the resident agents up
+AI agents as Orchestra machines. A host (the process `agents.host`, which `orchestra run` starts) keeps the resident agents up
 (the Supervisor the human talks to, the Coordinator that keeps the plan executable, any custom
 agent), wakes them on events and schedules, and runs a worker or a reviewer on a ticket when a
 task system (orchestra-tasking) assigns one over Orchestra's event bus. Which product runs a
@@ -41,32 +41,61 @@ and reworked) and the Supervisor answers the chat, without a model and at no cos
 
 ## Use it on a repository
 
-The task system must be set up first (`tasking init`, `tasking run`; see its README). Add to the
-repository's `orchestra.toml`:
+Install Orchestra with the task system and the agents beside it, once, as one tool (no clone):
+
+    uv tool install 'orchestra[sd] @ git+https://github.com/danroblewis/orchestra@main' --with 'orchestra-tasking @ git+https://github.com/danroblewis/orchestra-tasking' --with 'orchestra-agents @ git+https://github.com/danroblewis/orchestra-agents'
+
+That puts one executable on your PATH, `orchestra`. The agents' command line comes with it as
+`orchestra agents …` and the task system's as `orchestra tasks …`; neither has an executable of
+its own. Installing the tool again replaces it, so name every plugin on each install.
+
+In the repository (a git repository), set up the task system, then add the agents to its
+`orchestra.toml`. Start with the dummy harness: scripted agents with no model, no network and no
+cost, so you can see the whole loop work first:
+
+    cd <repo>
+    orchestra tasks init         # orchestra.toml (if there is none) with the task system's sections
+
+    # then add to orchestra.toml:
+    [agents]
+    harness = "dummy"            # pi | claude_code | codex | dummy
+    serves = ["worker", "reviewer"]   # the task system's roles these agents fill
+
+Run Orchestra, open its UI, and give it a ticket:
+
+    orchestra run                # Orchestra's host; it starts the task system's scheduler and the agents' host
+    orchestra web                # Orchestra's UI with the Tickets and Agents pages; open the login link it prints
+    orchestra tasks api --as planner create_milestone --args '{"name": "First"}'
+    orchestra tasks api --as planner create_ticket --args '{"title": "Say hello", "milestone_id": "M1", "description": "Write hello.", "acceptance": "It says hello."}'
+    orchestra tasks status       # the ticket moves to DONE: a dummy worker did it, a dummy reviewer approved it
+
+Then switch to a real model. The `claude_code` harness runs Claude Code, so `claude` must be
+installed, on the PATH `orchestra run` has, and logged in (`claude` once by hand). Change the
+section to:
 
     [agents]
-    harness = "claude_code"      # pi | claude_code | codex | dummy
+    harness = "claude_code"
     model = "haiku"
-    serves = ["worker", "reviewer"]   # the task system's roles these agents fill
+    serves = ["worker", "reviewer"]
+
+Restart `orchestra run` (Ctrl-C, then start it again) so that every agent, the resident
+Supervisor and Coordinator included, comes up on the new harness. Talk to the Supervisor on the Agents page of `orchestra web`, or in the terminal:
+
+    orchestra agents chat        # the Supervisor; Ctrl-D leaves
+    orchestra agents status      # the host, what it runs the agents on, what each agent is doing
 
 If your tasks live seconds, set `[discovery] step = "5s"` (with a window of 30–60 m) in
 `orchestra.toml` too: Orchestra's default grid is 30 s, and a level that changes inside one
 step is not a stock.
 
-The commands run from this repository's environment (`--project <this repo>`, as the task
-system's README does it), since the target repository need not have anything installed; the
-`dev` extra brings the task system (`uv sync --extra dev` here first):
-
-    cd <repo> && uv run --project <this repo> orchestra run          # Orchestra's host; its launcher starts the agents' host
-    cd <repo> && uv run --project <this repo> orchestra web          # Orchestra's UI with both plugins' pages; open the login link it prints
-    uv run --project <this repo> orchestra-agents chat               # the Supervisor, in the terminal
-
-`orchestra run` starts the agents' host (`orchestra-agents run --wait`, the process `agents.host`)
-because the plugin declares it for Orchestra's launcher when `orchestra.toml` has `[agents]`,
-keeps it running and stops it with itself, giving it 30 s to shut down; its output is in
-`~/.orchestrator/<key>/logs/machines/agents.host.log`. To run the host by hand instead, leave
-`orchestra run` out and run `orchestra-agents run`; two hosts of one project refuse to run side
-by side (with `--wait`, the second waits for the first to stop).
+`orchestra run` starts the agents' host (`orchestra agents run --wait`, the process
+`agents.host`, run with Orchestra's own Python) because the plugin declares it for Orchestra's
+launcher when `orchestra.toml` has `[agents]`, keeps it running and stops it with itself, giving
+it 30 s to shut down; its output is in `~/.orchestrator/<key>/logs/machines/agents.host.log`. To
+run the host by hand instead, leave `orchestra run` out and run `orchestra agents run`; two hosts
+of one project refuse to run side by side (with `--wait`, the second waits for the first to stop).
+The agents' tools call back into Orchestra's Python by its full path, which the host gives each
+session, so a session's own PATH never matters.
 
 A measurement the project wants taken over time is a collector of the project's own: the
 Supervisor has a worker write a small script under `machines/` (shell or any language, importing
@@ -125,7 +154,7 @@ event's source and no machine, edge or hand-off of `/api/machines`; a reworked t
 are planner → coordinator → worker → reviewer → worker → reviewer → merge_gate (the first offer is
 the task system's dispatch, an instance of the coordinator); discovery hypothesises no flow
 on `task_scheduler`; and the ticket metrics arrive with `instrument=tasks.tickets` (the
-instrument the task system's plugin declares, `tasking metrics`). Its `test_the_agents_host_is_no_machine` has the
+instrument the task system's plugin declares, `orchestra tasks metrics`). Its `test_the_agents_host_is_no_machine` has the
 Supervisor file a ticket and checks that no machine, edge or event is `agents`, that the
 Supervisor announces what the host watches for it (merge_gate's `gate.landed` reaches it on the
 map), that it is woken when its ticket lands, and that the agents' metrics arrive with

@@ -22,7 +22,7 @@ def test_every_command_and_argument_has_help(capsys):
     top = " ".join(build_parser().format_help().split())        # argparse wraps help text
     assert "the agents' sessions: list them, or show one's transcript" in top
     for sub, texts in (("sessions", ["list | show", "a session id from `sessions list`", "archived (its ticket closed)"]), ("roles", ["a role name"]),
-                       ("api", ["a tool name from `orchestra-agents tools`", "one line of JSON"]),
+                       ("api", ["a tool name from `orchestra agents tools`", "one line of JSON"]),
                        ("run", ["serves the Supervisor chat"]), ("status", ["running, idle, paused, down"])):
         with pytest.raises(SystemExit):
             build_parser().parse_args([sub, "--help"])
@@ -97,3 +97,15 @@ def test_tools_has_a_header_and_whole_descriptions(capsys):
 def test_run_takes_wait():
     assert build_parser().parse_args(["run", "--wait"]).wait is True
     assert build_parser().parse_args(["run"]).wait is False
+
+
+def test_the_command_line_is_a_subcommand_of_orchestra():
+    """`orchestra agents ...` (PLUGINS.md §4.10): the entry point orchestra.commands: agents, no
+    executable of its own, and the usage names it as Orchestra calls it."""
+    import sys
+    from importlib.metadata import entry_points
+
+    assert [ep.value for ep in entry_points(group="orchestra.commands") if ep.name == "agents"] == ["orchestra_agents.cli:main"]
+    assert not [ep for ep in entry_points(group="console_scripts") if ep.value.startswith("orchestra_agents")]
+    out = subprocess.run([sys.executable, "-m", "orchestra", "agents", "--help"], capture_output=True, text=True, check=True).stdout
+    assert out.startswith("usage: orchestra agents")

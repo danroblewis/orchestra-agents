@@ -3,7 +3,7 @@
 Pi stays resident between turns (the process is the session), takes one JSON command
 per line on stdin and streams events on stdout; ``agent_settled`` ends a turn. Tools
 come from the Orchestra extension (``pi_extension.ts``), which registers the tool
-definitions in ``tools.py`` and runs each call through ``python -m orchestra_agents api``."""
+definitions in ``tools.py`` and runs each call through ``<this interpreter> -m orchestra agents api`` (ORCHESTRA_PYTHON)."""
 
 from __future__ import annotations
 

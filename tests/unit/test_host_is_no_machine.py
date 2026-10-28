@@ -107,7 +107,7 @@ def test_the_measurements_reach_the_store_through_the_plugins_instrument(project
     for name in ("agents_working", "agent_turns_started_total", "agent_turns_finished_total"):
         assert not for_project(project.orchestra).dump(name, {}), name                    # the host wrote none
     [c] = web.collectors(project)
-    assert c.name == "turns" and c.kind == "collect" and c.target.endswith("-m orchestra_agents metrics")
+    assert c.name == "turns" and c.kind == "collect" and c.target.endswith("-m orchestra agents metrics")
     monkeypatch.chdir(project.repo_root)
     capsys.readouterr()                                                                     # the host's log so far
     assert cli.main(["metrics"]) == 0
@@ -117,5 +117,5 @@ def test_the_measurements_reach_the_store_through_the_plugins_instrument(project
     assert 'agent_turns_started_total{machine="worker",role="worker"} 1' in text
     assert 'agent_turns_finished_total{machine="worker",role="worker"} 1' in text
     assert 'agent_turns_finished_total{machine="coordinator",role="coordinator"} 1' in text
-    out = subprocess.run([sys.executable, "-m", "orchestra_agents", "metrics"], cwd=project.repo_root, capture_output=True, text=True, check=True)
+    out = subprocess.run([sys.executable, "-m", "orchestra", "agents", "metrics"], cwd=project.repo_root, capture_output=True, text=True, check=True)
     assert out.stdout == text                                                               # what the instrument runs

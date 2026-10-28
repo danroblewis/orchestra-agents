@@ -66,7 +66,7 @@
   const ago_ = (t) => (typeof ago === "function" && t ? ago(Date.now() / 1000 - t) : "");
   const e_ = (s) => (typeof esc === "function" ? esc(s) : String(s ?? ""));
   // With the host down nothing can be answered: the way in still opens the chat, which says so, but does not promise an answer.
-  const DOWN = "the Supervisor is down · start orchestra-agents run";
+  const DOWN = "the Supervisor is down · start orchestra run";
   const answerBtn = (onclick, label) => (hostUp() ? `<button class="primary" onclick="${onclick}">${label}</button>`
     : `<button class="att-down" onclick="window.SupervisorAttention.open()">${DOWN}</button>`);
 

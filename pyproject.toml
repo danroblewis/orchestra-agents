@@ -17,8 +17,8 @@ dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6",
        "orchestra-tasking @ git+ssh://git@github.com/danroblewis/orchestra-tasking",
        "orchestra[sd] @ git+https://github.com/danroblewis/orchestra@main"]
 
-[project.scripts]
-orchestra-agents = "orchestra_agents.cli:main"
+[project.entry-points."orchestra.commands"]
+agents = "orchestra_agents.cli:main"   # `orchestra agents ...` (PLUGINS.md §4.10): no executable of its own
 
 [project.entry-points."orchestra.plugins"]
 agents = "orchestra_agents.web:plugin"

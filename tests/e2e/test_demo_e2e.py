@@ -1,6 +1,6 @@
 """The demo, end to end through a real Orchestra: the template copied to a temporary directory,
-`orchestra run` and `orchestra web` on a free port, and what the host starts (`tasking run`,
-`orchestra-agents run` with the fake Claude Code standing in for the real one, and the shell
+`orchestra run` and `orchestra web` on a free port, and what the host starts (`orchestra tasks run`,
+`orchestra agents run` with the fake Claude Code standing in for the real one, and the shell
 worker from `[[machines]]`), all as processes (demo/run.py's own functions); the tickets created
 as a planner would (requests over the bus); and the rest read over HTTP and from git: the
 plugins' pages, the task system's tickets and board, Orchestra's /api/machines, the agents'

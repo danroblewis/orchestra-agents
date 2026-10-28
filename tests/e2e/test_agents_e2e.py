@@ -1,11 +1,11 @@
-"""End-to-end: the agents fill the task system's roles. The real task system (``tasking run``:
+"""End-to-end: the agents fill the task system's roles. The real task system (``orchestra tasks run``:
 its scheduler, desk, git and gate) runs as a separate process and is reached only on the bus,
 as any machine reaches it: the tickets are created with requests, their state is read with
 queries, and the agents' host answers the assignments with a fake harness, in a thread of its
 own, as a separate machine would.
 
 Every test runs once per harness: the fake Pi (RPC protocol, tools via the extension's
-`orchestra-agents api` path), the fake Claude Code (stream-json, tools via the real MCP server),
+`orchestra agents api` path), the fake Claude Code (stream-json, tools via the real MCP server),
 the fake Codex (`exec --json`, tools via the same MCP server), and the dummy harness, a product
 feature with no fake: its scripted agent plays the fakes' knobs from a script (``knob``). The agents must behave
 identically on all of them. What is checked is what the agents put on the bus for each ticket
@@ -134,7 +134,7 @@ def env(tmp_path, monkeypatch, request):
     (repo / "README.md").write_text("# e2e\n")
     git("add", "-A", cwd=repo)
     git("commit", "-qm", "init", cwd=repo)
-    init_project(repo, prefix="E2E", unit_command="test -f README.md")      # the repository's orchestra.toml, as `tasking init` writes it
+    init_project(repo, prefix="E2E", unit_command="test -f README.md")      # the repository's orchestra.toml, as `orchestra tasks init` writes it
     toml = repo / "orchestra.toml"
     text = toml.read_text().replace('work = "tasks"', 'work = "code"')      # the code path: a branch per ticket, the gate
     assert '# tick = "3s"' in text
@@ -150,7 +150,7 @@ def env(tmp_path, monkeypatch, request):
     monkeypatch.setenv("ORCHESTRA_REPO", str(repo))
     events = Events.for_project(project, source="planner")
     log = (tmp_path / "scheduler.log").open("ab")
-    scheduler = subprocess.Popen([sys.executable, "-m", "tasking", "run"], cwd=repo, env=dict(os.environ), stdout=log, stderr=subprocess.STDOUT)
+    scheduler = subprocess.Popen([sys.executable, "-m", "orchestra", "tasks", "run"], cwd=repo, env=dict(os.environ), stdout=log, stderr=subprocess.STDOUT)
     ev = Events.for_project(project)
     host = AgentHost(project, AgentStore(project, ev), ev)       # up before any ticket exists: an offer is answered as it comes
     th = threading.Thread(target=host.run, daemon=True)
@@ -161,7 +161,7 @@ def env(tmp_path, monkeypatch, request):
         # instance of the coordinator, and what makes it act, once it is up
         while not any(e["type"] == "orchestra.machine.started" and e["source"] == "coordinator/dispatch" and "ticket.created" in (e.get("listens_for") or [])
                       for e in events.after(0)[0]):
-            assert scheduler.poll() is None, "tasking run exited; see scheduler.log"
+            assert scheduler.poll() is None, "orchestra tasks run exited; see scheduler.log"
             assert time.time() < deadline, "the scheduler did not start"
             time.sleep(0.2)
         ask = TaskClient(events, "planner")

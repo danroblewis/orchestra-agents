@@ -7,11 +7,11 @@ emits nothing after accepting it, `chatty` streams a token every 0.2 s; `abort` 
 Otherwise, on `prompt` it plays the role given by ORCHESTRA_ROLE:
 
 - worker: edits a file in the cwd (its worktree), commits, then calls
-  `orchestra-agents api report_ticket` exactly like the real extension tool would.
+  `orchestra agents api report_ticket` exactly like the real extension tool would.
   If FAKE_PI_WORKER_BLOCK is set it reports BLOCKED instead. If FAKE_PI_BREAK_FIRST
   is set, its first attempt also deletes README.md (which the e2e unit command
   requires), so the merge gate rejects it; the next attempt restores the file.
-- reviewer: calls `orchestra-agents api report_review` with APPROVED, or REJECTED the first
+- reviewer: calls `orchestra agents api report_review` with APPROVED, or REJECTED the first
   time if FAKE_PI_REJECT_FIRST is set (tracked by a marker file in the worktree).
 - supervisor / coordinator: replies with text only.
 
@@ -43,7 +43,7 @@ def emit(obj: dict) -> None:
 
 def api(cmd: str, args: dict) -> dict:
     py = os.environ.get("ORCHESTRA_PYTHON", sys.executable)
-    p = subprocess.run([py, "-m", "orchestra_agents", "api", cmd, "--compact", "--args", json.dumps(args)],
+    p = subprocess.run([py, "-m", "orchestra", "agents", "api", cmd, "--compact", "--args", json.dumps(args)],
                        capture_output=True, text=True, cwd=os.environ.get("ORCHESTRA_REPO"), check=False)
     try:
         return json.loads(p.stdout.strip().splitlines()[-1])

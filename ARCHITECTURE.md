@@ -30,7 +30,7 @@ Contents:
 
 ## 1. What it is
 
-orchestra-agents runs AI agents as Orchestra machines. It is an Orchestra plugin, and it also
+orchestra agents runs AI agents as Orchestra machines. It is an Orchestra plugin, and it also
 has a long-running process of its own, the **host**.
 
 What the plugin is (the owner, 2026-10-27): a target repository usually defines its own machines,
@@ -101,7 +101,7 @@ flowchart LR
   subgraph Agents["orchestra-agents"]
     direction TB
     PLUGIN["web.py plugin<br/>pages, API, scripts"]
-    subgraph HostProc["host process: orchestra-agents run (no machine)"]
+    subgraph HostProc["host process: orchestra agents run (no machine)"]
       HOST[host.py AgentHost<br/>tick loop]
       CTRL[control.py<br/>127.0.0.1 control endpoint]
       RUN[runner.py AgentRunner]
@@ -115,7 +115,7 @@ flowchart LR
     subgraph Sessions["agent sessions (harness/)"]
       HAR[Pi / Claude Code / Codex]
       MCP[harness/mcp.py<br/>MCP server]
-      API[orchestra-agents api<br/>cli.py]
+      API[orchestra agents api<br/>cli.py]
     end
     TOOL[tooling.handle<br/>+ access.py + ledger.py]
     STORE[(runtime.json<br/>store.py)]
@@ -123,7 +123,7 @@ flowchart LR
   end
 
   H -- chat --> WEBAPP
-  H -- orchestra-agents chat --> CTRL
+  H -- orchestra agents chat --> CTRL
   WEBAPP -- mounts --> PLUGIN
   PLUGIN -- POST /supervisor proxy --> CTRL
   PLUGIN -- reads --> STORE
@@ -141,7 +141,7 @@ flowchart LR
   RUN <-- task.* --> BUS
   SCHED <-- task.*, request.*, gate.* --> BUS
   HOST --> STORE
-  INSTR[instrument agents.turns<br/>orchestra-agents metrics] -- reads --> STORE
+  INSTR[instrument agents.turns<br/>orchestra agents metrics] -- reads --> STORE
   LAUNCH -- runs every step --> INSTR
   INSTR -- agents_working, turn counters --> MET
   LAUNCH --> RT
@@ -151,7 +151,7 @@ The modules, grouped by job:
 
 | Job | Modules |
 |---|---|
-| Entry points | `cli.py` (the `orchestra-agents` command), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
+| Entry points | `cli.py` (`orchestra agents …`, the entry point `orchestra.commands: agents`; no executable of its own), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
 | The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py`, `verdicts.py` |
 | Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/dummy.py`, `harness/dummy_agent.py`, `harness/dummy_script.py`, `harness/dummy_defaults.toml`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
 | Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py`, `modeling.py`, `model_text.py`, `run_text.py` |
@@ -182,8 +182,8 @@ agents = "orchestra_agents.web:plugin"
 | Stylesheets on every page | `agents.css` | `web.plugin` |
 | API router | see [section 13](#13-web-panels-and-machine-cards) | `web.router` |
 | Declared machines | every agent from `org_store.all_agents` (kind `agent`, `continuous` if resident or `ad hoc`, and what it listens for, `listening.listens_for`). The host is not one. | `web.declared` |
-| Processes | `host`: `[sys.executable, -m, orchestra_agents, run, --wait]` with `stop_grace_s=30`, **only when `orchestra.toml` has an `[agents]` section** | `web.processes` |
-| Collectors | `turns` (Orchestra names it `agents.turns`): the command `orchestra-agents metrics`, every discovery step, same condition | `web.collectors` |
+| Processes | `host`: `[sys.executable, -m, orchestra, agents, run, --wait]` with `stop_grace_s=30`, **only when `orchestra.toml` has an `[agents]` section** | `web.processes` |
+| Collectors | `turns` (Orchestra names it `agents.turns`): the command `orchestra agents metrics`, every discovery step, same condition | `web.collectors` |
 
 So `orchestra run` starts the host as the process `agents.host`, keeps it running and stops it.
 A project without `[agents]` still gets the pages, but no host runs and no AI is started.
@@ -207,7 +207,7 @@ The host uses Orchestra only as a library:
 
 ## 4. The host and its control endpoint
 
-`orchestra-agents run` creates `host.AgentHost` and calls `run(wait=...)`. There is one host per
+`orchestra agents run` creates `host.AgentHost` and calls `run(wait=...)`. There is one host per
 project. On the bus it is nobody: every event it sends is an agent's (`host._say`,
 `host.source_of`), and it never announces itself.
 
@@ -429,7 +429,7 @@ an orphan.
 | Resume | `--session-dir`/`--session-id` | `--session-id <uuid>` first, then `--resume <uuid>`; the uuid is in `sessions/claude-code/<id>.json` | `resume <thread_id>` from the first `thread.started`; kept in `sessions/codex/<id>.json` | The transcript is the session: the turn number is counted from it |
 | System prompt | `--append-system-prompt` | `--append-system-prompt-file` | `-c developer_instructions=...` | Not read (kept beside the log, as for every harness) |
 | What it does | The model decides | The model decides | The model decides | The first matching rule of the script ([below](#the-dummy-harness-and-its-scripts)) |
-| Tools | `pi_extension.ts`, which reads `orchestra-agents tools --json` and calls `orchestra-agents api <tool>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config` | The same MCP server, through `-c mcp_servers.orchestra={...}` | The MCP server's `Server.call`, in the agent's process |
+| Tools | `pi_extension.ts`, which reads `orchestra agents tools --json` and calls `orchestra agents api <tool>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config` | The same MCP server, through `-c mcp_servers.orchestra={...}` | The MCP server's `Server.call`, in the agent's process |
 | Permissions | — | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | — |
 | Transcript | Pi's JSONL in `session_dir` | `$CLAUDE_CONFIG_DIR/projects/<cwd-key>/<uuid>.jsonl` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<thread>.jsonl` | `sessions/dummy/<id>.jsonl`, already in the common message shape |
 | Compaction | When asked (`{"type":"compact"}`) | Compacts itself (`--autocompact`); `compact()` answers `{"mode": "auto"}` | Cannot compact, so the session is rotated | Never needed: it records no tokens |
@@ -445,7 +445,7 @@ flowchart TB
     PIS[PiSession] -->|JSON lines on stdin| PIP["pi --mode rpc<br/>(resident process)"]
     PIP -->|events on stdout| PIN[_Normalizer]
     PIP --> EXT[pi_extension.ts]
-    EXT -->|execFileSync| APICLI["python -m orchestra_agents api TOOL --args JSON"]
+    EXT -->|execFileSync| APICLI["$ORCHESTRA_PYTHON -m orchestra agents api TOOL --args JSON"]
   end
 
   subgraph CC["Claude Code"]
@@ -767,9 +767,9 @@ sequenceDiagram
   `access.identify` (the role and ticket of the session's token), then
   `tooling.handle(project, store, name, args, role=<token's role>, ticket_env=<token's ticket>)`.
   The result is JSON text, and an error is `{"ok": false, "error": ...}` with `isError: true`.
-- **Pi** (`harness/pi_extension.ts`) registers the output of `orchestra-agents tools --json`
+- **Pi** (`harness/pi_extension.ts`) registers the output of `orchestra agents tools --json`
   (filtered by `ORCHESTRA_TOOLS`). Each call runs
-  `python -m orchestra_agents api <tool> --args <json>` (`cli.cmd_api`). That command refuses to
+  `$ORCHESTRA_PYTHON -m orchestra agents api <tool> --args <json>` (the host's interpreter) (`cli.cmd_api`). That command refuses to
   run without `ORCHESTRA_SESSION_TOKEN`, runs `access.identify`, `check_args`, then `handle`, and
   prints JSON.
 - **`tooling.handle`** first runs `access.authorize`, then wraps `_handle` with `ledger.record`. A successful call that changed
@@ -786,7 +786,7 @@ The runner, an ephemeral wake-up and `Residents.stop_changed`/`close_all` revoke
 close the session, and `host.recover` drops every grant when a host starts. `access.identify`
 looks the token up and returns the grant's role and ticket. It refuses a missing token, a token
 with no grant, and an `ORCHESTRA_ROLE` that names another role. So a shell inside a worker's
-session that runs `ORCHESTRA_ROLE=supervisor orchestra-agents api pause_agent ...` is refused.
+session that runs `ORCHESTRA_ROLE=supervisor orchestra agents api pause_agent ...` is refused.
 `ORCHESTRA_TICKET` is no longer read for a call; a worker cannot report on another ticket.
 
 **Who may call what.** `access.authorize`, at the top of `handle`, refuses:
@@ -1083,7 +1083,7 @@ message.
 
 The two ways in both reach `control.py` `POST /supervisor` on the host.
 
-### `orchestra-agents chat` (`cli.cmd_chat`)
+### `orchestra agents chat` (`cli.cmd_chat`)
 
 1. Read `control.port` from `runtime.json`, and check `GET /health` (3 s timeout).
 2. Run a `you>` prompt loop. Each line is one `POST /supervisor`, with the control token. `exit`, `quit` or Ctrl-D
@@ -1168,7 +1168,7 @@ The UI writes nothing except the chat and the "seen" mark.
 ## 14. Metrics
 
 The host writes no metrics. It moves counters in `runtime.json` (`store.count_turn`), and the
-plugin's instrument reads them: `orchestra run` runs `orchestra-agents metrics` every discovery
+plugin's instrument reads them: `orchestra run` runs `orchestra agents metrics` every discovery
 step (`web.collectors`), which prints Prometheus text from the record (`measures.exposition`,
 `org_views.metrics_text`). Orchestra adds `project=<key>` and `instrument=agents.turns` to every
 point. `GET /api/plugins/agents/metrics` serves the same text.
@@ -1344,8 +1344,8 @@ A new **built-in** role is a code change:
    `kill` and orphan recovery work.
 3. Expose the tools from the catalogue only. Point an MCP-speaking product at
    `python -m orchestra_agents.harness.mcp` with the session's env plus `ORCHESTRA_TOOLS`.
-   Otherwise write an extension that reads `orchestra-agents tools --json` and calls
-   `orchestra-agents api`. Never define a tool in one harness only (AGENTS.md rule 5).
+   Otherwise write an extension that reads `orchestra agents tools --json` and calls
+   `orchestra agents api`. Never define a tool in one harness only (AGENTS.md rule 5).
 4. Register the class in `harness/__init__.py` `HARNESSES`.
 5. Add a fake at `tests/e2e/fake_<name>.py` that speaks the product's real protocol, and run the
    e2e tests for it (AGENTS.md rule 8; the dummy harness, which has no product, runs them as it ships). Write down the product facts the code depends on in

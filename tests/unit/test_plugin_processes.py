@@ -21,5 +21,5 @@ def test_the_host_is_declared_for_a_project_with_an_agents_section(tmp_path, mon
     assert processes(load_project(repo)) == []                  # installed beside Orchestra, no [agents]: no AI starts
     [p] = processes(agents_project(repo))
     assert (p.name, p.restart) == ("host", "always")                # Orchestra runs it as agents.host
-    assert p.argv() == [sys.executable, "-m", "orchestra_agents", "run", "--wait"]
+    assert p.argv() == [sys.executable, "-m", "orchestra", "agents", "run", "--wait"]
     assert p.stop_grace_s == STOP_GRACE_S > SHUTDOWN_WORST_S + 5      # Orchestra never kills it mid-shutdown

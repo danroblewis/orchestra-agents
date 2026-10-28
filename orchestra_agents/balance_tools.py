@@ -35,6 +35,7 @@ from .config import Project
 from .store import StoreError
 
 MAX_CANDIDATES = 16       # metric names read as candidates, over every store
+MAX_LEVELS = 24           # levels searched in one call
 MAX_GROUPS = 8            # series per candidate name, when read per value of a label naming the level's subject
 WINDOW_MIN = 60
 SETTLE = 90.0             # every read ends at least this long before now (a store written a minute late)
@@ -95,6 +96,8 @@ class Store:
 
     def __init__(self, name: str, src, spec, declared: bool):
         self.name, self.src, self.spec, self.declared = name, src, spec, declared
+        self.names: list[str] | None = None      # its metric names, listed once per call
+        self.reads: dict = {}                    # candidate reads, by (selector, by): shared by the call's levels
 
 
 def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
@@ -154,11 +157,11 @@ def _production(level: str, sets: list[dict]) -> str:
     return level
 
 
-def _budget(stores: list[Store]) -> None:
+def _budget(stores: list[Store], levels: int = 1) -> None:
     from orchestra.sources.limits import Budget
-    until = time.monotonic() + DEADLINE
+    until = time.monotonic() + DEADLINE * min(levels, MAX_LEVELS)
     for s in stores:
-        s.src.budget = Budget(REQUESTS, until, "find_balance's reads")
+        s.src.budget = Budget(REQUESTS * levels, until, "find_balance's reads")
 
 
 def _level_tokens(level: str, label_sets: list[dict]) -> set[str]:
@@ -182,11 +185,13 @@ def _score(name: str, words: set[str], df: Counter, n_names: int) -> float:
 def _candidates(store: Store, level_metric: str, words: set[str], unit: str, start: float, end: float, name_unit,
                 meta: dict) -> list[tuple[float, str, Store]]:
     from orchestra.sources import SourceError
-    try:
-        names = sorted(set(store.src.names(['{__name__=~".+"}'], start, end)))
-    except SourceError:
-        from orchestra.sources.listing import listing
-        names = sorted(listing(store.src, ['{__name__=~".+"}'], start, end).names)
+    if store.names is None:
+        try:
+            store.names = sorted(set(store.src.names(['{__name__=~".+"}'], start, end)))
+        except SourceError:
+            from orchestra.sources.listing import listing
+            store.names = sorted(listing(store.src, ['{__name__=~".+"}'], start, end).names)
+    names = store.names
     df = Counter(w for n in names for w in tokens(n))
     out = []
     for n in names:
@@ -321,22 +326,81 @@ def _decl_name(metric: str, labels: dict[str, str]) -> str:
     return name[:60]
 
 
-def find_balance(project: Project, a: dict) -> dict:
-    from orchestra.sd.flows_of import flows_of, name_unit
-    from orchestra.sd.series import Declared, series_key
-    from orchestra.sources import SourceError
+def expand(levels) -> list[str]:
+    """The levels asked for: one selector, a list, or ``source_schema``'s entries as written
+    (``name by label: a, b (+3)``: one level per value shown)."""
+    out = []
+    for x in [levels] if isinstance(levels, str) else list(levels or []):
+        x = str(x).strip()
+        m = re.fullmatch(r"([A-Za-z_:][A-Za-z0-9_:]*) by ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: \(\+\d+\))?", x)
+        if m:
+            out += [f'{m.group(1)}{{{m.group(2)}="{v.strip()}"}}' for v in m.group(3).split(", ") if v.strip()]
+        elif x:
+            out.append(x)
+    return list(dict.fromkeys(out))
 
-    level = (a.get("level") or "").strip()
-    if not level:
-        raise StoreError("give the level: a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}")
+
+def find_balance(project: Project, a: dict) -> dict:
+    levels = expand(a.get("level"))
+    if not levels:
+        raise StoreError("give the level: a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}, or a list of them")
+    later = levels[MAX_LEVELS:]
+    levels = levels[:MAX_LEVELS]
     home, stores = _stores(project, a)
-    _budget(stores)
+    _budget(stores, len(levels))
     cfg = project.orchestra.config
     step = float(a.get("step_s") or cfg.discovery_step)
     end = time.time() - max([SETTLE, *(s.spec.settle for s in stores)])
     start = end - float(a.get("minutes") or WINDOW_MIN) * 60
     n = int((end - start) // step)
     end = start + n * step
+    window = (start, end, step, n)
+    if len(levels) == 1:
+        return _one(levels[0], home, stores, a, window)
+    out: dict = {"ok": True, "window": f"{round((end - start) / 60)} min, {step:g} s steps", "levels": []}
+    for level in levels:
+        try:
+            got = _one(level, home, stores, a | {"stock": ""}, window)
+        except StoreError as e:
+            out["levels"].append({"level": level, "result": str(e)})
+            continue
+        out["levels"].append(_brief(got))
+    if later:
+        out["not_searched_yet"] = later
+        out["not_searched_note"] = f"at most {MAX_LEVELS} levels a call: call again with not_searched_yet"
+    out["next"] = ("for each level with a balance, declare its declare list (all in one set_setting key series, with the "
+                   "[[series]] already there); with bursts or one_sided, declare the level and that side and name the "
+                   "residual; a level held in two stores is declared once")
+    return out
+
+
+def _brief(got: dict) -> dict:
+    """One level's answer, short: its best balance and how it fits, or why there is none."""
+    b = next(iter(got.get("balances") or []), None)
+    out = {"level": got["level"], "store": got["store"]}
+    if b:
+        f = b["fit"]
+        out["balance"] = b["balance"]
+        out["fit"] = (f"{'accepted' if b['accepted'] else 'not accepted: ' + b.get('why_not', '')}; R² {f['r2']}, held out "
+                      f"{f['held_out_r2']}, exact share {f['exact_share']}, unmeasured {b['unmeasured']:g}")
+        if b.get("bursts"):
+            out["bursts"] = b["bursts"]
+        out["declare"] = b["declare"]
+        if len(got["balances"]) > 1:
+            out["also"] = [x["balance"] for x in got["balances"][1:]]
+    else:
+        out["result"] = got.get("result", "no balance")
+        if got.get("one_sided"):
+            out["one_sided"] = [f"{x['as']}: {x['store']}:{x['select']} (correlation {x['correlation']})" for x in got["one_sided"]]
+    return out
+
+
+def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -> dict:
+    from orchestra.sd.flows_of import flows_of, name_unit
+    from orchestra.sd.series import Declared, series_key
+    from orchestra.sources import SourceError
+
+    start, end, step, n = window
     # the level's store: the one given, else the first searched store that has it
     tried = [home] if a.get("url") or a.get("source") else stores
     lv_rows, lv_sets, errors = [], [], []
@@ -367,11 +431,13 @@ def find_balance(project: Project, a: dict) -> dict:
     if len(lv_sets) > 1:
         notes.append(f"the level sums {len(lv_sets)} series; give a narrower selector to balance one queue, group or volume alone")
     metas = {}
-    for s in stores:
-        try:
-            metas[s.name] = s.src.metadata()
-        except SourceError:
-            metas[s.name] = {}
+    for st in stores:
+        if not hasattr(st, "meta"):
+            try:
+                st.meta = st.src.metadata()
+            except SourceError:
+                st.meta = {}
+        metas[st.name] = st.meta
     if a.get("candidates"):
         picked = []
         for sel in a["candidates"]:
@@ -394,7 +460,10 @@ def find_balance(project: Project, a: dict) -> dict:
         bare = metric_of(name) or name
         try:
             sel, by = (name, []) if "{" in name else _plan(store, name, level_labels, words, start, end)
-            return _read_counter(store, bare, sel, by, _kind(store, bare, metas[store.name]), start, end, step), None
+            key = (sel, tuple(by))
+            if key not in store.reads:
+                store.reads[key] = _read_counter(store, bare, sel, by, _kind(store, bare, metas[store.name]), start, end, step)
+            return store.reads[key], None
         except SourceError as e:
             return [], f"{store.name}:{name}: {e}"
     dump, kinds, refs = [], {}, {}

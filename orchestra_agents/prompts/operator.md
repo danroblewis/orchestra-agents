@@ -182,11 +182,11 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    flags, timestamps and the exporters' own timings as stocks.
    **A stock is only half found without its flows.** `source_schema` lists the store's `levels`,
    gauges of amounts held (queues, consumer lag, open connections, sessions, volumes' used
-   bytes, inventories), proxies' and the platform's included. Call `find_balance` on each one the
-   system's work fills and drains **before choosing what to read** (one call per queue, group or volume, never one summed over several): it searches every
-   declared store, or those you pass in `sources` (`{"url", "auth"}` for one not declared yet),
-   for the counters that fill and drain it, and returns the balance, its fit and the
-   `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list), and
+   bytes, inventories), proxies' and the platform's included. Pass that whole list, as written, to
+   `find_balance` (`level`) **before choosing what to read**: it searches every declared store,
+   or those in `sources` (`{"url", "auth"}` for one not declared yet), for the counters that
+   fill and drain each level (each queue, group or volume apart), and returns each balance, its
+   fit and the `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list), and
    read its counters in that store's `match`. One with `bursts` or `one_sided` is the level, its
    measured side and a residual: declare those and name the residual. When it finds nothing,
    say the flow is not measured. A level both stores hold is one stock: declare it once, from

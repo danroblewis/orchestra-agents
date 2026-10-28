@@ -16,6 +16,7 @@ import re
 import time
 from collections import defaultdict
 
+from .balance_tools import CUMULATIVE
 from .config import Project
 from .store import StoreError
 
@@ -143,7 +144,7 @@ def source_schema(project: Project, a: dict) -> dict:
 LEVEL_WORDS = re.compile(r"(^|_)(depth|messages|lag|active|open|inflight|in_flight|pending|backlog|queued|ready|unacked|"
                          r"waiting|used|inventory|units|sessions|connections|items|jobs|size)($|_)", re.IGNORECASE)
 NOT_LEVELS = re.compile(r"_(total|bucket|count|sum|created|seconds|ratio|percent|timestamp|info)$|(^|_)(cpu|memory|heap|gc|"
-                        r"threads?|goroutines|fds|scrape|up)($|_)", re.IGNORECASE)
+                        r"threads?|goroutines|fds|scrape|up)($|_)|^(kube|node|prometheus|go|process|jvm)_", re.IGNORECASE)
 SUBJECTS = ("queue", "consumergroup", "group", "topic", "persistentvolumeclaim", "volume", "pool", "warehouse",
             "cluster_name", "envoy_cluster_name", "deployment")
 
@@ -154,7 +155,7 @@ def _levels(fams: dict, values: dict, kind) -> list[str]:
     out = []
     for n in sorted(fams):
         snake = re.sub(r"([a-z])([A-Z])", r"\1_\2", n)
-        if not LEVEL_WORDS.search(snake) or NOT_LEVELS.search(snake) or "counter" in kind(n):
+        if not LEVEL_WORDS.search(snake) or NOT_LEVELS.search(snake) or CUMULATIVE.search(snake) or "counter" in kind(n):
             continue
         sub = next((k for k in SUBJECTS if k in values[n]), None)
         if sub:

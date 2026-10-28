@@ -62,3 +62,11 @@ def test_the_store_listing_names_its_levels_with_what_each_holds():
     values = {n: values.get(n, {}) for n in fams}
     got = _levels(fams, values, lambda n: "counter" if n.endswith("_total") else "gauge")
     assert got == ["envoy_http_downstream_cx_active", "fulfilment_email_queueDepth", "rabbitmq_queue_messages by queue: a, b"]
+
+
+def test_a_list_of_levels_is_read_as_source_schema_writes_it():
+    from orchestra_agents.balance_tools import expand
+    got = expand(["rabbitmq_queue_messages by queue: a, b.c (+2)", "envoy_http_downstream_cx_active", 'x{q="1"}'])
+    assert got == ['rabbitmq_queue_messages{queue="a"}', 'rabbitmq_queue_messages{queue="b.c"}', "envoy_http_downstream_cx_active",
+                   'x{q="1"}']
+    assert expand("one_level") == ["one_level"]

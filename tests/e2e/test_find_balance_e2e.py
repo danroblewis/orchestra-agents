@@ -130,6 +130,14 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     assert best["declare"][0] == {"source": "shop", "name": "jobs_level", "query": 'sum(jobs_queue_messages{queue="jobs"})',
                                   "kind": "level", "stock": "jobs", "role": "level"}
 
+    # the levels source_schema lists, passed as written, are searched each in turn
+    listed = tooling.handle(project, sup, "source_schema", {"source": "shop"}, role="supervisor")["levels"]
+    assert listed == ["jobs_queue_messages by queue: jobs, other"]
+    each = tooling.handle(project, sup, "find_balance", {"level": listed, "step_s": 30}, role="supervisor")["levels"]
+    assert [x["level"] for x in each] == ['jobs_queue_messages{queue="jobs"}', 'jobs_queue_messages{queue="other"}']
+    assert "jobs_done_total" in each[0]["balance"] and each[1]["balance"] == "+shop:jobs_published_total"
+    assert [d["query"] for d in each[1]["declare"]] == ['sum(jobs_queue_messages{queue="other"})', 'sum(jobs_published_total{queue="other"})']
+
     # a worker has no such tool
     with pytest.raises(Exception, match="find_balance"):
         tooling.handle(project, sup, "find_balance", {"level": "x"}, role="worker")

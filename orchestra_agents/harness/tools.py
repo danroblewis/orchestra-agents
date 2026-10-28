@@ -283,12 +283,14 @@ TOOLS: list[ToolDef] = [
              "match": A("PromQL selectors to narrow it")}),
     # flows: one level's flows, searched for in the stores (read only)
     ToolDef("find_balance", "flows",
-            "The counters that fill and drain one level, searched for in the stores with Orchestra's own discovery: candidates "
+            "The counters that fill and drain a level (or each of a list), searched for in the stores with Orchestra's own discovery: candidates "
             "that share a word with the level (its queue, topic, pool, service) in its unit, in every declared store or the ones "
             "given, read for one window; for each balance found, the counters with their sign (inflow +, outflow −), the fit "
             "(R², exact share, held-out R², running residual, shift null), whether discovery would accept it and why not, what "
             "stays unmeasured, and the [[series]] entries that declare it (stock, role) for set_setting key series.",
-            {"level": S("The level, a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}; it is summed"),
+            {"level": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                       "description": "The level, a PromQL selector (e.g. rabbitmq_queue_messages{queue=\"email\"}; it is "
+                                      "summed), or a list of them: source_schema's levels as written, each searched in turn"},
              "source": S("The level's store, a [[sources]] name (default: the first declared)"),
              "url": S("Or the level's store by URL"), "auth": O("With url: as [[sources]] writes it"),
              "sources": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}, "description": "The stores to search: [[sources]] names, or "

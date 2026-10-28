@@ -153,7 +153,7 @@ def source_schema(project: Project, a: dict) -> dict:
                        "label values")
     if len(names) > (SHOWN_METRICS if detail else SHOWN_NAMES):
         out["more"] = "more names than shown: narrow with match"
-    probe = sorted(fams, key=lambda n: fams[n])[:3] if fams else names[:3]      # the cheapest to ask
+    probe = _probes(sorted(fams, key=lambda n: fams[n]) if fams else names)
     if late := _lateness(src, probe, now):
         out["newest_sample_age_s"] = late
         worst = max(late.values())
@@ -201,6 +201,20 @@ def _levels(fams: dict, values: dict, kind) -> list[str]:
         else:
             out.append(n)
     return out[:40]
+
+
+def _probes(names: list[str], most: int = 4) -> list[str]:
+    """The metrics to ask how late the store writes: the first (cheapest) of each name prefix, as a
+    rule one exporter each, since one exporter may write a minute later than the others."""
+    out, seen = [], set()
+    for n in names:
+        head = re.split(r"[_:]", n, maxsplit=1)[0]
+        if head not in seen:
+            seen.add(head)
+            out.append(n)
+        if len(out) >= most:
+            break
+    return out
 
 
 def _lateness(src, names: list[str], now: float) -> dict[str, float]:

@@ -78,3 +78,8 @@ def test_two_levels_that_are_one_quantity_read_twice_are_told_apart_from_two_tha
     late = [(t * 30.0, 1000.0 + 5 * (t - 2) + (t % 3)) for t in range(60)]       # the same, a minute late
     other = [(t * 30.0, 4000.0 + 20 * t) for t in range(60)]                    # rises with it, another scale
     assert _same_quantity(a, late) and not _same_quantity(a, other)
+
+
+def test_lateness_is_asked_of_one_metric_per_exporter():
+    from orchestra_agents.source_tools import _probes
+    assert _probes(["shop_a", "shop_b", "fulfilment_x", "kafka_y", "shop_c", "up", "z_1"]) == ["shop_a", "fulfilment_x", "kafka_y", "up"]

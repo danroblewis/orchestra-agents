@@ -27,7 +27,7 @@ from conftest import free_port
 from test_demo_e2e import all_events
 from test_dummy_demo_e2e import GUARD, KEYS
 
-from demo.run import get, make_project, plan, start, stop, wait_for, wait_until
+from demo.run import Web, make_project, plan, start, stop, wait_for, wait_until, web_token
 
 QUEUE = '''#!/usr/bin/env python3
 """A queue: jobs arrive at the rate in rate.txt (per second); a tenth of the queue is done each second."""
@@ -86,19 +86,20 @@ def quick_demo(tmp_path, monkeypatch):
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
     try:
-        wait_for(url, procs)
-        yield url, target, queue
+        web = Web(url, web_token(target, env))
+        wait_for(web, procs)
+        yield web, target, queue
     finally:
         stop(procs)
 
 
 def test_a_change_announced_during_a_run_begins_an_era_in_the_model(quick_demo):
-    url, target, queue = quick_demo
+    web, target, queue = quick_demo
     from orchestra.config import load_project
     from orchestra.events import Events
 
     plan(target)
-    model = lambda: get(url + "/api/dynamics/model").get("model") or {}
+    model = lambda: web.get("/api/dynamics/model").get("model") or {}
     flows = lambda: {f["id"] for f in model().get("flows") or []}
     wait_until("a first model with the queue", lambda: "queue_jobs_arrived_total" in flows(), timeout_s=240)
     wait_until("a few minutes of it", lambda: model()["discovery"]["live_minutes"] >= 3, timeout_s=300)
@@ -128,15 +129,15 @@ def test_a_change_announced_during_a_run_begins_an_era_in_the_model(quick_demo):
     assert 1.6 < c["ratio"] < 2.4 and c["z"] > 2, c
     assert {None, "e1"} <= {v["era"] for v in m["versions"]}, "both eras have saved versions"
 
-    started = [e for e in all_events(url) if e["type"] == "orchestra.era.started"]
+    started = [e for e in all_events(web) if e["type"] == "orchestra.era.started"]
     assert [(e["source"], e["subject"], e["causationid"]) for e in started] == [("orchestra-host", "e1", change["id"])]
 
-    before = get(url + "/api/dynamics/model?era=none")
+    before = web.get("/api/dynamics/model?era=none")
     assert before["ok"] and before["model"]["era"] is None, "the past era stays readable"
-    d = get(url + "/api/machines")
+    d = web.get("/api/machines")
     assert d["ok"] and d["era"] == "e1" and [e["id"] for e in d["eras"]] == ["e1"]
     assert "supervisor" in {x["id"] for x in d["machines"]}, "its change is the era's first event"
-    every = get(url + "/api/machines?era=all")
+    every = web.get("/api/machines?era=all")
     assert {x["id"] for x in d["machines"]} <= {x["id"] for x in every["machines"]}
     assert "planner" in {x["id"] for x in every["machines"]} - {x["id"] for x in d["machines"]}, "the planner acted before the era only"
 

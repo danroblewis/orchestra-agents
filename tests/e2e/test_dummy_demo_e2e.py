@@ -33,7 +33,7 @@ from conftest import free_port
 from orchestra.web.machines import MachineIndex
 from test_demo_e2e import AGENTS, TASKS, all_events, chat, git, reported_by, settled, states
 
-from demo.run import get, make_project, plan, start, stop, wait_for, wait_until
+from demo.run import Web, make_project, plan, start, stop, wait_for, wait_until, web_token
 
 # Extra tickets for the owner's view (rules added to the target's dummy.toml, matching only their
 # titles): the reviewer rejects a "Rework" ticket's first round and approves the rest. Each turn
@@ -134,22 +134,23 @@ def free_demo(tmp_path, monkeypatch):
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
     try:
-        wait_for(url, procs)
-        yield url, target, logs
+        web = Web(url, web_token(target, env))
+        wait_for(web, procs)
+        yield web, target, logs
     finally:
         stop(procs)
 
 
 def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(free_demo):
-    url, target, logs = free_demo
+    web, target, logs = free_demo
     assert 'harness = "dummy"' in (target / "orchestra.toml").read_text()
     ids = plan(target)
     assert ids == ["DEMO-1", "DEMO-2", "DEMO-3", "DEMO-4"]
-    wait_until("the tickets", lambda: settled(url), timeout_s=300)
-    assert states(url) == dict.fromkeys(ids, "DONE")
+    wait_until("the tickets", lambda: settled(web), timeout_s=300)
+    assert states(web) == dict.fromkeys(ids, "DONE")
 
-    events = all_events(url)
-    by = reported_by(url)
+    events = all_events(web)
+    by = reported_by(web)
     verdicts = {}
     for e in events:
         if e["type"] in ("review.approved", "changes.requested") and e["source"].startswith("reviewer/"):
@@ -168,7 +169,7 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     assert "DEMO-4: measure the repository" in git(target, "log", "--format=%s", "main")
     assert "machines/repo_stats.sh" in git(target, "ls-tree", "-r", "--name-only", "main")
     assert "[[collect]]" in git(target, "show", "main:orchestra.toml")
-    assert get(url + f"{TASKS}/tickets/DEMO-4")["notes"][-1]["text"].startswith("landed on main as ")
+    assert web.get(f"{TASKS}/tickets/DEMO-4")["notes"][-1]["text"].startswith("landed on main as ")
 
     # DEMO-3, two rounds: rejected once, reworked in the same worker session, approved, landed
     assert verdicts["DEMO-3"] == ["REJECTED", "APPROVED"]
@@ -183,11 +184,11 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     assert "def test_longest_first" in git(target, "show", "main:tests/test_line_counts.py")
     assert {"DEMO-3: count the lines of the Python files", "DEMO-3: test that the longest file comes first"} <= \
         set(git(target, "log", "--format=%s", "main").splitlines())
-    worker = get(url + f"{AGENTS}/sessions/worker-DEMO-3/transcript")
+    worker = web.get(f"{AGENTS}/sessions/worker-DEMO-3/transcript")
     assert worker["session"]["harness"] == "dummy" and worker["turns"] == 2
 
     # the Supervisor answers through the web's /supervisor, with a tool call on the way
-    lines = chat(url, "What is going on?")
+    lines = chat(web, "What is going on?")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error")
     assert any(ln["type"] == "tool_start" and ln.get("name") == "project_status" for ln in lines)
     assert any(ln["type"] == "assistant_end" and ln["text"].startswith("I read the project's status") for ln in lines)
@@ -221,7 +222,7 @@ def flow_hypotheses(target: Path) -> dict[tuple[str, str, str], list[tuple[str, 
 
 
 def test_what_the_owner_sees(free_demo):
-    url, target, _logs = free_demo
+    web, target, _logs = free_demo
     ids = plan(target)
     from orchestra_agents.config import load_project
     from orchestra_agents.events import Events
@@ -231,14 +232,14 @@ def test_what_the_owner_sees(free_demo):
         made = ask("create_ticket", {"title": title, "milestone_id": "M1", "description": "Write a note.", "acceptance": "- a note"})
         assert made.get("ok"), made
         ids.append(made["ticket"]["id"])
-    wait_until("the tickets", lambda: settled(url) and len(states(url)) == len(ids), timeout_s=900)
-    assert states(url) == dict.fromkeys(ids, "DONE")
-    events = all_events(url)
+    wait_until("the tickets", lambda: settled(web) and len(states(web)) == len(ids), timeout_s=900)
+    assert states(web) == dict.fromkeys(ids, "DONE")
+    events = all_events(web)
 
     # the scheduler is nowhere: no event is its, and it is no machine, edge or hand-off
     assert not [e for e in events if e["source"].partition("/")[0] == "task_scheduler"]
     assert not [e for e in events if e["type"] in ("ticket.transitioned", "ticket.note_added")]      # no echoes
-    d = get(url + "/api/machines")
+    d = web.get("/api/machines")
     assert "task_scheduler" not in {m["id"] for m in d["machines"]}
     assert not [e for e in d["edges"] if "task_scheduler" in (e["from"], e["to"])]
     assert not [h for h in d["handoffs"] if "task_scheduler" in (h["from"], h["to"])]
@@ -290,22 +291,22 @@ def test_the_agents_host_is_no_machine(free_demo):
     Supervisor announces what the host watches for it, so the map shows merge_gate's gate.landed
     reaching the Supervisor; it is still told when its ticket lands; and the agents' measurements
     arrive through the plugin's instrument."""
-    url, target, _logs = free_demo
+    web, target, _logs = free_demo
     ids = plan(target)
-    lines = chat(url, "Please file the note ticket.")
+    lines = chat(web, "Please file the note ticket.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
     assert any(ln["type"] == "tool_start" and ln.get("name") == "create_ticket" for ln in lines)
-    wait_until("the tickets", lambda: settled(url) and len(states(url)) == len(ids) + 1, timeout_s=400)
-    assert set(states(url).values()) == {"DONE"}
+    wait_until("the tickets", lambda: settled(web) and len(states(web)) == len(ids) + 1, timeout_s=400)
+    assert set(states(web).values()) == {"DONE"}
     # the Supervisor is told its ticket landed: the host heard the gate for it and woke it
-    wait_until("the Supervisor told", lambda: ((get(url + f"{AGENTS}/attention").get("message") or {}).get("text") or "") == "Your note ticket landed.",
+    wait_until("the Supervisor told", lambda: ((web.get(f"{AGENTS}/attention").get("message") or {}).get("text") or "") == "Your note ticket landed.",
                timeout_s=60)
 
-    events = all_events(url)
+    events = all_events(web)
     assert not [e for e in events if e["source"].partition("/")[0] == "agents"]
     [made] = [e for e in events if e["type"] == "ticket.created" and e["data"].get("by") == "supervisor"]
     assert made["source"] == "supervisor"                                   # the answer to its request, as the asker
-    d = get(url + "/api/machines")
+    d = web.get("/api/machines")
     assert "agents" not in {m["id"] for m in d["machines"]}
     assert not [e for e in d["edges"] if "agents" in (e["from"], e["to"])]
     assert not [h for h in d["handoffs"] if "agents" in (h["from"], h["to"])]

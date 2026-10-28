@@ -28,6 +28,7 @@ from orchestra.runtime import alive
 
 from .api_org import read_org
 from .config import ConfigError, Project
+from .control import bearer as control_bearer
 from .events import Events
 from .harness import read_transcript
 from .listening import listens_for
@@ -178,7 +179,7 @@ def router(project) -> APIRouter:
             raise HTTPException(503, "the agents' host (orchestra-agents run) is not running; the Supervisor is only reachable while it is")
         req = urllib.request.Request(f"http://127.0.0.1:{ctl['port']}/supervisor", method="POST",
                                      data=json.dumps({"message": body.get("message", "")}).encode(),
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", **control_bearer(project)})
         try:
             # The control endpoint ends the stream when the turn ends; reads must not time out before that.
             resp = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=max(project.config.turn_timeout or 0, 86400)))

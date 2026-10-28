@@ -58,7 +58,7 @@ system's README does it), since the target repository need not have anything ins
 `dev` extra brings the task system (`uv sync --extra dev` here first):
 
     cd <repo> && uv run --project <this repo> orchestra run          # Orchestra's host; its launcher starts the agents' host
-    cd <repo> && uv run --project <this repo> orchestra web          # Orchestra's UI with both plugins' pages
+    cd <repo> && uv run --project <this repo> orchestra web          # Orchestra's UI with both plugins' pages; open the login link it prints
     uv run --project <this repo> orchestra-agents chat               # the Supervisor, in the terminal
 
 `orchestra run` starts the agents' host (`orchestra-agents run --wait`, the process `agents.host`)

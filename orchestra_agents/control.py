@@ -1,26 +1,44 @@
 """Local control endpoint served by `orchestra-agents run`.
 
 `orchestra-agents chat` attaches here to talk to the Supervisor session that the host keeps
-resident, so there is exactly one session per project agent. Bound to 127.0.0.1 only.
+resident, so there is exactly one session per project agent. Bound to 127.0.0.1 only, and the
+chat asks for the control token (``~/.orchestrator/<key>/agents/control.token``, owner-only, made
+the first time it is asked for): a page of any site the owner visits could otherwise post to a port
+on 127.0.0.1 and talk to the Supervisor, around Orchestra's web login. The web plugin and
+``orchestra-agents chat`` read the file and send ``Authorization: Bearer <token>``.
 
 POST /supervisor  body {"message": "..."}  -> NDJSON stream of the session's normalized events (harness/base.py;
                                               only tool_start and assistant_end are forwarded, host.py
                                               prompt_supervisor), then {"type": "done"}
+                  401 without the token
 GET  /health                                -> {"ok": true}
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from orchestra.tokens import owner_only
 
 PromptFn = Callable[[str, Callable[[dict], None]], dict]
 
 
+def token_file(project) -> Path:
+    return project.state_dir / "control.token"
+
+
+def bearer(project) -> dict[str, str]:
+    """The header the chat's clients send: the control token, made the first time it is asked for."""
+    return {"Authorization": f"Bearer {owner_only(token_file(project))}"}
+
+
 class ControlServer:
-    def __init__(self, port: int, prompt_supervisor: PromptFn):
+    def __init__(self, port: int, prompt_supervisor: PromptFn, token: str):
         self.port = port
         outer = self
 
@@ -46,6 +64,9 @@ class ControlServer:
             def do_POST(self):
                 if self.path != "/supervisor":
                     return self._json(404, {"ok": False})
+                given = (self.headers.get("Authorization") or "").encode()
+                if not hmac.compare_digest(given, f"Bearer {token}".encode()):
+                    return self._json(401, {"ok": False, "error": "send the control token (agents/control.token)"})
                 n = int(self.headers.get("Content-Length") or 0)
                 try:
                     body = json.loads(self.rfile.read(n) or b"{}")

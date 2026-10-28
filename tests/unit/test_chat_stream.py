@@ -56,3 +56,41 @@ def test_chat_stream_pings_while_the_supervisor_is_silent(project, monkeypatch):
     assert kinds.count("ping") >= 2                                   # silence was bridged
     assert kinds[-2:] == ["assistant_end", "done"]                    # and the real lines came through in order
     srv.shutdown()
+
+
+def test_the_control_endpoint_talks_to_the_supervisor_only_with_the_control_token(project):
+    """A page of any site could post to a port on 127.0.0.1 (a text/plain POST needs no preflight):
+    without the control token, the Supervisor never hears it. The web plugin sends the token."""
+    import urllib.error
+    import urllib.request
+
+    from orchestra_agents.control import ControlServer, bearer, token_file
+
+    heard = []
+
+    def prompt(message, emit):
+        heard.append(message)
+        emit({"type": "assistant_end", "text": "heard"})
+        return {}
+
+    tok = bearer(project)["Authorization"].removeprefix("Bearer ")
+    assert (token_file(project).stat().st_mode & 0o777) == 0o600
+    srv = ControlServer(0, prompt, tok)
+    srv.start()
+    try:
+        url = f"http://127.0.0.1:{srv.port}/supervisor"
+        for headers in ({"Content-Type": "text/plain"}, {"Content-Type": "application/json", "Authorization": "Bearer wrong"}):
+            req = urllib.request.Request(url, data=b'{"message": "rotate every token"}', headers=headers, method="POST")
+            with pytest.raises(urllib.error.HTTPError) as no:
+                urllib.request.urlopen(req, timeout=5)
+            assert no.value.code == 401
+        assert heard == []
+
+        AgentStore(project).set_control(srv.port, 1)
+        app = FastAPI()
+        app.include_router(web.router(project), prefix="/api/plugins/agents")
+        with TestClient(app).stream("POST", "/api/plugins/agents/supervisor", json={"message": "hello"}) as r:
+            lines = [json.loads(ln) for ln in r.iter_lines() if ln.strip() and json.loads(ln)["type"] != "ping"]
+        assert heard == ["hello"] and [ln["type"] for ln in lines] == ["assistant_end", "done"]
+    finally:
+        srv.stop()

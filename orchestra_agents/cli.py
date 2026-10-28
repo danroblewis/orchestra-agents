@@ -150,6 +150,8 @@ def _print_event(ev: dict) -> None:
 def _chat_attached(project: Project, port: int) -> int:
     import urllib.request
 
+    from .control import bearer
+
     print(f"Supervisor for {project.key} via orchestra-agents run on 127.0.0.1:{port}. Ctrl-D or 'exit' to leave.\n")
     while True:
         try:
@@ -163,7 +165,7 @@ def _chat_attached(project: Project, port: int) -> int:
             continue
         req = urllib.request.Request(f"http://127.0.0.1:{port}/supervisor", method="POST",
                                      data=json.dumps({"message": line}).encode(),
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", **bearer(project)})
         try:
             with urllib.request.urlopen(req, timeout=(project.config.turn_timeout or 86400) + 30) as resp:
                 for raw in resp:

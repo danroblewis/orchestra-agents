@@ -80,7 +80,8 @@ the script and its `[[collect]]` entry (or a `[[scrape]]` of a URL that serves P
 metrics) on a ticket of its own. How a collector is written: `docs/machines.md` in Orchestra's
 repository. Series never start with `orchestra_`: the prefix is Orchestra's own.
 
-Where to look, at http://127.0.0.1:8072:
+Where to look, at http://127.0.0.1:8072 (open the `log in:` link `run.py` prints first: every page
+asks for the project's web token):
 
 - **Dashboard**: the Machines panel lists the Supervisor and the Coordinator (AI agents,
   resident), the worker, the reviewer and the merge gate (`merge_gate`). The agents' host is not

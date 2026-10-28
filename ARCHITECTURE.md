@@ -219,7 +219,8 @@ project. On the bus it is nobody: every event it sends is an agent's (`host._say
    checks again every 2 s (`WAIT_RETRY_S`).
 2. **Serve the control endpoint** (`_start_control`). This is a `ControlServer` on 127.0.0.1 at
    `[agents] control_port` (0 means any free port). The port and pid are recorded with
-   `store.set_control`.
+   `store.set_control`; the control token (`agents/control.token`, owner-only, `control.bearer`)
+   is kept apart from the runtime record, which the Agents page reads.
 3. **Recover** (`recover`). For each session left `running` with a pid, the host kills that
    process group (`_kill_orphan`). It marks the turn `session.interrupted` and sets the session
    to idle.
@@ -267,7 +268,11 @@ declares (`web.STOP_GRACE_S`).
 
 ### The control endpoint (`control.py`)
 
-The endpoint is a `ThreadingHTTPServer` bound to 127.0.0.1 only.
+The endpoint is a `ThreadingHTTPServer` bound to 127.0.0.1 only. `POST /supervisor` needs
+`Authorization: Bearer <control token>` and answers `401` without it: 127.0.0.1 alone does not keep
+out a page of another site, which can post `text/plain` to any local port without a preflight.
+Orchestra's web login (the web token) is a separate credential; the plugin's route is behind that
+one, and the plugin sends this one.
 
 | Method and path | Body | Answer |
 |---|---|---|
@@ -1057,7 +1062,7 @@ The two ways in both reach `control.py` `POST /supervisor` on the host.
 ### `orchestra-agents chat` (`cli.cmd_chat`)
 
 1. Read `control.port` from `runtime.json`, and check `GET /health` (3 s timeout).
-2. Run a `you>` prompt loop. Each line is one `POST /supervisor`. `exit`, `quit` or Ctrl-D
+2. Run a `you>` prompt loop. Each line is one `POST /supervisor`, with the control token. `exit`, `quit` or Ctrl-D
    leaves.
 3. Print `tool_start` lines as `  ⚙ <name> <args>` and `assistant_end` text as paragraphs. A
    `done` with `error` or `timed_out` prints `[agents] turn ended: ...`.
@@ -1065,6 +1070,8 @@ The two ways in both reach `control.py` `POST /supervisor` on the host.
 
 ### Web: `POST /api/plugins/agents/supervisor` (`web.py`)
 
+- The route is behind Orchestra's web login (the session cookie, with a same-origin `Origin`, or
+  the web token as a bearer); the plugin adds no check of its own and sends the control token on.
 - The body is `{"message": "..."}`.
 - The answer is `503` if no control port is recorded or the host cannot be reached.
 - The plugin proxies the host's NDJSON. While nothing arrives for 20 s (`CHAT_PING_SECONDS`), it

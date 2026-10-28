@@ -18,7 +18,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -26,7 +25,7 @@ from conftest import free_port
 from orchestra import runtime
 from orchestra.config import load_project
 
-from demo.run import PLAN, get, make_project, start, stop, wait_for, wait_until
+from demo.run import PLAN, Web, make_project, start, stop, wait_for, wait_until, web_token
 
 AGENTS, TASKS = "/api/plugins/agents", "/api/plugins/tasks"
 FAKE = Path(__file__).parent / "fake_claude.py"
@@ -47,20 +46,18 @@ def git(target: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=target, capture_output=True, text=True, check=True).stdout
 
 
-def all_events(url: str) -> list[dict]:
+def all_events(web: Web) -> list[dict]:
     out, since = [], 0
     while True:
-        page = get(url + f"/api/events?since={since}")
+        page = web.get(f"/api/events?since={since}")
         if not page["events"]:
             return out
         out += page["events"]
         since = page["next"]
 
 
-def chat(url: str, message: str) -> list[dict]:
-    req = urllib.request.Request(url + f"{AGENTS}/supervisor", method="POST", data=json.dumps({"message": message}).encode(),
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=180) as r:
+def chat(web: Web, message: str) -> list[dict]:
+    with web.open(f"{AGENTS}/supervisor", {"message": message}, timeout=180) as r:
         return [json.loads(line) for line in r.read().decode().splitlines() if line.strip()]
 
 
@@ -94,8 +91,9 @@ def broken(tmp_path, monkeypatch):
                                                  env={**os.environ, "ORCHESTRA_LOG": str(target / "run" / "shell_worker.log")},
                                                  stdout=log, stderr=subprocess.STDOUT)
     try:
-        wait_for(url, procs)
-        yield url, target, script, procs["shell_worker"]
+        web = Web(url, web_token(target, env))
+        wait_for(web, procs)
+        yield web, target, script, procs["shell_worker"]
     finally:
         stop(procs)
         left = runtime.read(load_project(target)).get("processes") or {}
@@ -103,7 +101,7 @@ def broken(tmp_path, monkeypatch):
 
 
 def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
-    url, target, script, shell = broken
+    web, target, script, shell = broken
     from orchestra_agents.config import load_project as agents_project
     from orchestra_agents.events import Events
     from orchestra_agents.protocol import TaskClient
@@ -111,10 +109,10 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     assert ask("create_milestone", {"name": "Measurements"})["milestone"]["id"] == "M1"
 
     def announced() -> bool:
-        return any(e["type"] == "orchestra.machine.started" and e["source"] == "worker/shell" for e in all_events(url))
+        return any(e["type"] == "orchestra.machine.started" and e["source"] == "worker/shell" for e in all_events(web))
     wait_until("the shell worker", announced)
 
-    lines = chat(url, "Add a measurement of the repository: how many files git tracks, logged to Orchestra's metrics.")
+    lines = chat(web, "Add a measurement of the repository: how many files git tracks, logged to Orchestra's metrics.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
     reply = "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
     assert reply, lines
@@ -127,7 +125,7 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     assert "Supervisor: the AI agents fill worker, reviewer ([agents] serves)|a collector is code" in log
     assert "Supervisor: work is code ([project] work)|a collector must land in the repository" in log
     assert 'serves = ["worker", "reviewer"]' in git(target, "show", "main:orchestra.toml")
-    changed = [e for e in all_events(url) if e["type"] == "config.changed"]
+    changed = [e for e in all_events(web) if e["type"] == "config.changed"]
     assert [e["source"] for e in changed] == ["supervisor", "supervisor"]
     assert [e["data"]["section"] for e in changed] == ["agents", "project"]
 
@@ -135,20 +133,20 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     shell.terminate()
     shell.wait(timeout=10)
     script.write_text(json.dumps(FILE))
-    lines = chat(url, "I stopped the shell worker. Go ahead with the measurement.")
+    lines = chat(web, "I stopped the shell worker. Go ahead with the measurement.")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error"), lines[-1]
     assert "DEMO-1" in "\n".join(ln.get("text") or "" for ln in lines if ln["type"] == "assistant_end")
 
     # an AI worker takes the collector ticket, the reviewer approves, the gate lands it on main
     def done() -> bool:
-        return {t["id"]: t["state"] for t in get(url + f"{TASKS}/state")["tickets"]}.get("DEMO-1") == "DONE"
+        return {t["id"]: t["state"] for t in web.get(f"{TASKS}/state")["tickets"]}.get("DEMO-1") == "DONE"
     wait_until("the collector ticket DONE", done, timeout_s=300)
-    workers = [e["source"] for e in all_events(url) if e["type"] == "review.requested" and e.get("subject") == "DEMO-1"]
+    workers = [e["source"] for e in all_events(web) if e["type"] == "review.requested" and e.get("subject") == "DEMO-1"]
     assert workers[0] == "worker/1", workers
     assert "machines/repo_stats.sh" in git(target, "ls-tree", "-r", "--name-only", "main")
 
     # orchestra run starts the landed collector, and its series reach the project's store
     def written() -> bool:
-        rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}
+        rows = {m["name"]: m for m in web.get("/api/core/metrics/catalog")["metrics"]}
         return "repo_stats" in ((rows.get("repo_files") or {}).get("labels") or {}).get("instrument", {}).get("values", [])
     wait_until("the collector's series in the store", written, timeout_s=90)

@@ -23,12 +23,13 @@ from pathlib import Path
 
 import psutil
 from orchestra.runtime import alive
+from orchestra.tokens import owner_only
 
 from . import access, promises, prompting, tooling
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
-from .control import ControlServer
+from .control import ControlServer, token_file
 from .events import GAVE_UP, Events
 from .facts import SupervisorFacts
 from .fillers import Fillers
@@ -445,7 +446,7 @@ class AgentHost:
     def _start_control(self) -> None:
         """Serve the Supervisor chat; raises OSError when the port cannot be bound."""
         port = self.cfg.control_port                     # 0: any free port; it is recorded for the web
-        self.control = ControlServer(port, self.prompt_supervisor)
+        self.control = ControlServer(port, self.prompt_supervisor, owner_only(token_file(self.project)))
         self.control.start()
         self.store.set_control(self.control.port, os.getpid())
         log(f"control endpoint on 127.0.0.1:{self.control.port} (orchestra-agents chat and the web attach here)")

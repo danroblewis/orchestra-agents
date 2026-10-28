@@ -11,8 +11,9 @@ repository root; the task system lands each ticket's branch on its main), remove
 previous run left for it, and starts Orchestra: its host (`orchestra run`) and its web UI. The
 host starts the rest: the task system's scheduler and the agents' host (each plugin declares
 its own) and the shell worker (`[[machines]]` in orchestra.toml). Then it creates a milestone
-and its tickets as a planner would (requests over the bus, protocol.py), prints the URL and
-stops everything on Ctrl-C. Orchestra's output goes to run/*.log in the target; what the host
+and its tickets as a planner would (requests over the bus, protocol.py), prints the URL with a
+link that logs in (every page of `orchestra web` asks for the project's web token) and stops
+everything on Ctrl-C. Orchestra's output goes to run/*.log in the target; what the host
 starts logs to ~/.orchestrator/<key>/logs/machines/.
 
 The tickets show the two kinds of worker on one queue. Two are shell commands, which the
@@ -40,6 +41,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -192,9 +194,39 @@ def stop(procs: dict[str, subprocess.Popen]) -> None:
             p.wait()
 
 
-def get(url: str) -> dict:
-    with urllib.request.urlopen(url, timeout=5) as r:
-        return json.load(r)
+def web_token(target: Path, env: dict[str, str] | None = None) -> str:
+    """The project's web token, as `orchestra web token` prints it: what `orchestra web` asks for."""
+    env = {**os.environ, **(env or {}), "ORCHESTRA_REPO": str(target)}
+    return subprocess.run([PYTHON, "-m", "orchestra", "web", "token"], cwd=target, env=env,
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+class Web:
+    """`orchestra web` at ``url``, asked as a program asks it: with the web token as a bearer."""
+
+    def __init__(self, url: str, token: str):
+        self.url, self.token = url, token
+
+    def open(self, path: str, body: dict | None = None, timeout: float = 5):
+        """GET ``path``, or POST ``body`` as JSON to it."""
+        headers = {"Authorization": f"Bearer {self.token}"}
+        data = None
+        if body is not None:
+            data, headers["Content-Type"] = json.dumps(body).encode(), "application/json"
+        req = urllib.request.Request(self.url + path, data=data, headers=headers, method="GET" if body is None else "POST")
+        return urllib.request.urlopen(req, timeout=timeout)
+
+    def get(self, path: str) -> dict:
+        with self.open(path) as r:
+            return json.load(r)
+
+    def text(self, path: str) -> str:
+        with self.open(path) as r:
+            return r.read().decode()
+
+    def login_link(self, path: str = "/") -> str:
+        """A link that logs a browser in (the token after '#' never leaves it), then opens ``path``."""
+        return f"{self.url}/login?next={urllib.parse.quote(path, safe='')}#token={self.token}"
 
 
 def wait_until(what: str, check, timeout_s: float = 60.0) -> None:
@@ -210,7 +242,7 @@ def wait_until(what: str, check, timeout_s: float = 60.0) -> None:
     raise TimeoutError(f"{what} did not come up within {timeout_s:.0f} s")
 
 
-def wait_for(url: str, procs: dict[str, subprocess.Popen]) -> None:
+def wait_for(web: Web, procs: dict[str, subprocess.Popen]) -> None:
     """The web UI answers, and the processes the host started are up: the scheduler (its desk then
     hears requests) and the agents' host (it serves the Supervisor)."""
     def alive():
@@ -218,9 +250,9 @@ def wait_for(url: str, procs: dict[str, subprocess.Popen]) -> None:
         if dead:
             raise SystemExit(f"{', '.join(dead)} exited; see run/*.log")
         return True
-    wait_until("the web UI", lambda: alive() and get(f"{url}/api/plugins")["ok"])
-    wait_until("the scheduler", lambda: alive() and get(f"{url}/api/plugins/tasks/board")["scheduler"])
-    wait_until("the agents' host", lambda: alive() and get(f"{url}/api/plugins/agents/agents")["host"]["alive"])
+    wait_until("the web UI", lambda: alive() and web.get("/api/plugins")["ok"])
+    wait_until("the scheduler", lambda: alive() and web.get("/api/plugins/tasks/board")["scheduler"])
+    wait_until("the agents' host", lambda: alive() and web.get("/api/plugins/agents/agents")["host"]["alive"])
 
 
 def plan(target: Path, count: int = len(PLAN["tickets"])) -> list[str]:
@@ -273,8 +305,9 @@ def main() -> None:
     procs = start(target, a.port)
     running = lambda: all(p.poll() is None for p in procs.values())
     try:
-        wait_for(url, procs)
-        print(f"\nThe demo runs at {url}\n  project:  {target}\n  tickets:  {url}/tickets\n  agents:   {url}/agents\n"
+        web = Web(url, web_token(target))
+        wait_for(web, procs)
+        print(f"\nThe demo runs at {url}\n  log in:   {web.login_link('/agents')}\n  project:  {target}\n  tickets:  {url}/tickets\n  agents:   {url}/agents\n"
               f"  machines: {url}/machines\n  core:     {url}/core (what orchestra run keeps running, with their logs)\n"
               f"  logs:     {target / 'run'}/*.log, {home() / project_key(target) / 'logs' / 'machines'}/*.log\n"
               "Ctrl-C stops everything.\nThe tickets:", flush=True)

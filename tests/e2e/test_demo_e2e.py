@@ -10,7 +10,6 @@ import json
 import shutil
 import stat
 import subprocess
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,7 @@ from conftest import free_port
 from orchestra import runtime
 from orchestra.config import load_project
 
-from demo.run import PLAN, get, make_project, plan, start, stop, wait_for, wait_until
+from demo.run import PLAN, Web, make_project, plan, start, stop, wait_for, wait_until, web_token
 
 AGENTS, TASKS = "/api/plugins/agents", "/api/plugins/tasks"
 FAKE = Path(__file__).parent / "fake_claude.py"
@@ -41,8 +40,9 @@ def demo(tmp_path, monkeypatch):
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
     try:
-        wait_for(url, procs)
-        yield url, target
+        web = Web(url, web_token(target, env))
+        wait_for(web, procs)
+        yield web, target
     finally:
         stop(procs)
         assert all(p.poll() is not None for p in procs.values())
@@ -51,33 +51,26 @@ def demo(tmp_path, monkeypatch):
         assert not [n for n, r in left.items() if r.get("pid") and runtime.alive(r["pid"])], left
 
 
-def states(url: str) -> dict[str, str]:
-    return {t["id"]: t["state"] for t in get(url + f"{TASKS}/state")["tickets"]}
+def states(web: Web) -> dict[str, str]:
+    return {t["id"]: t["state"] for t in web.get(f"{TASKS}/state")["tickets"]}
 
 
-def settled(url: str) -> bool:
-    s = states(url)
+def settled(web: Web) -> bool:
+    s = states(web)
     return bool(s) and all(v in ("DONE", "BLOCKED") for v in s.values())
 
 
-def get_text(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=5) as r:
-        return r.read().decode()
-
-
-def chat(url: str, message: str) -> list[dict]:
+def chat(web: Web, message: str) -> list[dict]:
     """One message to the Supervisor: the NDJSON stream the web plugin proxies from the host."""
-    req = urllib.request.Request(url + f"{AGENTS}/supervisor", method="POST", data=json.dumps({"message": message}).encode(),
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with web.open(f"{AGENTS}/supervisor", {"message": message}, timeout=60) as r:
         return [json.loads(line) for line in r.read().decode().splitlines() if line.strip()]
 
 
-def all_events(url: str) -> list[dict]:
+def all_events(web: Web) -> list[dict]:
     """The whole event log, a page at a time."""
     out, since = [], 0
     while True:
-        page = get(url + f"/api/events?since={since}")
+        page = web.get(f"/api/events?since={since}")
         if not page["events"]:
             return out
         out += page["events"]
@@ -87,12 +80,12 @@ def all_events(url: str) -> list[dict]:
 ENDS = ("review.requested", "changes.requested", "review.approved", "task.reported")
 
 
-def reported_by(url: str) -> dict[str, list[str]]:
+def reported_by(web: Web) -> dict[str, list[str]]:
     """Who ended each turn on each ticket, in order, from the bus: a review requested, changes
     requested, an approval, a report. Both workers may claim a command ticket's offer: the first
     claim on the bus holds it, and the other starts nothing."""
     out: dict[str, list[str]] = {}
-    for e in all_events(url):
+    for e in all_events(web):
         if e["type"] in ENDS:
             out.setdefault(e["subject"], []).append(e["source"])
     return out
@@ -103,7 +96,7 @@ def git(target: Path, *args: str) -> str:
 
 
 def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(demo):
-    url, target = demo
+    web, target = demo
     ids = plan(target)
     assert ids == ["DEMO-1", "DEMO-2", "DEMO-3", "DEMO-4"]
 
@@ -112,8 +105,8 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     seen = {}
 
     def reviewing() -> bool:
-        live = [s for s in get(url + f"{AGENTS}/agents")["sessions"] if s["status"] == "running" and s["role"] == "reviewer"]
-        board = {t["id"]: t for t in get(url + f"{TASKS}/board")["tickets"]}
+        live = [s for s in web.get(f"{AGENTS}/agents")["sessions"] if s["status"] == "running" and s["role"] == "reviewer"]
+        board = {t["id"]: t for t in web.get(f"{TASKS}/board")["tickets"]}
         for s in live:
             t = board.get((s.get("ticket") or {}).get("id"))
             if t and t["assignment"] and t["assignment"]["text"]:
@@ -125,9 +118,9 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     assert s["instance"].startswith("reviewer/") and s["ticket"]["state"] == "IN_REVIEW" and s["ticket"]["title"] in [t["title"] for t in PLAN["tickets"]]
     assert card["assignment"]["instance"] == s["instance"] and card["assignment"]["text"] == "Reading RESULT.md against the acceptance criteria."
 
-    wait_until("the tickets", lambda: settled(url), timeout_s=300)
-    assert states(url) == dict.fromkeys(ids, "DONE")
-    by = reported_by(url)
+    wait_until("the tickets", lambda: settled(web), timeout_s=300)
+    assert states(web) == dict.fromkeys(ids, "DONE")
+    by = reported_by(web)
     # each offer has one holder, and only it ends the turn; the program takes only the command tickets, an AI
     # worker any; any reviewer instance may take a review a worker asked for (reviews run side by side)
     for tid in ids:
@@ -135,8 +128,8 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
         assert len(workers) == 1 and reviewers[0].startswith("reviewer/"), (tid, by[tid])
         assert workers[0] in ("worker/1", "worker/2", "worker/shell"), (tid, by[tid])           # the AI workers, the program
         assert workers[0] != "worker/shell" or tid in ("DEMO-1", "DEMO-2"), (tid, by[tid])
-    assert [e["source"] for e in all_events(url) if e["type"] == "task.requested"] == ["planner"] * len(ids)
-    one = get(url + f"{TASKS}/tickets/DEMO-1")
+    assert [e["source"] for e in all_events(web) if e["type"] == "task.requested"] == ["planner"] * len(ids)
+    one = web.get(f"{TASKS}/tickets/DEMO-1")
     assert [n["author"] for n in one["notes"]] == ["worker", "reviewer", "merge_gate"] and one["notes"][1]["text"].startswith("APPROVED")
     assert one["notes"][-1]["text"].startswith("landed on main as ")
 
@@ -150,51 +143,51 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     # landing updated, announced the collector on its behalf, runs it, and its series are in the
     # project's store, offered to discovery
     def written() -> bool:                      # an instrument, named by its label (Orchestra: measurements are not machines)
-        rows = {m["name"]: m for m in get(url + "/api/core/metrics/catalog")["metrics"]}
+        rows = {m["name"]: m for m in web.get("/api/core/metrics/catalog")["metrics"]}
         labels = (rows.get("repo_files") or {}).get("labels") or {}
         return load_project(target).key in labels.get("project", {}).get("values", []) \
             and "repo_stats" in labels.get("instrument", {}).get("values", [])
     wait_until("the collector's series in the store", written, timeout_s=60)
 
     # a finished ticket's sessions are archived (on the host's next tick), their transcripts still served
-    wait_until("the archive", lambda: not [s for s in get(url + f"{AGENTS}/agents")["sessions"] if s["role"] == "reviewer"], timeout_s=15)
-    tr = get(url + f"{AGENTS}/sessions/reviewer-DEMO-3/transcript")
+    wait_until("the archive", lambda: not [s for s in web.get(f"{AGENTS}/agents")["sessions"] if s["role"] == "reviewer"], timeout_s=15)
+    tr = web.get(f"{AGENTS}/sessions/reviewer-DEMO-3/transcript")
     assert tr["session"]["status"] == "archived" and tr["session"]["ticket_title"] == "Count the lines of the Python files"
     assert tr["session"]["harness"] == "claude_code" and tr["turns"] == 1
     assert any(m["role"] == "assistant" and any(c["name"] == "report_review" for c in m["tool_calls"]) for m in tr["messages"])
     assert tr["started_with"].startswith("# You are an Orchestra Reviewer")      # the code reviewer's prompt
 
     # the Supervisor answers through the host's control endpoint, as the web proxies it
-    lines = chat(url, "What is going on?")
+    lines = chat(web, "What is going on?")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error")
     assert any(ln["type"] == "assistant_end" and ln["text"].startswith("supervisor acknowledges") for ln in lines)
-    sup = get(url + f"{AGENTS}/sessions/supervisor/transcript")
+    sup = web.get(f"{AGENTS}/sessions/supervisor/transcript")
     assert sup["turns"] == 1 and sup["session"]["alive"]
-    assert get(url + f"{AGENTS}/attention")["message"]["text"].startswith("supervisor acknowledges")
+    assert web.get(f"{AGENTS}/attention")["message"]["text"].startswith("supervisor acknowledges")
 
 
 def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo):
-    url, target = demo
-    plugins = get(url + "/api/plugins")
+    web, target = demo
+    plugins = web.get("/api/plugins")
     assert plugins["errors"] == []
     assert sorted(plugins["pages"], key=lambda p: p["plugin"]) == [{"plugin": "agents", "path": "/agents", "title": "Agents"},
                                                                     {"plugin": "tasks", "path": "/tickets", "title": "Tickets"}]
     assert set(plugins["scripts"]) == {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js", "/plugins/tasks/static/tasks-boot.js"}
-    html = get_text(url + "/agents")
+    html = web.text("/agents")
     assert "<title>Agents</title>" in html and "/plugins/agents/static/agents.js" in html
-    head = get_text(url + "/").split("</head>")[0]                # each plugin's look, linked on every page
+    head = web.text("/").split("</head>")[0]                # each plugin's look, linked on every page
     assert "/plugins/agents/static/agents.css" in head and "/plugins/tasks/static/tasks.css" in head
-    org = get(url + f"{AGENTS}/org")
+    org = web.get(f"{AGENTS}/org")
     assert [a["name"] for a in org["agents"]] == ["supervisor", "coordinator", "worker", "reviewer"]   # serves worker and reviewer
     assert [t["name"] for t in org["teams"]] == ["engineering"]
-    assert get(url + f"{AGENTS}/state")["probes"] == []
+    assert web.get(f"{AGENTS}/state")["probes"] == []
 
     plan(target)
-    wait_until("the tickets", lambda: settled(url), timeout_s=300)
+    wait_until("the tickets", lambda: settled(web), timeout_s=300)
     seen = {}
 
     def observed() -> bool:
-        d = get(url + "/api/machines")
+        d = web.get("/api/machines")
         if not d.get("ok"):
             return False
         seen.update({m["id"]: m for m in d["machines"]})
@@ -211,7 +204,7 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == "haiku" and [i["id"] for i in m["instances"]] == instances
     reviewer = seen["reviewer"]
     assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["kind"] == "agent"
-    announced = [e["source"] for e in all_events(url) if e["type"] == "orchestra.machine.started" and e["source"].startswith("reviewer/")]
+    announced = [e["source"] for e in all_events(web) if e["type"] == "orchestra.machine.started" and e["source"].startswith("reviewer/")]
     assert len(announced) == len(set(announced)), "an instance announces itself once in the host's lifetime, not per review"
     assert {i["id"] for i in reviewer["instances"]} == {a.partition("/")[2] for a in announced} and {"task.accepted", "task.working"} <= {p["type"] for p in reviewer["publishes"]} \
         and {"review.approved", "changes.requested"} & {p["type"] for p in reviewer["publishes"]}
@@ -219,7 +212,7 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     # from [[machines]]) and the agents' AI workers (1, 2); one machine, worker, with their instances
     worker = seen["worker"]
     assert "shell" in [i["id"] for i in worker["instances"]] or "shell" in (worker.get("logs") or []), worker
-    started = {e["source"]: e["data"] for e in all_events(url) if e["type"] == "orchestra.machine.started"}
+    started = {e["source"]: e["data"] for e in all_events(web) if e["type"] == "orchestra.machine.started"}
     assert started["worker/shell"]["kind"] == "program" and "task.assigned" in started["worker/shell"]["listens_for"]
     assert "review.requested" in reviewer["subscribes"] and "changes.requested" in worker["subscribes"]
     assert "task_scheduler" not in seen                               # the task system's scheduler is no machine

@@ -265,7 +265,9 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   back to OPEN) and a reviewer's as a review that ended without a verdict (the review is
   redone, up to its no-verdict budget; `tasking/reports.py`);
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
-  recorded in the runtime record): one turn on the resident session per message, prefixed with
+  recorded in the runtime record, and the control token in `agents/control.token`, owner-only,
+  asked for on every message: a page of another site could otherwise post to the port, around
+  Orchestra's web login): one turn on the resident session per message, prefixed with
   the project context and who fills the roles when either changed, and a digest of the events
   since the last turn: a count per type and at most eight events that concern the Supervisor
   (attention addressed to it, a worker's turn ended blocked (`task.reported`, its
@@ -476,7 +478,9 @@ button stop offering an answer) and `POST /attention/seen`; `POST /supervisor` (
 Supervisor, proxied to the host, streamed). Every read re-reads `[agents]` from `orchestra.toml`,
 as the host does each tick. The UI is read-only for humans except the Supervisor chat
 (Orchestra's rule 9): an agent, a role, a team or a ticket is changed only by telling the
-Supervisor.
+Supervisor. The pages, these routes and the static files are behind Orchestra's web login
+(Orchestra's SPEC §10.2, PLUGINS.md §4.4.1): a browser's session, whose `POST`s must come from
+Orchestra's own pages, or `Authorization: Bearer <orchestra web token>` from a program.
 
 ## 9. Cost
 

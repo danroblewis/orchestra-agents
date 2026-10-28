@@ -96,6 +96,8 @@ def try_collector(project: Project, a: dict) -> dict:
 
 def _round_of(view: dict, name: str) -> tuple:
     e = next((i for i in view.get("instruments") or [] if i.get("name") == name), None) or {}
+    if e.get("kind") == "source":                 # a source's round is a discovery
+        return (view.get("discovered_at"),)
     return tuple(e.get(k) for k in ("last_write", "points", "last_error_at", "failures"))
 
 
@@ -118,7 +120,9 @@ def _view(project: Project) -> dict:
         cached = ModelStore.for_state(project.orchestra.state_dir).latest_discovery()
     except Exception:  # noqa: BLE001 - the rest of the view stands without it
         cached = None
-    return instruments_view(project.orchestra, cached[1].discovery if cached else None)
+    view = instruments_view(project.orchestra, cached[1].discovery if cached else None)
+    view["discovered_at"] = cached[0] if cached else None
+    return view
 
 
 MAX_WAIT_S = 120
@@ -144,7 +148,9 @@ def read_instrument(project: Project, a: dict) -> dict:
                 "note": f"no instrument named {name} is declared (or it was left out: see errors)"}
     if entry.get("kind") == "source":
         st = entry.get("status")
+        at = view.get("discovered_at")
         return {"ok": True, "found": True, "instrument": entry, "errors": errors,
+                "latest_discovery_s_ago": round(time.time() - at) if at else None,
                 "note": ("a source is read in place at each discovery and stores nothing here: `status` is how the latest "
                          "discovery read it (series, gaps, error)" if st else
                          "no discovery has read it yet: one runs every [discovery] every (5 min by default) while `orchestra "

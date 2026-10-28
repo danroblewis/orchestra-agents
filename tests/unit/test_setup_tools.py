@@ -153,6 +153,29 @@ def test_collectors_and_scrapes(project, store):
         call(project, store, "set_collector", name="y", command="a.sh", every="often", reason="the owner wants disk usage")
 
 
+def test_a_change_of_what_is_measured_only_begins_no_era(project, store):
+    from orchestra.sd.eras import DEFAULT_FROM, begins
+    call(project, store, "set_collector", name="disk", command="machines/disk.sh", every="60s", reason="the owner wants disk usage")
+    call(project, store, "set_setting", key="sources", value='[{"name": "shop", "url": "http://127.0.0.1:9"}]', target="repo", reason="the shop's store")
+    call(project, store, "set_capacity_limit", workers=2, reason="the owner wants two at once")
+    evs = [e for e in store.events.read(0, 1000)[0] if e["type"].endswith(".changed")]
+    assert [(e["type"], e["section"]) for e in evs] == [("instruments.changed", "collect"), ("instruments.changed", "sources"),
+                                                        ("config.changed", "tasks")]
+    raw = {k: e[k] for e in evs for k in ("type", "source")}
+    assert [begins({"type": e["type"], "source": e["source"]}, DEFAULT_FROM) for e in evs] == [False, False, True], raw
+
+
+def test_a_source_orchestra_would_refuse_is_never_committed(project, store):
+    head = git(project.repo_root, "rev-parse", "HEAD")
+    with pytest.raises(StoreError, match="metrics-lab"):
+        call(project, store, "set_setting", key="sources", value='[{"name": "metrics-lab", "url": "http://127.0.0.1:9"}]',
+             target="repo", reason="the shop's store")
+    with pytest.raises(StoreError, match="series\\[0\\]"):
+        call(project, store, "set_setting", key="series", value='[{"source": "nowhere", "name": "q", "query": "up", "kind": "level"}]',
+             target="repo", reason="the shop's queue")
+    assert git(project.repo_root, "rev-parse", "HEAD") == head
+
+
 def test_what_orchestra_would_refuse_is_not_written(project, store):
     before = (project.repo_root / "orchestra.toml").read_text()
     head = git(project.repo_root, "rev-parse", "HEAD")

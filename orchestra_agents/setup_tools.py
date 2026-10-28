@@ -1,6 +1,7 @@
 """The Supervisor's configuration tools: the setup of the project, changed one entry at a time
 through Orchestra's own objects (``project.orchestra.config_edit``; ``config_change.change``),
-announced on the bus (``config.changed``) and answered with what applies now and what restarts.
+announced on the bus (``config.changed``; ``instruments.changed`` for a change of what is measured
+only, which begins no era of the model) and answered with what applies now and what restarts.
 
 Each tool takes a ``target``: ``repo`` (the default), the repository's ``orchestra.toml``, where
 the project's settings go, each change committed with its reason; or ``overlay``, the owner's
@@ -51,6 +52,11 @@ SETUP_COMMANDS = frozenset({"set_agent_roles", "set_work_mode", "set_gate_unit",
                             "set_machine", "set_collector", "remove_entry", "set_setting"})
 SECTIONS = ("machines", "collect", "scrape", "gate.unit")
 CHANGED = "config.changed"
+# A change of what is measured only: announced as its own type, which begins no era in Orchestra's model
+# (only config.changed does, by default): measuring more is observation, not a change to the system, and an
+# era begun by it would throw away the history a new source brings (the model reads only the current era).
+INSTRUMENTS_CHANGED = "instruments.changed"
+INSTRUMENT_SECTIONS = frozenset({"collect", "scrape", "sources", "series"})
 
 
 @dataclass
@@ -218,6 +224,20 @@ def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
                 lambda: said + ("" if section == "gate.unit" else _unless_launching(project)))
 
 
+def _check_sources(project: Project, key: str, value: list) -> None:
+    """Refuse a [[sources]] or [[series]] list Orchestra would refuse when it reads it (a bad name,
+    a literal secret, a series of no source): config_edit does not check sources, so without this
+    a refused source would be committed and only seen missing at the next discovery."""
+    from orchestra.sources.spec import load
+    raw = dict(project.orchestra.config.raw)
+    raw[key] = value
+    refused = load(raw, project.repo_root).refused
+    mine = {k: v for k, v in refused.items() if k.startswith("series[") == (key == "series")}
+    if mine:
+        raise StoreError(f"Orchestra would refuse these [[{key}]] entries, so nothing was written: "
+                         + "; ".join(f"{k}: {v}" for k, v in mine.items()))
+
+
 def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     key = (a.get("key") or "").strip()
     if not key or "value" not in a:
@@ -229,6 +249,8 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
         except ValueError:
             pass
     head = key.split(".")[0]
+    if key in ("sources", "series") and isinstance(value, list):
+        _check_sources(project, key, value)
 
     def edit(ed, kw):
         return ed.unset(key, **kw) if value is None else ed.set(key, value, **kw)
@@ -268,7 +290,7 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     if claim_change(store, role, a.get("change")):     # the change a prediction of the Supervisor's waits for: Orchestra judges it from here
         store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"])
     else:
-        store.events.emit(CHANGED, **data)
+        store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED, **data)
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, the commit, and what applies now." if target == "repo" else
                     "Tell the human what you changed in their private overlay (not committed) and why, and what applies now.")}

@@ -85,7 +85,7 @@ register(Role(
               "the project not set up yet, when the host starts (first_run.py)"),
     emits=(REQUESTED, REQUESTS["update_ticket"], REQUESTS["cancel_ticket"], REQUESTS["unblock_ticket"],
            "context.updated", "role.created", "agent.created", "team.created", "agent.messaged",
-           "config.changed", "machine.restarted"),
+           "config.changed", "instruments.changed", "machine.restarted"),
     read_only=True,
     description="Talks to the human; sets the project up; translates requests into requirements and hands them to the "
                 "Coordinator; keeps the project's setup able to do them.",

@@ -262,7 +262,8 @@ TOOLS: list[ToolDef] = [
             "Another time-series store ([[sources]], or a url before declaring one): where it is, whether its credentials "
             "are present (never their values), whether it answers and which API endpoints work.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL, to look before declaring it"),
-             "auth": O("With url: as [[sources]] writes it, e.g. {\"bearer_env\": \"WORK_TOKEN\"}")}),
+             "auth": O("With url: as [[sources]] writes it: {\"bearer_file\": \"~/path/to/token\"} for a token in a file, "
+                       "{\"bearer_env\": \"WORK_TOKEN\"} for one in the environment; never the token itself")}),
     ToolDef("source_schema", "observe",
             "What a store has: without match, every metric name on one line (its type, or a guess from its name; how many "
             "series; each label with how many values); with match, those metrics in detail (help, label values).",

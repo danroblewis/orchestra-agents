@@ -71,8 +71,10 @@ Three things, kept apart:
   harnesses run with their own permission checks off, so nothing stops an agent from reading or
   writing elsewhere in the checkout.
 
-The built-in organisation is the Supervisor (no team; it talks to the human) and the
-`engineering` team: the Coordinator leads it, the worker and the reviewer are its members. The
+The built-in organisation is the Supervisor (no team; it talks to the human, sets the project up
+and hands the human's requirements on) and the `engineering` team: the Coordinator leads it (it
+plans what the Supervisor hands it into milestones and tickets), the worker and the reviewer are
+its members. The
 worker and the reviewer are not resident: a session of each is started per ticket, on the task
 system's assignment, for the roles this package serves (`[agents] serves`). A role served by
 another machine (the demo's shell worker) is not an agent here.
@@ -138,9 +140,34 @@ its worker at once and the task system asks the Coordinator for attention only a
 (`task.requested`, `task.change_requested`, `task.unblock_requested`, `milestone.requested`, …)
 and queries (`task.query_requested` with an `op`: `list_tickets`, `get_ticket`, `snapshot`, …),
 answered with `request.done` or `request.refused`; `TaskClient` waits for the answer. What a
-request made is said too: `ticket.created`, `milestone.created`. The
-Supervisor and the Coordinator may change tickets; a custom agent may when its roles or team
-grant the `tickets` group; a worker or reviewer only reports.
+request made is said too: `ticket.created`, `milestone.created`. Two tool groups divide them
+(the owner, 2026-10-28: the human makes no tickets; they talk to the Supervisor, who conveys the
+requirements; the Coordinator makes the milestones and tickets):
+
+- `planning`: creating tickets and milestones, changing and closing milestones, and reporting a
+  plan back (`report_plan`). The Coordinator's, and a custom agent's whose roles or team grant it.
+- `tickets`: reading them (`list_tickets`, `get_ticket`, `project_status`, `list_milestones`) and the
+  decisions on an existing ticket: `update_ticket`, `add_note`, `cancel_ticket`, `unblock_ticket`.
+  The Supervisor's and the Coordinator's. The Supervisor keeps these directly because they are the
+  human's intent, which is the Supervisor's to carry and which the Coordinator never changes: a
+  priority the human sets, a cancel the human asks for, the objective, and an unblock after the
+  Supervisor fixed the setup that blocked the ticket (it knows the blocker is gone; a round trip
+  through the Coordinator would only delay it). Anything that changes what a ticket asks for, splits
+  it or adds work goes through the Coordinator.
+
+A worker or reviewer only reports.
+
+**Hand-off** (`handoff.py`). The Supervisor's `hand_to_coordinator` (group `handoff`) publishes
+`work.requested` {request, requirements, context, to: coordinator, by} as the Supervisor, its subject
+the request's id (`r-…`). It wakes the Coordinator (`wake_on: work.requested:coordinator`), whose
+wake-up carries the requirements whole. The Coordinator plans (a milestone, tickets with objective,
+description, acceptance, verification and dependencies) and calls `report_plan`, which checks that
+the request was handed on and not yet answered and that every ticket it names exists in the task
+system (`list_tickets`), then publishes `work.planned` {request, to: supervisor, summary, milestone,
+tickets [{id, title}], questions, by} as the Coordinator, its causation the hand-off. That wakes the
+Supervisor (`work.planned:supervisor`), which tells the human; the tickets a plan names are followed
+until they end (`landings.py`), so the Supervisor also tells the human when they are done. The
+hand-offs are kept in the Supervisor's agent state (`handoffs`, the last 30).
 
 **Attention**: the task system asks a planner to look at something with `task.attention_needed`
 (`to`: supervisor or coordinator, the reason, the ticket), from the machine whose work is stuck
@@ -195,10 +222,10 @@ given `review.approved` as well.
 
 `orchestra agents run` is one process per project, and no machine: the runtime the configured
 agents run in (section 1). Orchestra's launcher
-starts it: the plugin declares it in `Plugin.processes` when the project's `orchestra.toml` has an
-`[agents]` section (`web.processes`), so `orchestra run` keeps it running in the interpreter
-Orchestra runs in, as the process `agents.host`; a project without the section gets the pages and
-no host. It is started with `--wait`: while another host holds the project, or the control port is
+starts it: the plugin declares it in `Plugin.processes` (`web.processes`) whether or not
+`orchestra.toml` has an `[agents]` section (the owner, 2026-10-28: a new user configures nothing;
+their Supervisor sets the project up), so `orchestra run` keeps it running in the interpreter
+Orchestra runs in, as the process `agents.host`; `[agents] enabled = false` declares none. It is started with `--wait`: while another host holds the project, or the control port is
 taken, it waits for that to clear instead of exiting, so a host restarted while the previous one
 still shuts down takes over afterwards. Its shutdown closes the running turns together, waits up
 to `SHUTDOWN_REPORTS_S` (10 s) for their reports, then closes the resident sessions together, each
@@ -218,6 +245,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   | each agent the host wakes (every resident, scheduled or ad hoc agent; not a worker or reviewer) | `request.done`, `request.refused` | the answers to its own requests: the snapshot each wake-up asks for as the agent, and its tools' requests. The task system publishes the answer as the asker (its D17) |
   | the Supervisor | `gate.landed`, `request.done`, and in tasks mode `review.approved` (`protocol.endings`) | the end of a ticket it created for the human, which it then tells the human about (`landings.py`) |
   | the Supervisor | `ticket.created` | how it remembers which tickets were its own (`by` = supervisor) |
+  | the Supervisor, the Coordinator | `work.planned`, `work.requested` (their `wake_on`) | the hand-off of the human's requirements and its plan (section 3) |
   | a worker, a reviewer | `task.assigned`, `review.requested` or `changes.requested`, `task.released` | its role's `wake_on`: the offers it answers (runner.py) |
 
   What wakes an agent without an event on the bus is not listed (a human's message, another
@@ -295,6 +323,16 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   the transcript. A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause, restart or reset waits for the running one, and a paused
   Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra agents chat` attaches to it. A host that cannot
   bind the endpoint exits instead of running unreachable;
+- wakes the Supervisor once, at start, when the project is not set up (`first_run.py`): no
+  `[project]` and no instrument (`[[collect]]`, `[[scrape]]`, `[[sources]]`) in the configuration,
+  and no setup recorded in the Supervisor's agent state (`setup`: {ran_at, harness}, written when
+  the setup's turn ends without an error; a setup that ran on the dummy harness does not count once
+  a real harness runs the agents). The wake-up gives the goal (understand the repository, configure
+  Orchestra and the installed plugins for it), not steps; the Supervisor's prompt says what setting
+  up means (section 10);
+- follows `[agents]` harness, model, provider and thinking: when one changes, once no turn runs,
+  the resident sessions are closed and open again on what is configured (a new conversation on the
+  new harness);
 - wakes the Supervisor when a ticket it created (`ticket.created` with `by` = supervisor: the
   human's requests) is DONE, to leave the human one short message (`landings.py`); the tickets are
   followed in the Supervisor's agent state until they end, as the runner hears it
@@ -309,7 +347,7 @@ Events the host and the agents publish: `session.started`, `session.settled`, `a
 `agent.compacted`, `agent.reset`, `agent.paused`, `agent.resumed`, `agent.messaged`,
 `context.updated`, `probe.failed`, `probe.recovered`, `role.*`, `agent.*`, `team.*` on changes to
 the organisation, `config.changed` and `machine.restarted` from the Supervisor's setup tools
-(section 10), and a team's own declared types raised with `emit_event` (rate-limited, and
+(section 10), `work.requested` and `work.planned` (the hand-off, section 3), and a team's own declared types raised with `emit_event` (rate-limited, and
 refused when the cause chain is three deep). The source of every one of them is an agent: a
 session's events are the agent's instance (the slot bound to the session, or after the slot was
 given back the instance its record names: a turn the previous host left running is cut as
@@ -357,6 +395,13 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
   compacts its own context (`--autocompact`). `CLAUDE_BINARY` names the binary to run.
 - **Codex** (`codex.py`): `codex exec --json` per turn, resumed by thread id, the rollout under
   `$CODEX_HOME`; tools through the same MCP server.
+Sessions of the Supervisor and the Coordinator are **read-only** (`builtins.Role.read_only`,
+`SessionSpec.read_only`): they read, search and run commands in the checkout, and their harness
+withholds its file-editing tools (Claude Code: `--disallowedTools Edit,Write,NotebookEdit`; Pi:
+`--exclude-tools edit,write`). Codex has no per-tool switch short of a sandbox that would also stop
+the agents' own tools from committing `orchestra.toml`, so there it is the prompt's rule only. The
+shell stays: a command can still write, and the prompts say it must not.
+
 - **Dummy** (`dummy.py`, `dummy_agent.py`, `dummy_script.py`): a scripted agent with no model, no
   network and no cost. Each turn is one `python -m orchestra_agents.harness.dummy_agent` process
   (in its own process group, like a `claude -p` turn, so a release kills it and a later host finds
@@ -372,10 +417,15 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
 all hold is played; the built-in rules (`harness/dummy_defaults.toml`) come after the file's, so a
 script says only what differs, and `harness = "dummy"` alone is a working team: a worker writes
 `work/<ticket>.md` in a code ticket's worktree (`RESULT.md` in a task's folder), commits it and
-reports READY_FOR_REVIEW; a reviewer approves; the Supervisor answers that it is scripted and
-changed nothing; the Coordinator and any custom agent reply "Nothing to do." A rule's conditions:
+reports READY_FOR_REVIEW; a reviewer approves; the Supervisor hands a chat message to the
+Coordinator (`hand_to_coordinator`), which makes a milestone and a ticket from it and reports the plan
+(`report_plan`), and the Supervisor tells the human the plan; on the first run the Supervisor says it
+cannot read the repository and how to get one that can; any other turn replies "Nothing to do." or
+that it is scripted. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
+script when it exists. A rule's conditions:
 `role` (required; a role's or custom agent's name, or `"*"`), `ticket` (a glob on the ticket id),
-`prompt` (a regular expression searched in the turn's prompt), `turn` (the session's nth turn,
+`prompt` (a regular expression searched in the turn's prompt; its named groups are
+`{match.<group>}` in the rule's steps and reply), `turn` (the session's nth turn,
 counted from its transcript, or a list of them) and `checkout` (whether the working directory is a
 git checkout). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
 `append`), `run` (a shell command in the working directory; its output and status are the
@@ -422,7 +472,11 @@ reads and reaches no agent's tool.
 
 ## 7. Settings and state (`config.py`, `store.py`)
 
-`[agents]` in the project's `orchestra.toml`: `harness` (pi | claude_code | codex | dummy),
+`[agents]` in the project's `orchestra.toml`, optional: without it the agents run on the defaults.
+`harness` (pi | claude_code | codex | dummy; unset: `claude_code` with `model` haiku when `claude`, or
+`CLAUDE_BINARY`, is found, else `dummy`, and the Agents page, `orchestra agents status` and the
+host's log say which was chosen and how to change it: `config.default_harness`), `enabled` (false:
+no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
 `provider`, `thinking`, `serves` (the task system's roles these agents fill; default worker and
 reviewer), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
@@ -508,6 +562,38 @@ gate's tests, whether what is needed runs), fix the setup with its tools, and te
 it changed and why; never keep filing tickets the system cannot complete. It never changes code,
 in an emergency or otherwise: code is a worker's, through a ticket, a review and the gate.
 
+**Guides** (tool group `guides`; the Supervisor and the Coordinator): `list_guides` (each operator's
+guide Orchestra serves, `orchestra.guides.collect`: Orchestra's own and each installed plugin's
+`Plugin.guide`, this package's `guide.md` among them, with what it is about, its size and its
+sections) and `read_guide` (one whole, or one section). They total about 100 KB, so they are read on
+demand; the Supervisor's prompt says to read the part a setting is in before changing it.
+
+**Setting up** (`first_run.py`, `prompts/operator.md` "Setting up the project"). Orchestra wakes the
+Supervisor once on a project that is not set up (section 4), and the human may ask any time ("set up
+this project", "re-check the setup"). The goal, not steps: read the guides, explore the repository
+read-only (its session has no editing tools; it may run the test command once to time it), set
+what is plainly right with the setup tools (the task system's `[project]`, the test-report
+instrument, a `[[scrape]]` of an existing `/metrics`, the gate's stages), ask the human only their
+choices in one message with a recommendation for each (`work = "code"`, `push`, anything acting as
+the human, the model and its cost), check what it declared works, and report what it set and why.
+It creates no tickets.
+
+**Measurements** (`instruments.py`, `source_tools.py`, `prompts/operator.md` "Measurements"). Adding a
+collector is the Supervisor's, from one chat message: it reads Orchestra's guide, finds where the
+number lives, chooses a `[[scrape]]` of an existing `/metrics`, a `[[sources]]` store, or a
+`[[collect]]` command; tries the command once exactly as Orchestra would (`try_collector`: Orchestra's
+`collect.round`, its environment and parser; what would be stored, bad lines, refused names, the
+time it took); declares it (`set_collector`); and reads it back (`read_instrument`: the Instruments
+page's record, its log, the points it stored, waiting up to two minutes for the next round). A
+one-liner over tools already there is configuration, so the Supervisor declares it itself
+(`set_collector` with `shell: true`: `["sh", "-c", …]`, at most 300 characters, one line): it is
+reviewed as a commit of `orchestra.toml` with its reason, can be tried before it is declared, and
+asks nothing of the human. Anything longer is a script, which is code: the Supervisor hands it to
+the Coordinator, and it lands through a ticket, a review and the gate (`work = "code"`, the human's
+choice). Another store is looked at before it is declared (`check_sources`, `source_schema`,
+`preview_query`, `infer_source`, over `orchestra.sources`, by a declared name or by `url` and `auth`;
+no credential's value is shown).
+
 **Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
 launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
@@ -516,14 +602,15 @@ secret values left out), `list_processes` (Orchestra's runtime record and the de
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a
 machine announced, read only within the repository or the state directory, as Orchestra's web
 server reads one), `list_metrics` (the project's store, as the Core page's catalogue),
-`get_model` (Orchestra's model view, shortened), `snapshot` (the task system's query), and
-`read_events`. All of it reads through Orchestra as a library; nothing is written.
+`get_model` (Orchestra's model view, shortened), `read_instrument`, the four sources tools,
+`snapshot` (the task system's query), and `read_events`. All of it reads through Orchestra as a library; nothing is written.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),
 `set_work_mode` (`[project] work`), `set_gate_unit` (`[[gate.unit]]`), `set_capacity_limit`
 (`[tasks] workers`, `reviewers`), `set_machine` (`[[machines]]`), `set_collector` (`[[collect]]` or
-`[[scrape]]`), `remove_entry` (any of those arrays), `set_setting` (any key, or removes it). Each
+`[[scrape]]`), `remove_entry` (any of those arrays), `set_setting` (any key, or removes it), and
+`try_collector` (a trial round, which writes nothing but runs a command). Each
 takes a `target`: `repo` (the default; `set_setting` must be told) for the project's settings in
 `orchestra.toml`, or `overlay` for the owner's own or their company's settings (identities,
 channels, templates) in the private overlay outside the repository (Orchestra's SPEC §8.1). The
@@ -533,9 +620,9 @@ prompt (`prompts/operator.md`) says which goes where. Each tool:
   checkout on the base branch and `orchestra.toml` has no uncommitted change;
 - changes the configuration only through Orchestra (`project.orchestra.config_edit`, Orchestra's
   SPEC §8.2), which keeps the file's comments and layout and refuses a result that Orchestra's
-  readers (its settings, `[[machines]]`, `[[collect]]`/`[[scrape]]`) or the agents' `[agents]`
-  (`config_change.agents_check`) accept less well than before; nothing here opens or edits the
-  file;
+  readers (its settings, `[[machines]]`, `[[collect]]`/`[[scrape]]`) or any installed plugin's
+  check (`Plugin.check`: the agents' `[agents]` reader, `web.check`, and the task system's) accept
+  less well than before; nothing here opens or edits the file;
 - refuses a change whose new lines look like a secret, in either file;
 - for `repo`, commits `orchestra.toml` alone, whatever else is changed in the checkout, with the
   message `Supervisor: <what changed>` and the reason as its body; a failed commit puts the file

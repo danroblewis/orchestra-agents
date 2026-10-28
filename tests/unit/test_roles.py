@@ -101,7 +101,7 @@ def test_get_role_explains_what_the_role_is(project):
     r = api.handle(project, store, "get_role", {"name": "coordinator"}, role="supervisor")
     assert r["role"]["builtin"] and "Coordinator" in r["prompt"] and r["prompt_source"].endswith("prompts/coordinator.tasks.md")   # the project's work is tasks
     assert r["role"]["created_by"] is None and r["role"]["created_at"] is None                 # nobody created a built-in role
-    assert "create_ticket" in r["tool_names"]["tickets"] and "set_capacity" in r["tool_names"]["capacity"]
+    assert "create_ticket" in r["tool_names"]["planning"] and "set_capacity" in r["tool_names"]["capacity"]
     assert r["agents"] == ["coordinator"]
     RepoRoleStore(project).save(RoleDef(name="product_owner", description="Keeps the backlog full", tools=["tickets", "escalate"]),
                                 "Be opinionated about {base_branch}.")

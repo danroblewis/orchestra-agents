@@ -144,7 +144,7 @@ def test_machines_are_added_changed_and_removed_with_what_the_launcher_does(proj
 def test_collectors_and_scrapes(project, store):
     out = call(project, store, "set_collector", name="disk", command="machines/disk.sh", every="60s", reason="the owner wants disk usage")
     assert toml(project)["collect"] == [{"name": "disk", "command": "machines/disk.sh", "every": "60s"}]
-    assert "logs/machines/disk.log" in out["applies"]
+    assert "logs/instruments/disk.log" in out["applies"]
     call(project, store, "set_collector", name="app", url="http://127.0.0.1:9100/metrics", reason="the app serves its own metrics")
     assert toml(project)["scrape"][0]["url"] == "http://127.0.0.1:9100/metrics"
     with pytest.raises(StoreError, match="not both"):

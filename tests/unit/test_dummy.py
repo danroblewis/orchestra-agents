@@ -26,6 +26,22 @@ def test_the_built_in_rules_make_a_team():
     assert s.pick(Turn(role="reviewer")).steps[0]["args"]["verdict"] == "APPROVED"
     assert s.pick(Turn(role="supervisor")).steps == () and "changed nothing" in s.pick(Turn(role="supervisor")).reply
     assert s.pick(Turn(role="coordinator")).reply == "Nothing to do." == s.pick(Turn(role="po")).reply
+    chat = Turn(role="supervisor", prompt="[Orchestra: ...]\n\n[The human's message]\nAdd a page")
+    assert s.pick(chat).steps[0]["tool"] == "hand_to_coordinator"                  # a chat is handed on
+    asked = Turn(role="coordinator", prompt="- event work.requested request=r-0a1b from supervisor: plan this\nrequirements: Add a page\n")
+    plan = s.pick(asked)
+    assert [st["tool"] for st in plan.steps] == ["create_milestone", "create_ticket", "report_plan"]
+    assert plan.groups(asked) == {"request": "r-0a1b", "requirements": "Add a page"}
+    setup = s.pick(Turn(role="supervisor", prompt="[First run: set up this project] ..."))
+    assert setup.steps[0]["tool"] == "list_guides" and "cannot read your repository" in setup.reply
+
+
+def test_a_rule_s_prompt_groups_fill_its_steps():
+    from orchestra_agents.harness.dummy_script import fill_match
+    [rule] = parse('[[rule]]\nrole = "*"\nprompt = "id=(?P<id>\\\\w+)"\nsteps = [{ say = "got {match.id}" }]\n')
+    t = Turn(role="x", prompt="the id=abc here")
+    assert fill_match(rule.steps[0], rule.groups(t)) == {"say": "got abc"}
+    assert fill_match("{match.none}", {}) == ""
 
 
 def test_the_first_matching_rule_is_played_and_the_built_ins_come_last(tmp_path):

@@ -41,6 +41,7 @@ from .config import Project
 from .config_change import Edit, change, target_of
 from .fillers import KEEP_S, Fillers
 from .gate_busy import landing
+from .instruments import shell_command
 from .modeling import claim_change, own_prediction
 from .org_store import all_agents
 from .restart import recover
@@ -188,7 +189,8 @@ def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
         raise StoreError("a collector needs a name and either a command (a script under machines/ that prints Prometheus "
                          "text: [[collect]]) or a url that serves it ([[scrape]]), not both")
     section = "collect" if command else "scrape"
-    entry: dict[str, Any] = {"name": name, **({"command": command} if command else {"url": url})}
+    words: Any = shell_command(command) if command and a.get("shell") else command
+    entry: dict[str, Any] = {"name": name, **({"command": words} if command else {"url": url})}
     for k in ("every", "timeout"):
         if v := _duration(a, k):
             entry[k] = v
@@ -196,8 +198,9 @@ def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
 
     def applies():
         what = "runs from now on, on its interval" if before is None else "starts over with the new entry"
-        return (f"orchestra run reads it within a second: it {what}, storing what it prints with machine={name}; a "
-                f"failed round says why in its log, logs/machines/{name}.log." + _unless_launching(project))
+        return (f"orchestra run reads it within a second: it {what}, storing what it prints labelled instrument={name}; a "
+                f"failed round says why in its log, logs/instruments/{name}.log. read_instrument {name} after its first "
+                "round shows what it stored." + _unless_launching(project))
     return Plan(section, lambda ed, kw: ed.add_entry(section, entry, **kw),
                 lambda c: (f"{_how(c)} the collector {name}: {command or url}, every "
                            f"{entry.get('every') or (before or {}).get('every') or '60s'} ([[{section}]])"), applies)

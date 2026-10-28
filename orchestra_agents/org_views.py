@@ -111,7 +111,7 @@ def agents_status(project: Project, store: AgentStore) -> dict:
                                      "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})
     cfg = project.config
     return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "now": time.time(),
-            "harness": cfg.harness, "model": cfg.model, "serves": cfg.serves}
+            "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note, "serves": cfg.serves}
 
 
 def measured_roles(project: Project) -> list[str]:

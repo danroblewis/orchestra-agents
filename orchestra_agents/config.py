@@ -11,6 +11,8 @@ AGENTS.md rule 10). The bus and the metrics store are Orchestra's too. State liv
 
 from __future__ import annotations
 
+import os
+import shutil
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,9 +28,36 @@ from .clock import parse_interval
 __all__ = ["Config", "ConfigError", "Project", "load_project"]
 
 
+DEFAULT_MODEL = "haiku"     # the model chosen when no harness is set and Claude Code is found: the cheapest that does the work
+
+
+def claude_found() -> bool:
+    """Whether Claude Code can be run here: ``CLAUDE_BINARY`` (a path, or a name on the PATH), else
+    ``claude`` on the PATH."""
+    b = os.environ.get("CLAUDE_BINARY") or "claude"
+    return os.access(b, os.X_OK) if os.sep in b else shutil.which(b) is not None
+
+
+def default_harness() -> tuple[str, str | None, str]:
+    """The harness, model and a note for the human, when ``[agents]`` names no harness: Claude Code
+    with Haiku when ``claude`` is found, else the dummy harness (scripted, no model, no cost)."""
+    how = ("Tell the Supervisor which harness and model to use (it sets [agents] harness and model), or set them "
+           "in orchestra.toml yourself.")
+    if claude_found():
+        return "claude_code", DEFAULT_MODEL, (
+            "No harness is set in [agents], so the agents run on Claude Code with Haiku (the claude command was found). "
+            + how)
+    return "dummy", None, (
+        "No harness is set in [agents] and no claude command is on the PATH, so the agents run on the dummy harness: "
+        "scripted, with no model and no cost, so they cannot read or set up your repository. Install Claude Code and log "
+        "in once (run claude), then restart orchestra run; or set [agents] harness to pi, codex or claude_code. " + how)
+
+
 @dataclass
 class Config:
-    harness: str = "pi"                 # pi | claude_code | codex | dummy
+    harness: str = "pi"                 # pi | claude_code | codex | dummy (from_raw: default_harness when unset)
+    harness_note: str | None = None     # when the harness was not set but chosen (default_harness): what to tell the human
+    enabled: bool = True                # [agents] enabled = false: the plugin's pages, and no host
     dummy_script: str | None = None     # the dummy harness's script, relative to the repository (harness/dummy_script.py)
     provider: str | None = None
     model: str | None = None
@@ -63,9 +92,13 @@ class Config:
                 parse_interval(every)
             except ConfigError as e:
                 raise ConfigError(f"[agents] coordinator_every: {e}") from e
+        harness, model, note = (a["harness"].replace("-", "_"), a.get("model") or None, None) if a.get("harness") else default_harness()
+        if a.get("harness") is None and a.get("model"):
+            model = a["model"]
         return cls(
-            harness=(a.get("harness") or "pi").replace("-", "_"), dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
-            model=a.get("model") or None, thinking=a.get("thinking"),
+            harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
+            dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
+            model=model, thinking=a.get("thinking"),
             serves=serves, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),

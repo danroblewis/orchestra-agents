@@ -24,7 +24,12 @@ agents' tools, with ``args``, and ``keep``: a name for its answer), ``sleep`` (s
 ``{instance}`` and ``{message}`` (the human's message in a chat turn, else the prompt's first
 line) are replaced, and so is ``{kept.<name>.<field>...}`` (in the reply too): a field of an answer
 an earlier step of the turn kept (``{kept.e.experiment}``; a list's item by its index, ``{kept.m.summary.0}``).
-A string that is only such a placeholder becomes the value itself, a number or a table too."""
+A string that is only such a placeholder becomes the value itself, a number or a table too. A
+rule's ``prompt`` may name groups, ``(?P<request>r-[0-9a-f]+)``: each is ``{match.<group>}`` in its steps
+and reply.
+
+Without ``[agents] dummy_script``, the repository's ``.orchestra/dummy.toml`` is the script when it
+exists (``dummy_agent.script_path``)."""
 
 from __future__ import annotations
 
@@ -37,6 +42,7 @@ from pathlib import Path
 DEFAULTS = Path(__file__).with_name("dummy_defaults.toml")
 ACTIONS = ("say", "write", "run", "commit", "tool", "sleep", "fail")
 MODIFIERS = {"write": {"text", "append"}, "tool": {"args", "keep"}}
+MATCH = re.compile(r"\{match\.([A-Za-z_]\w*)\}")
 KEPT = re.compile(r"\{kept\.([A-Za-z_]\w*)((?:\.[\w-]+)*)\}")
 CONDITIONS = ("role", "ticket", "prompt", "turn", "checkout")
 HUMAN = "[The human's message]\n"          # prompting.CHAT_SEAM ends with it
@@ -58,6 +64,17 @@ def _lookup(kept: dict, name: str, path: str):
         else:
             raise ScriptError(f"{{kept.{name}{path}}}: the kept answer has no {part!r}")
     return v
+
+
+def fill_match(value, groups: dict):
+    """``value`` with each ``{match.<group>}`` replaced by what the rule's prompt captured."""
+    if isinstance(value, str):
+        return MATCH.sub(lambda m: str(groups.get(m.group(1)) or ""), value)
+    if isinstance(value, list):
+        return [fill_match(v, groups) for v in value]
+    if isinstance(value, dict):
+        return {k: fill_match(v, groups) for k, v in value.items()}
+    return value
 
 
 def fill_kept(value, kept: dict):
@@ -113,6 +130,11 @@ class Rule:
     turn: tuple[int, ...] = ()
     checkout: bool | None = None
     where: str = ""                       # the file and rule number, for errors
+
+    def groups(self, t: Turn) -> dict:
+        """What the rule's prompt captured in the turn's prompt, by group name."""
+        m = re.search(self.prompt, t.prompt) if self.prompt else None
+        return {k: v for k, v in (m.groupdict() if m else {}).items() if v is not None}
 
     def matches(self, t: Turn) -> bool:
         return ((self.role == "*" or self.role == t.role)

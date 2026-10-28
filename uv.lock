@@ -426,7 +426,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#60daf293f7e4d65312c238f7e143043e04f932a1" }
+source = { git = "https://github.com/danroblewis/orchestra?rev=main#541d6043f67e969f55d8a895fc8028bbc247df34" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },
@@ -478,7 +478,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-tasking"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#d4dd5b507f2d09ab7bbb738f18982122c1ba2eba" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#c7bde236335de397ad08f6226a4418d01d48bc5a" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra" },

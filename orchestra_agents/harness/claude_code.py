@@ -109,6 +109,8 @@ class ClaudeCodeSession(AgentSession):
                 "--dangerously-skip-permissions", "--strict-mcp-config", "--mcp-config", str(self._mcp_config())]
         if self.spec.model:
             args += ["--model", self.spec.model]
+        if self.spec.read_only:                  # reads, searches and runs read-only commands; edits no file
+            args += ["--disallowedTools", "Edit,Write,NotebookEdit"]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(max(100_000, int(self.spec.compact_tokens)))]
         if self.spec.system_prompt:

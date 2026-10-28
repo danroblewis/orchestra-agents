@@ -1,7 +1,8 @@
 # The dummy harness's built-in rules (dummy_script.py): what each built-in role does when the
 # project's script has no rule for the turn. They make a working team on their own: a worker
 # that does a token piece of work and reports it ready, a reviewer that approves, a Supervisor
-# that answers, a Coordinator and any custom agent that do nothing.
+# that hands a chat message to the Coordinator, a Coordinator that plans it into a milestone and a
+# ticket, and any other turn that does nothing.
 
 # A code ticket: a file of the ticket's own (so two tickets' branches land side by side), committed.
 [[rule]]
@@ -30,9 +31,41 @@ steps = [
 ]
 reply = "Approved."
 
+# The first run (first_run.py): a scripted Supervisor cannot read the repository, so it sets
+# nothing and says how to get one that can.
+[[rule]]
+role = "supervisor"
+prompt = "\\[First run: set up this project\\]"
+steps = [{ tool = "list_guides" }]
+reply = "I am a scripted Supervisor (the dummy harness): I cannot read your repository, so I set nothing up. Install Claude Code and log in once (run claude), then restart orchestra run, and I will set the project up on Claude Code with Haiku; or tell a real Supervisor to set [agents] harness and model."
+
+# A chat message: handed to the Coordinator as the human's requirements, as a real Supervisor does.
+[[rule]]
+role = "supervisor"
+prompt = "\\[The human's message\\]"
+steps = [{ tool = "hand_to_coordinator", args = { requirements = "The human asked for this, in their words: {message}", context = "Handed on by the scripted Supervisor (the dummy harness), word for word." }, keep = "h" }]
+reply = "I handed your request to the Coordinator as {kept.h.request}; it plans it into tickets and I will tell you the plan. (I am a scripted Supervisor: the dummy harness.)"
+
+# The Coordinator's plan comes back: told to the human.
+[[rule]]
+role = "supervisor"
+prompt = "(?s)event work.planned request=(?P<request>r-[0-9a-f]+): .*?Plan: (?P<plan>.*?) Milestone: (?P<milestone>[^.\\s]+)\\. Tickets: (?P<tickets>[^\\n]*?)\\."
+reply = "The Coordinator planned your request {match.request}: {match.plan} Milestone {match.milestone}; tickets {match.tickets}. I will tell you when they are done."
+
 [[rule]]
 role = "supervisor"
 reply = "I am a scripted Supervisor (the dummy harness). I read your message and changed nothing."
+
+# The Supervisor's hand-off: one milestone and one ticket with the requirements, reported back.
+[[rule]]
+role = "coordinator"
+prompt = "event work.requested request=(?P<request>r-[0-9a-f]+)[^\\n]*\\nrequirements: (?P<requirements>[^\\n]*)"
+steps = [
+  { tool = "create_milestone", args = { name = "Request {match.request}", description = "The human's request, handed on by the Supervisor." }, keep = "m" },
+  { tool = "create_ticket", args = { title = "Do request {match.request}", objective = "The human's request, handed on by the Supervisor.", description = "{match.requirements}", acceptance = "- The result does what the request asks.", verification = "The reviewer reads the result.", milestone_id = "{kept.m.milestone.id}" }, keep = "t" },
+  { tool = "report_plan", args = { request = "{match.request}", summary = "One ticket for the request.", milestone = "{kept.m.milestone.id}", tickets = ["{kept.t.ticket.id}"] } },
+]
+reply = "Planned {match.request}: milestone {kept.m.milestone.id}, ticket {kept.t.ticket.id}."
 
 [[rule]]
 role = "*"

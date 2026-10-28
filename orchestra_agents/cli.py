@@ -69,6 +69,8 @@ def cmd_status(args) -> int:
     host, now = d["host"], d["now"]
     print(f"host:    {'running' if host['alive'] else 'not running'}" + (f" (pid {host.get('pid')}, control port {host.get('port')})" if host["alive"] else ""))
     print(f"agents:  {d['harness']}{' · ' + d['model'] if d['model'] else ''} · fills {', '.join(d['serves']) or 'no task roles'}")
+    if d.get("harness_note"):
+        print(f"         {d['harness_note']}")
     live = {s["role"]: s for s in d["sessions"] if s["status"] == "running"}
     for a in d["agents"]:
         if not a["resident"]:

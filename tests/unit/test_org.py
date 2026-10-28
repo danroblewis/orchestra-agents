@@ -264,15 +264,15 @@ def test_custom_agent_with_tickets_tools_may_create_tickets(project):
     from fake_tasks import FakeTasks
     store = AgentStore(project)
     sup = {"role": "supervisor"}
-    for name, tools in (("planner", ["tickets"]), ("observer", ["escalate"])):
+    for name, tools in (("planner", ["tickets", "planning"]), ("observer", ["escalate"])):
         api.handle(project, store, "create_role", {"name": name, "description": "d", "prompt": "# You plan\n\n" + "Carefully. " * 6, "tools": tools}, **sup)
         api.handle(project, store, "create_agent", {"name": f"{name}_agent", "roles": [name], "kind": "ad_hoc", "session": "ephemeral"}, **sup)
     with FakeTasks(project) as tasks:
-        m = api.handle(project, store, "create_milestone", {"name": "M"}, **sup)["milestone"]
+        m = api.handle(project, store, "create_milestone", {"name": "M"}, role="coordinator")["milestone"]
         r = api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="planner_agent")
         assert r["ok"]
-        with pytest.raises(StoreError, match="needs the 'tickets' tool group, and role 'observer_agent' has escalate"):
+        with pytest.raises(StoreError, match="needs the 'planning' tool group, and role 'observer_agent' has escalate"):
             api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="observer_agent")
-        with pytest.raises(StoreError, match="needs the 'tickets' tool group, and role 'worker' has report_ticket"):
+        with pytest.raises(StoreError, match="needs the 'planning' tool group, and role 'worker' has report_ticket"):
             api.handle(project, store, "create_ticket", {"title": "t", "milestone_id": m["id"]}, role="worker")
-        assert [x["by"] for x in tasks.seen] == ["supervisor", "planner_agent"]
+        assert [x["by"] for x in tasks.seen] == ["coordinator", "planner_agent"]

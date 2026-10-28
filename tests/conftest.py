@@ -16,9 +16,12 @@ from orchestra_agents.harness.base import AgentSession, Harness, SessionSpec, Tu
 from orchestra_agents.harness.pi import PiHarness
 
 
-def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "") -> Project:
+def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "",
+                   set_up: bool = True) -> Project:
     """Orchestra's starter ``orchestra.toml`` (if there is none) with an ``[agents]`` section
-    appended (if it has none), and the project registered with Orchestra."""
+    appended (if it has none), and the project registered with Orchestra. ``set_up``: the
+    Supervisor's setup is recorded as having run, so a host started on it wakes nobody for a first
+    run (first_run.py); the tests of the first run pass False."""
     o = init_orchestra(Path(repo))
     toml = o.repo_root / "orchestra.toml"
     text = toml.read_text()
@@ -29,7 +32,11 @@ def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", pr
         if provider:
             extra += f'provider = "{provider}"\n'
         toml.write_text(text.rstrip() + "\n" + extra)
-    return load_project(o.repo_root)
+    project = load_project(o.repo_root)
+    if set_up:
+        from orchestra_agents.store import AgentStore
+        AgentStore(project).set_agent_state("supervisor", setup={"ran_at": 1.0, "harness": project.config.harness})
+    return project
 
 
 def free_port() -> int:

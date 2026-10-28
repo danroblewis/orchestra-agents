@@ -61,8 +61,14 @@ AGENT_EVENT_TYPES = (
     "config.changed", "instruments.changed", "machine.restarted", "work.requested", "work.planned",
 )
 JUDGED = "orchestra.prediction.judged"     # Orchestra's: a prediction's verdict (verdicts.py wakes the agent that made it)
-ORCHESTRA_EVENT_TYPES = (JUDGED,)
-EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES + ORCHESTRA_EVENT_TYPES
+# Orchestra's statements about the model and the bus, domain-free (its sd/announce.py, sd/stall.py, quiet.py)
+STALLED, RESUMED, QUIET = "orchestra.model.stalled", "orchestra.model.resumed", "orchestra.machine.quiet"
+DIVERGED, RETURNED, GAVE_UP_TYPE = "orchestra.model.diverged", "orchestra.model.returned", "orchestra.process.gave_up"
+ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP_TYPE)
+# Other plugins' events an agent is asked to wake on (the outbox's SPEC §7.2: the Supervisor wakes on a rate limit it cannot resolve)
+OUTBOX_STUCK = "outbox.rate_limit.unresolvable"
+PLUGIN_EVENT_TYPES = (OUTBOX_STUCK,)
+EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES + ORCHESTRA_EVENT_TYPES + PLUGIN_EVENT_TYPES
 # What each of them means, in one line, for the Agents page's triggers (served in /org).
 EVENT_HELP = {
     "ticket.created": "a planner's request created a ticket", "milestone.created": "a planner's request created a milestone",
@@ -102,6 +108,11 @@ EVENT_HELP = {
     "machine.restarted": "the Supervisor restarts one of the project's programs",
     "work.requested": "the Supervisor hands the human's requirements to a planner (filter with :coordinator)",
     "work.planned": "the Coordinator reports how it planned a request (filter with :supervisor)",
+    STALLED: "a stock fills while its outflows stopped, or a flow that moved stopped (filter with :stock:<id> or :flow:<id>)",
+    RESUMED: "a stalled stock or flow moves again", QUIET: "a machine that kept a rhythm has gone silent (filter with :<machine>)",
+    DIVERGED: "a stock left the band the model predicted", RETURNED: "a diverged stock is back in its band",
+    GAVE_UP_TYPE: "Orchestra's launcher gave up restarting a program",
+    OUTBOX_STUCK: "the outbox cannot resolve a rate limit on a draft the owner approved",
     JUDGED: "Orchestra judges a prediction (filter with the verdict: :passed, :no effect, :side effect, ...); the agent that "
             "committed it is woken without asking",
 }

@@ -334,7 +334,7 @@ function agentStatus(s, now, a) {
   }
   if (a.host_alive === false || !(s && s.alive)) return { cls: "down", text: "down", title: "the agents' host (agents.host, started by orchestra run) is not up" };
   const name = a.name || (s && s.kind);
-  const title = name === "supervisor" ? "waiting for your message" : a.next_scheduled_at ? `next wake-up in ${ago(a.next_scheduled_at - now)}` : "waiting for an event";
+  const title = name === "supervisor" ? "waiting for your message" + (a.next_review_at && a.next_review_at > now ? `; next review in ${ago(a.next_review_at - now)}` : "") : a.next_scheduled_at ? `next wake-up in ${ago(a.next_scheduled_at - now)}` : "waiting for an event";
   return { cls: "resident", text: "resident", title };
 }
 function runningPhase(s, now) {

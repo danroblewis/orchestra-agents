@@ -69,6 +69,9 @@ class Config:
     compact_tokens: int = 100_000       # a context past this many tokens is compacted (residents.trim_if_large)
     prompt_overrides: dict[str, str] = field(default_factory=dict)
     control_port: int = 0               # 0: any free port, recorded for the web and `chat`
+    spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
+    review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
+    review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
     base_branch: str = "main"           # from the task system's [project], for the prompts
     ticket_prefix: str = "ORC"
     work: str = "tasks"
@@ -104,7 +107,23 @@ class Config:
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
+            spec_changes_per_day=_count(a, "spec_changes_per_day", 5), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
+            review_turns_per_day=_count(a, "review_turns_per_day", 48),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
+
+
+def _count(a: dict, key: str, default: int) -> int:
+    v = a.get(key, default)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        raise ConfigError(f"[agents] {key} must be a whole number, 0 or more (got {v!r})")
+    return v
+
+
+def _amount(a: dict, key: str, default: float) -> float:
+    v = a.get(key, default)
+    if isinstance(v, bool) or not isinstance(v, int | float) or v < 0:
+        raise ConfigError(f"[agents] {key} must be a number of dollars, 0 or more (got {v!r})")
+    return float(v)
 
 
 @dataclass

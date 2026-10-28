@@ -39,6 +39,13 @@ prompt = "\\[First run: set up this project\\]"
 steps = [{ tool = "list_guides" }]
 reply = "I am a scripted Supervisor (the dummy harness): I cannot read your repository, so I set nothing up. Install Claude Code and log in once (run claude), then restart orchestra run, and I will set the project up on Claude Code with Haiku; or tell a real Supervisor to set [agents] harness and model."
 
+# A standing instruction in the chat ("from now on, ..."): a duty of its own, as the Supervisor's fixed core says.
+[[rule]]
+role = "supervisor"
+prompt = "(?s)\\[The human's message\\]\\s*(?i:from now on),?\\s*(?P<duty>.+)"
+steps = [{ tool = "add_duty", args = { name = "owner_duty_{turn}", text = "The owner asked, in their words: from now on, {match.duty}", about = "{match.duty}", reason = "The owner said: from now on, {match.duty}" }, keep = "d" }]
+reply = "That is a standing duty of mine now ({kept.d.duty}, commit {kept.d.commit}). (I am a scripted Supervisor: the dummy harness.)"
+
 # A chat message: handed to the Coordinator as the human's requirements, as a real Supervisor does.
 [[rule]]
 role = "supervisor"

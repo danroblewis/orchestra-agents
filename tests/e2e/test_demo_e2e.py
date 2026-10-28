@@ -202,7 +202,8 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         # the coordinator is also the task system's dispatch, an instance of it (a program): one machine, both kinds
         kind, instances = ("agent ×1, program ×1", ["dispatch"]) if name == "coordinator" else ("agent", [])
         assert m["package"] == "agents" and m["mode"] == "continuous" and m["kind"] == kind and not m.get("unseen")
-        assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == "haiku" and [i["id"] for i in m["instances"]] == instances
+        model = "sonnet" if name == "supervisor" else "haiku"           # the Supervisor runs on its machine spec's model (D20)
+        assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == model and [i["id"] for i in m["instances"]] == instances
     reviewer = seen["reviewer"]
     assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["kind"] == "agent"
     announced = [e["source"] for e in all_events(web) if e["type"] == "orchestra.machine.started" and e["source"].startswith("reviewer/")]

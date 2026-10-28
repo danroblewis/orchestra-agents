@@ -27,7 +27,7 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
 
 ## Try it
 
-    uv sync --extra dev                # first clone github.com/danroblewis/orchestra beside this repository as `orchestra_2`, and orchestra-tasking as `orchestra-tasking` (the paths in [tool.uv.sources])
+    uv sync --extra dev                # Orchestra and the task system from GitHub, the commits uv.lock pins ("Developing against a local Orchestra")
     uv run demo/run.py                 # a fresh demo project at ~/orchestra-agents-demo, http://127.0.0.1:8072
     uv run demo/run.py --dummy         # the same demo for free: scripted agents, no model, no network
 
@@ -130,3 +130,18 @@ Supervisor file a ticket and checks that no machine, edge or event is `agents`, 
 Supervisor announces what the host watches for it (merge_gate's `gate.landed` reaches it on the
 map), that it is woken when its ticket lands, and that the agents' metrics arrive with
 `instrument=agents.turns`; `tests/unit/test_host_is_no_machine.py` is the same rule in process.
+
+## Developing against a local Orchestra
+
+`pyproject.toml` takes Orchestra from GitHub (`orchestra @ git+https://github.com/danroblewis/orchestra@main`),
+and the dev extra takes the task system the same way, over SSH (it is private). `uv.lock` pins
+both commits, so nothing needs cloning beside this repository. `uv lock --upgrade-package orchestra`
+(or `orchestra-tasking`) moves a pin to the newest `main`, then `uv sync --extra dev`.
+
+To run against local checkouts instead, with their uncommitted changes, lay them over this
+environment for one command:
+
+    uv run --with-editable ~/orchestra_2 --with-editable ~/orchestra-tasking python -m pytest -q
+
+Nothing is written: `.venv`, `pyproject.toml` and `uv.lock` keep the pinned commits, and a plain
+`uv run` goes back to them.

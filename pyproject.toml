@@ -7,13 +7,15 @@ name = "orchestra-agents"
 version = "0.1.0"
 description = "AI agents as Orchestra machines: harnesses (Pi, Claude Code, Codex), sessions, prompts, roles and teams; they fill a task system's roles over Orchestra's bus."
 requires-python = ">=3.12"
-dependencies = ["orchestra", "psutil", "fastapi"]   # the host reads processes, the web plugin is a FastAPI router;
+dependencies = ["orchestra @ git+https://github.com/danroblewis/orchestra@main", "psutil", "fastapi"]   # the host reads processes, the web plugin is a FastAPI router;
 # configuration is read and changed only through Orchestra (project.orchestra.config, config_edit)
 
 [project.optional-dependencies]
 # orchestra-tasking: the e2e tests and the demo run the real task system beside the agents;
 # orchestra[sd]: they start `orchestra run`, whose host rediscovers the model from the metrics.
-dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6", "orchestra-tasking", "orchestra[sd]"]
+dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6",
+       "orchestra-tasking @ git+ssh://git@github.com/danroblewis/orchestra-tasking",
+       "orchestra[sd] @ git+https://github.com/danroblewis/orchestra@main"]
 
 [project.scripts]
 orchestra-agents = "orchestra_agents.cli:main"
@@ -21,9 +23,8 @@ orchestra-agents = "orchestra_agents.cli:main"
 [project.entry-points."orchestra.plugins"]
 agents = "orchestra_agents.web:plugin"
 
-[tool.uv.sources]
-orchestra = { path = "../orchestra_2", editable = true }
-orchestra-tasking = { path = "../orchestra-tasking", editable = true }
+[tool.hatch.metadata]
+allow-direct-references = true   # orchestra and orchestra-tasking come from GitHub (git URLs)
 
 [tool.hatch.build.targets.wheel]
 packages = ["orchestra_agents"]

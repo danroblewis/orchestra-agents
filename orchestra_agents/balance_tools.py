@@ -340,13 +340,40 @@ def expand(levels) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def all_levels(stores: list[Store], start: float, end: float) -> list[str]:
+    """Every searched store's levels, as ``source_schema`` lists them (``source_tools._levels``)."""
+    from orchestra.sources import SourceError
+    from orchestra.sources.listing import listing
+
+    from .source_tools import _guess, _levels
+    out: list[str] = []
+    for st in stores:
+        try:
+            got = listing(st.src, ['{__name__=~".+"}'], start, end, concurrency=st.spec.concurrency)
+            meta = st.src.metadata()
+        except SourceError:
+            continue
+        fams = {n: len(v) for n, v in got.names.items()}
+        values: dict = {n: {} for n in fams}
+        for n, sets in got.names.items():
+            for labels in sets:
+                for k, v in labels.items():
+                    values[n].setdefault(k, set()).add(v)
+        out += _levels(fams, values, lambda n, meta=meta: (meta.get(n) or {}).get("type") or _guess(n))
+    return out
+
+
 def find_balance(project: Project, a: dict) -> dict:
     levels = expand(a.get("level"))
     if not levels:
         raise StoreError("give the level: a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}, or a list of them")
+    home, stores = _stores(project, a)
+    if levels == ["all"]:
+        levels = expand(all_levels(stores, time.time() - WINDOW_MIN * 60, time.time()))
+        if not levels:
+            raise StoreError("no store searched has a gauge that looks like an amount held: give the levels")
     later = levels[MAX_LEVELS:]
     levels = levels[:MAX_LEVELS]
-    home, stores = _stores(project, a)
     _budget(stores, len(levels))
     cfg = project.orchestra.config
     step = float(a.get("step_s") or cfg.discovery_step)

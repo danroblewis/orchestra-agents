@@ -102,6 +102,10 @@ def source_schema(project: Project, a: dict) -> dict:
         return m.get("type") or _guess(n)
 
     out: dict = {"ok": True, "source": name, "series_read": sets, "metrics": len(fams), "requests": got.requests}
+    if not detail and (lv := _levels(fams, values, kind)):           # first: what the answer is read for
+        out["levels"] = lv
+        out["levels_next"] = ("these gauges hold amounts (queues, lags, connections, volumes, inventories): each may be a "
+                              "stock. Call find_balance with level \"all\" (or this list) before choosing what to read")
     if got.notes:
         out["notes"] = got.notes
     if detail:
@@ -112,10 +116,6 @@ def source_schema(project: Project, a: dict) -> dict:
     else:
         out["names"] = [f"{n} [{kind(n)}] {fams[n]} series" + ("; " + ", ".join(f"{k}={len(v)}" for k, v in sorted(values[n].items()))
                                                              if values[n] else "") for n in sorted(fams)][:SHOWN_NAMES]
-        if lv := _levels(fams, values, kind):
-            out["levels"] = lv
-            out["levels_note"] = ("gauges of amounts held: each may be a stock. Call find_balance on each that the system's "
-                                  "work fills and drains (one per queue, group or volume), before choosing what to read")
         idle = sorted(set(meta) - set(fams))
         if idle:
             out["described_but_no_series_in_window"] = idle[:100]

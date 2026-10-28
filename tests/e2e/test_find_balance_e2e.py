@@ -136,6 +136,8 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     each = tooling.handle(project, sup, "find_balance", {"level": listed, "step_s": 30}, role="supervisor")["levels"]
     assert [x["level"] for x in each] == ['jobs_queue_messages{queue="jobs"}', 'jobs_queue_messages{queue="other"}']
     assert "jobs_done_total" in each[0]["balance"] and each[1]["balance"] == "+shop:jobs_published_total"
+    every = tooling.handle(project, sup, "find_balance", {"level": "all", "step_s": 30}, role="supervisor")["levels"]
+    assert [x["level"] for x in every] == [x["level"] for x in each]    # biz holds no level
     assert [d["query"] for d in each[1]["declare"]] == ['sum(jobs_queue_messages{queue="other"})', 'sum(jobs_published_total{queue="other"})']
 
     # a worker has no such tool

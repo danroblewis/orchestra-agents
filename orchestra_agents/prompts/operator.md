@@ -180,13 +180,13 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    them, then requests and their errors. Production only: a staging or test twin is never read.
    One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
    flags, timestamps and the exporters' own timings as stocks.
-   **A stock is only half found without its flows.** `source_schema` lists the store's `levels`,
-   gauges of amounts held (queues, consumer lag, open connections, sessions, volumes' used
-   bytes, inventories), proxies' and the platform's included. Pass that whole list, as written, to
-   `find_balance` (`level`) **before choosing what to read**: it searches every declared store,
-   or those in `sources` (`{"url", "auth"}` for one not declared yet), for the counters that
-   fill and drain each level (each queue, group or volume apart), and returns each balance, its
-   fit and the `[[series]]` that declare it. Declare an accepted balance as given (its `declare` list), and
+   **A stock is only half found without its flows.** Right after the name list, **before choosing
+   what to read**, call `find_balance` with `level` `"all"`: it takes every gauge of an amount
+   held in the stores (queues, consumer lag, open connections, sessions, volumes' used bytes,
+   inventories; `source_schema` lists them as `levels`), searches every declared store, or those
+   in `sources` (`{"url", "auth"}` for one not declared yet), for the counters that fill and
+   drain each (each queue, group or volume apart), and returns each balance, its fit and the
+   `[[series]]` that declare it. Read every level it balances, with its counters. Declare an accepted balance as given (its `declare` list), and
    read its counters in that store's `match`. One with `bursts` or `one_sided` is the level, its
    measured side and a residual: declare those and name the residual. When it finds nothing,
    say the flow is not measured. A level both stores hold is one stock: declare it once, from

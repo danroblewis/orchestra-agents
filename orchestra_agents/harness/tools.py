@@ -290,7 +290,8 @@ TOOLS: list[ToolDef] = [
             "stays unmeasured, and the [[series]] entries that declare it (stock, role) for set_setting key series.",
             {"level": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
                        "description": "The level, a PromQL selector (e.g. rabbitmq_queue_messages{queue=\"email\"}; it is "
-                                      "summed), or a list of them: source_schema's levels as written, each searched in turn"},
+                                      "summed), a list of them (source_schema's levels as written), or \"all\": every "
+                                      "level of the stores searched, each searched in turn"},
              "source": S("The level's store, a [[sources]] name (default: the first declared)"),
              "url": S("Or the level's store by URL"), "auth": O("With url: as [[sources]] writes it"),
              "sources": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}, "description": "The stores to search: [[sources]] names, or "

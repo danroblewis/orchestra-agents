@@ -43,11 +43,11 @@ and reworked) and the Supervisor answers the chat, without a model and at no cos
 
 Install Orchestra with the task system and the agents beside it, once, as one tool (no clone):
 
-    uv tool install 'orchestra[sd] @ git+https://github.com/danroblewis/orchestra@main' --with 'orchestra-tasking @ git+https://github.com/danroblewis/orchestra-tasking' --with 'orchestra-agents @ git+https://github.com/danroblewis/orchestra-agents'
+    uv tool install 'orchestra[sd,tasking,agents] @ git+https://github.com/danroblewis/orchestra@main'
 
 That puts one executable on your PATH, `orchestra`. The agents' command line comes with it as
 `orchestra agents …` and the task system's as `orchestra tasks …`; neither has an executable of
-its own. Installing the tool again replaces it, so name every plugin on each install.
+its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.
 
 In the repository (a git repository), start Orchestra and its UI. You configure nothing: the
 Supervisor does.
@@ -167,9 +167,10 @@ map), that it is woken when its ticket lands, and that the agents' metrics arriv
 
 ## Developing against a local Orchestra
 
-`pyproject.toml` takes Orchestra from GitHub (`orchestra @ git+https://github.com/danroblewis/orchestra@main`),
-and the dev extra takes the task system the same way, over SSH (it is private). `uv.lock` pins
-both commits, so nothing needs cloning beside this repository. `uv lock --upgrade-package orchestra`
+`pyproject.toml` requires `orchestra>=1.0.0a1,<1.0.0` and takes it from GitHub's `main`
+(`[tool.uv.sources]`; installed as a plugin, it gets the Orchestra it is installed with), and the
+dev extra takes the task system from GitHub over SSH (it is private). `uv.lock` pins both commits,
+so nothing needs cloning beside this repository. `uv lock --upgrade-package orchestra`
 (or `orchestra-tasking`) moves a pin to the newest `main`, then `uv sync --extra dev`.
 
 To run against local checkouts instead, with their uncommitted changes, lay them over this
@@ -179,3 +180,10 @@ environment for one command:
 
 Nothing is written: `.venv`, `pyproject.toml` and `uv.lock` keep the pinned commits, and a plain
 `uv run` goes back to them.
+
+To keep a checkout as this environment's Orchestra, point the source at it in `pyproject.toml`,
+then `uv sync --extra dev`; leave that change, and the `uv.lock` it rewrites, out of commits
+(`git checkout pyproject.toml uv.lock`, then `uv sync --extra dev`, goes back):
+
+    [tool.uv.sources]
+    orchestra = { path = "../orchestra_2", editable = true }   # the path to your Orchestra checkout

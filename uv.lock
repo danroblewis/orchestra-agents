@@ -426,7 +426,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#11427b974a25f042407c1f53f71aeda313d7a5fc" }
+source = { git = "https://github.com/danroblewis/orchestra?branch=main#50fe9ae0c17dacff20d2415049452a29440bced9" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },
@@ -466,8 +466,8 @@ dev = [
 requires-dist = [
     { name = "fastapi" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
-    { name = "orchestra", git = "https://github.com/danroblewis/orchestra?rev=main" },
-    { name = "orchestra", extras = ["sd"], marker = "extra == 'dev'", git = "https://github.com/danroblewis/orchestra?rev=main" },
+    { name = "orchestra", git = "https://github.com/danroblewis/orchestra?branch=main" },
+    { name = "orchestra", extras = ["sd"], marker = "extra == 'dev'", git = "https://github.com/danroblewis/orchestra?branch=main" },
     { name = "orchestra-tasking", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-tasking" },
     { name = "psutil" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -478,7 +478,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-tasking"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#d9134defbea6cc0f7c68f2595161944f6fb4dd4e" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#91b01d2838028bc575e5d68d6a8a0d359771694b" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra" },

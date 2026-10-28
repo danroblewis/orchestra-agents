@@ -265,8 +265,8 @@ TOOLS: list[ToolDef] = [
              "auth": O("With url: as [[sources]] writes it: {\"bearer_file\": \"~/path/to/token\"} for a token in a file, "
                        "{\"bearer_env\": \"WORK_TOKEN\"} for one in the environment; never the token itself")}),
     ToolDef("source_schema", "observe",
-            "What a store has: without match, every metric name on one line (its type, or a guess from its name; how many "
-            "series; each label with how many values); with match, those metrics in detail (help, label values).",
+            "What a store has: without match, every metric name with its type (or a guess from its name), and its levels (gauges "
+            "of amounts held, with what each holds); with match, those metrics in detail (series, labels, help, label values).",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
              "match": A("PromQL selectors, e.g. {__name__=~\"http_.*\"}"), "minutes": I("The window, default 60"),
              "limit": I("Most series read, default 20000")}),
@@ -280,7 +280,8 @@ TOOLS: list[ToolDef] = [
             "What Orchestra infers to read from a store for discovery: its metric families (kind, stats, interval, labels "
             "and their roles), the definitions it keeps (query, view, kind, score) and those it leaves out with why.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
-             "match": A("PromQL selectors to narrow it")}),
+             "match": A("PromQL selectors to narrow it"),
+             "refresh": B("Infer again now (it reads the store's schema); by default a recent inference is reused")}),
     # flows: one level's flows, searched for in the stores (read only)
     ToolDef("find_balance", "flows",
             "The counters that fill and drain a level (or each of a list), searched for in the stores with Orchestra's own discovery: candidates "

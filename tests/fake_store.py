@@ -28,7 +28,7 @@ class FakeStore:
                 one = lambda k, d=None: (form.get(k) or [d])[0]
                 if path in ("series", "values"):
                     seen = {}
-                    for m in form.get("match[]") or []:
+                    for m in form.get("match[]") or ['{__name__=~".+"}']:      # none: everything
                         for lab, _ in promql.select(dump, m, float(one("start", 0)), float(one("end", time.time()))):
                             seen.setdefault(tuple(sorted(lab.items())), lab)
                     data = list(seen.values())
@@ -44,7 +44,10 @@ class FakeStore:
                 elif path == "buildinfo":
                     data = {"version": "fake-1"}
                 elif path == "query_range":
-                    res = promql.query_range(dump, one("query"), float(one("start")), float(one("end")), float(one("step")))
+                    q = one("query")
+                    if q.startswith("topk(") and q.endswith(")"):      # its subset has no topk: every series, as few as here
+                        q = q[5:-1].partition(",")[2].strip()
+                    res = promql.query_range(dump, q, float(one("start")), float(one("end")), float(one("step")))
                     data = {"resultType": "matrix", "result": [{"metric": lab, "values": [[t, repr(v)] for t, v in pts]} for lab, pts in res]}
                 elif path in ("query", "labels"):
                     data = {"resultType": "vector", "result": []} if path == "query" else ["__name__"]

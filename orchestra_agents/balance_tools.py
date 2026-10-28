@@ -39,6 +39,8 @@ SAME_SCALE = 0.1          # two levels within this share of each other on averag
 SAME_CORR = 0.98          # ... whose values move together this closely are one quantity read twice
 PARTS = re.compile(r"_(ready|unacked|bytes|max|pending|in_flight)$")   # a part or aspect of another level
 MAX_LEVELS = 32           # levels searched in one call
+SHORTLIST = 48            # names whose type is asked of the store, at most
+MAX_SERIES = 500          # a candidate with more series than this is not read (sized first)
 MAX_GROUPS = 8            # series per candidate name, when read per value of a label naming the level's subject
 WINDOW_MIN = 60
 SETTLE = 90.0             # every read ends at least this long before now (a store written a minute late)
@@ -94,6 +96,10 @@ def _with(selector: str, extra: dict[str, str]) -> str:
     return f"{selector}{{{add}}}"
 
 
+class TooLarge(Exception):
+    """A store with more metric names than its ``max_names``: not listed whole."""
+
+
 class Store:
     """One store searched: its name (as declared, or a trial name), the source, its spec."""
 
@@ -101,6 +107,20 @@ class Store:
         self.name, self.src, self.spec, self.declared = name, src, spec, declared
         self.names: list[str] | None = None      # its metric names, listed once per call
         self.reads: dict = {}                    # candidate reads, by (selector, by): shared by the call's levels
+        self.meta: dict = {}                     # the metadata of the names asked about
+        self._asked: set[str] = set()
+
+    def meta_for(self, names: list[str]) -> dict:
+        """The store's metadata of these names, asked once each (only the names, not the whole store's)."""
+        from orchestra.sources import SourceError
+        missing = sorted(set(names) - self._asked)
+        if missing:
+            try:
+                self.meta.update(self.src.metadata(missing))
+            except SourceError:
+                pass
+            self._asked |= set(missing)
+        return self.meta
 
 
 def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
@@ -117,8 +137,10 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
         if isinstance(x, dict) and not x.get("url"):
             x = x.get("name") or x.get("source") or ""
         if isinstance(x, dict):
-            name = "undeclared" if not trial else f"undeclared_{len(trial) + 1}"
-            trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {})})
+            from .source_tools import trial_name
+            name = trial_name(x["url"])
+            if name not in {t["name"] for t in trial}:
+                trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {})})
             return name
         name = str(x or "").strip()
         if name not in declared:
@@ -142,7 +164,7 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
             declared[s.name] = s
     from orchestra.sources.spec import Specs
     cat = Catalogue(project.orchestra, metrics_for(project.orchestra), Specs(sources=[declared[n] for n in names]))
-    stores = [Store(n, cat.remotes[n], declared[n], not n.startswith("undeclared")) for n in names]
+    stores = [Store(n, cat.remotes[n], declared[n], n not in {t["name"] for t in trial}) for n in names]
     return stores[0], stores
 
 
@@ -185,34 +207,40 @@ def _score(name: str, words: set[str], df: Counter, n_names: int) -> float:
     return sum(math.log(1 + n_names / (1 + df[w])) for w in shared)
 
 
-def _candidates(store: Store, level_metric: str, words: set[str], unit: str, start: float, end: float, name_unit,
-                meta: dict) -> list[tuple[float, str, Store]]:
+def _candidates(store: Store, level_metric: str, words: set[str], unit: str, start: float, end: float,
+                name_unit) -> list[tuple[float, str, Store]]:
     from orchestra.sources import SourceError
     if store.names is None:
         try:
-            store.names = sorted(set(store.src.names(['{__name__=~".+"}'], start, end)))
+            store.names = sorted(set(store.src.names(['{__name__=~".+"}'], start, end, limit=store.spec.max_names + 1)))
         except SourceError:
-            from orchestra.sources.listing import listing
-            store.names = sorted(listing(store.src, ['{__name__=~".+"}'], start, end).names)
+            store.names = []
+        if len(store.names) > store.spec.max_names:
+            store.names = []
+            raise TooLarge(f"{store.name} has more than {store.spec.max_names} metric names: give candidates (selectors) to test")
     names = store.names
     df = Counter(w for n in names for w in tokens(n))
     out = []
     for n in names:
         if n == level_metric or NOT_FLOWS.search(n) or name_unit(n, {}) != unit:
             continue
-        if _kind(store, n, meta) == "gauge" and not CUMULATIVE.search(n):
-            continue                     # a gauge is a candidate only when its name says it counts (an offset)
         sc = _score(n, words, df, len(names))
         if sc > 0:
             out.append((sc, n, store))
-    return out
+    out = sorted(out, key=lambda x: (-x[0], x[1]))[:SHORTLIST]
+    meta = store.meta_for([n for _, n, _ in out])
+    # a gauge is a candidate only when its name says it counts (an offset)
+    return [x for x in out if _kind(store, x[1], meta) != "gauge" or CUMULATIVE.search(x[1])]
 
 
 def _plan(store: Store, name: str, level_labels: dict[str, str], words: set[str], start: float, end: float) -> tuple[str, list[str]]:
     """The selector a candidate is read with and the labels it is read by: the level's own subject
     labels as matchers where the candidate has that value, production only, and by a label whose
     values name the level's subject (a topic named for the consumer group's orders)."""
-    sets = store.src.series([name], start, end, 2000)
+    from orchestra.sources import SourceError
+    sets = store.src.series([name], start, end, MAX_SERIES + 1)
+    if len(sets) > MAX_SERIES:
+        raise SourceError(f"more than {MAX_SERIES} series: not read; give it as a candidate with label matchers")
     have: dict[str, set[str]] = {}
     for labels in sets:
         for k, v in labels.items():
@@ -344,26 +372,33 @@ def expand(levels) -> list[str]:
 
 
 def all_levels(stores: list[Store], start: float, end: float) -> list[str]:
-    """Every searched store's levels, as ``source_schema`` lists them (``source_tools._levels``)."""
+    """Every searched store's levels, as ``source_schema`` lists them: the names that look like
+    amounts held (one request for the names), then those names' series and types alone."""
     from orchestra.sources import SourceError
     from orchestra.sources.listing import listing
 
-    from .source_tools import _guess, _levels
+    from .source_tools import _guess, _levels, level_names
     per: list[list[str]] = []
     for st in stores:
         try:
-            got = listing(st.src, ['{__name__=~".+"}'], start, end, concurrency=st.spec.concurrency)
-            meta = st.src.metadata()
+            names = sorted(set(st.src.names(['{__name__=~".+"}'], start, end, limit=st.spec.max_names + 1)))
+            if len(names) > st.spec.max_names:
+                continue                             # a big store: its levels are given, not listed
+            wanted = level_names(names)
+            got = listing(st.src, wanted, start, end, concurrency=st.spec.concurrency) if wanted else None
         except SourceError:
             continue
+        if got is None:
+            continue
+        meta = st.meta_for(wanted)
         fams = {n: len(v) for n, v in got.names.items()}
         values: dict = {n: {} for n in fams}
         for n, sets in got.names.items():
             for labels in sets:
                 for k, v in labels.items():
                     values[n].setdefault(k, set()).add(v)
-        got = expand(_levels(fams, values, lambda n, meta=meta: (meta.get(n) or {}).get("type") or _guess(n)))
-        per.append(sorted(got, key=lambda x: bool(PARTS.search(metric_of(x)))))      # a part of another level last
+        got_levels = expand(_levels(fams, values, lambda n, meta=meta: (meta.get(n) or {}).get("type") or _guess(n)))
+        per.append(sorted(got_levels, key=lambda x: bool(PARTS.search(metric_of(x)))))      # a part of another level last
     out = []                                     # the stores taken in turn, so a cap cuts each store's least
     for i in range(max(map(len, per), default=0)):
         out += [lv[i] for lv in per if i < len(lv)]
@@ -509,14 +544,6 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
     notes: list[str] = []
     if len(lv_sets) > 1:
         notes.append(f"the level sums {len(lv_sets)} series; give a narrower selector to balance one queue, group or volume alone")
-    metas = {}
-    for st in stores:
-        if not hasattr(st, "meta"):
-            try:
-                st.meta = st.src.metadata()
-            except SourceError:
-                st.meta = {}
-        metas[st.name] = st.meta
     if a.get("candidates"):
         picked = []
         for sel in a["candidates"]:
@@ -526,8 +553,8 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
         scored: list = []
         for store in stores:
             try:
-                scored += _candidates(store, metric_of(level), words, unit, start, end, name_unit, metas[store.name])
-            except SourceError as e:
+                scored += _candidates(store, metric_of(level), words, unit, start, end, name_unit)
+            except (SourceError, TooLarge) as e:
                 notes.append(f"{store.name}: its names could not be listed: {e}")
         scored.sort(key=lambda x: (-x[0], x[1]))
         picked = scored[:int(a.get("max_candidates") or MAX_CANDIDATES)]
@@ -541,7 +568,7 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
             sel, by = (name, []) if "{" in name else _plan(store, name, level_labels, words, start, end)
             key = (sel, tuple(by))
             if key not in store.reads:
-                store.reads[key] = _read_counter(store, bare, sel, by, _kind(store, bare, metas[store.name]), start, end, step)
+                store.reads[key] = _read_counter(store, bare, sel, by, _kind(store, bare, store.meta_for([bare])), start, end, step)
             return store.reads[key], None
         except SourceError as e:
             return [], f"{store.name}:{name}: {e}"
@@ -584,7 +611,7 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
     if notes:
         out["notes"] = notes
     if any(not s.declared for s in stores):
-        out["undeclared"] = ("a store given by url is called undeclared here: in the declarations, replace its name with the "
+        out["undeclared"] = ("a store given by url is called trial_<hash> here: in the declarations, replace its name with the "
                              "name you declare it under in [[sources]]")
     out["next"] = ("declare an accepted balance (its declare list, added to the [[series]] already there) with set_setting key "
                    "series; one not accepted is a hypothesis: declare it only when its counters plainly measure what fills and "

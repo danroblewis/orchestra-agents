@@ -125,8 +125,8 @@ def test_another_store_is_looked_at_before_it_is_declared(project, store, remote
     checked = call(project, store, "check_sources", url=remote.url)
     assert any("answers" in line for line in checked["lines"])
     whole = call(project, store, "source_schema", url=remote.url)
-    assert "http_requests_total [counter] 3 series; pod=3, service=1" in whole["names"]          # one line a metric
-    assert "queue_depth [guessed: gauge] 1 series; queue=1" in whole["names"]
+    assert whole["names"] == ["http_requests_total [counter]", "queue_depth [guessed: gauge]"]   # names only: one request
+    assert whole["levels"] == ["queue_depth by queue: orders"]          # an amount held, with what it holds
     schema = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
     by = {m["name"]: m for m in schema["names"]}
     assert by["http_requests_total"]["type"] == "counter" and by["http_requests_total"]["series"] == 3
@@ -153,9 +153,9 @@ def test_a_store_that_refuses_a_whole_listing_is_listed_name_by_name(project, st
     from orchestra_agents import source_tools
     monkeypatch.setattr(source_tools.time, "sleep", lambda s: None)
     remote.max_series, remote.busy = 2, 1        # three request series: too many at once; one 429 on the way
-    whole = call(project, store, "source_schema", url=remote.url)
-    assert "queue_depth [guessed: gauge] 1 series; queue=1" in whole["names"]
-    assert any(x.startswith("http_requests_total [counter]: not listed") for x in whole["too_big_to_list"])
+    whole = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
+    assert [m["name"] for m in whole["names"]] == ["queue_depth"]
+    assert [x.split(" [")[0] for x in whole["too_big_to_list"]] == ["http_requests_total"]   # named, with why
     narrow = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+",queue="orders"}'])
     assert [m["name"] for m in narrow["names"]] == ["queue_depth"]
     remote.max_series = 3
@@ -206,3 +206,13 @@ def test_how_late_a_store_writes_is_measured_from_its_newest_samples():
             return [({}, [(end - 60, 30.0), (end, 75.0)])]
 
     assert _lateness(Late(), ["shop_orders", "not a name{}"], 1000.0) == {"shop_orders": 75.0}
+
+
+def test_previews_are_bounded_and_trial_stores_keep_one_name(project, store, remote):
+    from orchestra_agents.source_tools import trial_name
+    with pytest.raises(StoreError, match="no aggregation and no label matcher"):
+        call(project, store, "preview_query", url=remote.url, query="http_requests_total")
+    ok = call(project, store, "preview_query", url=remote.url, query='http_requests_total{service="api"}', minutes=10, step_s=15)
+    assert ok["lines"][0].startswith("3 series")
+    assert trial_name(remote.url) == trial_name(remote.url + "/") and trial_name(remote.url).startswith("trial_")
+    assert trial_name(remote.url) in call(project, store, "check_sources", url=remote.url)["note"]

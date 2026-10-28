@@ -186,7 +186,8 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    inventories; `source_schema` lists them as `levels`), searches every declared store, or those
    in `sources` (`{"url", "auth"}` for one not declared yet), for the counters that fill and
    drain each (each queue, group or volume apart), and returns each balance, its fit and the
-   `[[series]]` that declare it. Read every level it balances, with its counters. Each time you
+   `[[series]]` that declare it. Read every level it balances, with its counters: a proxy's
+   connections and a log's volume are stocks of the system as much as a queue. Each time you
    add a store, call it with `"all"` again (never a list of your own: a level's flows may be in
    the new store, and a level in the old one). Its `declare_all` holds one of each quantity read
    twice (`same_as`): declare that. Declare an accepted balance as given (its `declare` list), and

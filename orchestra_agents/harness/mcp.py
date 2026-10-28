@@ -4,6 +4,10 @@ Codex). Dependency-free: newline-delimited JSON-RPC 2.0 over stdin/stdout.
     ORCHESTRA_REPO=<repo> ORCHESTRA_ROLE=<role> ORCHESTRA_TOOLS=<groups> ORCHESTRA_TICKET=<id> \\
         ORCHESTRA_SESSION_TOKEN=<token> python -m orchestra_agents.harness.mcp
 
+A server that cannot load its tools says why on stderr (and in ``ORCHESTRA_MCP_LOG``, the
+session's log, when the harness names one) and exits non-zero before answering anything, so the
+harness reports it as failed instead of a server with no tools.
+
 Tool calls go straight to ``orchestra_agents.tooling.handle``; there is no shelling out. The caller
 is the session the host issued the token to (``access.identify``, on every call, so a session
 that has ended is refused), not whatever ``ORCHESTRA_ROLE`` says; ``ORCHESTRA_TOOLS`` only
@@ -15,8 +19,6 @@ import json
 import os
 import sys
 import traceback
-
-from .tools import BY_NAME, tools_for
 
 PROTOCOL = "2024-11-05"
 SERVER_NAME = "orchestra"
@@ -38,6 +40,7 @@ def _tool_text(result) -> str:
 
 class Server:
     def __init__(self) -> None:
+        from .tools import tools_for
         groups = [g for g in (os.environ.get("ORCHESTRA_TOOLS") or "").split(",") if g]
         self.tools = tools_for(groups)
         self._project = None
@@ -53,6 +56,7 @@ class Server:
         return self._project, self._store
 
     def call(self, name: str, args: dict) -> dict:
+        from .tools import BY_NAME
         tool = BY_NAME.get(name)
         if tool is None or tool not in self.tools:
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": f"unknown tool {name}"})}], "isError": True}
@@ -103,8 +107,26 @@ class Server:
                     _reply(msg["id"], error={"code": -32603, "message": "internal error"})
 
 
+def _cannot_start() -> None:
+    why = f"orchestra MCP server: cannot load its tools, so it is not starting:\n{traceback.format_exc()}"
+    sys.stderr.write(why)
+    sys.stderr.flush()
+    log = os.environ.get("ORCHESTRA_MCP_LOG")
+    if log:
+        try:
+            with open(log, "a", encoding="utf-8") as f:
+                f.write(why)
+        except OSError:
+            pass
+    sys.exit(2)
+
+
 def main() -> None:
-    Server().serve()
+    try:
+        server = Server()
+    except Exception:  # noqa: BLE001 - said on stderr and in the session's log, then a non-zero exit
+        _cannot_start()
+    server.serve()
 
 
 if __name__ == "__main__":

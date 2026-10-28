@@ -172,7 +172,10 @@ async function sendToSupervisor(ev) {
         else if (e.type === "assistant_end") {
           const txt = e.text || "";
           if (txt.trim()) { body.innerHTML += md(txt); highlightCode(body); }
-        } else if (e.type === "done") body.previousElementSibling.textContent = e.error ? `supervisor · ${e.error}` : e.timed_out ? "supervisor · timed out" : "supervisor";
+        } else if (e.type === "done") {
+          body.previousElementSibling.textContent = e.error ? "supervisor · failed" : e.timed_out ? "supervisor · timed out" : "supervisor";
+          if (e.error) body.innerHTML += `<div class="bad">${md(e.error)}</div>`;
+        }
       }
     }
   } catch (err) { $("live-body").innerHTML += `<div class="bad">${esc(String(err))}</div>`; return false; }
@@ -207,7 +210,7 @@ function renderMarker(e) {
     (e.phase_for != null ? `, ${fmtDur(e.phase_for)} into that` : "") + ". Orchestra took that as stuck. If the model was only slow, raise silence_timeout in orchestra.toml.";
   else if (e.type === "session.timed_out") text = `⏱ Orchestra stopped this turn: the ${fmtDur(e.limit)} hard turn limit (turn_timeout in orchestra.toml) ran out while the agent was ${esc(e.doing || "working")}` +
     (e.phase_for != null ? ` (${fmtDur(e.phase_for)} into that)` : "") + (e.silent_for != null ? `, last output ${fmtDur(e.silent_for)} earlier` : "") + ". Nothing after this point was the agent's decision.";
-  else if (e.type === "session.error") text = `✖ Orchestra ended this turn: ${esc(e.error || "harness error")}`;
+  else if (e.type === "session.error") text = `✖ Orchestra ended this turn: ${md(e.error || "harness error")}`;
   else if (e.type === "session.interrupted") text = `■ Orchestra was restarted or stopped during this turn, which cut it off. ${esc(e.reason || "")}`;
   else if (e.type === "agent.crashed") text = `✖ The agent's process exited on its own between turns (crash ${e.count || 1}); Orchestra is restarting it.${e.stderr ? ` Last stderr: <code>${esc(e.stderr.trim().split("\n").slice(-1)[0].slice(0, 160))}</code>` : ""}`;
   else if (e.type === "agent.crash_loop") text = `✖ Crash loop: ${e.count} exits in fifteen minutes. The agent is paused after a crash loop and the Supervisor has been asked to look: ask the Supervisor to resume it once fixed.`;

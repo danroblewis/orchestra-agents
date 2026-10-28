@@ -112,6 +112,8 @@ def test_the_host_issues_each_session_its_token(project):
     host.harness = FakeHarness()
     host._open_session("worker-T-1", "worker", "p", ("report_ticket",), project.repo_root, "T-1")
     env = host.harness.sessions[-1].spec.env
+    from orchestra_agents.prompting import NO_SUBSTITUTE
+    assert host.harness.sessions[-1].spec.system_prompt.startswith("p\n") and NO_SUBSTITUTE in host.harness.sessions[-1].spec.system_prompt
     assert access.identify(store, {**env, "ORCHESTRA_TICKET": "T-2"}) == ("worker", "T-1")
     host.recover()                                                        # a new host honours no earlier session
     with pytest.raises(StoreError):

@@ -11,6 +11,8 @@ from collections.abc import Callable
 
 from .harness import AgentSession, TurnResult
 
+ERROR_KEPT = 2000     # a failure's reason as the transcript and the banner show it (mcp_status's runs to about 1200)
+
 
 class Turns:
     def __init__(self, host):
@@ -77,7 +79,8 @@ class Turns:
                 # The harness "failed" because the host is shutting down and closed it.
                 host._mark("session.interrupted", session=sid, agent=agent, ticket=ticket, reason="orchestra shut down (restart or stop) during this turn")
                 return
-            host._mark("session.error", session=sid, agent=agent, ticket=ticket, error=str(res.error)[:500])
+            host._mark("session.error", session=sid, agent=agent, ticket=ticket, error=str(res.error)[:ERROR_KEPT])
+            host.log(f"{sid}: turn failed: {res.error}")
             return
         phase = s.get("phase") or "working"
         doing = f"running `{s['tool_name']}`" if phase == "tool" and s.get("tool_name") else \

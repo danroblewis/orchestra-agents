@@ -308,7 +308,9 @@ class AgentHost:
         """Start a session on the configured harness. Which product runs the agent is
         invisible past this point: the host only sees the AgentSession interface. The
         prompt the session starts with is kept beside its stderr log, so a transcript can
-        show what the agent was told, whatever the harness records."""
+        show what the agent was told, whatever the harness records. Every session's prompt ends
+        with what to do when Orchestra's tools are missing (prompting.NO_SUBSTITUTE)."""
+        system_prompt = f"{system_prompt.rstrip()}\n\n{prompting.NO_SUBSTITUTE}\n"
         prompt_file = self.project.logs_dir / "agents" / f"{session_id}.prompt.md"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")

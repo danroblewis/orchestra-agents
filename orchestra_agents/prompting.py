@@ -59,6 +59,12 @@ def role_prompt(project: Project, role: str) -> str:
     return _fill(project, text)
 
 
+# Every session's last word (host._open_session): Claude Code once found no Orchestra tools and "created" a ticket in its own todo list.
+NO_SUBSTITUTE = ("If Orchestra's tools (tickets, the project, the Supervisor's and your role's tools) are missing from this "
+                 "session, say so in one line and stop: never do the work some other way, and never use another task, todo "
+                 "or schedule list in their place; nothing outside Orchestra's tools is seen or done by anyone.")
+
+
 MACHINES_DOC_URL = "https://github.com/danroblewis/orchestra/blob/main/docs/machines.md"
 
 

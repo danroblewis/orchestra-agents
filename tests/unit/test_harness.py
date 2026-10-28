@@ -212,9 +212,7 @@ def test_codex_session_identity_resume_and_args(tmp_path, monkeypatch):
     assert again._args()[-3:] == ["resume", "abc", "-"]
     assert again.pid is None and again.alive()
     again.close()
-    assert "--disallowedTools" not in args                      # a worker edits files
-    ro = ClaudeCodeSession(spec(tmp_path, session_id="supervisor", read_only=True))._args()
-    assert ro[ro.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"   # the Supervisor reads, searches, runs; edits nothing
+    assert "--disallowedTools" not in args                      # Codex has no such flag
     assert not again.alive()
 
 
@@ -271,6 +269,112 @@ def test_claude_turn_without_binary_reports_error(tmp_path, monkeypatch):
     s = ClaudeCodeSession(spec(tmp_path), binary=str(tmp_path / "no-such-claude"))
     res = s.prompt("hi", timeout=5)
     assert res.error and "cannot start" in res.error
+
+
+def test_claude_takes_away_tools_that_stand_in_for_orchestra(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    (tmp_path / "wt").mkdir()
+    args = ClaudeCodeSession(spec(tmp_path))._args()
+    taken = args[args.index("--disallowedTools") + 1].split(",")
+    assert {"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite"} <= set(taken)   # no task list but Orchestra's, for any role
+    assert "Edit" not in taken and "Task" not in taken          # a worker edits files and may use subagents
+    ro = ClaudeCodeSession(spec(tmp_path, session_id="supervisor", read_only=True))._args()
+    ro_taken = ro[ro.index("--disallowedTools") + 1].split(",")
+    assert set(taken) | {"Edit", "Write", "NotebookEdit"} == set(ro_taken)   # the Supervisor reads, searches, runs; edits nothing
+    assert ro.count("--disallowedTools") == 1
+
+
+def _fake_claude(tmp_path, status: str | None) -> str:
+    """A `claude` that prints an init event naming the orchestra server with ``status`` (or not
+    at all), then would run the model for a minute: the harness must stop it at the init."""
+    servers = [] if status is None else [{"name": "orchestra", "status": status, "source": "dynamic"}]
+    f = tmp_path / "fake-claude"
+    f.write_text(f"""#!{sys.executable}
+import json, sys, time
+sys.stdin.read()
+print(json.dumps({{"type": "system", "subtype": "init", "session_id": "u", "mcp_servers": {servers!r}, "tools": ["Bash"]}}), flush=True)
+print(json.dumps({{"type": "assistant", "message": {{"content": [{{"type": "text", "text": "Orchestra MCP not available here. Task #1 created."}}]}}}}), flush=True)
+time.sleep(60)
+""")
+    f.chmod(0o755)
+    return str(f)
+
+
+@pytest.fixture
+def no_backoff(monkeypatch, tmp_path):
+    from orchestra_agents.harness import claude_code, mcp_status
+    fresh = mcp_status.Backoff()
+    monkeypatch.setattr(claude_code, "BACKOFF", fresh)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    (tmp_path / "wt").mkdir()
+    return fresh
+
+
+@pytest.mark.parametrize("status", ["failed", "pending", "needs-auth", None])
+def test_claude_turn_without_orchestra_server_fails_at_init(tmp_path, no_backoff, status):
+    import time
+    s = ClaudeCodeSession(spec(tmp_path), binary=_fake_claude(tmp_path, status))
+    seen = []
+    began = time.time()
+    res = s.prompt("create a ticket", timeout=30, on_event=seen.append)
+    assert time.time() - began < 15                            # stopped at the init, not after the model's minute
+    assert res.error and "MCP server `orchestra` did not connect" in res.error
+    assert (f"status is `{status}`" if status else "was not loaded at all") in res.error
+    assert "managed-mcp.json" in res.error and "allowedMcpServers" in res.error
+    assert "-m orchestra_agents.harness.mcp" in res.error and str(tmp_path / "logs" / "x.log") in res.error
+    assert "no ticket was created" in res.error and "will not start another Claude Code turn until" in res.error
+    assert "Task #1" not in res.text and not seen                # the model's substitute never reaches the host
+    # The next turn is refused at once, without starting Claude Code.
+    s2 = ClaudeCodeSession(spec(tmp_path, session_id="other"), binary=str(tmp_path / "no-such-claude"))
+    again = s2.prompt("hi", timeout=5)
+    assert again.error and "did not connect" in again.error and "cannot start" not in again.error
+
+
+def test_claude_turn_with_orchestra_connected_runs(tmp_path, no_backoff):
+    f = tmp_path / "fake-claude"
+    f.write_text(f"""#!{sys.executable}
+import json, sys
+sys.stdin.read()
+print(json.dumps({{"type": "system", "subtype": "init", "mcp_servers": [{{"name": "orchestra", "status": "connected"}}]}}))
+print(json.dumps({{"type": "result", "subtype": "success", "result": "done"}}))
+""")
+    f.chmod(0o755)
+    res = ClaudeCodeSession(spec(tmp_path), binary=str(f)).prompt("hi", timeout=10)
+    assert res.error is None and res.text == "done"
+
+
+def test_mcp_backoff_waits_doubles_and_lifts_when_settings_change(tmp_path):
+    from orchestra_agents.harness.mcp_status import BACKOFF_FIRST_S, BACKOFF_MAX_S, Backoff
+    b, settings = Backoff(), tmp_path / "managed-settings.json"
+    files = [settings]
+    assert b.refusal(files, now=0) is None
+    assert b.failed("down", files, now=0) == BACKOFF_FIRST_S
+    assert "down" in b.refusal(files, now=1) and b.refusal(files, now=BACKOFF_FIRST_S) is None
+    assert b.failed("down", files, now=0) == 2 * BACKOFF_FIRST_S        # a second failure waits longer
+    for _ in range(10):
+        b.failed("down", files, now=0)
+    assert b.failed("down", files, now=0) == BACKOFF_MAX_S
+    settings.write_text("{}")                                          # the policy was changed: try again
+    assert b.refusal(files, now=1) is None
+    b.failed("down", files, now=0)
+    b.ok()
+    assert b.refusal(files, now=1) is None
+
+
+def test_mcp_server_that_cannot_load_its_tools_exits_and_says_why(tmp_path):
+    log = tmp_path / "mcp.log"
+    code = ("import sys, builtins; real = builtins.__import__\n"
+            "def imp(name, *a, **k):\n"
+            "    if name == 'tools' and a and (a[0] or {}).get('__package__') == 'orchestra_agents.harness': raise ImportError('no numpy here')\n"
+            "    return real(name, *a, **k)\n"
+            "builtins.__import__ = imp\n"
+            "import runpy; runpy.run_module('orchestra_agents.harness.mcp', run_name='__main__')")
+    import os
+    p = subprocess.run([sys.executable, "-c", code], check=False, input="", capture_output=True, text=True, timeout=30,
+                       env={**os.environ, "ORCHESTRA_MCP_LOG": str(log)})
+    assert p.returncode != 0
+    assert "no numpy here" in p.stderr and "cannot load its tools" in p.stderr
+    assert "no numpy here" in log.read_text()
 
 
 class McpClient:

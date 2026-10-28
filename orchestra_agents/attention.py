@@ -7,13 +7,15 @@ blocked ticket, a landing, a process Orchestra gave up on, a judged prediction) 
 when it says something: an empty reply or a bare acknowledgement ("Nothing to do.", "Noted.") is
 the Supervisor's own business and calls nobody. What the Supervisor last said that its transcript
 does not hold (a reply cut off before the harness wrote it, a transcript moved on) is still a
-message, returned with ``in_chat`` false so the chat shows its text."""
+message, returned with ``in_chat`` false so the chat shows its text. A Supervisor turn that failed
+(``session.error``: the harness could not run it, e.g. Claude Code without Orchestra's tools) is
+the newest thing the human must read when nothing newer waits: ``kind`` "failed", with the reason."""
 
 from __future__ import annotations
 
 import re
 
-from .session_turns import WOKEN, current_turn, messages, split
+from .session_turns import WOKEN, current_turn, epoch, messages, split
 
 SUPERVISOR = "supervisor"
 # A reply that tells the human nothing: an acknowledgement, or that there was nothing to do.
@@ -46,9 +48,20 @@ def reasons(prompt: str) -> list[str]:
 
 def unread(rt: dict) -> dict | None:
     """The Supervisor's newest message for the human since the human last read the chat
-    (``supervisor_seen_at``), with how many there are; None when nothing waits."""
+    (``supervisor_seen_at``), with how many there are, or the turn that failed after it; None
+    when nothing waits."""
     s = rt["sessions"].get(SUPERVISOR) or {}
     seen = float(rt.get("supervisor_seen_at") or 0)
+    said = _said(s, seen)
+    failed = [m for m in s.get("markers") or [] if m.get("type") == "session.error" and epoch(m.get("ts")) > seen]
+    if failed and (said is None or epoch(failed[-1].get("ts")) >= said["at"]):
+        return {"text": f"Orchestra could not run the Supervisor's turn:\n\n{failed[-1].get('error') or 'the harness failed'}",
+                "at": epoch(failed[-1].get("ts")), "index": None, "count": 1 + (said["count"] if said else 0),
+                "kind": "failed", "woken_by": [], "in_chat": False}
+    return said
+
+
+def _said(s: dict, seen: float) -> dict | None:
     turns = split(messages(s))
     live = current_turn(s, turns)
     waiting = [t for n, t in enumerate(turns) if n != live and t["ended"] > seen and for_the_human(t)]

@@ -100,7 +100,8 @@
     document.title = (A.count ? `(${A.count}) ` : "") + baseTitle;
     const parts = [];
     if (A.blocked.length) parts.push(`<b>${A.blocked.length} ticket${A.blocked.length === 1 ? " is" : "s are"} blocked</b> waiting for a decision (${A.blocked.slice(0, 3).map((b) => e_(b.id)).join(", ")}${A.blocked.length > 3 ? ", …" : ""})`);
-    if (A.message) parts.push(`<b>the Supervisor wrote to you</b>${A.message.count > 1 ? ` (${A.message.count} messages)` : ""} ${ago_(A.message.at)} ago`);
+    if (A.message && A.message.kind === "failed") parts.push(`<b>the Supervisor's turn failed</b> ${ago_(A.message.at)} ago: ${e_((A.message.text.split("\n\n")[1] || "").slice(0, 160))}`);
+    else if (A.message) parts.push(`<b>the Supervisor wrote to you</b>${A.message.count > 1 ? ` (${A.message.count} messages)` : ""} ${ago_(A.message.at)} ago`);
     const show = parts.length && sig() !== dismissed;
     bar.classList.toggle("on", !!show);
     if (show && sig() !== rendered) {
@@ -122,12 +123,13 @@
           <button onclick="window.openTicket ? openTicket('${e_(b.id)}') : (location.href='/tickets#ticket=${e_(b.id)}')">Ticket</button></div></div>`);
     if (msg) {
       const woke = msg.woken_by && msg.woken_by.length ? `<div class="att-r">An event woke it, not you: ${e_(msg.woken_by[0].slice(0, 240))}${msg.woken_by[0].length > 240 ? "…" : ""}</div>` : "";
+      const failed = msg.kind === "failed";
       const where = msg.in_chat === false ? `<div class="att-full">${typeof md === "function" ? md(msg.text) : e_(msg.text)}</div>
-          <div class="att-r">Its transcript does not hold this message (the turn was cut off, or the transcript moved on), so it is shown here.</div>`
+          <div class="att-r">${failed ? "Orchestra wrote this, not the Supervisor: the turn did not run." : "Its transcript does not hold this message (the turn was cut off, or the transcript moved on), so it is shown here."}</div>`
         : `<div class="att-r">${e_(msg.text.slice(0, 300))}${msg.text.length > 300 ? "…" : ""}</div>
            <div class="att-r"><a href="#" onclick="window.SupervisorAttention.show();return false">marked in the transcript below ↓</a></div>`;
       items.unshift(`<div class="att-item">
-        <div class="att-t">The Supervisor wrote to you <span class="muted" style="font-weight:400">· ${ago_(msg.at)} ago${msg.count > 1 ? ` · ${msg.count} messages since you last looked` : ""}</span></div>
+        <div class="att-t">${failed ? "The Supervisor's turn failed" : "The Supervisor wrote to you"} <span class="muted" style="font-weight:400">· ${ago_(msg.at)} ago${msg.count > 1 ? ` · ${msg.count} messages since you last looked` : ""}</span></div>
         ${woke}${where}
         <div class="att-acts">${answerBtn("document.getElementById('chat-input')?.focus()", "Reply")}</div></div>`);
     }

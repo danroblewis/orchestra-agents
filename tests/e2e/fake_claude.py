@@ -160,9 +160,17 @@ def main() -> None:
             f.write(json.dumps({"type": entry_type, "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
                                 "message": {"role": entry_type, "content": content}, "sessionId": sid}) + "\n")
 
-    emit({"type": "system", "subtype": "init", "session_id": sid, "cwd": str(cwd)})
+    try:                                    # as Claude Code does: the MCP servers connect before the init event names them
+        mcp = Mcp(mcp_cfg)
+        mcp_status = "connected"
+    except (OSError, RuntimeError, ValueError):
+        mcp, mcp_status = None, "failed"
+    emit({"type": "system", "subtype": "init", "session_id": sid, "cwd": str(cwd),
+          "mcp_servers": [{"name": "orchestra", "status": mcp_status}]})
+    if mcp is None:                         # a real one would go on without the tools; the harness stops it here
+        time.sleep(30)
+        return
     record("user", prompt)
-    mcp = Mcp(mcp_cfg)
     tools = {t["name"] for t in mcp.rpc("tools/list", {}).get("result", {}).get("tools", [])}
 
     def use_tool(name: str, args: dict) -> str:

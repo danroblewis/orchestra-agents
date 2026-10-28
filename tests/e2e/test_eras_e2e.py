@@ -15,12 +15,11 @@ It checks that:
   the arrival rate changed at the boundary, about doubled;
 - the Dynamics page's API has the era on its timeline, and the Machines page's map is drawn from
   the era's events by default;
-- ``orchestra sd eras`` lists it."""
+- the web UI's eras read (``/api/dynamics/eras``) lists it."""
 
 import os
 import stat
 import subprocess
-import sys
 
 import pytest
 from conftest import free_port
@@ -141,6 +140,8 @@ def test_a_change_announced_during_a_run_begins_an_era_in_the_model(quick_demo):
     assert {x["id"] for x in d["machines"]} <= {x["id"] for x in every["machines"]}
     assert "planner" in {x["id"] for x in every["machines"]} - {x["id"] for x in d["machines"]}, "the planner acted before the era only"
 
-    out = subprocess.run([sys.executable, "-m", "orchestra", "sd", "eras"], cwd=target, capture_output=True, text=True, check=True).stdout
-    assert "e1" in out and "config.changed from supervisor" in out and "(current)" in out, out
-    assert "flow queue_jobs_arrived_total: changed" in out, out
+    eras = web.get("/api/dynamics/eras")         # the web UI's read of the eras (the CLI is gone)
+    assert eras["ok"] and eras["current"] == "e1" and [e["id"] for e in eras["eras"]] == ["e1"], eras
+    assert eras["eras"][0]["label"] == "config.changed from supervisor", eras["eras"][0]
+    changed = {f["id"]: f for f in (eras["comparison"] or {}).get("flows", [])}
+    assert changed.get("queue_jobs_arrived_total", {}).get("status") == "changed", eras["comparison"]

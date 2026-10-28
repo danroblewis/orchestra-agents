@@ -79,25 +79,30 @@ def source_schema(project: Project, a: dict) -> dict:
     match = [match] if isinstance(match, str) else list(match)
     now, limit = time.time(), int(a.get("limit") or LIMIT)
     start = now - float(a.get("minutes") or 60) * 60
+    from orchestra.sources.listing import listing
     try:
-        sets, big = _listing(src, match, start, now, limit)
+        got = listing(src, match, start, now, concurrency=cat.spec(name).concurrency)
         meta = src.metadata()
     except SourceError as e:
         raise StoreError(f"the store did not answer: {e}") from e
+    big = {**got.too_big, **got.failed}
     fams: dict[str, int] = defaultdict(int)
     values: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
-    for labels in sets:
-        n = labels.get("__name__", "")
-        fams[n] += 1
-        for k, v in labels.items():
-            if k != "__name__":
+    sets = 0
+    for n, label_sets in got.names.items():
+        fams[n] += len(label_sets)
+        sets += len(label_sets)
+        for labels in label_sets[:limit]:
+            for k, v in labels.items():
                 values[n][k].add(v)
 
     def kind(n: str) -> str:
         m = meta.get(n) or meta.get(n.rsplit("_", 1)[0]) or {}
         return m.get("type") or _guess(n)
 
-    out: dict = {"ok": True, "source": name, "series_read": len(sets), "metrics": len(fams)}
+    out: dict = {"ok": True, "source": name, "series_read": sets, "metrics": len(fams), "requests": got.requests}
+    if got.notes:
+        out["notes"] = got.notes
     if detail:
         rows = [{"name": n, "type": kind(n), "help": ((meta.get(n) or {}).get("help") or "")[:160], "series": fams[n],
                  "labels": {k: {"values": len(v), "e.g.": sorted(v)[:LABEL_VALUES]} for k, v in sorted(values[n].items())}}
@@ -111,11 +116,11 @@ def source_schema(project: Project, a: dict) -> dict:
             out["described_but_no_series_in_window"] = idle[:100]
         out["next"] = "source_schema with match (e.g. {__name__=~\"http_.*\"}) shows those metrics' help and label values"
     if big:
-        out["too_big_to_list"] = [f"{n} [{kind(n)}]: the store refused to list its series at once ({why[:120]}); "
-                                  "narrow it with label matchers in match" for n, why in sorted(big.items())][:100]
+        out["too_big_to_list"] = [f"{n} [{kind(n)}]: not listed ({why[:120]}); narrow it with label matchers in match"
+                                  for n, why in sorted(big.items())][:100]
     if len(fams) > (SHOWN_METRICS if detail else SHOWN_NAMES):
         out["more"] = "more names than shown: narrow with match"
-    if len(sets) >= limit:
+    if sets >= limit:
         out["capped"] = f"the read hit its limit of {limit} series: the counts are a lower bound and some names may be missing; narrow with match"
     if late := _lateness(src, sorted(fams, key=lambda n: -fams[n])[:3], now):
         out["newest_sample_age_s"] = late
@@ -140,87 +145,13 @@ def _lateness(src, names: list[str], now: float) -> dict[str, float]:
         if not re.fullmatch(r"[A-Za-z_:][A-Za-z0-9_:]*", n or ""):
             continue
         try:
-            got = _ask(src.query_range, f"time() - max(timestamp({n}))", now - 120, now, 60)
+            got = src.query_range(f"time() - max(timestamp({n}))", now - 120, now, 60)
         except SourceError:
             continue
         pts = [v for _, p in got for _, v in p[-1:]]
         if pts:
             out[n] = round(max(pts), 1)
     return out
-
-
-BATCH = 25                                    # metric names listed per request once a store refuses a whole listing
-BUSY = re.compile(r"HTTP (429|502|503|504)\b")
-TOO_BIG = re.compile(r"(?i)HTTP 422|too many|exceed|limit of")
-
-
-def _ask(fn, *args, tries: int = 4):
-    """``fn(*args)``, asked again after a pause when the store is busy (429, 5xx)."""
-    from orchestra.sources import SourceError
-    for i in range(tries):
-        try:
-            return fn(*args)
-        except SourceError as e:
-            if i == tries - 1 or not BUSY.search(str(e)):
-                raise
-            time.sleep(min(2 ** i, 8))
-    return None
-
-
-def _names(src, match: list[str], start: float, end: float) -> list[str]:
-    """The metric names ``match`` selects (``label/__name__/values``), which a store answers
-    without touching every series."""
-    if hasattr(src, "names"):
-        return list(_ask(src.names, match, start, end))
-    form = {"match[]": list(match), "start": f"{start:.3f}", "end": f"{end:.3f}"}
-    data = _ask(lambda: src._call("/api/v1/label/__name__/values", form, post=False))
-    return [str(x) for x in data or []]
-
-
-def _listing(src, match: list[str], start: float, end: float, limit: int) -> tuple[list[dict], dict[str, str]]:
-    """Every series ``match`` selects, up to ``limit``, and the names too big to list. One request
-    when the store allows it; when it refuses for size (a per-query series limit), the names
-    first, then their series in batches of names, a refused batch split in halves, a single name
-    still refused set aside with the store's reason."""
-    from orchestra.sources import SourceError
-    try:
-        return list(_ask(src.series, match, start, end, limit)), {}
-    except SourceError as e:
-        if not TOO_BIG.search(str(e)):
-            raise
-    braced = [m.strip() for m in match if m.strip().startswith("{")]
-    named = [m for m in match if not m.strip().startswith("{")]
-    sets: list[dict] = []
-    big: dict[str, str] = {}
-
-    def batch(names: list[str]) -> None:
-        if not names or len(sets) >= limit:
-            return
-        sel = [f'{{__name__=~"{"|".join(names)}",{m[1:].lstrip()}' if m[1:].strip() != "}" else f'{{__name__=~"{"|".join(names)}"}}'
-               for m in braced]
-        try:
-            sets.extend(_ask(src.series, sel, start, end, limit - len(sets)))
-        except SourceError as e:
-            if not TOO_BIG.search(str(e)):
-                raise
-            if len(names) == 1:
-                big[names[0]] = str(e)
-                return
-            batch(names[: len(names) // 2])
-            batch(names[len(names) // 2:])
-
-    if braced:
-        names = sorted(set(_names(src, braced, start, end)))
-        for i in range(0, len(names), BATCH):
-            batch(names[i:i + BATCH])
-    for m in named:
-        try:
-            sets.extend(_ask(src.series, [m], start, end, limit))
-        except SourceError as e:
-            if not TOO_BIG.search(str(e)):
-                raise
-            big[m] = str(e)
-    return sets[:limit], big
 
 
 def _guess(name: str) -> str:

@@ -84,6 +84,15 @@ worker's, through a ticket, a review and the gate. A collector's script is a tic
 `[[collect]]` entry comes with the worker's branch, or from your `set_collector` once the script
 has landed.
 
+## "What would happen if…"
+
+When the human asks what a change would do (reviews twice as fast, another worker, a new
+machine), ask the model rather than guess. Read `modeling_guide` once; then experiment
+(`create_experiment`, `edit_experiment`, `run_replay`, `run_forward`; `run_inverse` for "what
+would it take to…") and answer with the key numbers and what was not trusted. Before a
+configuration change you expect to move a measured stock, `commit_prediction` and pass its
+`change` id to the setup tool; the verdict wakes you, and you tell the human what it said.
+
 ## The pages
 
 The pages (Orchestra's Core, Dashboard, Machines and Dynamics, and the plugins' pages) show the

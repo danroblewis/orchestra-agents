@@ -4,8 +4,9 @@ and the Pi extension both call this).
 Some tools are the agents' own: a worker's or reviewer's report (handed to the session that runs
 it, which reports to the task system on the bus), the project context, escalating to the
 Supervisor, reading the bus, the organisation (roles, agents, teams, emit_event), reading the
-whole system (``observe.py``, ``observe_model.py``) and the Supervisor's changes to the project's
-``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
+whole system (``observe.py``, ``observe_model.py``), the model and experiments on it, and the
+predictions of an agent's own changes (``modeling.py``), and the Supervisor's changes to the
+project's ``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
 about tickets and milestones is the task system's, asked for on the bus (protocol.TaskClient): a
 request it answers, so only it changes them. The role is the session's, as the host issued it
 (access.identify, at the MCP server and `orchestra-agents api`), never the agent's, and every
@@ -17,7 +18,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from . import access, ledger, observe, observe_model, prompting
+from . import access, ledger, modeling, observe, observe_model, prompting
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
 from .org import effective_tools
@@ -140,6 +141,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return observe_model.list_metrics(project, a)
     if command == "get_model":
         return observe_model.get_model(project)
+
+    if command in modeling.COMMANDS:
+        return modeling.handle_model(project, store, command, a, role, ticket_env)
 
     if command in REQUESTS or command in QUERIES:                 # the task system's
         if command in REQUESTS and not may_change_tickets(project, role):

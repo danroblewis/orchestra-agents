@@ -17,7 +17,8 @@ from .builtins import ROLES as BUILTIN
 from .clock import now
 from .config import Project
 
-TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe")
+TOOL_GROUPS = ("tickets", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "model", "experiments",
+               "replay", "predict")
 # (`setup`, changing orchestra.toml, is the Supervisor's alone: no custom role or team is granted it)
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 

@@ -19,9 +19,12 @@ file's, so a file says only what differs.
 
 Steps, played in order: ``say`` (a message), ``write`` (a file, with ``text`` and ``append``),
 ``run`` (a shell command), ``commit`` (everything, with this message), ``tool`` (one of the
-agents' tools, with ``args``), ``sleep`` (seconds), ``fail`` (the turn fails, with this error).
-In every string ``{ticket}``, ``{role}``, ``{turn}``, ``{instance}`` and ``{message}`` (the
-human's message in a chat turn, else the prompt's first line) are replaced."""
+agents' tools, with ``args``, and ``keep``: a name for its answer), ``sleep`` (seconds), ``fail``
+(the turn fails, with this error). In every string ``{ticket}``, ``{role}``, ``{turn}``,
+``{instance}`` and ``{message}`` (the human's message in a chat turn, else the prompt's first
+line) are replaced, and so is ``{kept.<name>.<field>...}`` (in the reply too): a field of an answer
+an earlier step of the turn kept (``{kept.e.experiment}``; a list's item by its index, ``{kept.m.summary.0}``).
+A string that is only such a placeholder becomes the value itself, a number or a table too."""
 
 from __future__ import annotations
 
@@ -33,13 +36,42 @@ from pathlib import Path
 
 DEFAULTS = Path(__file__).with_name("dummy_defaults.toml")
 ACTIONS = ("say", "write", "run", "commit", "tool", "sleep", "fail")
-MODIFIERS = {"write": {"text", "append"}, "tool": {"args"}}
+MODIFIERS = {"write": {"text", "append"}, "tool": {"args", "keep"}}
+KEPT = re.compile(r"\{kept\.([A-Za-z_]\w*)((?:\.[\w-]+)*)\}")
 CONDITIONS = ("role", "ticket", "prompt", "turn", "checkout")
 HUMAN = "[The human's message]\n"          # prompting.CHAT_SEAM ends with it
 
 
 class ScriptError(ValueError):
     pass
+
+
+def _lookup(kept: dict, name: str, path: str):
+    if name not in kept:
+        raise ScriptError(f"{{kept.{name}{path}}}: no earlier step of this turn kept an answer as {name!r}")
+    v = kept[name]
+    for part in [p for p in path.split(".") if p]:
+        if isinstance(v, list) and part.isdigit() and int(part) < len(v):
+            v = v[int(part)]
+        elif isinstance(v, dict) and part in v:
+            v = v[part]
+        else:
+            raise ScriptError(f"{{kept.{name}{path}}}: the kept answer has no {part!r}")
+    return v
+
+
+def fill_kept(value, kept: dict):
+    """``value`` with each ``{kept.<name>.<path>}`` replaced from the answers kept so far."""
+    if isinstance(value, str):
+        whole = KEPT.fullmatch(value)
+        if whole:
+            return _lookup(kept, whole.group(1), whole.group(2))
+        return KEPT.sub(lambda m: str(_lookup(kept, m.group(1), m.group(2))), value)
+    if isinstance(value, list):
+        return [fill_kept(v, kept) for v in value]
+    if isinstance(value, dict):
+        return {k: fill_kept(v, kept) for k, v in value.items()}
+    return value
 
 
 @dataclass(frozen=True)
@@ -115,6 +147,8 @@ def _step(raw, where: str) -> dict:
         raise ScriptError(f"{where}: sleep is a number of seconds")
     if action == "tool" and not isinstance(raw.get("args", {}), dict):
         raise ScriptError(f"{where}: a tool's args are a table")
+    if action == "tool" and "keep" in raw and not (isinstance(raw["keep"], str) and re.fullmatch(r"[A-Za-z_]\w*", raw["keep"])):
+        raise ScriptError(f"{where}: keep names the answer, like keep = \"e\"")
     if action != "sleep" and not isinstance(raw[action], str):
         raise ScriptError(f"{where}: {action} is a string")
     return dict(raw)

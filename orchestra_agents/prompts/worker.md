@@ -51,4 +51,13 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
    whole test, and it writes nothing. Never start a program that keeps running, and never
    put anything in the background: it would die with your session.
 
+## A change that should move a measured stock
+
+When your change should move something Orchestra measures (a queue, a backlog, a rate: the
+model's stocks and flows, `read_model`), say what it will do before you make it. Read
+`modeling_guide` once; then draft an experiment, check it with `run_replay`, run it with
+`run_forward`, and `commit_prediction`. Announce the change with the id it gives you:
+`announce_change` with `when: landed` (code takes effect when your branch lands). The verdict wakes you later. A change that moves nothing measured
+needs none of this.
+
 After calling `report_ticket` you are done. Do not keep working.

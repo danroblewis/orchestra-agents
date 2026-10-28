@@ -49,7 +49,8 @@ from .roles import TOOL_GROUPS
 AGENT_KINDS = ("continuous", "scheduled", "ad_hoc")
 ACCESS_MODES = ("read", "write")
 # The event types an agent may wake on: the task system's (protocol.py, where the contract and
-# the hand-copied list live) and the agents' own (host.py, api_org.py, probes.py).
+# the hand-copied list live), the agents' own (host.py, api_org.py, probes.py) and Orchestra's
+# verdict on a prediction.
 TASK_EVENT_TYPES = (ASSIGNED, ACCEPTED, WORKING, REVIEW_REQUESTED, CHANGES_REQUESTED, APPROVED, REPORTED, RELEASED, ATTENTION,
                     DONE, REFUSED, *TASK_EVENTS)
 AGENT_EVENT_TYPES = (
@@ -59,7 +60,9 @@ AGENT_EVENT_TYPES = (
     "agent.paused", "agent.resumed", "agent.messaged", "team.created", "team.changed", "team.deleted",
     "config.changed", "machine.restarted",
 )
-EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES
+JUDGED = "orchestra.prediction.judged"     # Orchestra's: a prediction's verdict (verdicts.py wakes the agent that made it)
+ORCHESTRA_EVENT_TYPES = (JUDGED,)
+EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES + ORCHESTRA_EVENT_TYPES
 # What each of them means, in one line, for the Agents page's triggers (served in /org).
 EVENT_HELP = {
     "ticket.created": "a planner's request created a ticket", "milestone.created": "a planner's request created a milestone",
@@ -96,6 +99,8 @@ EVENT_HELP = {
     "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
     "config.changed": "the Supervisor changes the configuration (orchestra.toml, committed with the reason, or the owner's private overlay)",
     "machine.restarted": "the Supervisor restarts one of the project's programs",
+    JUDGED: "Orchestra judges a prediction (filter with the verdict: :passed, :no effect, :side effect, ...); the agent that "
+            "committed it is woken without asking",
 }
 # Teams may declare further event types (`emits`) that their agents raise with `emit_event`;
 # those are validated against the teams, not this list.
@@ -131,7 +136,8 @@ def current_wake_on(wake_on: list[str]) -> list[str]:
 def event_matches(wake_on: list[str], ev: dict) -> bool:
     """`type` matches the event type; `type:x` also needs x to be the status, the probe name, the
     role an attention event is addressed to, the state a turn ended in (a report's: BLOCKED), the
-    state a request left its ticket in (CANCELLED), or the subject of an agent-emitted event."""
+    state a request left its ticket in (CANCELLED), a prediction's verdict, or the subject of an
+    agent-emitted event."""
     report = ev.get("report") if isinstance(ev.get("report"), dict) else {}
     result = ev.get("result") if isinstance(ev.get("result"), dict) else {}
     ticket = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
@@ -139,7 +145,9 @@ def event_matches(wake_on: list[str], ev: dict) -> bool:
         t, _, suffix = w.partition(":")
         if ev.get("type") != t:
             continue
-        if not suffix or suffix in (ev.get("to"), ev.get("status"), ev.get("probe"), ev.get("subject"), report.get("state"), ticket.get("state")):
+        verdict = ev.get("verdict") if isinstance(ev.get("verdict"), str) else None
+        if not suffix or suffix in (ev.get("to"), ev.get("status"), ev.get("probe"), ev.get("subject"), report.get("state"), ticket.get("state"),
+                                    verdict):
             return True
     return False
 
@@ -358,7 +366,7 @@ def effective_tools(agent: AgentDef, roles: dict, teams: dict[str, TeamDef]) -> 
     and `team` for every agent in a team, so a member can reach its lead with
     message_agent and read the organisation. Who may message whom is enforced in the
     API by the tree, not by the grant. A worker or reviewer on a ticket gets its role's
-    exit tool and nothing else."""
+    groups (its exit tool and the modeling groups) and nothing else."""
     out: list[str] = []
     for r in agent.roles:
         for g in (roles[r].tools if r in roles else ()):

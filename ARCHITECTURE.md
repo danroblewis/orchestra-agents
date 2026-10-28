@@ -152,9 +152,9 @@ The modules, grouped by job:
 | Job | Modules |
 |---|---|
 | Entry points | `cli.py` (the `orchestra-agents` command), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
-| The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py` |
+| The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py`, `verdicts.py` |
 | Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/dummy.py`, `harness/dummy_agent.py`, `harness/dummy_script.py`, `harness/dummy_defaults.toml`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
-| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
+| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py`, `modeling.py`, `model_text.py`, `run_text.py` |
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
@@ -297,10 +297,10 @@ The organisation has three kinds of record, kept apart (`roles.py`, `org.py`):
 
 | Agent | Kind | Tool groups | Woken by | Team |
 |---|---|---|---|---|
-| `supervisor` | continuous, resident | tickets, context, pipeline, roles, team, events, observe, setup | `task.attention_needed:supervisor`, `orchestra.process.gave_up`, a human message, `escalate_to_supervisor`, a crash loop, a landing of a human's ticket | none |
-| `coordinator` | continuous, resident; `scheduled` when `[agents] coordinator_every` is set | tickets, capacity, escalate (+ `team`, because it is in a team) | `task.attention_needed:coordinator`, the optional schedule | `engineering` (lead) |
-| `worker` | ad hoc, one session per ticket | report_ticket | `task.assigned` for `worker`, `changes.requested` to its instance (through the runner) | `engineering` |
-| `reviewer` | ad hoc, one session per ticket | report_review | `task.assigned` for `reviewer`, `review.requested` (through the runner) | `engineering` |
+| `supervisor` | continuous, resident | tickets, context, pipeline, roles, team, events, observe, setup, model, experiments, replay, predict | `task.attention_needed:supervisor`, `orchestra.process.gave_up`, a human message, `escalate_to_supervisor`, a crash loop, a landing of a human's ticket | none |
+| `coordinator` | continuous, resident; `scheduled` when `[agents] coordinator_every` is set | tickets, capacity, escalate, model, experiments, replay (+ `team`, because it is in a team) | `task.attention_needed:coordinator`, the optional schedule | `engineering` (lead) |
+| `worker` | ad hoc, one session per ticket | report_ticket, model, experiments, replay, predict | `task.assigned` for `worker`, `changes.requested` to its instance (through the runner) | `engineering` |
+| `reviewer` | ad hoc, one session per ticket | report_review, model, replay | `task.assigned` for `reviewer`, `review.requested` (through the runner) | `engineering` |
 
 `worker` and `reviewer` are agents only for the roles in `[agents] serves`
 (`org_store.all_agents`). A role that another machine fills, such as the demo's shell worker, is
@@ -327,7 +327,8 @@ not an agent here.
   lands, such an agent needs `review.approved` added.
 - A team's `emits` must be new lowercase names, never Orchestra's or the task system's types.
 - **Tool groups are granted by roles and teams** (`org.effective_tools`). Every agent in a team,
-  and every team lead, also gets `team`. A per-ticket worker or reviewer gets only its exit tool.
+  and every team lead, also gets `team`. A per-ticket worker or reviewer gets only its role's
+  groups: its exit tool and the modeling groups.
   The `setup` group is not in `roles.TOOL_GROUPS`, so no custom role or team can be given it.
   `roles` is, but every change it names (`api_org.MUTATIONS`, which includes pausing, resuming,
   restarting and resetting an agent) is the Supervisor's alone, so a custom holder of `roles`
@@ -510,7 +511,7 @@ played.
 | `{ write = "path", text = "...", append = false }` | Writes a file relative to the working directory |
 | `{ run = "shell command" }` | Runs it with `bash -c` in the working directory; the output and status are the result, and the script goes on |
 | `{ commit = "message" }` | `git add -A` and a commit, even an empty one; without a git identity configured, as `dummy agent` |
-| `{ tool = "name", args = { ... } }` | One of the agents' tools. A refusal (not in the session's groups, a wrong argument, a role check) is the result, and the script goes on |
+| `{ tool = "name", args = { ... }, keep = "e" }` | One of the agents' tools. A refusal (not in the session's groups, a wrong argument, a role check) is the result, and the script goes on. `keep` names its answer: later steps of the turn read its fields as `{kept.e.experiment}` (a list item by index, `{kept.m.summary.0}`); a string that is only such a placeholder becomes the value itself |
 | `{ sleep = 5 }` | Waits that many seconds: a slow agent, or one a release or a timeout cuts off |
 | `{ fail = "why" }` | The turn fails with this error (`session.error`; a per-ticket turn reports `failed`) |
 
@@ -874,6 +875,29 @@ task system's `result`. A refusal or no answer raises an error. "Query" works th
 | `remove_entry` | setup | section* (`machines`\|`collect`\|`scrape`\|`gate.unit`), name*, reason* | Removes the entry from the text |
 | `restart_machine` | setup | name*, reason* | Takes the entry out and puts it back. No commit. Publishes `machine.restarted`. |
 | `escalate_to_supervisor` | escalate | note* | Queues a Supervisor wake-up `[<role>] <note>` |
+| `modeling_guide` | model | — | `{guide}`: `prompts/modeling.md` with Orchestra's equation language filled in |
+| `read_model` | model | version, raw | `{summary}`: each stock with its level now, each flow with its ends, equation, origin, error and why it is not trusted; `model` with `raw` |
+| `read_series` | model | ids*, span \| start, end, points, limit, after, version | `{summary}` per series (first, last, range, mean, trend an hour, latest readings); with `points`, `points{id: {points, next}}` |
+| `read_eras` | model | raw | `{summary}`: the eras, saved versions by era, what changed at the last boundary (z per number) |
+| `read_observability` | model | version, raw | `{summary}`: which stocks are determined, hidden stocks, modes |
+| `check_equation` | model | equation*, params, experiment | `{summary, reads}`, or `ok: false` with the reason |
+| `read_predictions` | model | id, experiment, change, mine, raw | `{summary}`: each prediction (the last 10) with its expectations, and its verdict with the numbers |
+| `list_experiments` | model | mine, owner, status | `{summary}` |
+| `read_experiment`, `diff_experiment` | model | id*, draft (read only), raw | `{summary}`: the changes from the base, runs, prediction |
+| `read_run` | model | experiment*, run*, raw | A run's summary again; `run` with `raw` |
+| `create_experiment` | experiments | title*, purpose, version | `{summary, experiment}`; recorded with the session's ticket |
+| `edit_experiment` | experiments | id*, edit \| edits | One edit or a batch, atomic; a refused batch raises with the edit's index |
+| `load_model` | experiments | id*, model* | The whole draft |
+| `run_forward` | experiments | id*, horizon (default 1h), stocks, bounds, members, raw | `{summary, run}`: per stock base → experiment and difference with the band, limits, rates now, what is not trusted |
+| `run_inverse` | experiments | id*, targets*, hold, span \| start, end \| era, new_flows, max_changes, deadline_s (default 60), alternatives, check, raw | `{summary, run}`: reached, the changes, targets, side effects, ambiguity; the solution is a new draft of the caller's |
+| `discard_experiment` | experiments | id* | |
+| `run_replay` | replay | id*, span \| start, end \| era, raw | `{summary, run}`: per stock the error of each run, per counted flow the one-step fit, better/same/worse |
+| `commit_prediction` | predict | id*, horizon*, subject | `{summary, prediction, change}`. On a ticket, only an experiment made on it. Publishes `orchestra.prediction.made` (Orchestra's) |
+| `announce_change` | predict | change*, note, when (`now` \| `landed`) | Publishes `system.changed` with `id` = the change, or waits for the ticket's end. Only the agent that committed it, once |
+
+Every setup tool (not `restart_machine`) also takes `change`: a change id of the Supervisor's own
+prediction, which its `config.changed` then carries as its `id`, so Orchestra judges the
+prediction from it. See SPEC §11 for the modeling tools' design.
 
 ---
 
@@ -1203,6 +1227,8 @@ Every event is a CloudEvent written through `orchestra.events`. The fields below
 | `context.updated` | `supervisor` | `{by}` |
 | `config.changed` | `supervisor` | `{section, change, reason, commit, applies, by}` |
 | `machine.restarted` | `supervisor` | `{name, reason, by, pid_before, pid}` |
+| `system.changed` | the instance that committed the prediction | `{prediction, experiment, ticket, note}`; `id` the change, `subject` the ticket (`announce_change`, or the host on the ticket's end for `when: landed`) |
+| `orchestra.prediction.made` | the caller | Orchestra's (`commit_prediction`, through `Experiments.commit`) |
 | `probe.failed`, `probe.recovered` | the team's lead, or `supervisor` | `{probe, team, output?}` |
 | A team's declared type | the caller | `{by, subject, note, depth, team}` |
 
@@ -1221,6 +1247,8 @@ The web plugin publishes nothing.
 | `request.done`, `request.refused` | `protocol.TaskClient` | Answers to requests and queries |
 | `task.attention_needed` (`to`: supervisor or coordinator) | `host._wake_on_events` | Wake a planner |
 | `orchestra.process.gave_up` | `host._wake_on_events` | Wake the Supervisor |
+| `orchestra.prediction.judged` | `verdicts.Verdicts.see` | Wake the agent whose prediction it judges (by `correlationid`); a worker gets a verdict turn of its own |
+| `gate.landed`, `review.approved` (tasks), `request.done` (CANCELLED) | `modeling.announce_landed` (runner tick) | Announce a change said to take effect when its ticket lands |
 | Any type in a custom agent's `wake_on` | `host._wake_on_events` | Custom wake rules |
 | Every event since the last turn | `host._supervisor_turn` | The Supervisor's digest |
 | Any event from a `merge_gate` source | `gate_busy.landing` | Whether a gate is present to ask about |
@@ -1235,6 +1263,7 @@ Who announces each subscription (`listening.listens_for`; the host announces not
 | every agent | the types of its `wake_on` |
 | every agent the host wakes (not a worker or reviewer) | `request.done`, `request.refused`: answers to its own requests and snapshot queries, which the task system publishes as the asker |
 | the Supervisor | also `gate.landed`, `ticket.created`, and in tasks mode `review.approved` (`protocol.endings`) |
+| every agent with `predict` | also `orchestra.prediction.judged`; a per-ticket one also its ticket's ends (`protocol.endings`) |
 
 ---
 

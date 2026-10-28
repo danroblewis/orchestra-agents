@@ -44,7 +44,9 @@ as many agents as the responsibilities need.
 4. **Minimum access.** Grant tool groups at the team level, only what the responsibilities
    need. `tickets` to file and edit tickets, `events` to look back, `escalate` to reach you,
    `pipeline` for gate and staging, `context` for the project context, `capacity` for the
-   worker dial. Tool groups decide which of these tools an agent gets. Path grants are
+   worker dial, `model` to read the system dynamics model and verdicts, `experiments` and
+   `replay` to test a change on it, `predict` to commit the prediction of the agent's own change.
+   Tool groups decide which of these tools an agent gets. Path grants are
    relative to the repository; `read` for what the team must understand, `write` only inside
    its own space unless there is a reason. A path grant is an instruction written into the
    agents' prompts, not a permission: nothing stops an agent from reading or writing elsewhere.

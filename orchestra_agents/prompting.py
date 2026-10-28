@@ -141,6 +141,40 @@ def org_guide() -> str:
     return (PROMPTS_DIR / "org_guide.md").read_text(encoding="utf-8")
 
 
+def modeling_guide() -> str:
+    """The modeling skill (prompts/modeling.md): what the model's words mean, how to test a change
+    on it and commit a prediction, and the equation language as Orchestra defines it now; loaded
+    on demand, with the ``modeling_guide`` tool."""
+    return (PROMPTS_DIR / "modeling.md").read_text(encoding="utf-8").replace("{language}", language_text())
+
+
+def language_text() -> str:
+    """Orchestra's equation language (``GET /language``), as text."""
+    from orchestra.sd.experiments.language import reference
+
+    r = reference()
+    arity = lambda lo, hi: f"{lo} or more" if hi is None else str(lo) if lo == hi else f"{lo} to {hi}"
+    lines = [f"- Syntax: {r['syntax']}.", f"- Names: {r['names']}.", f"- Rates: {r['rate']}.", f"- Units: {r['units']}.",
+             "- Limits: " + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in (r.get("limits") or {}).items()) + ".",
+             "- Functions (how many arguments): " + "; ".join(f"`{name}` ({arity(*f['arguments'])}) {f['meaning']}"
+                                                              for name, f in (r.get("functions") or {}).items()) + "."]
+    return "\n".join(lines)
+
+
+VERDICT_TURN = """[A verdict on your prediction]
+{reason}
+
+Your ticket's work is over: this turn is only about the verdict. Read it with `read_predictions`
+(the prediction's id above) and, if it helps, the experiment with `read_experiment`. Do not change
+any file. Reply with what the verdict means for the change you made, in two or three sentences:
+whether it did what you predicted, and what the model got wrong if it did not.
+"""
+
+
+def verdict_task(reason: str) -> str:
+    return VERDICT_TURN.format(reason=reason)
+
+
 CONTEXT_TEMPLATE = """# Project context
 
 _Maintained by the Supervisor. Every Supervisor turn starts with this document._

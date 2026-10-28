@@ -103,9 +103,9 @@ class Agent:
 
     def play(self, rule: Rule, t: Turn) -> str:
         """The rule's steps in order; the turn's last message. A ``fail`` step raises."""
-        said = ""
+        said, kept = "", {}
         for raw in rule.steps:
-            step = t.fill(raw)
+            step = dummy_script.fill_kept(t.fill(raw), kept)
             if "say" in step:
                 said = step["say"]
                 self.say(said)
@@ -117,11 +117,16 @@ class Agent:
                 self.use("commit", {"message": step["commit"]}, lambda s=step: self.commit(s["commit"]))
             elif "tool" in step:
                 said = self.use(step["tool"], step.get("args", {}), lambda s=step: self.tool(s["tool"], s.get("args", {})))
+                if step.get("keep"):
+                    try:
+                        kept[step["keep"]] = json.loads(said)
+                    except json.JSONDecodeError:
+                        kept[step["keep"]] = said
             elif "sleep" in step:
                 time.sleep(float(step["sleep"]))
             elif "fail" in step:
                 raise TurnFailed(step["fail"])
-        return t.fill(rule.reply) if rule.reply is not None else (said or "Done.")
+        return str(dummy_script.fill_kept(t.fill(rule.reply), kept)) if rule.reply is not None else (said or "Done.")
 
 
 class TurnFailed(RuntimeError):

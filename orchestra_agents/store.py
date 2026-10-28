@@ -156,6 +156,40 @@ class AgentStore:
             st["actions"] = (st.get("actions") or [])[-(keep - 1):] + [action]
         self._mutate_runtime(fn)
 
+    def add_experiment(self, name: str, eid: str, ticket: str, keep: int = 200) -> None:
+        """An experiment an agent made, with the ticket its session was on (modeling.py: a worker
+        commits only the experiments of its own ticket)."""
+        def fn(d):
+            st = d["agent_state"].setdefault(name, {})
+            st["experiments"] = (st.get("experiments") or [])[-(keep - 1):] + [{"id": eid, "ticket": ticket}]
+        self._mutate_runtime(fn)
+
+    def add_prediction(self, name: str, rec: dict, keep: int = 100) -> None:
+        """A prediction an agent committed (modeling.py), so the change can be announced only by
+        it and its verdict wakes it (verdicts.py)."""
+        def fn(d):
+            st = d["agent_state"].setdefault(name, {})
+            st["predictions"] = (st.get("predictions") or [])[-(keep - 1):] + [rec]
+        self._mutate_runtime(fn)
+
+    def find_prediction(self, change: str | None) -> tuple[str, dict] | None:
+        """The agent that committed the prediction of ``change``, and its record."""
+        for name, st in self.runtime()["agent_state"].items():
+            for rec in st.get("predictions") or []:
+                if change and rec.get("change") == change:
+                    return name, dict(rec)
+        return None
+
+    def update_prediction(self, change: str, **fields: Any) -> dict | None:
+        def fn(d):
+            for st in d["agent_state"].values():
+                for rec in st.get("predictions") or []:
+                    if rec.get("change") == change:
+                        rec.update(fields)
+                        return dict(rec)
+            return None
+        return self._mutate_runtime(fn)
+
     def add_wakeup(self, target: str, reason: str) -> None:
         self._mutate_runtime(lambda d: d["wakeups"].append({"target": target, "reason": reason, "ts": now()}))
 

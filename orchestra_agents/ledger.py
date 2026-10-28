@@ -24,7 +24,7 @@ KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS)
-           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor"}))
+           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "commit_prediction", "announce_change"}))
 
 PAST = {"create": "created", "update": "updated", "delete": "deleted", "close": "closed", "pause": "paused",
         "resume": "resumed", "restart": "asked for a restart of", "reset": "asked for a reset of", "cancel": "cancelled",
@@ -71,6 +71,11 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return "escalated to the Supervisor"
     if command == "emit_event":
         return f"raised the event {a.get('type')}"
+    if command == "commit_prediction":
+        return f"committed experiment {a.get('id')} as prediction {result.get('prediction')} of change {result.get('change')}"
+    if command == "announce_change":
+        return (f"announced change {a.get('change')} (system.changed)" if (a.get("when") or "now") == "now"
+                else f"set change {a.get('change')} to be announced when its ticket lands")
     if verb in PAST:                                              # the organisation: roles, agents, teams
         return f"{PAST[verb]} the {noun} {a.get('name') or ''}".rstrip()
     return None

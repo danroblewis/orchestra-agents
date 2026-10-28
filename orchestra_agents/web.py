@@ -32,9 +32,10 @@ from .control import bearer as control_bearer
 from .events import Events
 from .harness import read_transcript
 from .listening import listens_for
-from .org import EVENT_HELP
-from .org_store import all_agents
+from .org import EVENT_HELP, effective_tools
+from .org_store import all_agents, all_teams
 from .org_views import agents_status, metrics_text, residents_of, session_alive
+from .roles import all_roles
 from .store import AgentStore, StoreError
 
 STATIC = Path(__file__).parent / "static"
@@ -85,8 +86,8 @@ def declared(project) -> list[Declared]:
     and the per-ticket roles the agents serve (a role another machine fills is that machine's, not
     declared here), each with what it listens for (listening.py), as it announces itself. The host
     that runs them is no machine and is not declared."""
-    work = project.config.work
-    return [Declared(a.name, "agent", "continuous" if a.resident else "ad hoc", listens_for(a, work))
+    work, roles, teams = project.config.work, all_roles(project), all_teams(project)
+    return [Declared(a.name, "agent", "continuous" if a.resident else "ad hoc", listens_for(a, work, effective_tools(a, roles, teams)))
             for a in all_agents(project).values()]
 
 

@@ -41,6 +41,7 @@ from .config import Project
 from .config_change import Edit, change, target_of
 from .fillers import KEEP_S, Fillers
 from .gate_busy import landing
+from .modeling import claim_change, own_prediction
 from .org_store import all_agents
 from .restart import recover
 from .store import AgentStore, StoreError
@@ -243,6 +244,8 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     if role != "supervisor":
         raise StoreError("only the supervisor changes the configuration")
     target = target_of(a, None if command == "set_setting" else "repo")
+    if a.get("change"):
+        own_prediction(store, role, a["change"])      # refused before anything is written
     recovered = recover(project)                  # an entry an interrupted restart left out
     plan = HANDLERS[command](project, store, a)
     if why := landing(store, role):
@@ -257,8 +260,12 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
         applies = plan.applies()
     except Exception as e:  # noqa: BLE001 - the change stands; only the description of it failed
         applies = f"Changed; what applies now could not be worked out ({e}): read_config and check_setup show it."
-    store.events.emit(CHANGED, section=plan.section, change=done["announce"], reason=a["reason"].strip(),
-                      commit=done["commit"], target=target, applies=applies, by=author)
+    data = {"section": plan.section, "change": done["announce"], "reason": a["reason"].strip(), "commit": done["commit"],
+            "target": target, "applies": applies, "by": author}
+    if claim_change(store, role, a.get("change")):     # the change a prediction of the Supervisor's waits for: Orchestra judges it from here
+        store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"])
+    else:
+        store.events.emit(CHANGED, **data)
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, the commit, and what applies now." if target == "repo" else
                     "Tell the human what you changed in their private overlay (not committed) and why, and what applies now.")}

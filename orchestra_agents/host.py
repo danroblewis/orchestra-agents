@@ -45,6 +45,7 @@ from .roles import all_roles
 from .runner import AgentRunner
 from .store import AgentStore, StoreError
 from .turns import Turns
+from .verdicts import Verdicts
 
 HOST_LOG: Path | None = None
 HOST_LOG_MAX = 5_000_000
@@ -98,6 +99,7 @@ class AgentHost:
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
         self.prober = Prober(project, store, events)   # the teams' probes
+        self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
 
     def recover(self) -> None:
         """Turns the previous host left running: their processes are stopped (no orphans) and
@@ -182,6 +184,7 @@ class AgentHost:
             log(f"probes: {e!r}")
         self._schedule_wakeups(states)
         self._wake_on_events()
+        self.verdicts.tick()
         for target in list(self.agents):
             if target == "supervisor" and self.residents.procs.get("supervisor") is None:
                 continue
@@ -321,10 +324,14 @@ class AgentHost:
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
         mode = "continuous" if agent is not None and agent.resident else "ad hoc"
-        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": listens_for(agent, self.cfg.work),
+        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
                                                           "kind": "agent", "role": role,
                                                           "harness": self.harness.name, "model": self.cfg.model},
                             source=source)
+
+    def _listens_for(self, agent: AgentDef | None) -> list[str]:
+        return listens_for(agent, self.cfg.work, None if agent is None else effective_tools(agent, self.role_defs or all_roles(self.project),
+                                                                                             self.teams or all_teams(self.project)))
 
     @staticmethod
     def _pid(proc: AgentSession) -> int | None:
@@ -336,11 +343,13 @@ class AgentHost:
     def _wake_on_events(self) -> None:
         """Match new events against every agent's wake_on list and queue wake-ups. Workers and
         reviewers are not woken: their events are assignments, answered by the runner. A ticket
-        the Supervisor created for the human that is done wakes it to tell the human (landings.py)."""
+        the Supervisor created for the human that is done wakes it to tell the human (landings.py);
+        a verdict on a prediction wakes the agent that made it (verdicts.py)."""
         evs, self._wake_at = self.events.after(self._wake_at)
         for ev in evs:
             if landed := self.landings.see(ev, self.cfg):
                 self.store.add_wakeup("supervisor", landed)
+            self.verdicts.see(ev)
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue

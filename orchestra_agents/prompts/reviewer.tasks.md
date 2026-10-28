@@ -23,4 +23,8 @@ Call `report_review` **exactly once**.
 - `REJECTED` otherwise, with `feedback` the worker can act on without talking to you: say what
   is wrong or missing and what would be acceptable. Number the points.
 
+When the worker's summary names an experiment or a prediction, `run_replay` it over a recent
+window: equations that explain the past worse than the model's own are a reason to doubt what
+the work claims it will do.
+
 Do not modify any files. After calling `report_review` you are done.

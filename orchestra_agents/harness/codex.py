@@ -35,6 +35,7 @@ from .base import (
 )
 
 MCP_SERVER = "orchestra"
+TOOL_TIMEOUT_S = 420                       # a tool call may run the model: an inverse run searches for up to 300 s
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"      # how Codex names an MCP server's functions
 _INJECTED = re.compile(r"\s*<[a-z_]+>")    # <environment_context>, <user_instructions>: Codex's own context messages
 _TOOL_ITEMS = {"command_execution": "exec", "mcp_tool_call": None, "file_change": "apply_patch", "web_search": "web_search"}
@@ -118,6 +119,7 @@ class CodexSession(AgentSession):
         return not self._closed
 
     def _mcp_override(self) -> str:
+        """The MCP server, with a tool timeout long enough for a model run (Codex's default is 60 s)."""
         env = {k: v for k, v in self.spec.env.items()}
         env["ORCHESTRA_TOOLS"] = ",".join(self.spec.tool_groups)
         for k in ("ORCHESTRATOR_HOME", "PATH", "HOME"):
@@ -126,7 +128,7 @@ class CodexSession(AgentSession):
         env_toml = ", ".join(f"{k}={toml_string(v)}" for k, v in env.items())
         args = ", ".join(toml_string(a) for a in ["-m", "orchestra_agents.harness.mcp"])
         return (f"mcp_servers.{MCP_SERVER}={{command={toml_string(sys.executable)}, args=[{args}], "
-                f"env={{{env_toml}}}, required=true}}")
+                f"env={{{env_toml}}}, required=true, tool_timeout_sec={TOOL_TIMEOUT_S}}}")
 
     def _args(self) -> list[str]:
         if self.thread_id is None and self._meta_path.exists():

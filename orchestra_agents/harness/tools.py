@@ -50,6 +50,34 @@ def A(d: str = "") -> dict:
     return {**s, "description": d} if d else s
 
 
+def B(d: str) -> dict:
+    return {"type": "boolean", "description": d}
+
+
+def O(d: str) -> dict:
+    return {"type": "object", "description": d}
+
+
+def OS(d: str) -> dict:
+    return {"type": "array", "items": {"type": "object"}, "description": d}
+
+
+DURATION = S("A duration such as 90s, 30m, 2h or 1d (plain digits are seconds)")
+EXPERIMENT = S("The experiment's id (x-...)")
+RAW = B("Also give Orchestra's whole answer as JSON (trajectories, every number); default: the summary only")
+WINDOW = {"span": S("The past window back from now, such as 30m, 2h or 1d (default 1h)"),
+          "start": {"type": "number", "description": "Or the window's start, unix seconds"},
+          "end": {"type": "number", "description": "And its end, unix seconds (default now)"},
+          "era": S("Or a whole era, by its id (e1, ...): read_eras lists them")}
+CHANGE = S("The change id commit_prediction gave you, when this change is the one you predicted: Orchestra judges "
+           "the prediction from this announcement")
+EDIT_OPS = ("Each edit is an object with an op: add_flow {id, from, to, equation, params} (from/to a stock id, or null for "
+            "outside); replace_flow {id, equation, params, from?, to?} (the whole equation); remove_flow {id}; set_params "
+            "{flow, params}; add_stock {id, initial} (a hidden stock); remove_stock {id}; set_level {stock, level}; set_input "
+            "{input, scenario} (scenario: {kind: hold|value|scale|step|ramp|series, ...}). Equations are in the language "
+            "modeling_guide describes.")
+
+
 TOOLS: list[ToolDef] = [
     ToolDef("report_ticket", "report_ticket",
             "Report the outcome of your work on this ticket. Call exactly once when you are finished. "
@@ -154,7 +182,7 @@ TOOLS: list[ToolDef] = [
             "what it never does, how it reports). No schedule, no team: those belong to agents and teams.",
             {"name": S("lowercase_with_underscores"), "description": S("One line: what this kind of agent is good at"),
              "prompt": S("The job description in markdown, under sixty lines"),
-             "tools": A("Tool groups the role needs: tickets, context, pipeline, capacity, escalate, events")},
+             "tools": A("Tool groups the role needs: tickets, context, pipeline, capacity, escalate, events, model, experiments, replay, predict")},
             ("name", "description", "prompt")),
     ToolDef("update_role", "roles", "Change a custom role's description, tools, or prompt.",
             {"name": S("Role name"), "description": S(""), "prompt": S("New full prompt"), "tools": A()}, ("name",)),
@@ -220,8 +248,9 @@ TOOLS: list[ToolDef] = [
             "and how many points in the last hour. A measurement that is not here is not being stored.",
             {"prefix": S("Only names starting with this")}),
     ToolDef("get_model", "observe",
-            "The system dynamics model Orchestra discovered from the metrics: stocks, flows with their equations and the "
-            "machines attributed to them, and the series the last discovery left out, with why."),
+            "The system dynamics model Orchestra discovered from the metrics, for a diagnosis: the series each stock is, flows "
+            "with their equations and the machines attributed to them, and the series the last discovery left out, with why. "
+            "To experiment on the model, read_model."),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment."),
@@ -233,47 +262,138 @@ TOOLS: list[ToolDef] = [
             "templates, anything personal; never committed), repo for the project's settings (committed).",
             {"key": S("section.name"),
              "value": S('The value as JSON: "#ops", 3, true, ["#a", "@me"], {"k": "v"}; null removes the key'),
-             "target": TARGET, "reason": S("Why, in a sentence")}, ("key", "target", "reason")),
+             "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("key", "target", "reason")),
     ToolDef("set_agent_roles", "setup",
             "Set which of the task system's roles the AI agents fill ([agents] serves). A role left out is left to other "
             "machines (a program worker): leave a role out only when one fills it.",
-            {"serves": A("worker, reviewer, both, or none"), "target": TARGET, "reason": S("Why, in a sentence: it goes in the commit")},
+            {"serves": A("worker, reviewer, both, or none"), "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence: it goes in the commit")},
             ("serves", "reason")),
     ToolDef("set_work_mode", "setup",
             "Set the kind of work ([project] work): code (a branch per ticket, reviewed, landed on the base branch by the "
             "merge gate; needed for anything that must end up in the repository, like a collector) or tasks (a scratch "
             "folder per ticket, nothing merged).",
-            {"work": {"type": "string", "enum": ["tasks", "code"]}, "target": TARGET, "reason": S("Why, in a sentence")}, ("work", "reason")),
+            {"work": {"type": "string", "enum": ["tasks", "code"]}, "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("work", "reason")),
     ToolDef("set_gate_unit", "setup",
             "Add or change a test the merge gate runs on every branch before it lands ([[gate.unit]]): a shell command, "
             "run in the branch's checkout, that must exit 0.",
             {"name": S("The test's name, default unit"), "command": S("The shell command"),
-             "timeout": S("How long it may take, e.g. 300s"), "target": TARGET, "reason": S("Why, in a sentence")}, ("command", "reason")),
+             "timeout": S("How long it may take, e.g. 300s"), "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("command", "reason")),
     ToolDef("set_capacity_limit", "setup",
             "Set the most tickets offered at once to workers and to reviewers ([tasks] workers, reviewers): the ceiling "
             "under which the Coordinator's set_capacity dial moves.",
-            {"workers": I(), "reviewers": I(), "target": TARGET, "reason": S("Why, in a sentence")}, ("reason",)),
+            {"workers": I(), "reviewers": I(), "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("reason",)),
     ToolDef("set_machine", "setup",
             "Add or change a program Orchestra keeps running ([[machines]]): a command in the repository. Orchestra starts "
             "a new one within a second and restarts one whose command changed. The program itself is a worker's to write.",
             {"name": S("letters, digits, . _ -"), "command": S("The command, e.g. python machines/feed.py"),
              "restart": S("always (default), on-failure or never"), "stop_grace": I("Seconds from SIGTERM to SIGKILL"),
-             "target": TARGET, "reason": S("Why, in a sentence")}, ("name", "command", "reason")),
+             "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("name", "command", "reason")),
     ToolDef("set_collector", "setup",
             "Add or change a collector: a command under machines/ that prints Prometheus text ([[collect]]), or a url "
             "that serves it ([[scrape]]). Orchestra runs it on its interval and stores what it prints. The script itself "
             "is a worker's to write.",
             {"name": S("The machine's id"), "command": S("The script, e.g. machines/disk.sh"), "url": S("Or a URL"),
              "every": S("How often, e.g. 60s"), "timeout": S("For a round that may take more than 10 s"),
-             "target": TARGET, "reason": S("Why, in a sentence")}, ("name", "reason")),
+             "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("name", "reason")),
     ToolDef("remove_entry", "setup",
             "Remove a [[machines]], [[collect]], [[scrape]] or [[gate.unit]] entry by name. A removed machine is stopped.",
             {"section": {"type": "string", "enum": ["machines", "collect", "scrape", "gate.unit"]}, "name": S("Entry name"),
-             "target": TARGET, "reason": S("Why, in a sentence")}, ("section", "name", "reason")),
+             "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("section", "name", "reason")),
     ToolDef("restart_machine", "setup",
             "Restart one of the project's programs ([[machines]]), including one Orchestra gave up on: its entry is taken "
             "out until Orchestra has stopped it, then put back as it was, which starts it again. Nothing is committed.",
             {"name": S("The [[machines]] entry's name"), "reason": S("Why, in a sentence")}, ("name", "reason")),
+    # model: read the system dynamics model and what was done with it (modeling.py)
+    ToolDef("modeling_guide", "model",
+            "How to read the system dynamics model and experiment on it: what stocks, flows, equations, eras, trust and "
+            "verdicts mean, the equation language, and how to test a hypothesis before you believe it. Read it before your "
+            "first experiment."),
+    ToolDef("read_model", "model",
+            "The system dynamics model Orchestra discovered from the metrics, summarised: each stock with its level now, each "
+            "flow with its ends, its equation in the equation language, its origin and error, and whether to trust it.",
+            {"version": I("A saved version (default: the current era's latest discovery)"), "raw": RAW}),
+    ToolDef("read_series", "model",
+            "Measured history of stocks (levels), flows (rates) or measured inputs, summarised: first and last, range, mean, "
+            "trend an hour, the latest readings. points: true gives the points themselves, paged.",
+            {"ids": A("Stock, flow or input ids from read_model (at most 64)"), **{k: WINDOW[k] for k in ("span", "start", "end")},
+             "points": B("Also give the points, [unix seconds, value], at most limit a series"), "limit": I("Points a series, default 500"),
+             "after": {"type": "number", "description": "Continue a series cut short: its next"}, "version": I("A saved version")},
+            ("ids",)),
+    ToolDef("read_eras", "model",
+            "The eras (each announced change to the system begins one) and what changed at the last boundary: each flow's "
+            "numbers before and after, with how sure that it changed.", {"raw": RAW}),
+    ToolDef("read_observability", "model",
+            "Which stocks what is measured determines, which are hidden, and the model's modes (how fast it settles).",
+            {"version": I("A saved version"), "raw": RAW}),
+    ToolDef("check_equation", "model",
+            "Whether an equation parses in the equation language against the model (or an experiment's draft), and what it reads.",
+            {"equation": S("e.g. k * min(queue, 2 * workers)"), "params": O("Its parameters, e.g. {\"k\": 0.5}"),
+             "experiment": S("Check against this experiment's draft")}, ("equation",)),
+    ToolDef("read_predictions", "model",
+            "Predictions and their verdicts (passed, no effect, side effect, model wrong elsewhere, interrupted, undecided), "
+            "with the numbers each was judged by.",
+            {"id": S("One prediction"), "experiment": S("The prediction this experiment became"), "change": S("The change id"),
+             "mine": B("Only yours"), "raw": RAW}),
+    ToolDef("list_experiments", "model", "Experiments, newest last: id, title, status, owner, runs, prediction.",
+            {"mine": B("Only yours"), "owner": S("Only this machine's"), "status": S("draft, committed or discarded"),
+             "era": S("Only those made on this era's model or predicting the change that began it")}),
+    ToolDef("read_experiment", "model",
+            "One experiment: what its draft changed from the base model, its runs, its prediction.",
+            {"id": EXPERIMENT, "draft": B("Also the whole draft model, summarised"), "raw": RAW}, ("id",)),
+    ToolDef("diff_experiment", "model", "What an experiment's draft changed from its base model: flows, stocks, the scenario.",
+            {"id": EXPERIMENT, "raw": RAW}, ("id",)),
+    ToolDef("read_run", "model", "An earlier run of an experiment again, summarised, or whole with raw.",
+            {"experiment": EXPERIMENT, "run": S("The run's id (r-...)"), "raw": RAW}, ("experiment", "run")),
+    # experiments: a draft copy of the model, edited and run; it changes nothing in the system
+    ToolDef("create_experiment", "experiments",
+            "Start an experiment: a draft copy of the model (the current era's latest, or a saved version) that you edit and run. "
+            "It changes nothing in the system.",
+            {"title": S("What you are trying, in a few words"), "purpose": S("The question it answers"),
+             "version": I("Copy a saved version instead")}, ("title",)),
+    ToolDef("edit_experiment", "experiments",
+            "Edit your experiment's draft: one edit (edit) or a batch (edits), applied together or not at all. " + EDIT_OPS,
+            {"id": EXPERIMENT, "edits": OS("The batch, in order"), "edit": O("One edit")}, ("id",)),
+    ToolDef("load_model", "experiments",
+            "Replace your experiment's whole draft: {stocks: [{id, initial?}], flows: [{id, from, to, equation, params}]}. A stock "
+            "the base measures keeps its series; a new one is hidden.",
+            {"id": EXPERIMENT, "model": O("The whole model")}, ("id", "model")),
+    ToolDef("run_forward", "experiments",
+            "Run the base model and your draft forward from the levels now: each stock's base, experiment and difference with "
+            "a band, the limits they hit, and what not to trust.",
+            {"id": EXPERIMENT, "horizon": S("How far ahead, such as 30m, 2h or 1d (default 1h)"),
+             "stocks": A("Only these stocks"), "bounds": O("Limits to watch: {stock: [lo, hi]}"),
+             "members": I("Runs in the band, default 24"), "raw": RAW}, ("id",)),
+    ToolDef("run_inverse", "experiments",
+            "Ask what would have had to be different for a past window to come out otherwise: the fewest changes to the "
+            "draft's numbers (and, with new_flows, a new flow) under which a replay meets the targets. The answer is a new "
+            "draft of yours. Hold what must not move; treat an ambiguous answer as a warning.",
+            {"id": EXPERIMENT, "targets": OS("{stock, scale} (its mean ×), {stock, level}, {stock, below|above}, {flow, scale}, "
+                                             "{flow, total}"),
+             "hold": OS("{flow} (its equation stays) or {series} (that history stays)"), **WINDOW,
+             "new_flows": B("Also consider a new inflow or outflow of a target stock"), "max_changes": I("1 to 8, default 3"),
+             "deadline_s": I("Seconds to search, up to 300, default 60"), "alternatives": I("Other answers to report, default 3"),
+             "check": B("Check the answer's uniqueness by rediscovery (default true)"), "raw": RAW}, ("id", "targets")),
+    ToolDef("discard_experiment", "experiments", "End an experiment of yours you will not commit; it stays readable.",
+            {"id": EXPERIMENT}, ("id",)),
+    # replay: a past window run again on an experiment's equations
+    ToolDef("run_replay", "replay",
+            "Replay a past window with the base model and an experiment's draft, from the levels measured at its start, against "
+            "what was measured: whether the draft's equations explain what happened (each stock's error, each counted "
+            "flow's fit), not only the outcome wanted. Any experiment may be replayed.",
+            {"id": EXPERIMENT, **WINDOW, "raw": RAW}, ("id",)),
+    # predict: an experiment as the prediction of the caller's own change
+    ToolDef("commit_prediction", "predict",
+            "Commit your experiment as the prediction of the change you are about to make: its edits become what the change "
+            "is expected to do, its forward run what the stocks will do. Returns the change id; make the change, then announce "
+            "it with that id. Orchestra judges it after the horizon and the verdict wakes you.",
+            {"id": EXPERIMENT, "horizon": S("How long after the change to judge it, such as 30m or 2h: long enough for the "
+                                            "flows you changed to count a few dozen events"),
+             "subject": S("What the change is about (default: your ticket, or the experiment)")}, ("id", "horizon")),
+    ToolDef("announce_change", "predict",
+            "Announce that the change you predicted is made (system.changed, carrying its change id): a new era begins and the "
+            "prediction is judged from it. when: now (it is in effect) or landed (code that takes effect when your ticket lands).",
+            {"change": S("The change id commit_prediction gave you"), "note": S("What changed, in a sentence"),
+             "when": {"type": "string", "enum": ["now", "landed"], "description": "now (default) or landed"}}, ("change",)),
     # escalate
     ToolDef("escalate_to_supervisor", "escalate",
             "Wake the Supervisor with a note when a decision about intent, scope, or priorities is needed.",

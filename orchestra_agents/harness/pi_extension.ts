@@ -18,11 +18,13 @@ const REPO = process.env.ORCHESTRA_REPO ?? "";
 const TICKET = process.env.ORCHESTRA_TICKET ?? "";
 const PYTHON = process.env.ORCHESTRA_PYTHON ?? "python3";
 const ENV = { ...process.env, ORCHESTRA_REPO: REPO, ORCHESTRA_ROLE: ROLE, ORCHESTRA_TICKET: TICKET };
+// a call may run the model: an inverse run searches for up to 300 s, and checks its answer after
+const CALL_MS = 420_000;
 
 function api(command: string, args: Record<string, unknown>): string {
   try {
     const out = execFileSync(PYTHON, ["-m", "orchestra_agents", "api", command, "--args", JSON.stringify(args)], {
-      env: ENV, cwd: REPO || process.cwd(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 60_000,
+      env: ENV, cwd: REPO || process.cwd(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: CALL_MS,
     });
     return out.trim();
   } catch (err: any) {

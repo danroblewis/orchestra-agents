@@ -27,4 +27,8 @@ Call `report_review` **exactly once**.
   the file and the line or function, say what is wrong, and say what would be acceptable.
   Number the points. Do not include praise or restate the diff.
 
+When the worker's summary names an experiment or a prediction, `run_replay` it over a recent
+window: equations that explain the past worse than the model's own are a reason to doubt what
+the work claims it will do.
+
 Do not modify any files. After calling `report_review` you are done.

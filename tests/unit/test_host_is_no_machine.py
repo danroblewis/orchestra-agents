@@ -87,11 +87,15 @@ def test_each_subscription_is_announced_by_the_agent_that_reacts(project, tmp_pa
     _host, _store, events = a_run(project, tmp_path)
     said = {e["source"]: e["listens_for"] for e in events.read(0)[0] if e["type"] == "orchestra.machine.started"}
     # the Supervisor: its wake-ups, the answers to its own requests, its tickets' ends (tasks mode:
-    # an approval ends a ticket) and ticket.created, by which it remembers its own
-    assert said["supervisor"] == ["gate.landed", "orchestra.process.gave_up", "request.done", "request.refused",
-                                  "review.approved", "task.attention_needed", "ticket.created"]
+    # an approval ends a ticket), ticket.created, by which it remembers its own, and the verdicts
+    # on its predictions
+    assert said["supervisor"] == ["gate.landed", "orchestra.prediction.judged", "orchestra.process.gave_up", "request.done",
+                                  "request.refused", "review.approved", "task.attention_needed", "ticket.created"]
     assert said["coordinator"] == ["request.done", "request.refused", "task.attention_needed"]
-    assert said["worker/1"] == ["changes.requested", "task.assigned", "task.released"]       # a per-ticket role asks nothing
+    # a per-ticket role asks nothing; a worker hears its predictions' verdicts and its ticket's end
+    # (a predicted change announced when it lands)
+    assert said["worker/1"] == ["changes.requested", "gate.landed", "orchestra.prediction.judged", "request.done",
+                                "review.approved", "task.assigned", "task.released"]
     builtins = built_in_agents()
     assert "review.approved" not in listens_for(builtins["supervisor"], "code")              # in code mode the gate ends a ticket
     assert {d.id: d.listens_for for d in web.declared(project)}["supervisor"] == said["supervisor"]   # declared as announced

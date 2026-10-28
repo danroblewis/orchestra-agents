@@ -48,10 +48,15 @@ def default_source() -> str:
 
 
 def flat(ev: dict) -> dict:
-    """An event as this package reads it: its data's fields, with ``type``, ``ts``, ``source``."""
+    """An event as this package reads it: its data's fields, with ``type``, ``ts``, ``source``, and
+    the envelope's ``correlationid`` and ``causationid`` when it has them (a verdict names its
+    change by ``correlationid``: verdicts.py)."""
     data = ev.get("data")
     out = dict(data) if isinstance(data, dict) else {"data": data}
     out.update(type=ev.get("type"), ts=ev.get("time"), source=ev.get("source"), id=ev.get("id"))
+    for k in ("correlationid", "causationid"):
+        if ev.get(k) is not None:
+            out[k] = ev[k]
     return out
 
 

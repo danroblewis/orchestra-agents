@@ -381,7 +381,8 @@ git checkout). Its `steps`, in order: `say` (a message), `write` (a file, with `
 `append`), `run` (a shell command in the working directory; its output and status are the
 result, and the script goes on), `commit` (everything, with this message; a commit even when
 nothing changed), `tool` (an agents' tool, with `args`; a refusal is the result, and the script
-goes on), `sleep` (seconds), `fail` (the turn fails with this error: `session.error`, and a
+goes on; `keep` names its answer, whose fields later steps of the turn read as
+`{kept.<name>.<field>}`), `sleep` (seconds), `fail` (the turn fails with this error: `session.error`, and a
 per-ticket turn reports `failed`). `reply` is the turn's last message (default: the last tool's
 answer or `say`). `{ticket}`, `{role}`, `{turn}`, `{instance}` and `{message}` (the human's message
 in a chat turn) are replaced in every string. A script that does not parse fails the turn with
@@ -566,3 +567,60 @@ pipeline, puts the ticket back to APPROVED and asks the Supervisor for attention
 lands it on the next run. A tool's answer about what applies describes the readers' rules; it
 does not wait to see them act (except `restart_machine`, which watches the launcher).
 
+
+## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
+
+Orchestra discovers a system dynamics model of the system from its metrics, and lets any machine
+experiment on a copy of it and commit an experiment as the prediction of a change (Orchestra's
+USING_ORCHESTRA §5.8–5.9, SPEC §4.5). The agents get that as tools, so an agent can say what a
+change will do before it makes it, and is told afterwards whether it did. The tools hold
+Orchestra's Python API (`orchestra.sd.experiments.api.Experiments`, as the agent's instance, its
+`source`) in the tool server's process: no HTTP, no token of Orchestra's.
+
+**The tools, in four groups.** `model` reads: the model (`read_model`), series (`read_series`),
+the eras and what changed at the last boundary (`read_eras`), observability, an equation checked
+(`check_equation`), predictions and their verdicts, experiments, their diffs and runs, and the
+modeling guide. `experiments` makes, edits (one edit, a batch, or the whole model with
+`load_model`), runs forward and inverse, and discards the caller's own experiments. `replay` runs
+any experiment over a past window. `predict` commits the caller's own experiment as the prediction
+of its own change (`commit_prediction`) and announces the change (`announce_change`).
+
+**Answers an LLM can use.** Each answer leads with `summary`: lines with the key numbers first
+(`stock queue: base 12 -> 15; experiment 12 -> 22 by +2h (band 19–25); not trusted: flow
+done: declared`), written by `model_text` and `run_text` from Orchestra's JSON. Trajectories and
+every number come only with `raw: true`; series points only with `points: true`, paged.
+
+**Grants** (`builtins.py`): the Supervisor has all four; the Coordinator `model`, `experiments`
+and `replay` (it compares plans, and commits nothing); a worker all four; a reviewer `model` and
+`replay` (it can replay a worker's experiment). A custom role or team may be granted any of them.
+Beyond the groups: an experiment is its owner's to change (Orchestra refuses another instance);
+a session on a ticket commits only an experiment it made on that ticket (`AgentStore.add_experiment`);
+only the agent that committed a prediction announces its change, once (`AgentStore.add_prediction`).
+
+**Announcing the change.** Nothing is judged until the change is announced with the prediction's
+change id. A worker calls `announce_change`: `when: now` publishes `system.changed` (id: the change,
+subject: the ticket) as the worker's instance; `when: landed` waits for the ticket's end
+(`protocol.ended`: the gate landed it, or in tasks mode its review approved it) and the host then
+publishes it as that instance (`modeling.announce_landed`, from the runner's tick; a cancelled
+ticket's change is never announced). The Supervisor passes `change` to the setup tool that makes
+a configuration change, whose `config.changed` then carries it as its id.
+
+**The verdict wakes the predictor** (`verdicts.py`). The host matches `orchestra.prediction.judged`
+by its `correlationid` (the change) to the agent that committed it: a resident or custom agent gets a
+wake-up saying the verdict; a worker, whose ticket session is over by then, gets one short turn of
+its own (`<role>-<ticket>-verdict-<time>`, the `model` tools only, a scratch directory, not the
+workspace) to read the verdict and say what it means. Every agent with `predict` lists the
+verdict in what it listens for, and a per-ticket one its ticket's end too (`listening.py`). Any
+agent may also wake on `orchestra.prediction.judged`, filtered by verdict
+(`orchestra.prediction.judged:side effect`).
+
+**The skill.** `prompts/modeling.md`, read with the `modeling_guide` tool, says what stocks, flows,
+equations, origins, trust, eras, observability and verdicts mean, how to test a change (read, draft,
+replay to check the equations explain what happened, run forward, read what is not trusted), how to
+ask an inverse question (hold what must not move; an ambiguous answer is a warning), and when to
+commit and how to read a verdict. The equation language in it is Orchestra's own reference
+(`GET /language`), filled in when it is read. The role prompts only say when to reach for it.
+
+Limits: a verdict published while the host is down wakes nobody (it is still in
+`read_predictions`); running the model needs `orchestra[sd]` beside the agents (reading it does
+not), and a tool says so when it is missing.

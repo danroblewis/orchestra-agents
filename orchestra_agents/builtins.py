@@ -18,6 +18,11 @@ Tool groups:
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
                overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
                collectors, any key) and restart a machine (the Supervisor only)
+  model        read the system dynamics model, series, eras, observability, experiments, runs,
+               predictions and their verdicts; the modeling guide (modeling.py)
+  experiments  make, edit, run forward and inverse, and discard one's own experiments
+  replay       replay any experiment over a past window
+  predict      commit one's own experiment as the prediction of one's own change, and announce it
   report_ticket / report_review   the worker's and the reviewer's exit tools
 """
 
@@ -64,7 +69,7 @@ def register(role: Role) -> Role:
 
 register(Role(
     name="supervisor", prompt="supervisor",
-    tools=("tickets", "context", "pipeline", "roles", "team", "events", "observe", "setup"),
+    tools=("tickets", "context", "pipeline", "roles", "team", "events", "observe", "setup", "model", "experiments", "replay", "predict"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent"),
     emits=(REQUESTS["create_ticket"], REQUESTS["update_ticket"], REQUESTS["create_milestone"], REQUESTS["close_milestone"],
@@ -75,7 +80,7 @@ register(Role(
 ))
 register(Role(
     name="coordinator", prompt="coordinator",
-    tools=("tickets", "capacity", "escalate"),
+    tools=("tickets", "capacity", "escalate", "model", "experiments", "replay"),
     wake_on=(f"{ATTENTION}:{COORDINATOR}",),
     emits=(REQUESTS["update_ticket"], REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"],
            REQUESTS["set_capacity"]),
@@ -83,10 +88,10 @@ register(Role(
 ))
 # Per-ticket roles are not resident; the host starts them on the offers of work (runner.py): the task
 # system's queue, and the machines that pass work on directly (a review requested, changes requested).
-register(Role(name="worker", prompt="worker", tools=("report_ticket",), resident=False,
+register(Role(name="worker", prompt="worker", tools=("report_ticket", "model", "experiments", "replay", "predict"), resident=False,
               wake_on=(ASSIGNED, CHANGES_REQUESTED, RELEASED), emits=(ACCEPTED, WORKING, REVIEW_REQUESTED, REPORTED),
               description="Does one ticket in the workspace it is handed and asks the reviewers, or reports BLOCKED."))
-register(Role(name="reviewer", prompt="reviewer", tools=("report_review",), resident=False,
+register(Role(name="reviewer", prompt="reviewer", tools=("report_review", "model", "replay"), resident=False,
               wake_on=(ASSIGNED, REVIEW_REQUESTED, RELEASED), emits=(ACCEPTED, WORKING, CHANGES_REQUESTED, APPROVED, REPORTED),
               description="Reviews one ticket's result (a diff, or RESULT.md): approves it for the gate, or sends it back to its worker."))
 

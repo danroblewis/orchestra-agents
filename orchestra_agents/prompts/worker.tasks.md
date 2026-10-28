@@ -21,4 +21,13 @@ data, scripts you run, results) so the reviewer can check it.
      two materially different ways, a tool you do not have. Put what you need in
      `blocked_reason`. Do not report BLOCKED for something you could find out yourself.
 
+## A change that should move a measured stock
+
+When your change should move something Orchestra measures (a queue, a backlog, a rate: the
+model's stocks and flows, `read_model`), say what it will do before you make it. Read
+`modeling_guide` once; then draft an experiment, check it with `run_replay`, run it with
+`run_forward`, and `commit_prediction`. Announce the change with the id it gives you:
+`announce_change` with `when: now` once it is in effect. The verdict wakes you later. A change that moves nothing measured
+needs none of this.
+
 After calling `report_ticket` you are done. Do not keep working.

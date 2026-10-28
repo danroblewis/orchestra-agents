@@ -23,6 +23,7 @@ from . import access, prompting
 from .builtins import PER_TICKET_ROLES
 from .builtins import ROLES as BUILTIN
 from .harness import AgentSession
+from .modeling import announce_landed
 from .prompting import TicketView
 from .protocol import (
     ACCEPTED,
@@ -72,6 +73,8 @@ class AgentRunner:
             if kind in OFFERS and ev.get("role") in serves and ev.get("assignment") not in self.threads:
                 self._offered(ev, start)
             elif end := ended(ev, self.host.cfg.work):                  # the gate landed it, its reviewer approved it (tasks), it was cancelled
+                for line in announce_landed(self.host.store, ev, self.host.cfg.work):   # a predicted change that takes effect now
+                    self.host.log(line)
                 self._let_go(end[0])
                 self.host.store.purge_ticket_sessions(end[0])           # a finished ticket's sessions go to the archive
             elif kind == RELEASED and ev.get("assignment") in self.sessions \

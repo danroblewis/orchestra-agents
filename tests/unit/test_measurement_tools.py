@@ -251,6 +251,7 @@ def test_the_supervisor_connects_a_store_it_is_asked_to_without_waiting_for_a_go
     assert "observation, not a change to the system" in store_part and "do not propose" in store_part
     assert "bearer_file" in store_part and "never for its value" in store_part
     assert "or size-limited store is no reason to stop or to ask" in store_part
+    assert "without `match` first" in store_part and "never conclude a\n   store lacks something" in store_part
     assert "rate-limited store)" not in store_part           # the old reason to ask first is gone
 
 

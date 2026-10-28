@@ -167,8 +167,9 @@ map), that it is woken when its ticket lands, and that the agents' metrics arriv
 
 ## Developing against a local Orchestra
 
-`pyproject.toml` requires `orchestra>=1.0.0a1,<1.0.0` and takes it from GitHub's `main`
-(`[tool.uv.sources]`; installed as a plugin, it gets the Orchestra it is installed with), and the
+`pyproject.toml` requires `orchestra>=1.0.0a1,<1.0.0rc0` and takes it from GitHub's `main`
+(`[tool.uv] override-dependencies`; installed as a plugin, it gets the Orchestra it is installed
+with), and the
 dev extra takes the task system from GitHub over SSH (it is private). `uv.lock` pins both commits,
 so nothing needs cloning beside this repository. `uv lock --upgrade-package orchestra`
 (or `orchestra-tasking`) moves a pin to the newest `main`, then `uv sync --extra dev`.
@@ -181,9 +182,10 @@ environment for one command:
 Nothing is written: `.venv`, `pyproject.toml` and `uv.lock` keep the pinned commits, and a plain
 `uv run` goes back to them.
 
-To keep a checkout as this environment's Orchestra, point the source at it in `pyproject.toml`,
+To keep a checkout as this environment's Orchestra, point `pyproject.toml` at it,
 then `uv sync --extra dev`; leave that change, and the `uv.lock` it rewrites, out of commits
 (`git checkout pyproject.toml uv.lock`, then `uv sync --extra dev`, goes back):
 
-    [tool.uv.sources]
-    orchestra = { path = "../orchestra_2", editable = true }   # the path to your Orchestra checkout
+    [tool.uv]
+    override-dependencies = ["orchestra[sd]"]
+    sources = { orchestra = { path = "../orchestra_2", editable = true } }   # the path to your Orchestra checkout

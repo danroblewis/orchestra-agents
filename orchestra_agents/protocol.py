@@ -4,9 +4,9 @@ tasking/requests.py; nothing is imported from it.
 
 - Assignment (the owner's decision D17: the task system is the record, not the hub). Work passes
   directly between the machines that do it. An offer opens a turn: ``task.assigned`` from the
-  role's queue (published as ``worker`` or ``reviewer``: the task system's scheduler is no machine
-  and stands in for each role's own queue, so it publishes as the machine it acts for and never as
-  ``task_scheduler``), ``review.requested`` from the worker that finished (for any reviewer), or
+  task system's queue (published as ``coordinator/dispatch``: the task system's scheduler is no
+  machine, choosing what is offered next is dispatch, the coordinator's, so it publishes as an
+  instance of the coordinator and never as ``task_scheduler``), ``review.requested`` from the worker that finished (for any reviewer), or
   ``changes.requested`` from the reviewer that rejected (``to`` the worker instance that did the
   work, which takes it back in the same session). A machine claims an offer
   (``task.accepted``); the first valid claim on the bus holds it, and the claimant knows by
@@ -16,9 +16,10 @@ tasking/requests.py; nothing is imported from it.
   ``review.approved`` for the task system's gate) or with ``task.reported`` when it passes to no
   machine (a worker's BLOCKED, or no report). Every event of a turn names the offer as its
   ``causationid``. The task system listens, records, and may take a turn back
-  (``task.released``, as the role's queue: a silent holder, an offer nobody took, rejected work its
-  worker did not take back within the return timeout, the operator, a restart; ``instance`` names
-  the holder when it is addressed to one). Nothing here reads an offer's or a release's source:
+  (``task.released``: an offer nobody took, or rejected work its worker did not take back within
+  the return timeout, withdrawn as ``coordinator/dispatch``; a silent holder, the operator, a
+  restart, as the role, ``worker`` or ``reviewer``; ``instance`` names the holder when it is
+  addressed to one). Nothing here reads an offer's or a release's source:
   the claim rule (``holder``) is the bus's order of claims. There is no machine-sent
   release in the contract: a stop of the host reports every open assignment as ``failed``. The
   task system counts a worker's failed report against the ticket's crash budget (the ticket goes

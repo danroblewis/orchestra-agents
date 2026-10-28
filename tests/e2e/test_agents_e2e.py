@@ -157,9 +157,9 @@ def env(tmp_path, monkeypatch, request):
     th.start()
     try:
         deadline = time.time() + 30
-        # the scheduler is no machine and announces nothing of itself; it says, as the worker's queue,
-        # what makes that queue act, once it is up
-        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "worker" and "ticket.created" in (e.get("listens_for") or [])
+        # the scheduler is no machine and announces nothing of itself; it announces dispatch, an
+        # instance of the coordinator, and what makes it act, once it is up
+        while not any(e["type"] == "orchestra.machine.started" and e["source"] == "coordinator/dispatch" and "ticket.created" in (e.get("listens_for") or [])
                       for e in events.after(0)[0]):
             assert scheduler.poll() is None, "tasking run exited; see scheduler.log"
             assert time.time() < deadline, "the scheduler did not start"
@@ -250,8 +250,10 @@ def test_rejection_loops_back_to_worker(env, monkeypatch):
     check_protocol(env.events, t, WORK_READY, REJECTED, WORK_READY, APPROVED)          # reworked by the same instance, worker/1
     msgs = read_transcript(agent_store(env).runtime()["archived_sessions"][f"worker-{t}"])
     assert sum(1 for m in msgs if m["role"] == "user") == 2                              # the same worker session, re-engaged
-    # the work passed between the machines: from the planner (its queue offered it first), and the gate took the approval
-    assert handoffs(env.events, t) == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
+    # the work passed between the machines: from the planner to the coordinator's dispatch, which offered it
+    # to a worker, and the gate took the approval
+    assert handoffs(env.events, t) == [("planner", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker"),
+                                       ("worker", "review.requested", "reviewer"),
                                        ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
                                        ("reviewer", "review.approved", "merge_gate")]
 

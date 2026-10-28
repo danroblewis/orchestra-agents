@@ -99,7 +99,7 @@ and `tasking/requests.py` hold the full field tables).
 
 **Assignment** (`runner.py`, inside the host). Work passes directly between the machines that do
 it; the task system listens, records, and takes back what a silent machine holds (the owner's
-decision D17). An offer opens a turn: `task.assigned` from the role's queue (assignment
+decision D17). An offer opens a turn: `task.assigned` from the task system's dispatch (assignment
 id, role, ticket, workspace, branch and base or null, lease, the ticket's brief, the unit command
 in code mode; a reviewer's carries `review` {summary, commit, test_output, worker}),
 `review.requested` from the worker that finished (the same fields, for the reviewers), or
@@ -153,12 +153,17 @@ bug ticket for a cause in the program.
 
 **Sources, and no echoes.** The task system's scheduler is no machine: it never announces itself
 and never publishes as `task_scheduler`. It publishes as the machine whose responsibility it
-implements: offers and releases as the role's queue (`task.assigned` and `task.released` with
-source `worker` or `reviewer`, no instance; a release addressed to an instance names it in
+implements: offers as dispatch, an instance of the coordinator (`task.assigned` with source
+`coordinator/dispatch`: choosing what is offered next is the coordinator's), releases of an offer
+nobody claimed as dispatch too, and releases of a held turn as its role (`task.released` with source
+`worker` or `reviewer`, no instance; a release addressed to an instance names it in
 `data.instance`), answers as the asker (`request.done` and `request.refused`, with the request as
 `causationid`; `ticket.created` and `milestone.created` for what a request made), the gate, staging and the pipeline as
-`merge_gate`, probes as `probes`. It announces once, as `worker`, what makes the worker's queue
-act (`listens_for: [gate.conflict, gate.rejected, ticket.created]`). Nothing here reads an offer's
+`merge_gate`, probes as `probes`. It announces dispatch as `coordinator/dispatch` (`kind:
+program`, `listens_for: [gate.conflict, gate.rejected, task.released, ticket.created]`, no
+package): with the Coordinator agent (source `coordinator`, kind agent) it is one `coordinator`
+machine on the Machines page, which lists what both listen for, says `agent ×1, program ×1`, and
+keeps each instance's card apart, so the agent's harness and model stay on it. Nothing here reads an offer's
 or a release's source: the claim rule (`protocol.holder`) is the bus's order of claims. And it
 publishes no echo of another machine's act: there is no `ticket.transitioned`,
 `ticket.note_added`, `ticket.updated`, `milestone.updated`, `milestone.closed` or
@@ -255,7 +260,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   not see end. At a clean stop (Ctrl-C, a deploy restart) it closes every live turn and waits
   briefly for each open assignment's `task.reported` (`failed`) to go out, because the
   contract has no machine-sent release (`task.released` is the task system's verb only, published
-  as the role's queue). The task
+  as its dispatch or as the role). The task
   system counts a worker's failed report against the ticket's crash budget (the ticket goes
   back to OPEN) and a reviewer's as a review that ended without a verdict (the review is
   redone, up to its no-verdict budget; `tasking/reports.py`);

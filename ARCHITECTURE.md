@@ -643,10 +643,10 @@ back what a silent machine holds; it relays nothing and confirms nothing.
 
 | Step | Event (source → bus) | Data this side sends or reads |
 |---|---|---|
-| Offer | `task.assigned` (the role's queue: source `worker` or `reviewer`, no instance), `review.requested` (a worker), `changes.requested` (a reviewer, `to` one worker instance) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` and `base` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`, `feedback`), `unit_command` (code), `review {summary, commit, test_output, worker}` (reviewer), `to` |
+| Offer | `task.assigned` (the task system's dispatch: source `coordinator/dispatch`), `review.requested` (a worker), `changes.requested` (a reviewer, `to` one worker instance) | Read: `assignment`, `role`, `ticket`, `workspace`, `branch` and `base` (null in tasks mode), `lease_s`, `brief` (ticket fields, `worker_turns`, `feedback`), `unit_command` (code), `review {summary, commit, test_output, worker}` (reviewer), `to` |
 | Claim | `task.accepted` (instance, e.g. `worker/1`; subject = ticket; causationid = the offer) | `{assignment, ticket, role, instance}` |
 | Held? | the bus itself | Read back from where the offer was read: the first valid claim of the offer (`protocol.holder`) is this one, and no `task.released` of it came first |
-| Taken back | `task.released` (the role's queue) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
+| Taken back | `task.released` (an offer nobody claimed: `coordinator/dispatch`; a held turn: the role) | Read: `assignment`, `reason`, and `instance` (null, or this instance) |
 | Heartbeat | `task.working` (instance) | `{assignment, ticket, role, text}`: at least every `HEARTBEAT_S` (30 s), and sooner (checked every 2 s) when the agent's latest text changes. `text` is the last 160 characters of `partial_text` or `last_text`. |
 | A worker passes on | `review.requested` (instance) | The offer fields for the reviewers' turn: a new `assignment`, `role: reviewer`, `ends` (its own), `review {summary, commit, test_output, worker: this instance}` |
 | A reviewer rejects | `changes.requested` (instance) | A new `assignment`, `role: worker`, `to` (the offer's `review.worker`), `ends`, the brief with `feedback` and `rejected_by`, `summary`, `feedback`, `commit` |
@@ -684,7 +684,7 @@ slots, so its old rejections reach the queue after that timeout.
 ```mermaid
 sequenceDiagram
   autonumber
-  participant S as task system (as the role's queue)
+  participant S as task system (as coordinator/dispatch, or the role)
   participant B as Orchestra bus
   participant W as runner as worker/1
   participant O as other machine (worker/shell)
@@ -734,8 +734,9 @@ sequenceDiagram
   (DONE); in tasks mode `review.approved` (DONE, nothing to merge); `request.done` whose result is
   the ticket in DONE or CANCELLED (a planner's cancel).
 - **Sources.** The task system's scheduler is no machine and never publishes as itself. Offers
-  and releases come from the role's queue (`worker`, `reviewer`; a release addressed to an
-  instance names it in `instance`), answers from the asker, the gate's events from `merge_gate`.
+  come from its dispatch (`coordinator/dispatch`, an instance of the coordinator), releases from
+  it (an offer nobody claimed) or from the role (`worker`, `reviewer`: a held turn; a release
+  addressed to an instance names it in `instance`), answers from the asker, the gate's events from `merge_gate`.
   The runner reads neither an offer's nor a release's source: the bus's order of claims decides
   (`protocol.holder`).
 - **Host crash.** The host reports nothing it did not see end. The task system takes the ticket

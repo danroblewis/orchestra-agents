@@ -122,7 +122,8 @@ runs the whole demo on dummy agents with no API key and no network. Its
 `test_what_the_owner_sees` lands twelve tickets, five of them rejected once (a rule appended to
 the target's `dummy.toml`), and checks what the owner would see: `task_scheduler` is in no
 event's source and no machine, edge or hand-off of `/api/machines`; a reworked ticket's hand-offs
-are planner → worker → reviewer → worker → reviewer → merge_gate; discovery hypothesises no flow
+are planner → coordinator → worker → reviewer → worker → reviewer → merge_gate (the first offer is
+the task system's dispatch, an instance of the coordinator); discovery hypothesises no flow
 on `task_scheduler`; and the ticket metrics arrive with `instrument=tasks.tickets` (the
 instrument the task system's plugin declares, `tasking metrics`). Its `test_the_agents_host_is_no_machine` has the
 Supervisor file a ticket and checks that no machine, edge or event is `agents`, that the

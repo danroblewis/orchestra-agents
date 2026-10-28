@@ -8,15 +8,16 @@ that only note that they ran, and every Python process unable to reach beyond th
 - a ticket is offered, accepted, worked (a real commit), reviewed, gated and landed;
 - a second ticket is rejected once by the reviewer, reworked by the same worker instance and
   session, and lands, the work passing directly between them: the hand-offs Orchestra's event map
-  computes are worker → reviewer → worker → reviewer → merge_gate, the task system only where it
-  acted (the first offer);
+  computes are planner → coordinator → worker → reviewer → worker → reviewer → merge_gate, the
+  task system only where it acted (the first offer, as the coordinator's dispatch);
 - the Supervisor answers a chat turn through the web's /supervisor;
 - no model was run and nothing tried the network.
 
 And what the owner sees (``test_what_the_owner_sees``), after more tickets, five of them rejected
 once: the task system's scheduler is nowhere (no event is its, it is no machine, no edge or
 hand-off names it), every hand-off of a reworked ticket is one machine to the next with nothing in
-between (planner → worker → reviewer → worker → reviewer → merge_gate), discovery hypothesises no
+between (planner → coordinator → worker → reviewer → worker → reviewer → merge_gate), one
+coordinator machine is the agent and the task system's dispatch, discovery hypothesises no
 machine on a ticket flow for acts it did not take, and the ticket measurements arrive through the
 task system's instrument."""
 
@@ -162,6 +163,7 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     accepted = [e for e in events if e["type"] == "task.accepted" and e["subject"] == "DEMO-4"]
     asked = [e for e in events if e["type"] == "review.requested" and e["subject"] == "DEMO-4"]
     assert {e["data"]["role"] for e in offered} == {"worker"} and by["DEMO-4"][1] in {e["source"] for e in accepted}   # the queue offered the work
+    assert {e["source"] for e in offered} == {"coordinator/dispatch"}                       # as the coordinator's dispatch
     assert [e["source"] for e in asked] == [by["DEMO-4"][0]]                                 # the worker itself asked for the review
     assert "DEMO-4: measure the repository" in git(target, "log", "--format=%s", "main")
     assert "machines/repo_stats.sh" in git(target, "ls-tree", "-r", "--name-only", "main")
@@ -174,7 +176,8 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     assert by["DEMO-3"][0] == by["DEMO-3"][2] and by["DEMO-3"][0].startswith("worker/")     # reworked by the same worker instance
     back = [e for e in events if e["type"] == "changes.requested" and e["subject"] == "DEMO-3"]
     assert [e["data"]["to"] for e in back] == [by["DEMO-3"][0]]                             # the rejection went to it, not to a queue
-    assert handoffs(events, "DEMO-3") == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
+    assert handoffs(events, "DEMO-3") == [("planner", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker"),
+                                          ("worker", "review.requested", "reviewer"),
                                           ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
                                           ("reviewer", "review.approved", "merge_gate")]
     assert "def test_longest_first" in git(target, "show", "main:tests/test_line_counts.py")
@@ -242,18 +245,27 @@ def test_what_the_owner_sees(free_demo):
 
     # a reworked ticket passes from machine to machine with nothing in between
     rework = ids[len(ids) - len(EXTRA)]
-    assert handoffs(events, rework) == [("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"),
+    assert handoffs(events, rework) == [("planner", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker"),
+                                        ("worker", "review.requested", "reviewer"),
                                         ("reviewer", "changes.requested", "worker"), ("worker", "review.requested", "reviewer"),
                                         ("reviewer", "review.approved", "merge_gate")]
     edges = {(h["from"], h["via"], h["to"]) for h in d["handoffs"]}
-    assert {("planner", "ticket.created", "worker"), ("worker", "review.requested", "reviewer"), ("reviewer", "changes.requested", "worker"),
-            ("reviewer", "review.approved", "merge_gate")} <= edges, edges
+    assert {("planner", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker"), ("worker", "review.requested", "reviewer"),
+            ("reviewer", "changes.requested", "worker"), ("reviewer", "review.approved", "merge_gate")} <= edges, edges
+    assert not [e for e in edges if e[2] == "worker" and e[0] in ("planner", "supervisor")], edges   # new work reaches a worker only by dispatch
 
-    # what each machine published: the worker's queue (offers, as worker) adds one offer per ticket from the queue
+    # one coordinator machine: the Coordinator agent and the task system's dispatch, an instance of it
+    [coord] = [m for m in d["machines"] if m["id"] == "coordinator"]
+    assert {"ticket.created", "task.released", "gate.rejected", "task.attention_needed", "request.done"} <= set(coord["subscribes"]), coord
+    assert coord["kind"] == "agent ×1, program ×1" and coord["package"] == "agents" and coord["about"].get("harness") == "dummy", coord
+    assert [i["id"] for i in coord["instances"]] == ["dispatch"]
+
+    # what each machine published: dispatch (offers, as the coordinator) adds one offer per ticket from the queue
     published = {m["id"]: {p["type"]: p["count"] for p in m["publishes"]} for m in d["machines"]}
     print("published:", {m: sum(c.values()) for m, c in published.items()})
     print("degrees:", {m["id"]: {"publishes": len(m["publishes"]), "listens_for": len(m["subscribes"])} for m in d["machines"]})
-    assert published["worker"].get("task.assigned") == len(ids)                            # one offer per ticket: rework went to the worker directly
+    assert published["coordinator"].get("task.assigned") == len(ids)                       # one offer per ticket: rework went to the worker directly
+    assert "task.assigned" not in published["worker"] and "task.assigned" not in published["reviewer"]    # no role offers work as its queue
     assert "ticket.created" in published["planner"] and "gate.landed" in published["merge_gate"]
 
     # discovery hypothesises no machine on a ticket flow for acts it did not take: the scheduler on
@@ -303,6 +315,8 @@ def test_the_agents_host_is_no_machine(free_demo):
     assert "gate.landed" in {p["type"] for p in next(m for m in d["machines"] if m["id"] == "merge_gate")["publishes"]}
     coord = next(m for m in d["machines"] if m["id"] == "coordinator")
     assert "request.done" in coord["subscribes"]
+    # the Supervisor's request reaches the coordinator: its ticket goes to dispatch, which offers it to a worker
+    assert handoffs(events, made["subject"])[:2] == [("supervisor", "ticket.created", "coordinator"), ("coordinator", "task.assigned", "worker")]
 
     # the measurements: through the plugin's instrument, the host writing none
     from orchestra.config import load_project as orchestra_project

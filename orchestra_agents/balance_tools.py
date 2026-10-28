@@ -29,12 +29,14 @@ import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from itertools import pairwise
+from itertools import combinations, pairwise
 
 from .config import Project
 from .store import StoreError
 
 MAX_CANDIDATES = 16       # metric names read as candidates, over every store
+SAME_SCALE = 0.1          # two levels within this share of each other on average ...
+SAME_CORR = 0.98          # ... whose values move together this closely are one quantity read twice
 MAX_LEVELS = 24           # levels searched in one call
 MAX_GROUPS = 8            # series per candidate name, when read per value of a label naming the level's subject
 WINDOW_MIN = 60
@@ -383,22 +385,50 @@ def find_balance(project: Project, a: dict) -> dict:
     end = start + n * step
     window = (start, end, step, n)
     if len(levels) == 1:
-        return _one(levels[0], home, stores, a, window)
+        got = _one(levels[0], home, stores, a, window)
+        got.pop("_rows", None)
+        return got
     out: dict = {"ok": True, "window": f"{round((end - start) / 60)} min, {step:g} s steps", "levels": []}
+    rows = []
     for level in levels:
         try:
             got = _one(level, home, stores, a | {"stock": ""}, window)
         except StoreError as e:
             out["levels"].append({"level": level, "result": str(e)})
             continue
+        rows.append((len(out["levels"]), got.pop("_rows")))
         out["levels"].append(_brief(got))
+    for (i, ra), (j, rb) in combinations(rows, 2):
+        if _same_quantity(ra, rb):
+            for x, y in ((i, j), (j, i)):
+                other = out["levels"][y]
+                out["levels"][x].setdefault("same_as", []).append(f"{other['store']}:{other['level']}")
     if later:
         out["not_searched_yet"] = later
         out["not_searched_note"] = f"at most {MAX_LEVELS} levels a call: call again with not_searched_yet"
     out["next"] = ("for each level with a balance, declare its declare list (all in one set_setting key series, with the "
                    "[[series]] already there); with bursts or one_sided, declare the level and that side and name the "
-                   "residual; a level held in two stores is declared once")
+                   "residual; levels marked same_as are one quantity read twice (a copy in another store, a replica): "
+                   "declare one of them, the one whose balance is accepted")
     return out
+
+
+def _same_quantity(a: list, b: list) -> bool:
+    """Two levels that are one quantity read twice: where both have a point, their values agree
+    within ``SAME_SCALE`` on average and move together (correlation ``SAME_CORR``). Their changes are
+    not compared: a store written a minute late moves a minute after the other."""
+    at = dict(b)
+    pairs = [(v, at[t]) for t, v in a if t in at]
+    if len(pairs) < 10:
+        return False
+    xs, ys = [p for p, _ in pairs], [q for _, q in pairs]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    if max(abs(mx), abs(my)) <= 0 or abs(mx - my) > SAME_SCALE * max(abs(mx), abs(my)):
+        return False
+    vx, vy = sum((x - mx) ** 2 for x in xs), sum((y - my) ** 2 for y in ys)
+    if vx <= 0 or vy <= 0:
+        return False
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / (vx * vy) ** 0.5 >= SAME_CORR
 
 
 def _brief(got: dict) -> dict:
@@ -510,7 +540,7 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
     lname = f"{home.name}:{metric_of(level) or 'level'}"
     found = flows_of((lname, {}, lv_rows[0][1]), dump, start, step, n, kinds | {lname: Declared("level")})
     stock = _stock_name(a.get("stock") or "", level)
-    out: dict = {"ok": True, "level": level, "store": home.name, "unit": unit,
+    out: dict = {"ok": True, "level": level, "store": home.name, "unit": unit, "_rows": lv_rows[0][1],
                  "window": f"{round((end - start) / 60)} min to {round(time.time() - end)} s ago, {step:g} s steps",
                  "candidates_read": sorted(refs), "balances": []}
     if found.why:

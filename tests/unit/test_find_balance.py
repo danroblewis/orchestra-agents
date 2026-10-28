@@ -70,3 +70,11 @@ def test_a_list_of_levels_is_read_as_source_schema_writes_it():
     assert got == ['rabbitmq_queue_messages{queue="a"}', 'rabbitmq_queue_messages{queue="b.c"}', "envoy_http_downstream_cx_active",
                    'x{q="1"}']
     assert expand("one_level") == ["one_level"]
+
+
+def test_two_levels_that_are_one_quantity_read_twice_are_told_apart_from_two_that_rise_together():
+    from orchestra_agents.balance_tools import _same_quantity
+    a = [(t * 30.0, 1000.0 + 5 * t + (t % 3)) for t in range(60)]
+    late = [(t * 30.0, 1000.0 + 5 * (t - 2) + (t % 3)) for t in range(60)]       # the same, a minute late
+    other = [(t * 30.0, 4000.0 + 20 * t) for t in range(60)]                    # rises with it, another scale
+    assert _same_quantity(a, late) and not _same_quantity(a, other)

@@ -222,7 +222,7 @@ def test_a_store_that_refuses_a_whole_listing_is_listed_name_by_name(project, st
     remote.max_series, remote.busy = 2, 1        # three request series: too many at once; one 429 on the way
     whole = call(project, store, "source_schema", url=remote.url)
     assert "queue_depth [guessed: gauge] 1 series; queue=1" in whole["names"]
-    assert any(x.startswith("http_requests_total [counter]: the store refused") for x in whole["too_big_to_list"])
+    assert any(x.startswith("http_requests_total [counter]: not listed") for x in whole["too_big_to_list"])
     narrow = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+",queue="orders"}'])
     assert [m["name"] for m in narrow["names"]] == ["queue_depth"]
     remote.max_series = 3

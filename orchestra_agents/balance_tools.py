@@ -458,8 +458,8 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
     from orchestra.sources import SourceError
 
     start, end, step, n = window
-    # the level's store: the one given, else the first searched store that has it
-    tried = [home] if a.get("url") or a.get("source") else stores
+    # the level's store: the one given first, then the other searched stores, the first that has it
+    tried = [home, *(st for st in stores if st is not home)] if a.get("url") or a.get("source") else stores
     lv_rows, lv_sets, errors = [], [], []
     for cand in tried:
         try:

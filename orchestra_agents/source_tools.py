@@ -5,12 +5,14 @@ each), what a query returns, and what Orchestra infers to read from it. All thro
 written to the store, the metrics store or the configuration, and no credential's value is shown.
 
 Each tool takes a declared source by ``source`` (its name in ``[[sources]]``), or a trial one by
-``url`` (and ``auth``, as ``[[sources]]`` writes it: ``{"bearer_env": "WORK_TOKEN"}``), so a store
+``url`` (and ``auth``, as ``[[sources]]`` writes it: ``{"bearer_file": "~/.config/x/token"}`` or
+``{"bearer_env": "WORK_TOKEN"}``), so a store
 can be looked at before anything is declared. The credential is read from the environment of the
 agents' tools, which is ``orchestra run``'s."""
 
 from __future__ import annotations
 
+import re
 import time
 from collections import defaultdict
 
@@ -78,7 +80,7 @@ def source_schema(project: Project, a: dict) -> dict:
     now, limit = time.time(), int(a.get("limit") or LIMIT)
     start = now - float(a.get("minutes") or 60) * 60
     try:
-        sets = src.series(match, start, now, limit)
+        sets, big = _listing(src, match, start, now, limit)
         meta = src.metadata()
     except SourceError as e:
         raise StoreError(f"the store did not answer: {e}") from e
@@ -108,6 +110,9 @@ def source_schema(project: Project, a: dict) -> dict:
         if idle:
             out["described_but_no_series_in_window"] = idle[:100]
         out["next"] = "source_schema with match (e.g. {__name__=~\"http_.*\"}) shows those metrics' help and label values"
+    if big:
+        out["too_big_to_list"] = [f"{n} [{kind(n)}]: the store refused to list its series at once ({why[:120]}); "
+                                  "narrow it with label matchers in match" for n, why in sorted(big.items())][:100]
     if len(fams) > (SHOWN_METRICS if detail else SHOWN_NAMES):
         out["more"] = "more names than shown: narrow with match"
     if len(sets) >= limit:
@@ -116,6 +121,80 @@ def source_schema(project: Project, a: dict) -> dict:
                     "as increments or a rate. A label with many values (ids, paths, pods) multiplies series: sum it away unless "
                     "it names the thing you model.")
     return out
+
+
+BATCH = 25                                    # metric names listed per request once a store refuses a whole listing
+BUSY = re.compile(r"HTTP (429|502|503|504)\b")
+TOO_BIG = re.compile(r"(?i)HTTP 422|too many|exceed|limit of")
+
+
+def _ask(fn, *args, tries: int = 4):
+    """``fn(*args)``, asked again after a pause when the store is busy (429, 5xx)."""
+    from orchestra.sources import SourceError
+    for i in range(tries):
+        try:
+            return fn(*args)
+        except SourceError as e:
+            if i == tries - 1 or not BUSY.search(str(e)):
+                raise
+            time.sleep(min(2 ** i, 8))
+    return None
+
+
+def _names(src, match: list[str], start: float, end: float) -> list[str]:
+    """The metric names ``match`` selects (``label/__name__/values``), which a store answers
+    without touching every series."""
+    if hasattr(src, "names"):
+        return list(_ask(src.names, match, start, end))
+    form = {"match[]": list(match), "start": f"{start:.3f}", "end": f"{end:.3f}"}
+    data = _ask(lambda: src._call("/api/v1/label/__name__/values", form, post=False))
+    return [str(x) for x in data or []]
+
+
+def _listing(src, match: list[str], start: float, end: float, limit: int) -> tuple[list[dict], dict[str, str]]:
+    """Every series ``match`` selects, up to ``limit``, and the names too big to list. One request
+    when the store allows it; when it refuses for size (a per-query series limit), the names
+    first, then their series in batches of names, a refused batch split in halves, a single name
+    still refused set aside with the store's reason."""
+    from orchestra.sources import SourceError
+    try:
+        return list(_ask(src.series, match, start, end, limit)), {}
+    except SourceError as e:
+        if not TOO_BIG.search(str(e)):
+            raise
+    braced = [m.strip() for m in match if m.strip().startswith("{")]
+    named = [m for m in match if not m.strip().startswith("{")]
+    sets: list[dict] = []
+    big: dict[str, str] = {}
+
+    def batch(names: list[str]) -> None:
+        if not names or len(sets) >= limit:
+            return
+        sel = [f'{{__name__=~"{"|".join(names)}",{m[1:].lstrip()}' if m[1:].strip() != "}" else f'{{__name__=~"{"|".join(names)}"}}'
+               for m in braced]
+        try:
+            sets.extend(_ask(src.series, sel, start, end, limit - len(sets)))
+        except SourceError as e:
+            if not TOO_BIG.search(str(e)):
+                raise
+            if len(names) == 1:
+                big[names[0]] = str(e)
+                return
+            batch(names[: len(names) // 2])
+            batch(names[len(names) // 2:])
+
+    if braced:
+        names = sorted(set(_names(src, braced, start, end)))
+        for i in range(0, len(names), BATCH):
+            batch(names[i:i + BATCH])
+    for m in named:
+        try:
+            sets.extend(_ask(src.series, [m], start, end, limit))
+        except SourceError as e:
+            if not TOO_BIG.search(str(e)):
+                raise
+            big[m] = str(e)
+    return sets[:limit], big
 
 
 def _guess(name: str) -> str:

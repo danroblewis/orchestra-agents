@@ -153,30 +153,47 @@ worker, handed to the Coordinator with the error quoted.
 
 When the measurements already live in another store (the company's Prometheus, VictoriaMetrics,
 Thanos, Mimir or Chronosphere), Orchestra reads them in place with `[[sources]]` and never writes
-there. Read Orchestra's guide first (`read_guide` orchestra, the `[[sources]]` section and
-"Reading another store's schema"). Then, before declaring anything, with the store's `url` and
-`auth` (the name of the environment variable holding its token, never the token):
+there. **Reading a store is observation, not a change to the system**: when the human asks you to
+connect one, you connect it, in the turn, and report what you chose. You do not propose a
+selection and wait for a go-ahead; they redirect you afterwards if they want something else.
 
-- `check_sources`: does it answer, is the credential present;
-- `source_schema`: what it has; narrow a big store with `match` to what bears on the human's
-  question;
-- `preview_query`: what a query returns, to see a candidate's shape and scale;
-- `infer_source`: what Orchestra would read from it, and what it leaves out.
+1. **Read Orchestra's guide** once per session: `read_guide` orchestra, sections "`[[sources]]`
+   and `[[series]]`", "Reading another store's schema" and "Two stores, and a busy one".
+2. **The credential, by reference.** A token in a file is `auth = {"bearer_file": "<the path the
+   human gave>"}`; one in an environment variable is `{"bearer_env": "<NAME>"}`. Never read the
+   file, print or copy the token, or put it in a command or a query: the tools read it themselves.
+   When the store refuses without a credential and the human named none, ask where it is (a file
+   or a variable), never for its value.
+3. **Look, with `url` and `auth`, before declaring:** `check_sources` (does it answer; is the
+   credential there), `source_schema` (what it has; narrow with `match` to what bears on the
+   human's question), `preview_query` (a candidate's shape, scale, labels and units). A slow,
+   rate-limited or size-limited store is no reason to stop or to ask: read it narrowly (a `match`
+   per family you need), and Orchestra waits out its 429s and 503s and narrows what it refuses.
+4. **Choose a first selection yourself**, from the question asked or, without one, from what carries
+   the system's work: amounts that accumulate and drain (queues, backlogs and consumer lag,
+   inventories, sessions, connections, jobs in progress) and the counters that fill and drain
+   them, then requests and their errors. Production only: a staging or test twin is never read.
+   One store reached at several addresses is one source. Leave out latencies, quantiles, ratios,
+   flags, timestamps and the exporters' own timings as stocks.
+5. **Declare it** with `set_setting` key `sources` (the whole list of `[[sources]]` tables as
+   JSON, the ones already there included): a `name` for what the store is (it prefixes every
+   series read from it), the `url`, the `auth`, a narrow `match` (a list of selectors), the
+   `machine` label (the one that names the service doing the work: `service`, `job`, `app`;
+   never a pod or an instance), `[sources.labels]` for spellings of one label, and `settle` for a
+   store that writes late. Then key `series` for the `[[series]]` that pin what inference does not
+   rank or reads wrongly (the guide's "Translate into quantities of the system"): each with a
+   plain name for what it measures and its `kind`, previewed first. `target` repo, or overlay when
+   the store is only the owner's.
+6. **Check it**: `check_sources` and `infer_source` with its name (what Orchestra will read, what
+   it left out and why; fix the selection where it reads wrongly), and `read_instrument` with its
+   name once a discovery has read it. A second store is a second entry; a quantity both stores
+   hold is read from one of them (pin the better copy, leave the other out).
+7. **Tell the human** in a few lines: what you read and why, the series names discovery will see
+   (`<name>:<series>`), what you left out (and what is not measured at all, such as an outflow no
+   series counts), and the commit.
 
-When the human asks you to connect a store, connect it: choose a first selection yourself, from
-the question they asked or, without one, from what carries the system's work (requests and
-their errors and latency, queues and their consumers' lag, orders or jobs, saturation), name
-each series for what it measures, and declare it: the `[[sources]]` entry (a narrow `match`, the
-`machine`: the label that names the service doing the work, such as `service`, `job` or `app`,
-never a pod or an instance; `[sources.labels]` for spellings of one label; a `name` for what the
-store is, which prefixes every series read from it) and the `[[series]]` that pin what
-inference does not rank, with `set_setting` (key `sources` or `series`, the whole list of tables
-as JSON; `target` repo, or overlay when the store is only the owner's). Then check it
-(`check_sources` and `infer_source` with its name, `read_instrument` with its name: what the latest
-discovery read from it) and tell the human what you chose and why, and what you left out; they
-can redirect you. Ask first only when reading costs them (a paid or rate-limited store) or the
-credential is missing (name the environment variable it needs; never ask for the value).
-Credentials are never in either file.
+Ask before reading only when the store bills per query, or when you cannot tell which of several
+environments is production from the data. Credentials are never in either file.
 
 ## When the system cannot do what is asked
 

@@ -118,6 +118,8 @@ class FakeStore:
     def __init__(self, dump):
         from orchestra.metrics import promql
         fake = self
+        self.max_series = 0          # a listing of more series answers 422 (a per-query limit)
+        self.busy = 0                # the next N listings answer 429
 
         class H(BaseHTTPRequestHandler):
             def log_message(self, *a):
@@ -126,12 +128,19 @@ class FakeStore:
             def _go(self, form):
                 path = urllib.parse.urlsplit(self.path).path.rsplit("/", 1)[-1]
                 one = lambda k, d=None: (form.get(k) or [d])[0]
-                if path == "series":
+                if path in ("series", "values"):
                     seen = {}
                     for m in form.get("match[]") or []:
                         for lab, _ in promql.select(dump, m, float(one("start", 0)), float(one("end", time.time()))):
                             seen.setdefault(tuple(sorted(lab.items())), lab)
                     data = list(seen.values())
+                    if path == "values":
+                        data = sorted({lab["__name__"] for lab in data})
+                    elif fake.max_series and len(data) > fake.max_series:
+                        return self._send(422, {"status": "error", "error": f"query matched {len(data)} series, over the limit"})
+                    if fake.busy:
+                        fake.busy -= 1
+                        return self._send(429, {"status": "error", "error": "slow down"})
                 elif path == "metadata":
                     data = {"http_requests_total": [{"type": "counter", "help": "Requests served.", "unit": ""}]}
                 elif path == "buildinfo":
@@ -205,6 +214,44 @@ def test_another_store_is_looked_at_before_it_is_declared(project, store, remote
         call(project, store, "source_schema", source="work")
     with pytest.raises(StoreError, match="literal secret|user:pass"):
         call(project, store, "check_sources", url="http://me:pw@127.0.0.1:1")
+
+
+def test_a_store_that_refuses_a_whole_listing_is_listed_name_by_name(project, store, remote, monkeypatch):
+    from orchestra_agents import source_tools
+    monkeypatch.setattr(source_tools.time, "sleep", lambda s: None)
+    remote.max_series, remote.busy = 2, 1        # three request series: too many at once; one 429 on the way
+    whole = call(project, store, "source_schema", url=remote.url)
+    assert "queue_depth [guessed: gauge] 1 series; queue=1" in whole["names"]
+    assert any(x.startswith("http_requests_total [counter]: the store refused") for x in whole["too_big_to_list"])
+    narrow = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+",queue="orders"}'])
+    assert [m["name"] for m in narrow["names"]] == ["queue_depth"]
+    remote.max_series = 3
+    whole = call(project, store, "source_schema", url=remote.url, match=['{service="api"}'])
+    assert [m["name"] for m in whole["names"]] == ["http_requests_total"] and "too_big_to_list" not in whole
+
+
+def test_a_token_in_a_file_is_declared_by_its_path_and_never_shown(project, store, remote, tmp_path):
+    token = tmp_path / "secrets" / "token"
+    token.parent.mkdir()
+    token.write_text("tok-9f8e7d6c5b4a\n")
+    auth = {"bearer_file": str(token)}
+    seen = json.dumps(call(project, store, "check_sources", url=remote.url, auth=auth))
+    assert "present" in seen and "tok-9f8e7d6c5b4a" not in seen
+    entry = json.dumps([{"name": "shop", "url": remote.url, "auth": auth, "match": ['{__name__="queue_depth"}']}])
+    assert call(project, store, "set_setting", key="sources", value=entry, target="repo", reason="The shop's queue.")["commit"]
+    toml = (project.repo_root / "orchestra.toml").read_text()
+    assert str(token) in toml and "tok-9f8e7d6c5b4a" not in toml
+    assert "tok-9f8e7d6c5b4a" not in json.dumps(call(project, store, "read_config"))
+
+
+def test_the_supervisor_connects_a_store_it_is_asked_to_without_waiting_for_a_go_ahead(project):
+    from orchestra_agents.prompting import PROMPTS_DIR
+    text = (PROMPTS_DIR / "operator.md").read_text()
+    store_part = text[text.index("## Another time-series store"):text.index("## When the system cannot do what is asked")]
+    assert "observation, not a change to the system" in store_part and "do not propose" in store_part
+    assert "bearer_file" in store_part and "never for its value" in store_part
+    assert "or size-limited store is no reason to stop or to ask" in store_part
+    assert "rate-limited store)" not in store_part           # the old reason to ask first is gone
 
 
 def test_an_orchestra_toml_git_does_not_track_yet_is_committed_with_the_first_change(project, store):

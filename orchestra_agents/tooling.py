@@ -122,7 +122,7 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handle_org(project, store, command, a, author, role)
 
     if command in SETUP_COMMANDS or command in SYSTEM_COMMANDS:
-        project.reload_config()               # the file as it is now: an earlier call in this session may have changed it
+        project.reload_config()               # the configuration as it is now: an earlier call may have changed it
     if command in SETUP_COMMANDS:
         return handle_setup(project, store, command, a, author, role)
     if command == "restart_machine":

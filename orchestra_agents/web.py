@@ -21,7 +21,7 @@ from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
 from .api_org import read_org
-from .config import ConfigError, Project, load_project
+from .config import ConfigError, Project
 from .events import Events
 from .harness import read_transcript
 from .org import EVENT_HELP
@@ -36,7 +36,8 @@ STOP_GRACE_S = 30.0      # SIGTERM to SIGKILL for the host: above its worst-case
 
 def plugin(orchestra_project) -> Plugin:
     """The plugin for the repository Orchestra serves (its entry point, in pyproject.toml)."""
-    project = load_project(orchestra_project.repo_root)
+    project = Project.of(orchestra_project)
+    project.ensure_dirs()
     return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
                   scripts=["attention.js", "machine-cards.js"], stylesheets=["agents.css"],
                   machines=declared(project), processes=processes(project))
@@ -45,12 +46,13 @@ def plugin(orchestra_project) -> Plugin:
 def processes(project) -> list[Process]:
     """What `orchestra run` keeps running for the agents: their host (`orchestra-agents run --wait`,
     the machine `agents`; Orchestra names the process `agents.host`), in the environment this
-    package is installed in, when the project's orchestra.toml has an `[agents]` section. A project
+    package is installed in, when the project's configuration has an `[agents]` section (in
+    orchestra.toml or the owner's overlay; read through Orchestra, `project.orchestra.config`). A project
     without one has the pages and no host: installing the package beside Orchestra starts no AI.
     ``--wait``: a host restarted while the previous one still shuts down waits for it. The stop
     grace outlasts the host's own shutdown, so Orchestra never kills it mid-way and leaves its
     sessions' processes behind."""
-    raw = tomllib.loads((project.repo_root / "orchestra.toml").read_text(encoding="utf-8"))
+    raw = project.orchestra.config.raw
     return ([Process("host", [sys.executable, "-m", "orchestra_agents", "run", "--wait"], stop_grace_s=STOP_GRACE_S)]
             if "agents" in raw else [])
 
@@ -66,8 +68,9 @@ def declared(project) -> list[Declared]:
 
 
 def current(project: Project) -> Project:
-    """The project with ``[agents]`` as orchestra.toml says now: the host follows an edit within
-    a second, and so do the pages. A half-written or broken file keeps the last good config."""
+    """The project with ``[agents]`` as the configuration says now (through Orchestra, the overlay
+    merged): the host follows an edit within a second, and so do the pages. A half-written or broken
+    file keeps the last good config."""
     try:
         project.reload_config()
     except (ConfigError, OSError, tomllib.TOMLDecodeError):

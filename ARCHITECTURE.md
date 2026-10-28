@@ -56,7 +56,7 @@ The guarantees we care about, and where each one comes from:
 | No orphan processes | Each turn's pid is recorded on its session. A new host kills orphans on start (`host.py` `recover`). Shutdown closes turns, waits for their reports, then closes the residents, all inside the stop grace (`host.py` `run`, `closing.py`, `web.py` `STOP_GRACE_S`). |
 | Bounded context | Each session's context is measured in tokens from the harness's own transcript. Past the limit the session is compacted or rotated (`residents.py` `trim_if_large`). |
 | The human talks only to the Supervisor | The UI and CLI only read. The one write is the chat (`web.py` `POST /supervisor`, `control.py`). |
-| The Supervisor fixes the setup, not the code | Its setup tools edit `orchestra.toml` one entry at a time. Each edit is committed with a reason and announced on the bus (`setup_tools.py`, `toml_edit.py`). There is no code-writing tool. |
+| The Supervisor fixes the setup, not the code | Its setup tools change the configuration one entry at a time, through Orchestra's `config_edit`, in `orchestra.toml` (committed with a reason) or the owner's private overlay (never committed), and announce it on the bus (`setup_tools.py`, `config_change.py`). There is no code-writing tool. |
 | The Supervisor's replies are true | The tool calls are recorded in a ledger, the facts go in front of each turn, and Orchestra appends a correction when a reply contradicts them (`ledger.py`, `facts.py`, `truth.py`, `promises.py`). |
 | One transcript | The harness's own session file is the only transcript. The host keeps markers beside it and never writes a parallel log (`store.py` `add_marker`, `web.py` transcript view). |
 
@@ -136,7 +136,7 @@ The modules, grouped by job:
 | Entry points | `cli.py` (the `orchestra-agents` command), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
 | The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py` |
 | Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/dummy.py`, `harness/dummy_agent.py`, `harness/dummy_script.py`, `harness/dummy_defaults.toml`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
-| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
+| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py` |
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
@@ -177,8 +177,9 @@ The host uses Orchestra only as a library:
 - the bus, through `orchestra.events.Events` (wrapped by `events.py`);
 - the metrics store, through `orchestra.metrics.for_project` (`measures.py`, `observe_model.py`);
 - the runtime record, through `orchestra.runtime` (`restart.py`, `observe.py`, `setup_tools.py`);
-- the readers of `orchestra.toml`: `orchestra.config`, `orchestra.launcher`,
-  `orchestra.collect.spec` (`toml_edit.py`);
+- the configuration, only through Orchestra's objects: `project.orchestra.config` to read it (the
+  private overlay merged), `project.orchestra.config_edit` to change it (`config_change.py`,
+  `restart.py`); `orchestra.collect.spec` reads the collectors from it (`observe.py`);
 - the model view and log readers: `orchestra.web.dynamics.model_view` and
   `orchestra.web.machine_logs`.
 
@@ -865,7 +866,7 @@ The `observe` group only reads, through Orchestra as a library. See the table in
 - `check_setup.not_launched` names programs seen filling a role that Orchestra's launcher does
   not run. The Supervisor cannot restart or change those.
 
-### Config tools (`setup_tools.py`, `toml_edit.py`, `toml_entries.py`)
+### Config tools (`setup_tools.py`, `config_change.py`)
 
 `setup_tools.handle_setup` runs these steps for every setup tool:
 
@@ -875,24 +876,24 @@ The `observe` group only reads, through Orchestra as a library. See the table in
 4. `gate_busy.landing`: if a `task_scheduler` was seen on the bus, ask `list_gate_runs` (10 s).
    Refuse while a run is `running`, because a commit to the base branch would make the landing
    fail.
-5. `toml_edit.change`:
+5. `config_change.change`, with the tool's `target` (`repo` by default, `overlay` for the owner's
+   private settings):
    - The reason must be at least 10 characters.
-   - The root must be a git checkout on `base_branch`, with no uncommitted change to
+   - For `repo`, the root must be a git checkout on `base_branch`, with no uncommitted change to
      `orchestra.toml` (`why_not_committable`).
-   - Apply the edit on a `tomlkit` document, which keeps comments and layout.
-     `toml_entries.remove` cuts a removed entry out of the text.
+   - Ask Orchestra for the change without writing it (`config_edit.set`/`set_many`/`unset`/
+     `add_entry`/`remove_entry` with `dry_run=True`): Orchestra keeps comments and layout, and
+     refuses a result its readers or `agents_check` (`config.Config`) accept less well than before.
    - Refuse any new line that looks like a secret (`secret_shapes.secret_in`).
-   - Refuse a result that does not parse, or that Orchestra's readers (`orchestra.config`,
-     `orchestra.launcher`, `orchestra.collect.spec`) or `config.Config` accept less well than
-     before (`check`).
-   - Write the file atomically, then run
-     `git commit -m "Supervisor: <what>\n\n<reason>" -- orchestra.toml`. If the commit fails,
-     the old text is put back.
-6. If nothing changed, answer `{commit: null, applies: "Nothing changed..."}` and publish
-   nothing.
-7. Otherwise publish `config.changed {section, change, reason, commit, applies, by}` from the
-   Supervisor's instance.
-8. Answer `{ok, changed, commit, applies, next}`. Then run `plan.then`, for example the
+   - `config_edit.apply` writes it. For `repo`, then run
+     `git commit -m "Supervisor: <what>\n\n<reason>" -- orchestra.toml`; if the commit fails,
+     `config_edit.restore` puts the old text back. The overlay is never committed.
+6. If nothing changed, answer `{written: false, commit: null, applies: "Nothing changed..."}` and
+   publish nothing.
+7. Otherwise publish `config.changed {section, change, reason, commit, target, applies, by}` from
+   the Supervisor's instance (for the overlay, `change` names the keys, not their values).
+8. Answer `{ok, changed, target, file, commit, applies, next}` (and `note` when the overlay still
+   overrides a change to the repository). Then run `plan.then`, for example the
    restart flags after `set_work_mode`.
 
 `applies` describes when the change takes effect, according to each reader's rules:
@@ -910,14 +911,17 @@ program this way:
 
 1. Refuse without a running `orchestra run`. Refuse for a plugin's process or a collector, and
    while a gate run is landing.
-2. Save `pending-restart.json` in the agents' state directory.
-3. Write the file without the entry.
-4. Watch the runtime record until the launcher has stopped the program: its stop grace plus 10 s.
-5. Put the file back byte for byte, which starts the program again.
+2. Ask Orchestra to take the entry out in the owner's private overlay
+   (`config_edit.remove_entry(..., target="overlay", dry_run=True)`), save that change in
+   `pending-restart.json` in the agents' state directory, then apply it.
+3. Watch the runtime record until the launcher has stopped the program: its stop grace plus 10 s.
+4. `config_edit.restore`: the overlay back byte for byte (removed, if the restart created it),
+   which starts the program again.
+5. (`orchestra.toml` is never touched.)
 6. Wait up to 10 s for a new pid, then publish
    `machine.restarted {name, reason, by, pid_before, pid}`.
 
-Nothing is committed. If someone else changed the file in the meantime, the entry is not put
+Nothing is committed. If someone else changed the overlay in the meantime, the entry is not put
 back and the answer says so.
 
 ### A chat turn that changes the setup
@@ -933,7 +937,7 @@ sequenceDiagram
   participant Se as Supervisor session (harness)
   participant M as MCP server
   participant Tl as tooling.handle + ledger
-  participant Su as setup_tools / toml_edit
+  participant Su as setup_tools / config_change
   participant G as git
   participant B as bus
   participant TS as task system
@@ -955,7 +959,7 @@ sequenceDiagram
   Tl->>Su: handle_setup
   Su->>TS: list_gate_runs (gate_busy)
   TS-->>Su: no run is landing
-  Su->>G: write orchestra.toml, commit "Supervisor: work is code ([project] work)"
+  Su->>G: config_edit writes orchestra.toml; commit "Supervisor: work is code ([project] work)"
   G-->>Su: commit abc1234
   Su->>B: config.changed {section project, change, reason, commit abc1234, applies, by supervisor}
   Tl->>Tl: ledger.record, actions += committed abc1234

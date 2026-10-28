@@ -1,6 +1,7 @@
 """Restarting a program through Orchestra's real launcher, run here in a thread: the entry is taken
-out until the launcher has stopped it, then put back byte for byte, and the launcher starts it
-again. Nothing is committed; the restart is on the bus."""
+out in the owner's private overlay (through Orchestra's config_edit) until the launcher has stopped
+it, then the overlay is put back byte for byte, and the launcher starts it again. orchestra.toml is
+not touched and nothing is committed; the restart is on the bus."""
 
 import subprocess
 import sys
@@ -87,6 +88,7 @@ def test_a_machine_is_stopped_and_started_again_with_its_entry_unchanged(project
     assert out["ok"] and out["pid_before"] == old and out["pid"] not in (None, old) and "started again" in out["said"]
     assert not runtime.alive(old) and runtime.alive(out["pid"])
     assert (project.repo_root / "orchestra.toml").read_text() == before_text
+    assert not project.orchestra.overlay_file.exists()                              # the overlay it made is gone again
     assert git(project.repo_root, "rev-parse", "HEAD") == head                       # nothing to commit
     assert not (project.state_dir / "pending-restart.json").exists()
     evs, _ = store.events.read(0, 1000)
@@ -117,35 +119,45 @@ def test_without_orchestra_run_there_is_nothing_to_restart(project):
 
 def test_a_restart_the_agents_were_killed_in_is_put_back_by_the_next_setup_change(project):
     # the agents were killed (a timeout, an interrupt) after the entry was taken out: the record
-    # and the file without the entry are left. The next setup tool puts the entry back first,
-    # so the file is committed again and the change goes through
+    # and the overlay without the entry are left. The next setup tool puts the entry back first
     from orchestra_agents.restart import _save_pending, recover
 
     store = AgentStore(project, Events.for_project(project, source="supervisor"))
-    toml_path = project.repo_root / "orchestra.toml"
-    before = toml_path.read_text()
-    without = before.replace(SLEEPER.split("[[collect]]")[0], "")
-    assert without != before
-    _save_pending(project, "sleeper", before, without)
-    toml_path.write_text(without)
+    c = project.orchestra.config_edit.remove_entry("machines", "sleeper", target="overlay")
+    _save_pending(project, "sleeper", c)
+    project.reload_config()
+    assert "sleeper" not in [m["name"] for m in project.orchestra.config.raw.get("machines") or []]
     out = tooling.handle(project, store, "set_capacity_limit", {"workers": 2, "reason": "two tickets may run at once now"},
                          role="supervisor")
     assert out["ok"] and out["commit"] and "sleeper" in out["recovered"]
-    text = toml_path.read_text()
-    assert 'name = "sleeper"' in text and "workers = 2" in text
-    assert git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml") == ""
+    assert [m["name"] for m in project.orchestra.config.raw["machines"]] == ["sleeper"]
+    assert not project.orchestra.overlay_file.exists() and "workers = 2" in (project.repo_root / "orchestra.toml").read_text()
     assert not (project.state_dir / "pending-restart.json").exists()
     assert recover(project) is None                                                # nothing left to do
+
+
+def test_a_record_from_before_the_overlay_is_still_put_back(project):
+    # a restart interrupted by an older version left orchestra.toml without the entry
+    import json
+
+    from orchestra_agents.restart import recover
+
+    toml_path = project.repo_root / "orchestra.toml"
+    before = toml_path.read_text()
+    without = before.replace(SLEEPER.split("[[collect]]")[0], "")
+    (project.state_dir / "pending-restart.json").write_text(json.dumps({"name": "sleeper", "before": before, "without": without}))
+    toml_path.write_text(without)
+    assert "sleeper" in recover(project) and toml_path.read_text() == before
 
 
 def test_a_record_is_dropped_when_someone_changed_the_file_since(project):
     from orchestra_agents.restart import _save_pending, recover
 
-    toml_path = project.repo_root / "orchestra.toml"
-    before = toml_path.read_text()
-    _save_pending(project, "sleeper", before, before.replace("stop_grace = 2", ""))
-    toml_path.write_text(before + "\n# the human's edit\n")
-    assert recover(project) is None and toml_path.read_text().endswith("# the human's edit\n")
+    c = project.orchestra.config_edit.remove_entry("machines", "sleeper", target="overlay")
+    _save_pending(project, "sleeper", c)
+    overlay = project.orchestra.overlay_file
+    overlay.write_text(overlay.read_text() + "\n# the human's edit\n")
+    assert recover(project) is None and overlay.read_text().endswith("# the human's edit\n")
     assert not (project.state_dir / "pending-restart.json").exists()
 
 

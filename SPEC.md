@@ -385,7 +385,7 @@ real model is not needed, the tests use the fakes in `tests/e2e/` (one per harne
 product's real protocol), and the dummy harness (section 6), which has no product to fake, costs
 nothing at all: `demo/run.py --dummy` is the whole demo for free.
 
-## 10. The Supervisor as the project's operator (`observe.py`, `observe_model.py`, `setup_tools.py`, `toml_edit.py`, `toml_entries.py`, `restart.py`)
+## 10. The Supervisor as the project's operator (`observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`)
 
 The human talks only to the Supervisor (Orchestra's rule 9), so when the system cannot do what
 the human asks, the Supervisor is the one who sees why and fixes the setup. Its prompt
@@ -399,7 +399,8 @@ in an emergency or otherwise: code is a worker's, through a ticket, a review and
 **Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
 launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
-changed now, its recent commits), `list_processes` (Orchestra's runtime record and the declared
+changed now, its recent commits; whether the owner has a private overlay and each key it sets,
+secret values left out), `list_processes` (Orchestra's runtime record and the declared
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a
 machine announced, read only within the repository or the state directory, as Orchestra's web
 server reads one), `list_metrics` (the project's store, as the Core page's catalogue),
@@ -410,17 +411,26 @@ server reads one), `list_metrics` (the project's store, as the Core page's catal
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),
 `set_work_mode` (`[project] work`), `set_gate_unit` (`[[gate.unit]]`), `set_capacity_limit`
 (`[tasks] workers`, `reviewers`), `set_machine` (`[[machines]]`), `set_collector` (`[[collect]]` or
-`[[scrape]]`), `remove_entry` (any of those arrays). Each:
+`[[scrape]]`), `remove_entry` (any of those arrays), `set_setting` (any key, or removes it). Each
+takes a `target`: `repo` (the default; `set_setting` must be told) for the project's settings in
+`orchestra.toml`, or `overlay` for the owner's own or their company's settings (identities,
+channels, templates) in the private overlay outside the repository (Orchestra's SPEC §8.1). The
+prompt (`prompts/operator.md`) says which goes where. Each tool:
 
-- refuses unless the repository root is a git checkout on the base branch and `orchestra.toml` has
-  no uncommitted change, and refuses a reason shorter than a sentence;
-- edits the file keeping its comments and layout (`tomlkit`; a removed entry is cut from the text,
-  so the comments after it stay), and refuses a result that does not parse or that Orchestra's
+- refuses a reason shorter than a sentence, and for `repo` unless the repository root is a git
+  checkout on the base branch and `orchestra.toml` has no uncommitted change;
+- changes the configuration only through Orchestra (`project.orchestra.config_edit`, Orchestra's
+  SPEC §8.2), which keeps the file's comments and layout and refuses a result that Orchestra's
   readers (its settings, `[[machines]]`, `[[collect]]`/`[[scrape]]`) or the agents' `[agents]`
-  accept less well than before;
-- commits `orchestra.toml` alone, whatever else is changed in the checkout, with the message
-  `Supervisor: <what changed>` and the reason as its body; a failed commit puts the file back;
-- publishes `config.changed` {section, change, reason, commit, applies, by} from the Supervisor;
+  (`config_change.agents_check`) accept less well than before; nothing here opens or edits the
+  file;
+- refuses a change whose new lines look like a secret, in either file;
+- for `repo`, commits `orchestra.toml` alone, whatever else is changed in the checkout, with the
+  message `Supervisor: <what changed>` and the reason as its body; a failed commit puts the file
+  back. A change to the overlay is never committed. A change to `orchestra.toml` that the overlay
+  overrides is answered with a `note` saying so;
+- publishes `config.changed` {section, change, reason, commit, target, applies, by} from the
+  Supervisor (for the overlay, `change` names the keys without their values);
 - answers with what applies now and what restarts, from the readers' documented rules: the
   agents' host reads `[agents]` every second; the task system's scheduler reads `[project]`,
   `[tasks]` and `[gate]` on every tick (its own SPEC owns what they mean); Orchestra's launcher and
@@ -430,12 +440,14 @@ group a custom role or team may be granted): `set_agent_roles` (`[agents] serves
   after their current turn.
 
 `restart_machine` restarts a `[[machines]]` program, including one Orchestra gave up on. Orchestra's
-launcher has no restart command, so the entry is taken out of the file, the runtime record is
-watched until the launcher has stopped the program (its stop grace plus 10 s at most), and the file
-is put back byte for byte, which starts it again; nothing is committed, and `machine.restarted`
+launcher has no restart command, so the entry is taken out in the owner's private overlay
+(`config_edit.remove_entry(..., target="overlay")`: `enabled = false`), the runtime record is
+watched until the launcher has stopped the program (its stop grace plus 10 s at most), and the
+overlay is put back byte for byte (`config_edit.restore`; an overlay the restart created is
+removed), which starts it again; `orchestra.toml` is not touched and nothing is committed, and `machine.restarted`
 {name, reason, pid_before, pid} is published. It refuses without a running `orchestra run`, and for
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
-someone else changes the file in between, the entry is not put back and the answer says so.
+someone else changes the overlay in between, the entry is not put back and the answer says so.
 
 Limits: a commit to the base branch while the task system's gate is landing a ticket makes that
 landing fail (the base moved under it), as any commit there would: the task system pauses its

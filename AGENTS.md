@@ -11,13 +11,20 @@ broken without updating the spec and saying so in the commit.
    store, and nothing imports from `tasking`.
 2. **No branching, no worktrees.** The task system prepares the workspace and names it in the
    assignment; the agents work in it. A reviewer reads the diff in the worktree; the host never
-   creates, switches, merges or deletes a branch. The git writes here are two: committing the
-   organisation's own files under `.orchestra/`, only when the checkout is on the base branch and
-   otherwise clean; and the Supervisor's setup tools committing `orchestra.toml` alone
-   (`config_change.py`), when a change targets the repository, only when the checkout is on the
-   base branch and that file has no uncommitted change. A change to the owner's private overlay
-   is never committed. (`restart_machine` takes one entry out in the overlay and puts the overlay
-   back byte for byte; it commits nothing.)
+   creates, switches, merges or deletes a ticket's branch. The git writes here are these, and
+   each is the Supervisor's or the organisation's own: committing the organisation's own files
+   under `.orchestra/`, only when the checkout is on the base branch and otherwise clean; the
+   Supervisor's setup tools committing `orchestra.toml` alone (`config_change.py`), when a change
+   targets the repository, only when the checkout is on the base branch and that file has no
+   uncommitted change; and, since 2026-10-28 (the owner's decision D20), the Supervisor's machine
+   spec, committed alone to the base branch on the same terms or else to the side branch
+   `orchestra/supervisor` with git's plumbing on a private index, never touching the working tree
+   (`spec_git.py`); a repair to the project's code, written and committed in a scratch worktree in
+   the state directory on its own branch `supervisor/patch-<name>`, which is removed after and
+   whose branch only a ticket takes onward (`patching.py`); and an override file under
+   `.orchestra/overrides/`, committed alone on the same terms as `orchestra.toml`. A change to the
+   owner's private overlay is never committed. (`restart_machine` takes one entry out in the
+   overlay and puts the overlay back byte for byte; it commits nothing.)
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
@@ -46,7 +53,8 @@ broken without updating the spec and saying so in the commit.
    run once per harness. Real Claude runs only in the demo, with Haiku, and the demo honours
    `CLAUDE_BINARY` so a test can stand a fake in. The dummy harness is the exception: it is a
    product feature with no product behind it, so it has no fake; the e2e tests run on it as it
-   ships, with a script for each fake's knob. A test of anything around the agents (another goal's
+   ships, with a script for each fake's knob. The Supervisor runs on its machine spec's model,
+Sonnet by default (D20), where the harness takes the name; the other agents on `[agents] model`. A test of anything around the agents (another goal's
    acceptance, the task system's flow, the web) uses the dummy harness, never a model.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
    `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
@@ -58,8 +66,15 @@ broken without updating the spec and saying so in the commit.
     write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or
     deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
-    operator controls on tickets are the task system's. The Supervisor changes configuration,
-    never code: code is a worker's, through a ticket, a review and the gate. Nor does it make
+    operator controls on tickets are the task system's. The Supervisor changes configuration and
+    never edits a file in the checkout; new code is a worker's, through a ticket, a review and the
+    gate. Its one exception is a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
+    `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
+    patch to an installed plugin is a project-local override pinned to the installed version,
+    never of Orchestra or this package, with its upstream issue an outbox draft the owner approves.
+    Its own spec (`.orchestra/machines/supervisor/`) it changes only with its duty tools, each a
+    commit with its reason, capped per day; the fixed core of its prompt ships here and no spec
+    removes it. Nor does it make
     tickets: it hands the human's requirements to the Coordinator (`work.requested`,
     `handoff.py`), which plans them into milestones and tickets (the `planning` group) and reports
     back (`work.planned`); the Supervisor keeps only the human's decisions on existing tickets

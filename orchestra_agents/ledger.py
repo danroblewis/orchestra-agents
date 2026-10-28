@@ -17,15 +17,17 @@ import time
 from typing import Any
 
 from .api_org import MUTATIONS as ORG_MUTATIONS
+from .duties import CHANGES as SPEC_CHANGES
 from .protocol import REQUESTS
 from .setup_tools import SETUP_COMMANDS
 
 KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
-CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS)
+CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
            | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "commit_prediction", "announce_change",
-                         "hand_to_coordinator", "report_plan"}))
+                         "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
+                         "draft_upstream_issue"}))
 
 PAST = {"create": "created", "update": "updated", "delete": "deleted", "close": "closed", "pause": "paused",
         "resume": "resumed", "restart": "asked for a restart of", "reset": "asked for a reset of", "cancel": "cancelled",
@@ -41,6 +43,21 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
     """One line saying what a successful call changed, or None when it changed nothing."""
     a = args or {}
     verb, _, noun = command.partition("_")
+    if command in SPEC_CHANGES:
+        if not result.get("changed"):
+            return None
+        what = f"duty {result.get('duty')}" if result.get("duty") else "your spec"
+        where = "the base branch" if result.get("where") == "base" else f"the side branch ({result.get('where')})"
+        return f"committed {result.get('commit')} to {where}: {result.get('change')} {what}"
+    if command == "predict_fix":
+        return f"committed prediction {result.get('prediction')} of change {result.get('change')}"
+    if command == "propose_patch":
+        return (f"committed patch {result.get('commit')} on branch {result.get('branch')} and handed request "
+                f"{result.get('request')} to the Coordinator to land it")
+    if command == "write_override":
+        return f"wrote the override {result.get('file')} ({result.get('note')})"
+    if command == "draft_upstream_issue":
+        return f"drafted the upstream issue {result.get('draft') or ''} for the owner's approval ({result.get('repo')})"
     if command in SETUP_COMMANDS:
         if result.get("commit"):
             return f"committed {result['commit']} to orchestra.toml on the base branch: {result.get('changed')}"

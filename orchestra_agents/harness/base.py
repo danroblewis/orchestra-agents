@@ -92,6 +92,7 @@ class TurnResult:
     timed_out: bool = False
     stopped_by: str | None = None    # "silence" (no event for idle_timeout) or "limit" (the hard cap), when timed_out
     error: str | None = None         # the harness failed: the turn did not end on the agent's terms
+    cost_usd: float | None = None    # what the turn cost, when the harness reports it (Claude Code does)
 
 
 class _Deadlines:
@@ -229,6 +230,13 @@ class Harness(ABC):
 
     @abstractmethod
     def start(self, spec: SessionSpec) -> AgentSession: ...
+
+    def model_for(self, wanted: str | None) -> str | None:
+        """The model to run a machine whose spec asks for ``wanted`` (``sonnet``, ``haiku``,
+        ``opus``: a machine's ``model`` in ``.orchestra/machines/<name>/machine.toml``), or None
+        when this harness cannot take that name, and the configured ``[agents] model`` stands.
+        Default: none taken (a harness whose model names differ says which it accepts)."""
+        return None
 
     @staticmethod
     @abstractmethod

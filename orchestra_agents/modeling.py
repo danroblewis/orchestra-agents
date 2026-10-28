@@ -38,7 +38,7 @@ from .store import AgentStore, StoreError
 READS = frozenset({"modeling_guide", "read_model", "read_series", "read_eras", "read_observability", "check_equation",
                    "read_predictions", "list_experiments", "read_experiment", "diff_experiment", "read_run"})
 WRITES = frozenset({"create_experiment", "edit_experiment", "load_model", "discard_experiment", "run_forward", "run_inverse"})
-COMMANDS = READS | WRITES | frozenset({"run_replay", "commit_prediction", "announce_change"})
+COMMANDS = READS | WRITES | frozenset({"run_replay", "commit_prediction", "announce_change", "predict_fix"})
 CHANGED = "system.changed"
 SERIES_POINTS = 20_000         # Orchestra's cap on the points of one series answer
 RECENT = 6                     # the last readings a series summary shows
@@ -316,3 +316,32 @@ def announce_landed(store: AgentStore, ev: dict, work: str) -> list[str]:
             else:
                 store.update_prediction(rec["change"], announced=f"never: ticket {tid} was {state}")
     return done
+
+
+def predict_fix(project: Project, store: AgentStore, a: dict, role: str, ticket: str) -> dict:
+    """A fix's expected effect, stated before it is made without an experiment (the Supervisor's
+    flow-keeping: every fix carries a prediction): Orchestra's ``Predictions.record`` publishes
+    ``orchestra.prediction.made`` as the caller, and the record is the caller's, so its setup
+    tools' ``change`` and ``announce_change`` take its id."""
+    from orchestra.sd.predictions import PredictionError, Predictions
+
+    expect = a.get("expect")
+    if not isinstance(expect, list):
+        raise StoreError("expect is a list: [{flow, factor}], [{stock, below}], ... or [] for a fix that should change nothing")
+    horizon = seconds(a.get("horizon"), "horizon")
+    note = (a.get("note") or "").strip()
+    if len(note) < 10:
+        raise StoreError("say what the fix is, in a sentence")
+    source = store.events.source or role
+    try:
+        made = Predictions(project.orchestra, source).record(expect, horizon, subject=a.get("subject") or None)
+    except PredictionError as e:
+        raise StoreError(f"Orchestra refused the prediction: {e}") from None
+    change = made.get("change") or (made.get("data") or {}).get("change")
+    store.add_prediction(role, {"id": made.get("id"), "change": change, "experiment": None, "ticket": ticket, "source": source,
+                                "horizon_s": horizon, "at": time.time(), "announced": None, "note": note})
+    effect = "the fix should change nothing measured (the null test)" if not expect else "; ".join(R.expectation(e) for e in expect)
+    lines = [f"prediction {made.get('id')} recorded for change {change}: {effect}",
+             (f"next: make the fix with change={change} (a setup tool), or announce it with announce_change once it is made; "
+              f"Orchestra judges it {T.dur(horizon)} after the announcement")]
+    return answer(lines, prediction=made.get("id"), change=change)

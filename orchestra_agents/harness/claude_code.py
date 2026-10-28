@@ -187,6 +187,8 @@ class ClaudeCodeSession(AgentSession):
                             if part.get("type") == "text" and part.get("text", "").strip():
                                 last_text = part["text"]
                     elif t == "result":
+                        if isinstance(ev.get("total_cost_usd"), int | float):
+                            result.cost_usd = float(ev["total_cost_usd"])
                         if ev.get("is_error"):
                             result.error = str(ev.get("result") or ev.get("subtype") or "error")
                         else:
@@ -296,6 +298,11 @@ class ClaudeCodeHarness(Harness):
 
     def start(self, spec: SessionSpec) -> ClaudeCodeSession:
         return ClaudeCodeSession(spec, self.binary)
+
+    def model_for(self, wanted: str | None) -> str | None:
+        """Claude Code takes the aliases (``haiku``, ``sonnet``, ``opus``) and full model ids."""
+        w = (wanted or "").strip()
+        return w if w in ("haiku", "sonnet", "opus") or w.startswith("claude-") else None
 
     @staticmethod
     def context(session_file: str | Path) -> ContextSize:

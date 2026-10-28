@@ -5,7 +5,12 @@ is no machine). Named for what they measure:
 - ``agents_working{role, machine}``: agent sessions of a role in a turn now, every measured role
   (the resident agents and the task system's roles the agents serve) even at 0, so the level is
   live from the first read and not from the first turn;
-- ``agent_turns_started_total{role, machine}`` and ``agent_turns_finished_total{role, machine}``.
+- ``agent_turns_started_total{role, machine}`` and ``agent_turns_finished_total{role, machine}``;
+- ``agent_load{machine, signal}``: an agent's overload signals as its last review round measured
+  them (``load.py``: ``prompt_tokens``, ``tools``, ``duties``, ``duty_tokens``, ``compactions_day``,
+  ``utilisation_day``, ``wakeups_queued``, ``in_degree``, ``in_share``, ``subscriptions``,
+  ``wait_p90_s``, ``usd_today``, ``cost_per_turn``, ...), one gauge per signal measured; and
+  ``agent_spend_dollars_total{machine}``, what its turns cost as its harness reported it.
 
 ``machine`` is the agent the turn ran as, without its instance (``worker`` for ``worker/1``): the
 measured system's own dimension, not who wrote the point. It equals ``role`` for every agent.
@@ -28,9 +33,12 @@ from __future__ import annotations
 from orchestra.events import machine_and_instance
 
 WORKING, STARTED, FINISHED = "agents_working", "agent_turns_started_total", "agent_turns_finished_total"
+LOAD, SPEND = "agent_load", "agent_spend_dollars_total"
 HELP = {WORKING: ("gauge", "agent sessions of a role in a turn now"),
         STARTED: ("counter", "agent turns started"),
-        FINISHED: ("counter", "agent turns finished")}
+        FINISHED: ("counter", "agent turns finished"),
+        LOAD: ("gauge", "an agent's overload signals, as its last review round measured them"),
+        SPEND: ("counter", "what an agent's turns cost, in dollars, as its harness reported it")}
 
 
 def count(counts: dict, name: str, role: str, source: str) -> None:
@@ -78,6 +86,12 @@ def exposition(runtime: dict, roles: list[str]) -> str:
                                               for r, n in sorted(working(list(runtime.get("sessions", {}).values()), roles).items())]}
     for (name, labels), n in sorted(counters(runtime.get("metric_counts") or {}).items()):
         series.setdefault(name, []).append(_line(name, labels, n))
+    for agent, st in sorted((runtime.get("agent_state") or {}).items()):
+        for k, v in sorted((st.get("load") or {}).items()):
+            if k != "at" and isinstance(v, int | float) and not isinstance(v, bool):
+                series.setdefault(LOAD, []).append(_line(LOAD, {"machine": agent, "signal": k}, v))
+        if st.get("spend_total"):                                # cumulative, never trimmed (budget.py); none until a harness reports a cost
+            series.setdefault(SPEND, []).append(_line(SPEND, {"machine": agent}, float(st["spend_total"])))
     lines: list[str] = []
     for name, rows in series.items():
         kind, text = HELP[name]

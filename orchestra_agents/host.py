@@ -19,13 +19,14 @@ import os
 import signal
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import psutil
 from orchestra.runtime import alive
 from orchestra.tokens import owner_only
 
-from . import access, handoff, promises, prompting, tooling
+from . import access, budget, handoff, promises, prompting, supervisor_spec, tooling
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
@@ -38,11 +39,13 @@ from .first_run import FirstRun
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
 from .listening import listens_for
+from .machine_spec import load as load_spec
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
 from .residents import Residents
 from .restart import recover as recover_restart
+from .review import ReviewRound, initiative
 from .roles import all_roles
 from .runner import AgentRunner
 from .store import AgentStore, StoreError
@@ -104,6 +107,9 @@ class AgentHost:
         self.prober = Prober(project, store, events)   # the teams' probes
         self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
         self.first_run = FirstRun(self)                # a project not set up wakes the Supervisor to set it up
+        self.review = ReviewRound(self)                # the Supervisor's scheduled review round (review.py)
+        self._session_models: dict[str, str | None] = {}   # resident agent -> the model its session was opened on
+        self._over_said: str | None = None             # the budget's last refusal, logged once
 
     def recover(self) -> None:
         """Turns the previous host left running: their processes are stopped (no orphans) and
@@ -137,6 +143,11 @@ class AgentHost:
         self.recover()
         if put_back := recover_restart(self.project):      # a restart_machine the last host was killed in
             log(put_back)
+        try:
+            if seeded := supervisor_spec.ensure(self.project):   # the Supervisor's spec, the first time in this project
+                log(f"the Supervisor's spec was written to .orchestra/machines/supervisor/ ({seeded['note']})")
+        except Exception as e:  # noqa: BLE001 - the Supervisor runs on its built-in prompt without one
+            log(f"the Supervisor's spec could not be written: {e}")
         # no announcement of the host's own: it is no machine. Each agent announces itself when its
         # session opens (_announce), with what the host watches for it (listening.py)
         log(f"project {self.project.key} on {self.project.repo_root}; harness {self.harness.name}"
@@ -197,6 +208,10 @@ class AgentHost:
         self._schedule_wakeups(states)
         self._wake_on_events()
         self.verdicts.tick()
+        try:
+            self.review.tick()
+        except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
+            log(f"review round: {e!r}")
         for target in list(self.agents):
             if target == "supervisor" and self.residents.procs.get("supervisor") is None:
                 continue
@@ -206,10 +221,41 @@ class AgentHost:
                 st = states.get(target) or {}
                 if st.get("paused") or st.get("deleted"):
                     continue  # wake-ups stay queued until resumed
-                reasons = list(dict.fromkeys(w["reason"] for w in self.store.drain_wakeups(target)))
+                drained = self.store.drain_wakeups(target)
+                reasons = list(dict.fromkeys(w["reason"] for w in drained))
+                if drained and target == "supervisor":
+                    self._note_waits(drained)
                 if reasons:
                     self._spawn(self.agent_threads, target, self._wake, target, reasons)
         self.runner.tick()
+
+    def _note_waits(self, drained: list[dict]) -> None:
+        """How long the Supervisor's wake-ups waited before their turn (head-of-line blocking, load.py)."""
+        now_t = time.time()
+        waits = []
+        for w in drained:
+            try:
+                waits.append([now_t, round(now_t - datetime.fromisoformat(w["ts"]).timestamp(), 1)])
+            except (KeyError, TypeError, ValueError):
+                continue
+        if waits:
+            kept = [x for x in self.store.agent_state("supervisor").get("wake_waits") or [] if now_t - x[0] < 86_400][-200:]
+            self.store.set_agent_state("supervisor", wake_waits=kept + waits)
+
+    def model_of(self, name: str) -> str | None:
+        """The model an agent runs on: its machine spec's (``.orchestra/machines/<name>/``) when the
+        harness takes that name (``Harness.model_for``), else ``[agents] model``."""
+        try:
+            spec = load_spec(self.project, name)
+        except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
+            spec = None
+        return (self.harness.model_for(spec.model) if spec is not None and spec.model else None) or self.cfg.model
+
+    def _duty_types(self) -> set[str]:
+        """The event types only the Supervisor's own duties listen for (not its fixed core's)."""
+        spec = load_spec(self.project, "supervisor")
+        core = {w.split(":")[0] for w in BUILTIN_ROLES["supervisor"].wake_on}
+        return {w.split(":")[0] for w in spec.listens()} - core if spec is not None else set()
 
     def _harness_settings(self) -> tuple:
         return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking)
@@ -280,6 +326,11 @@ class AgentHost:
         except Exception as e:  # noqa: BLE001 - a broken record is logged; the host keeps running
             log(f"org: could not load roles, teams, or agents: {e}")
             return
+        for name, running in list(self._session_models.items()):
+            if name in self.residents.procs and running != self.model_of(name) and not states.get(name, {}).get("restart_requested"):
+                self.store.set_agent_state(name, restart_requested=True)     # its spec's model changed: open it again on the new one
+                states.setdefault(name, {})["restart_requested"] = True
+                log(f"{name}: its model changed to {self.model_of(name)}; the session starts again after its turn")
         self.residents.stop_changed(agents_, states)
         self.role_defs, self.teams, self.agents = roles, teams, agents_
         self.residents.start_missing(states)
@@ -315,6 +366,7 @@ class AgentHost:
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")
         source = self._instance(session_id, role, ticket_id)
+        model = self.model_of(role)
         token = access.issue(self.store, session_id, role, ticket_id)     # who the session's tool calls are (access.py)
         proc = self.harness.start(SessionSpec(
             session_id=session_id, session_dir=self.project.sessions_dir, cwd=cwd,
@@ -322,9 +374,11 @@ class AgentHost:
             env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
                  "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token},
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
-            model=self.cfg.model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
+            model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
             read_only=read_only))
-        self._announce(source, role)               # once it exists: a session that failed to start is no machine
+        if not ticket_id:
+            self._session_models[role] = model
+        self._announce(source, role, model)        # once it exists: a session that failed to start is no machine
         return proc
 
     def _instance(self, session_id: str, role: str, ticket_id: str = "") -> str:
@@ -349,14 +403,15 @@ class AgentHost:
         if self._slots.pop(session_id, None) is not None:
             self.events.unbind(session_id)
 
-    def _announce(self, source: str, role: str) -> None:
+    def _announce(self, source: str, role: str, model: str | None = None) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
         mode and what it listens for): an AI agent, on which harness and model, engaged how. A
         resident agent is continuous (its session is always up; a schedule is one of its wake
         rules), a per-ticket or ephemeral one ad hoc. Once per source in the host's lifetime
         (``reviewer/1`` is one machine instance however many tickets it reviews), again only when
         the harness or the model changed."""
-        key = (source, self.harness.name, self.cfg.model)
+        model = model if model is not None else self.cfg.model
+        key = (source, self.harness.name, model)
         if key in self._announced:
             return
         self._announced.add(key)
@@ -364,7 +419,7 @@ class AgentHost:
         mode = "continuous" if agent is not None and agent.resident else "ad hoc"
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
                                                           "kind": "agent", "role": role,
-                                                          "harness": self.harness.name, "model": self.cfg.model},
+                                                          "harness": self.harness.name, "model": model},
                             source=source)
 
     def _listens_for(self, agent: AgentDef | None) -> list[str]:
@@ -390,6 +445,12 @@ class AgentHost:
             self.verdicts.see(ev)
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
+                    continue
+                if name == "supervisor" and not event_matches(list(BUILTIN_ROLES["supervisor"].wake_on), ev) \
+                        and (why := budget.over(self.store, self.cfg)):
+                    if why != self._over_said:                          # a duty's own wake-up, past the day's cap
+                        log(f"supervisor: not woken for {ev['type']}: {why}")
+                        self._over_said = why
                     continue
                 self.store.add_wakeup(name, self._wake_reason(ev))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
@@ -543,6 +604,7 @@ class AgentHost:
 
         res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
         res = self._checked(res, began, message, emit)
+        budget.record(self.store, res.cost_usd, initiative=False)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])
@@ -566,9 +628,11 @@ class AgentHost:
             return res
         log(f"supervisor: the reply claims an action the turn did not take ({said[:120]!r}); one more turn to do it or say so")
         again = proc.prompt(promises.follow_up(said), on_event=on_event, **limits)
+        cost = None if res.cost_usd is None and again.cost_usd is None else (res.cost_usd or 0.0) + (again.cost_usd or 0.0)
         if again.error or again.timed_out or not again.text.strip():
+            res.cost_usd = cost
             return res
-        return TurnResult(text=f"{res.text.rstrip()}\n\n{again.text.strip()}")
+        return TurnResult(text=f"{res.text.rstrip()}\n\n{again.text.strip()}", cost_usd=cost)
 
     def _checked(self, res: TurnResult, began: float, message: str = "", emit=None) -> TurnResult:
         """A Supervisor reply checked against Orchestra's records (facts.py, truth.py): what it
@@ -583,7 +647,7 @@ class AgentHost:
         self._mark("agent.corrected", session="supervisor", agent="supervisor", text=fix)
         if emit is not None:
             emit({"type": "assistant_end", "text": fix})
-        return TurnResult(text=f"{res.text.rstrip()}\n\n{fix}")
+        return TurnResult(text=f"{res.text.rstrip()}\n\n{fix}", cost_usd=res.cost_usd)
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)
@@ -617,6 +681,7 @@ class AgentHost:
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))
+            budget.record(self.store, res.cost_usd, initiative=initiative(reasons, self._duty_types()))
         else:
             res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)

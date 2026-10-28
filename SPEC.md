@@ -362,8 +362,10 @@ every discovery step, which prints them as Prometheus text from the record, and 
 every point `instrument=agents.turns` (and `project`). The same text is served at
 `GET /api/plugins/agents/metrics`. The series: `agents_working{role, machine}` (every measured
 role: the resident agents and the roles `serves`, even at 0) and the counters
-`agent_turns_started_total{role, machine}`, `agent_turns_finished_total{role, machine}`, named for
-what they measure: `role` names the series, and `machine` (the instance's machine, `worker` for
+`agent_turns_started_total{role, machine}`, `agent_turns_finished_total{role, machine}`, and, for an
+agent with a machine spec, `agent_load{machine, signal}` (its overload signals as its last review
+round measured them, section 12) and `agent_spend_dollars_total{machine}` (what its turns cost as
+the harness reported it), named for what they measure: `role` names the series, and `machine` (the instance's machine, `worker` for
 `worker/1`) is the measured system's own dimension, which discovery may read as attribution; the
 model generator decides what is a stock or a flow. Until 2026-10-27 the host wrote these points
 itself at each turn's start and end; the names and the `role` and `machine` labels are kept,
@@ -489,8 +491,11 @@ reads and reaches no agent's tool.
 host's log say which was chosen and how to change it: `config.default_harness`), `enabled` (false:
 no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
-`provider`, `thinking`, `serves` (the task system's roles these agents fill; default worker and
-reviewer), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
+`provider`, `thinking` (`model` is the default: a machine spec's own `model` wins for its agent
+when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
+reviewer), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
+hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
+rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
 compacted), `prompts` (per-role prompt file overrides,
@@ -587,8 +592,13 @@ the human asks, the Supervisor is the one who sees why and fixes the setup. Its 
 rejected twice for the same reason, or a request of the human's is not met, look first, then
 check whether the system can do it at all (which machines fill which role, the kind of work, the
 gate's tests, whether what is needed runs), fix the setup with its tools, and tell the human what
-it changed and why; never keep filing tickets the system cannot complete. It never changes code,
-in an emergency or otherwise: code is a worker's, through a ticket, a review and the gate.
+it changed and why; never keep filing tickets the system cannot complete. It never edits a file in
+the checkout, and new code is a worker's, through a ticket, a review and the gate. Repairs are the
+exception (the owner, 2026-10-28, decision D20: the Supervisor carries the self-healing duties for
+now, code patches included), and only through its patch tools, under the guardrails of section 12:
+a patch to the project's own code is written in a scratch worktree and lands through a ticket, a
+review and the gate; a patch to an installed plugin is a project-local override pinned to the
+installed version, with the upstream issue drafted in the outbox for the owner's approval.
 
 **Guides** (tool group `guides`; the Supervisor and the Coordinator): `list_guides` (each operator's
 guide Orchestra serves, `orchestra.guides.collect`: Orchestra's own and each installed plugin's
@@ -739,3 +749,115 @@ commit and how to read a verdict. The equation language in it is Orchestra's own
 Limits: a verdict published while the host is down wakes nobody (it is still in
 `read_predictions`); running the model needs `orchestra[sd]` beside the agents (reading it does
 not), and a tool says so when it is missing.
+
+
+## 12. The Supervisor grows (`machine_spec.py`, `spec_git.py`, `supervisor_spec.py`, `duties.py`, `review.py`, `flow_signals.py`, `load.py`, `split_proposal.py`, `budget.py`, `patching.py`, `upstream.py`, `transcripts.py`)
+
+The first phase of Orchestra's `docs/proposals/agent-first-machines.md`, as the owner decided it
+on 2026-10-28 (Orchestra's `docs/roadmap/decisions.md` D20): the Supervisor takes on duties, keeps
+the flow moving, repairs what blocks it, and asks of itself at every review whether it should be
+two machines. The split itself is a later phase.
+
+**The machine spec.** `.orchestra/machines/<name>/` in the project ("just machines"):
+`machine.toml` (description, engagement, `model`, `[review] every`, and `[[duties]]`, each with
+`listens`, the wake-up entries it adds to the agent's `wake_on`, and `tools`, the groups it needs),
+`role.md` (how it works a wake-up), `duties/<duty>.md` (one standing duty each), `ledger.md` (why
+each duty exists) and `proposals/` (what its review rounds proposed about itself). A spec is a role
+plus an agent record given a contract: it belongs to the agent of its name, built in or custom,
+and `org_store.all_agents` applies it (`machine_spec.apply`); a spec naming no agent is ignored. It
+never grants a tool. A **built-in duty** (`builtin = true`: `talk_to_owner`, `setup`,
+`hand_to_planner`) names part of the plugin's own prompt, which keeps shipping with the plugin;
+it is listed, never copied, edited or removed. Orchestra reads none of it (its rule 2).
+
+**The Supervisor's spec.** Written the first time the host runs in a project
+(`supervisor_spec.ensure`, committed as `orchestra-agents: ...`): `model = "sonnet"` (the owner's
+default for the Supervisor; Haiku for the narrow machines it will create), `[review] every =
+"30m"`, the built-in duties, and two of its own: `keep_flow` and `review_round`. From then on the
+files are the project's. Its prompt is, in order: the **fixed core** (`prompts/supervisor_core.md`,
+shipped with the plugin and always first, so nothing in the spec can remove it: the owner's
+channel, Orchestra's invariants, the outbox for acting as the owner, the guardrails below, a
+prediction for every fix, the rules of self-healing), its built-in prompt
+(`supervisor.md`/`supervisor.tasks.md` with `operator.md`), then the spec's loop and duties.
+
+**Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
+takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;
+the dummy harness records it; Pi and Codex take none, and `[agents] model` stands). A changed
+model reopens the resident session after its turn. The announcement names the model it runs.
+
+**Changing the spec** (group `roles`, the Supervisor's alone): `list_duties`, `add_duty`,
+`edit_duty`, `remove_duty`, `revert_change`. Duties are added by chat: the fixed core tells it that
+a standing instruction ("from now on, ...", "whenever ...", "every morning ...") is a duty, written
+in the same turn with the owner's words as the reason. Every change:
+
+- needs a reason in a sentence; is one commit of `.orchestra/machines/` alone (`spec_git.commit`):
+  on the base branch when the checkout is on it with no other uncommitted change and the merge gate
+  is not landing; else on the side branch `orchestra/supervisor`, made with git's plumbing on a
+  private index so the working tree and the owner's index are untouched. While the side branch has
+  commits the checkout lacks, the specs are read from it; the next change on a clean base checkout
+  merges it;
+- is refused past `[agents] spec_changes_per_day` in 24 hours (a revert never is); refused for a
+  built-in duty, for a tool group the Supervisor does not hold, for text that looks like a secret;
+- is announced as `role.changed` (subject `machine:supervisor`, the commit, the reason), a line in
+  `ledger.md`, and a restart of the resident session after the turn, so the next turn runs it (the
+  conversation is kept);
+- can be undone: `revert_change` undoes one spec commit by what it did to each duty, applied to the
+  spec as it is now, so later changes to other duties stay; the owner may also `git revert`.
+
+**Flow-keeping** (`keep_flow`). It wakes on Orchestra's domain-free statements
+`orchestra.model.stalled` (subject `stock:<id>` or `flow:<id>`), `orchestra.machine.quiet`,
+`orchestra.model.diverged`, and on `gate.base_broken`, `pipeline.paused` and
+`outbox.rate_limit.unresolvable` (besides what the core already wakes it for). It reads the model,
+the series, the events, machine logs and, new, agent transcripts (`read_transcript`, group
+`observe`: an agent's latest session or one by id, the turns around a time, trimmed). Every fix
+carries a prediction: `predict_fix` (group `predict`) commits `orchestra.prediction.made` with the
+expected effect (`{flow, factor}`, `{stock, below|above}`, ...) without an experiment, and its
+change id goes with the fix (a setup tool's `change`) or is announced with `announce_change`.
+Orchestra judges it, and a verdict that did not pass is a review round's finding. The events wake
+it through `machine_spec.apply`; their filters match the envelope's `subject`, which `events.flat`
+now carries when the data has none.
+
+**The review round** (`review.py`, in the host). Every `[review] every` (default 30m, never under
+5m): a quick check with no model call (`flow_signals.check`: stalls, quiet machines and divergences
+still open, a subject bounced three times in a day, the gate's broken base or a paused pipeline, a
+failing instrument in Orchestra's runtime record, a verdict on its own prediction that did not
+pass, fixes without a prediction), and its own overload signals (`load.measure`). Only a finding
+whose key no earlier round woke it for, or a split proposal, queues a wake-up (`[Review round]
+...`): a full turn. Otherwise the round costs nothing. The record is its agent state (`review`,
+`next_review_at`, `load`).
+
+**The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, and wake-ups
+on events only its spec's duties listen for) stops at `[agents] review_usd_per_day` dollars
+(Claude Code reports each turn's cost: `TurnResult.cost_usd`) or `review_turns_per_day` turns.
+The owner's chat and what the fixed core wakes it for never wait on it. Spending is kept per day in
+its agent state (`spend`, `spend_total`).
+
+**Self-healing** (group `patch`, the Supervisor's alone, decided by the owner for now; a separate
+Steward may split off later). `propose_patch`: a bug in the project's own code, when `work =
+"code"`: the diff is applied and committed in a scratch worktree
+(`~/.orchestrator/<key>/agents/scratch/patch-<name>`) on a branch `supervisor/patch-<name>`, the
+worktree removed, and the Coordinator handed a request to land that commit through a ticket, a
+review and the gate. `write_override`: a bug in an installed plugin: `.orchestra/overrides/<name>.py`
+in Orchestra's override format (`TARGET`, `PACKAGE` pinned to the installed version, `KIND`,
+`ISSUE`, `def override`), committed alone to the base branch when it can be, announced as
+`system.changed` (subject `override:<name>`). Orchestra applies it by file in every process that
+loads plugins, on that exact version only. Never Orchestra's core or this package.
+`draft_upstream_issue`: the issue, with the override's code, as an outbox draft of kind
+`upstream.issue` (orchestra-outbox's `github.issue_create`, always the owner's to approve); without
+the outbox, or without that kind, nothing is sent and the issue is kept in
+`~/.orchestrator/<key>/agents/upstream/`.
+
+**The self-decomposition hook.** Each round measures the overload signals the owner named
+(`load.py`: prompt over 45k tokens, over 30 tools, compactions, busy over 0.7 of the day with
+wake-ups waiting, more than half the machines sending to it or over 20 types listened for,
+wake-ups waiting over 10 minutes behind its turns, cost per turn rising 1.5 times, its predictions
+failing more as duties grow), records them for the instrument (`agent_load`), and when any cross,
+writes a split proposal into its spec (`proposals/split-<date>.md`, one commit, at most weekly for
+the same signals): its duties clustered by cohesion (shared wake-ups and non-privileged tools),
+which cluster could be a machine, whether the split is for load, privilege or engagement, and when
+only the busy signal crossed, that scaling out may fit better. The round then wakes it to tell the
+owner in two lines. Nothing is split: `split_machine` and `merge_machine` are the next phase.
+
+Limits: tool count crosses at once (the Supervisor holds about a hundred tools), so the first round
+writes a proposal; utilisation is measured from its own turns' events and counts a turn still
+running; cost is known only on Claude Code; the quick check reads the last 20,000 events.
+

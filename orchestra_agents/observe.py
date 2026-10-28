@@ -1,5 +1,6 @@
 """What the Supervisor reads to see the system before it concludes anything: the project's
-``orchestra.toml`` and its history, the processes Orchestra's launcher keeps running (its runtime
+configuration (``orchestra.toml`` and its history, and the owner's private overlay, through
+Orchestra's objects), the processes Orchestra's launcher keeps running (its runtime
 record), the collectors the file declares, any machine's log, and a summary of the setup (which
 machines fill the task system's roles, the work mode, what runs). The metrics and the model are in
 ``observe_model.py``; the event stream is ``read_events`` and the task system's picture is its
@@ -12,37 +13,44 @@ only within the project's repository or its state directory, as Orchestra's web 
 from __future__ import annotations
 
 import time
-import tomllib
 from pathlib import Path
 
 from orchestra import runtime
 from orchestra.collect import spec as collect_spec
 from orchestra.events import machine_and_instance
+from orchestra.overlay import describe
 from orchestra.web.machine_logs import readable, tail
 
 from .config import Project
+from .config_change import file_name, git, why_not_committable
 from .fillers import Fillers
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
-from .toml_edit import FILE, git, path, why_not_committable
 
 STARTED = "orchestra.machine.started"
 LOOK_BACK = 5000
 
 
 def read_config(project: Project) -> dict:
-    """The file as it is, with anything that looks like a secret hidden (``secret_shapes``: a
-    session's transcript is no place for one), whether it can take a change now, and its last
-    commits."""
-    log = git(project, "log", "-8", "--format=%h %ad %s", "--date=format:%Y-%m-%d %H:%M", "--", FILE).stdout.splitlines()
-    return {"ok": True, "path": str(path(project)), "text": redact(path(project).read_text(encoding="utf-8")),
+    """The repository's ``orchestra.toml`` as it is, with anything that looks like a secret hidden
+    (``secret_shapes``: a session's transcript is no place for one), whether it can take a change
+    now, and its last commits; the owner's private overlay (whether there is one; its text is not
+    shown); and each key of the merged configuration with the file it comes from, a value the
+    overlay marks secret left out (Orchestra's ``describe``). Read through Orchestra's objects."""
+    o, edit = project.orchestra, project.orchestra.config_edit
+    log = git(project, "log", "-8", "--format=%h %ad %s", "--date=format:%Y-%m-%d %H:%M", "--",
+              file_name(project)).stdout.splitlines()
+    return {"ok": True, "path": str(edit.file("repo")), "text": redact(edit.text("repo") or ""),
             "can_change": why_not_committable(project) or "yes: the root is on the base branch and the file is committed",
-            "recent_commits": log}
+            "recent_commits": log,
+            "overlay": {"path": str(edit.file("overlay")), "exists": edit.text("overlay") is not None,
+                        "about": "the owner's private settings, merged over orchestra.toml; never committed"},
+            "keys": [{**r, "value": redact(str(r["value"]))} if "value" in r else r
+                     for r in describe(o.config.raw, o.config.layers) if r["from"] == "overlay"]}
 
 
 def _collectors(project: Project) -> tuple[list[dict], list[str]]:
-    raw = tomllib.loads(path(project).read_text(encoding="utf-8"))
-    found, errors = collect_spec.from_toml(raw)
+    found, errors = collect_spec.from_toml(project.orchestra.config.raw)
     out = []
     for c in found:
         log = project.orchestra.logs_dir / "machines" / f"{c.name}.log"
@@ -121,7 +129,7 @@ def check_setup(project: Project, store: AgentStore) -> dict:
     """Whether the system can do what is asked of it: which machines fill the task system's roles
     (and which of them Orchestra does not run), the kind of work, the gate's tests, the capacity,
     and what the launcher runs."""
-    raw = tomllib.loads(path(project).read_text(encoding="utf-8"))
+    raw = project.orchestra.config.raw
     p, t, g = raw.get("project") or {}, raw.get("tasks") or {}, raw.get("gate") or {}
     procs = list_processes(project)
     fillers = Fillers(store.events)

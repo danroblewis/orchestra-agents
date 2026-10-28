@@ -283,7 +283,7 @@ def test_a_task_system_that_does_not_know_the_query_does_not_stop_a_change(proje
 
 
 @pytest.mark.parametrize("written,tool,args,said", [
-    ('\n[gate]\nunit = "make test"\n', "set_gate_unit", {"command": "make check"}, r"\[gate\] unit is not an array of tables; write each test as \[\[gate.unit\]\]"),
+    ('\n[gate]\nunit = "make test"\n', "set_gate_unit", {"command": "make check"}, r"gate.unit is not an array of tables; write each entry as \[\[gate.unit\]\]"),
     ('\ncollect = "machines/x.sh"\n', "set_collector", {"name": "disk", "command": "machines/disk.sh"}, r"collect is not an array of tables"),
     ('\nscrape = []\n', "set_collector", {"name": "app", "url": "http://127.0.0.1:9100/metrics"}, r"scrape is not an array of tables"),
 ])

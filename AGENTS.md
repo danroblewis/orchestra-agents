@@ -14,9 +14,10 @@ broken without updating the spec and saying so in the commit.
    creates, switches, merges or deletes a branch. The git writes here are two: committing the
    organisation's own files under `.orchestra/`, only when the checkout is on the base branch and
    otherwise clean; and the Supervisor's setup tools committing `orchestra.toml` alone
-   (`toml_edit.py`), only when the checkout is on the base branch and that file has no
-   uncommitted change. (`restart_machine` writes the file without one entry and puts it back
-   byte for byte; it commits nothing.)
+   (`config_change.py`), when a change targets the repository, only when the checkout is on the
+   base branch and that file has no uncommitted change. A change to the owner's private overlay
+   is never committed. (`restart_machine` takes one entry out in the overlay and puts the overlay
+   back byte for byte; it commits nothing.)
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
@@ -63,6 +64,11 @@ broken without updating the spec and saying so in the commit.
     github.com/danroblewis/orchestra beside this repository, named `orchestra_2` as
     `[tool.uv.sources]` says) and the task system from `../orchestra-tasking` (both editable);
     the task system is a dev dependency, for the tests and the demo only.
+12. **Configuration only through Orchestra's objects** (Orchestra's AGENTS.md rule 10). The
+    agents read `project.orchestra.config.raw` (orchestra.toml with the owner's private overlay
+    merged), follow it with `reload_config()`, and change it only with
+    `project.orchestra.config_edit`; nothing here opens, parses or edits `orchestra.toml` or the
+    overlay itself (`tests/unit/test_config_via_orchestra.py` fails otherwise).
 
 ## Harness facts the code depends on
 

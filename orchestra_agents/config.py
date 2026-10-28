@@ -1,19 +1,21 @@
 """The agents' settings and where they keep their state.
 
-The settings are ``[agents]`` in the repository's ``orchestra.toml`` (which product runs them,
-the model, time limits, which roles they fill, the Coordinator's schedule if any), and three of the task system's ``[project]``
-settings their prompts are filled with (the base branch, the ticket prefix, whether work is tasks
-or code). The bus and the metrics store are Orchestra's, reached through the Orchestra project
-(``Project.orchestra``). State lives in ``~/.orchestrator/<key>/agents/``; the project key is
-Orchestra's."""
+The settings are ``[agents]`` in the project's configuration (which product runs them, the model,
+time limits, which roles they fill, the Coordinator's schedule if any), and three of the task
+system's ``[project]`` settings their prompts are filled with (the base branch, the ticket prefix,
+whether work is tasks or code). They are read only through Orchestra's objects: the Orchestra
+project (``Project.orchestra``) holds the configuration, ``orchestra.toml`` with the owner's
+private overlay merged over it, and reloads it; nothing here opens ``orchestra.toml`` (Orchestra's
+AGENTS.md rule 10). The bus and the metrics store are Orchestra's too. State lives in
+``~/.orchestrator/<key>/agents/``; the project key is Orchestra's."""
 
 from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from orchestra.config import Config as OrchestraConfig
 from orchestra.config import ConfigError, home, parse_duration
 from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
@@ -44,7 +46,12 @@ class Config:
 
     @classmethod
     def from_toml(cls, text: str) -> Config:
-        raw = tomllib.loads(text)
+        """The settings in a TOML text (tests; the project's come from ``from_raw``)."""
+        return cls.from_raw(tomllib.loads(text))
+
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any]) -> Config:
+        """The settings in a parsed configuration: Orchestra's ``project.config.raw``."""
         a, p = raw.get("agents", {}) or {}, raw.get("project", {}) or {}
         serves = list(a.get("serves", ["worker", "reviewer"]))
         bad = [r for r in serves if r not in PER_TICKET_ROLES]
@@ -69,13 +76,22 @@ class Config:
 
 @dataclass
 class Project:
-    key: str
-    repo_root: Path
+    orchestra: OrchestraProject    # the same repository as Orchestra sees it: its configuration, key, bus and store
     config: Config
+    stamp: tuple | None = field(default=None, repr=False, compare=False)   # the files as last read (config_stamp)
+
+    @classmethod
+    def of(cls, o: OrchestraProject) -> Project:
+        """The agents' view of an Orchestra project (the one a plugin is given, or ``load_project``'s)."""
+        return cls(orchestra=o, config=Config.from_raw(o.config.raw))
 
     @property
-    def orchestra(self) -> OrchestraProject:
-        return OrchestraProject(self.key, self.repo_root, OrchestraConfig.from_toml((self.repo_root / "orchestra.toml").read_text()))
+    def key(self) -> str:
+        return self.orchestra.key
+
+    @property
+    def repo_root(self) -> Path:
+        return self.orchestra.repo_root
 
     @property
     def state_dir(self) -> Path:
@@ -102,12 +118,17 @@ class Project:
             d.mkdir(parents=True, exist_ok=True)
 
     def reload_config(self) -> None:
-        self.config = Config.from_toml((self.repo_root / "orchestra.toml").read_text())
+        """The configuration as it is now, through Orchestra (the overlay merged): read again only
+        when either file changed (``config_stamp``), so the host can ask every second."""
+        stamp = self.orchestra.config_stamp()
+        if stamp != self.stamp:
+            self.orchestra.reload_config()
+            self.stamp = stamp
+        self.config = Config.from_raw(self.orchestra.config.raw)
 
 
 def load_project(repo: Path | str | None = None) -> Project:
     """The project for ``repo`` (default: ORCHESTRA_REPO, else the cwd), as Orchestra resolves it."""
-    o = load_orchestra_project(repo)
-    project = Project(key=o.key, repo_root=o.repo_root, config=Config.from_toml((o.repo_root / "orchestra.toml").read_text()))
+    project = Project.of(load_orchestra_project(repo))
     project.ensure_dirs()
     return project

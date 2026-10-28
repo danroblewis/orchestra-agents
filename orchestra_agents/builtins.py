@@ -14,9 +14,10 @@ Tool groups:
   events       read the event log, raise a team's declared events
   team         read the organisation; brief ad hoc agents and message along the tree
   roles        design the organisation: roles, agents, teams (the Supervisor)
-  observe      read the whole system: orchestra.toml, processes, logs, metrics, the model, the snapshot
-  setup        change orchestra.toml (roles the AI agents fill, work mode, gate tests, capacity limit,
-               machines and collectors) and restart a machine (the Supervisor only)
+  observe      read the whole system: the configuration, processes, logs, metrics, the model, the snapshot
+  setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
+               overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
+               collectors, any key) and restart a machine (the Supervisor only)
   report_ticket / report_review   the worker's and the reviewer's exit tools
 """
 

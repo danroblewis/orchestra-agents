@@ -94,7 +94,7 @@ EVENT_HELP = {
     "agent.paused": "an agent is paused", "agent.resumed": "an agent is resumed",
     "agent.messaged": "an agent gets a message or brief",
     "team.created": "a team is created", "team.changed": "a team changes", "team.deleted": "a team is deleted",
-    "config.changed": "the Supervisor changes orchestra.toml (committed, with the reason)",
+    "config.changed": "the Supervisor changes the configuration (orchestra.toml, committed with the reason, or the owner's private overlay)",
     "machine.restarted": "the Supervisor restarts one of the project's programs",
 }
 # Teams may declare further event types (`emits`) that their agents raise with `emit_event`;

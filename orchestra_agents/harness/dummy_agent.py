@@ -141,11 +141,14 @@ def turns_so_far(transcript: Path) -> int:
 
 
 def script_path() -> Path | None:
-    """``[agents] dummy_script`` of the project, relative to its repository; None when unset."""
+    """``[agents] dummy_script`` of the project (read through Orchestra, the overlay merged),
+    relative to its repository; None when unset."""
+    from orchestra.config import load_project
+
     from ..config import Config
-    repo = Path(os.environ.get("ORCHESTRA_REPO") or ".")
-    name = Config.from_toml((repo / "orchestra.toml").read_text(encoding="utf-8")).dummy_script
-    return (repo / name) if name else None
+    o = load_project(os.environ.get("ORCHESTRA_REPO") or None)
+    name = Config.from_raw(o.config.raw).dummy_script
+    return (o.repo_root / name) if name else None
 
 
 def main(argv: list[str] | None = None) -> int:

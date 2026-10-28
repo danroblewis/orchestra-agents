@@ -39,6 +39,12 @@ def I(d: str = "") -> dict:
     return {"type": "integer", "description": d} if d else {"type": "integer"}
 
 
+TARGET = {"type": "string", "enum": ["repo", "overlay"],
+          "description": "repo (default): orchestra.toml, the project's settings, committed; overlay: the owner's "
+                         "private file, for their own or their company's settings (identities, channels, templates), "
+                         "never committed"}
+
+
 def A(d: str = "") -> dict:
     s = {"type": "array", "items": {"type": "string"}}
     return {**s, "description": d} if d else s
@@ -200,7 +206,8 @@ TOOLS: list[ToolDef] = [
             "Whether the system can do what is asked: which machines fill the worker and reviewer roles (AI agents, programs), "
             "the kind of work (tasks or code), the gate's tests, the capacity limit, what Orchestra runs and how each "
             "collector's last round went. Call it first when a ticket blocks or keeps being rejected, or a request is not met."),
-    ToolDef("read_config", "observe", "The project's orchestra.toml as it is, whether it can be changed now, and its recent commits."),
+    ToolDef("read_config", "observe", "The project's orchestra.toml as it is, whether it can be changed now, and its recent commits; "
+            "whether the owner has a private overlay, and each key it sets (secret values left out)."),
     ToolDef("list_processes", "observe",
             "The programs Orchestra's launcher keeps running (its runtime record: state, pid, restarts, last exit code, "
             "log) and the collectors orchestra.toml declares, with the last line of each one's log."),
@@ -218,43 +225,51 @@ TOOLS: list[ToolDef] = [
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment."),
-    # setup: orchestra.toml, changed by the Supervisor only; each change is a commit with its reason
+    # setup: the configuration, changed by the Supervisor only, through Orchestra: in orchestra.toml
+    # (target repo, each change a commit with its reason) or the owner's private overlay (target overlay)
+    ToolDef("set_setting", "setup",
+            "Set one key of the configuration (section.name, as desk.channels or slack.me), or remove it with value "
+            "null. Say where: target overlay for the owner's own or their company's settings (identities, channels, "
+            "templates, anything personal; never committed), repo for the project's settings (committed).",
+            {"key": S("section.name"),
+             "value": S('The value as JSON: "#ops", 3, true, ["#a", "@me"], {"k": "v"}; null removes the key'),
+             "target": TARGET, "reason": S("Why, in a sentence")}, ("key", "target", "reason")),
     ToolDef("set_agent_roles", "setup",
             "Set which of the task system's roles the AI agents fill ([agents] serves). A role left out is left to other "
             "machines (a program worker): leave a role out only when one fills it.",
-            {"serves": A("worker, reviewer, both, or none"), "reason": S("Why, in a sentence: it goes in the commit")},
+            {"serves": A("worker, reviewer, both, or none"), "target": TARGET, "reason": S("Why, in a sentence: it goes in the commit")},
             ("serves", "reason")),
     ToolDef("set_work_mode", "setup",
             "Set the kind of work ([project] work): code (a branch per ticket, reviewed, landed on the base branch by the "
             "merge gate; needed for anything that must end up in the repository, like a collector) or tasks (a scratch "
             "folder per ticket, nothing merged).",
-            {"work": {"type": "string", "enum": ["tasks", "code"]}, "reason": S("Why, in a sentence")}, ("work", "reason")),
+            {"work": {"type": "string", "enum": ["tasks", "code"]}, "target": TARGET, "reason": S("Why, in a sentence")}, ("work", "reason")),
     ToolDef("set_gate_unit", "setup",
             "Add or change a test the merge gate runs on every branch before it lands ([[gate.unit]]): a shell command, "
             "run in the branch's checkout, that must exit 0.",
             {"name": S("The test's name, default unit"), "command": S("The shell command"),
-             "timeout": S("How long it may take, e.g. 300s"), "reason": S("Why, in a sentence")}, ("command", "reason")),
+             "timeout": S("How long it may take, e.g. 300s"), "target": TARGET, "reason": S("Why, in a sentence")}, ("command", "reason")),
     ToolDef("set_capacity_limit", "setup",
             "Set the most tickets offered at once to workers and to reviewers ([tasks] workers, reviewers): the ceiling "
             "under which the Coordinator's set_capacity dial moves.",
-            {"workers": I(), "reviewers": I(), "reason": S("Why, in a sentence")}, ("reason",)),
+            {"workers": I(), "reviewers": I(), "target": TARGET, "reason": S("Why, in a sentence")}, ("reason",)),
     ToolDef("set_machine", "setup",
             "Add or change a program Orchestra keeps running ([[machines]]): a command in the repository. Orchestra starts "
             "a new one within a second and restarts one whose command changed. The program itself is a worker's to write.",
             {"name": S("letters, digits, . _ -"), "command": S("The command, e.g. python machines/feed.py"),
              "restart": S("always (default), on-failure or never"), "stop_grace": I("Seconds from SIGTERM to SIGKILL"),
-             "reason": S("Why, in a sentence")}, ("name", "command", "reason")),
+             "target": TARGET, "reason": S("Why, in a sentence")}, ("name", "command", "reason")),
     ToolDef("set_collector", "setup",
             "Add or change a collector: a command under machines/ that prints Prometheus text ([[collect]]), or a url "
             "that serves it ([[scrape]]). Orchestra runs it on its interval and stores what it prints. The script itself "
             "is a worker's to write.",
             {"name": S("The machine's id"), "command": S("The script, e.g. machines/disk.sh"), "url": S("Or a URL"),
              "every": S("How often, e.g. 60s"), "timeout": S("For a round that may take more than 10 s"),
-             "reason": S("Why, in a sentence")}, ("name", "reason")),
+             "target": TARGET, "reason": S("Why, in a sentence")}, ("name", "reason")),
     ToolDef("remove_entry", "setup",
             "Remove a [[machines]], [[collect]], [[scrape]] or [[gate.unit]] entry by name. A removed machine is stopped.",
             {"section": {"type": "string", "enum": ["machines", "collect", "scrape", "gate.unit"]}, "name": S("Entry name"),
-             "reason": S("Why, in a sentence")}, ("section", "name", "reason")),
+             "target": TARGET, "reason": S("Why, in a sentence")}, ("section", "name", "reason")),
     ToolDef("restart_machine", "setup",
             "Restart one of the project's programs ([[machines]]), including one Orchestra gave up on: its entry is taken "
             "out until Orchestra has stopped it, then put back as it was, which starts it again. Nothing is committed.",

@@ -41,9 +41,11 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
     a = args or {}
     verb, _, noun = command.partition("_")
     if command in SETUP_COMMANDS:
-        if not result.get("commit"):
-            return None
-        return f"committed {result['commit']} to orchestra.toml on the base branch: {result.get('changed')}"
+        if result.get("commit"):
+            return f"committed {result['commit']} to orchestra.toml on the base branch: {result.get('changed')}"
+        if result.get("written") and result.get("target") == "overlay":
+            return f"changed the owner's private overlay (not committed): {result.get('announce')}"
+        return None
     if command == "restart_machine":
         return f"restarted the program {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> {result.get('pid')})"
     if command == "update_project_context":

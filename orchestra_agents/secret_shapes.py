@@ -2,7 +2,7 @@
 
 ``orchestra.toml`` is committed to the base branch and every change to it is announced on the bus,
 so a password, a token or a key written into it is published twice. The Supervisor's setup tools
-refuse a change that adds one (``toml_edit.change``), and ``read_config`` hides any already there
+refuse a change that adds one (``config_change.change``), and ``read_config`` hides any already there
 before the text reaches a session. What counts is a shape, not a proof: a URL with a user and a
 password in it (``https://admin:hunter2@host``), a query parameter named for a secret (``?token=``,
 ``&api_key=``), a value given after ``--token``, ``--password``, ``--secret`` or ``--api-key``, a

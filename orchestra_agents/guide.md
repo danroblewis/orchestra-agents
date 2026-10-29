@@ -85,17 +85,19 @@ enabled = true            # false: no host, no agents
 ### How the agents call Orchestra's tools (`tools_via`)
 
 - **`mcp`**: through Orchestra's MCP server, which the host gives each Claude Code or Codex turn.
-  When Claude Code reports the server not connected, the turn fails and says why, and no Claude
-  Code turn starts for a while.
+  When Claude Code reports the server not connected, or refuses a call to it, the turn fails and
+  says why, and no Claude Code turn starts for a while.
 - **`bash`**: no MCP server at all; each session runs its tools from its shell, `orchestra agents
   tool <name> '<json>'` (the system prompt names them and the exact command). The same tools, the
   same checks, the same identity. For an organisation whose Claude Code policy allows only listed
   MCP servers: when the human says "use bash for tools", set `[agents] tools_via` to `"bash"`
   (`set_setting`, key `agents.tools_via`).
-- **`auto`** (the default): the MCP server, until Claude Code reports it not connected; then every
-  session calls the tools from its shell until Orchestra restarts, the turn that found it runs
-  again that way, and you are woken once with the reason (tell the human, and offer `bash` to make
-  it permanent).
+- **`auto`** (the default): the MCP server, until it is found blocked: Claude Code reports it not
+  connected, or refuses a call to it (a hook in the Claude Code settings, as an organisation's
+  whitelist of MCP servers is often written, or a permission rule). Then every session calls the
+  tools from its shell until Orchestra restarts, the turn that found it runs again that way (from
+  where it stopped, when a call was refused), and you are woken once with the reason (tell the
+  human, and offer `bash` to make it permanent).
 
 The sessions start again on the new setting after their turn. Pi always calls the tools through
 its extension and the dummy harness in-process: the setting changes nothing there; Codex takes

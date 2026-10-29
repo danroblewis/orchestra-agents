@@ -11,6 +11,7 @@ any. From the orchestra-agents repository:
     uv run demo/run.py                 # copies this folder to ~/orchestra-agents-demo and starts everything
     uv run demo/run.py /tmp/d --port 8072
     uv run demo/run.py --dummy         # free: scripted agents (dummy.toml), no model, no network
+    uv run demo/run.py --tools-via bash   # the agents call Orchestra's tools from their shell ([agents] tools_via)
 
 Needs: Claude Code installed and signed in, with `claude` on the PATH or named by
 `CLAUDE_BINARY`; or the fake, `CLAUDE_BINARY=$PWD/tests/e2e/fake_claude.py uv run demo/run.py`,

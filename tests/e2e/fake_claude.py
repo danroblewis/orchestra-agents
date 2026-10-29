@@ -27,7 +27,10 @@ calls the tools the file lists the same way, with {request} replaced by the requ
 With no ``orchestra`` server in the MCP config (``[agents] tools_via = "bash"``, or ``auto`` after
 the switch) every tool call is a Bash call of the command the system prompt gives (``Shell``).
 FAKE_CLAUDE_MCP_BLOCKED=1: the ``orchestra`` server, when configured, never connects (status
-``failed``), as when an organisation's policy blocks it."""
+``failed``), as when an organisation's policy blocks it.
+FAKE_CLAUDE_MCP_HOOK=1: the server connects, but a hook in the settings (an organisation's whitelist
+of MCP servers) refuses every call to it: the call's result is the hook's error, as Claude Code 2.1
+streams it, and the model would go on without its tools for a while."""
 
 from __future__ import annotations
 
@@ -216,6 +219,14 @@ def main() -> None:
         use = [{"type": "tool_use", "id": tid, **call}]
         emit({"type": "assistant", "message": {"role": "assistant", "content": use}, "session_id": sid})
         record("assistant", use)
+        if not shell and os.environ.get("FAKE_CLAUDE_MCP_HOOK"):
+            refused = [{"type": "tool_result", "tool_use_id": tid, "is_error": True,
+                        "content": f"PreToolUse:mcp__orchestra__{name} hook error: [python3 /etc/company/mcp_whitelist.py]: "
+                                   "MCP server is not in the whitelist\n"}]
+            emit({"type": "user", "message": {"role": "user", "content": refused}, "session_id": sid})
+            record("user", refused)
+            time.sleep(30)                   # a real one retries, then says it could not; the harness stops it here
+            sys.exit(0)
         out = shell.run(call["input"]["command"]) if shell else mcp.call(name, args)
         res = [{"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": out}]}]
         emit({"type": "user", "message": {"role": "user", "content": res}, "session_id": sid})

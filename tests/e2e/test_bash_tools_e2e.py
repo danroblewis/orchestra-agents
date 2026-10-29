@@ -3,7 +3,8 @@ real task system, the host and the fake Claude Code, which runs each tool as the
 prompt gives, through a shell with the session's environment, as Claude Code's Bash tool would.
 ``bash``: no MCP server at all. ``auto``: the MCP server is blocked (as by an organisation's
 policy), so the first turn is stopped at its init and run again from the shell, and the
-Supervisor is told once."""
+Supervisor is told once; or it connects and a hook refuses its first call (an organisation's
+whitelist of MCP servers), so that turn is stopped there and carried on from the shell."""
 
 import json
 from pathlib import Path
@@ -57,3 +58,24 @@ def test_auto_switches_to_the_shell_when_the_server_is_blocked(tmp_path, monkeyp
         sup = agent_store(env).find_session("supervisor") or {}
         told = [m["text"] for m in read_transcript(sup) if m["role"] == "user" and "Orchestra notice" in m["text"]]
         assert len(told) == 1 and "call Orchestra's tools from their shell" in told[0]      # said once, for both turns
+
+
+def test_auto_switches_to_the_shell_when_a_hook_refuses_the_servers_calls(tmp_path, monkeypatch):
+    monkeypatch.setenv("FAKE_CLAUDE_MCP_HOOK", "1")
+    with make_env(tmp_path, monkeypatch, "claude_code", tools_via="auto") as env:
+        t = env.create(title="Do the thing", description="x", acceptance="y")
+        env.settle(t)
+        assert env.state(t) == "DONE"                                  # the refused report went through from the shell
+        check_protocol(env.events, t, WORK_READY, APPROVED)
+        assert claude_code.FALLBACK.on and "MCP server is not in the whitelist" in claude_code.FALLBACK.why
+        archived = agent_store(env).runtime()["archived_sessions"]
+        worker = Path(archived[f"worker-{t}"]["session_file"]).read_text()
+        assert "mcp__orchestra__report_ticket" in worker and "agents tool report_ticket" in worker   # refused, then from the shell
+        assert "[Orchestra] Your call to Orchestra's `report_ticket`" in worker                     # carried on, not started over
+        assert "From now on Orchestra's tools are called from your shell" in worker   # its system prompt is kept on resume: told
+        reviewer = Path(archived[f"reviewer-{t}"]["session_file"]).read_text()
+        assert "mcp__orchestra__" not in reviewer and "agents tool report_review" in reviewer       # every session from the shell since
+        env.settle(t)
+        sup = agent_store(env).find_session("supervisor") or {}
+        told = [m["text"] for m in read_transcript(sup) if m["role"] == "user" and "Orchestra notice" in m["text"]]
+        assert len(told) == 1 and "MCP server is not in the whitelist" in told[0]

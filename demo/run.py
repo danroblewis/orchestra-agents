@@ -1,6 +1,6 @@
 """The agents' demo, in one command, from this repository's environment:
 
-    uv run demo/run.py [target] [--port 8072] [--dummy]
+    uv run demo/run.py [target] [--port 8072] [--dummy] [--tools-via bash]
     # target: a new directory, default ~/orchestra-agents-demo
     # --dummy: scripted agents (the dummy harness, dummy.toml beside this file): no model, no cost
 
@@ -122,11 +122,12 @@ new tool or machine comes with a test there.
 DUMMY_SCRIPT = "dummy.toml"
 
 
-def make_project(target: Path, dummy: bool = False) -> Path:
+def make_project(target: Path, dummy: bool = False, tools_via: str | None = None) -> Path:
     """The template as a fresh git repository at ``target`` (which must not exist yet), with no
     state: Orchestra names a project's state directory after the target's path, so a previous
     run of the demo at the same path left tickets, sessions and events there that would show up
-    again. With ``dummy`` the agents run on the dummy harness, playing ``dummy.toml``."""
+    again. With ``dummy`` the agents run on the dummy harness, playing ``dummy.toml``; with
+    ``tools_via`` they call Orchestra's tools that way (``[agents] tools_via``: mcp, bash, auto)."""
     if target.exists():
         sys.exit(f"{target} exists; remove it or name another directory")
     shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__", *(() if dummy else (DUMMY_SCRIPT,))))
@@ -137,6 +138,11 @@ def make_project(target: Path, dummy: bool = False) -> Path:
         assert agents in text, "demo/orchestra.toml's [agents] changed; update make_project"
         toml.write_text(text.replace(agents, f'harness = "dummy"        # scripted agents: no model, no cost\ndummy_script = "{DUMMY_SCRIPT}"\n'),
                         encoding="utf-8")
+    if tools_via:
+        toml = target / "orchestra.toml"
+        text = toml.read_text(encoding="utf-8")
+        assert text.rstrip().endswith('serves = ["worker", "reviewer"]'), "[agents] is no longer orchestra.toml's last section; update make_project"
+        toml.write_text(f'{text.rstrip()}\ntools_via = "{tools_via}"\n', encoding="utf-8")
     (target / ".orchestra").mkdir()
     (target / ".orchestra" / "PROJECT.md").write_text(CONTEXT, encoding="utf-8")
     git = ["git", "-c", "user.name=demo", "-c", "user.email=demo@example.invalid"]
@@ -283,6 +289,7 @@ def main() -> None:
     ap.add_argument("target", nargs="?", default=Path.home() / "orchestra-agents-demo", type=Path)
     ap.add_argument("--port", type=int, default=8072)
     ap.add_argument("--dummy", action="store_true", help="scripted agents (the dummy harness): no model, no network, no cost")
+    ap.add_argument("--tools-via", choices=("mcp", "bash", "auto"), help="how the agents call Orchestra's tools ([agents] tools_via; default auto)")
     a = ap.parse_args()
     binary = os.environ.get("CLAUDE_BINARY", "claude")
     if not a.dummy and not shutil.which(binary):
@@ -290,7 +297,7 @@ def main() -> None:
                  "or run the free demo with --dummy (README.md)")
     signal.signal(signal.SIGTERM, interrupt)          # `kill` stops everything, like Ctrl-C
     signal.signal(signal.SIGINT, interrupt)
-    target, url = make_project(a.target.expanduser().resolve(), dummy=a.dummy), f"http://127.0.0.1:{a.port}"
+    target, url = make_project(a.target.expanduser().resolve(), dummy=a.dummy, tools_via=a.tools_via), f"http://127.0.0.1:{a.port}"
     procs = start(target, a.port)
     running = lambda: all(p.poll() is None for p in procs.values())
     try:

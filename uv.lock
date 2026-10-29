@@ -481,7 +481,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-tasking"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#91b01d2838028bc575e5d68d6a8a0d359771694b" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#c5ac976c99d36955fb748928e2767e848f978fb6" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },

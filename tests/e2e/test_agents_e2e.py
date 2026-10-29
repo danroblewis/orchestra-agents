@@ -5,7 +5,7 @@ queries, and the agents' host answers the assignments with a fake harness, in a 
 own, as a separate machine would.
 
 Every test runs once per harness: the fake Pi (RPC protocol, tools via the extension's
-`orchestra agents api` path), the fake Claude Code (stream-json, tools via the real MCP server),
+`orchestra agents tool` path), the fake Claude Code (stream-json, tools via the real MCP server),
 the fake Codex (`exec --json`, tools via the same MCP server), and the dummy harness, a product
 feature with no fake: its scripted agent plays the fakes' knobs from a script (``knob``). The agents must behave
 identically on all of them. What is checked is what the agents put on the bus for each ticket
@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,7 +114,12 @@ def knob(env: Env, monkeypatch, name: str) -> None:
 
 @pytest.fixture(params=["pi", "claude_code", "codex", "dummy"])
 def env(tmp_path, monkeypatch, request):
-    harness = request.param
+    with make_env(tmp_path, monkeypatch, request.param) as e:
+        yield e
+
+
+@contextmanager
+def make_env(tmp_path, monkeypatch, harness: str, tools_via: str | None = None):
     home = tmp_path / "home"
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(home))
     if harness in FAKES:
@@ -143,6 +149,9 @@ def env(tmp_path, monkeypatch, request):
     if harness == "dummy":      # the script lives outside the repository, so a test can change it with the checkout clean
         (tmp_path / "dummy.toml").write_text("")
         toml.write_text(toml.read_text() + f'dummy_script = "{tmp_path / "dummy.toml"}"\n')
+        project.reload_config()
+    if tools_via:
+        toml.write_text(toml.read_text() + f'tools_via = "{tools_via}"\n')
         project.reload_config()
     assert project.config.harness == harness and project.config.work == "code"
     git("add", "-A", cwd=repo)

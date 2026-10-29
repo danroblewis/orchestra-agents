@@ -46,7 +46,7 @@ broken without updating the spec and saying so in the commit.
    the host's events (turn starts, cut-offs, resets) are overlaid on it by the view.
 7. **The role is the session's, as the host issued it**, never the agent's: the host starts each
    session with `ORCHESTRA_ROLE` and a token, `ORCHESTRA_SESSION_TOKEN`, whose digest it records
-   with the role (`access.py`); the MCP server and `orchestra agents api` take the role from the
+   with the role (`access.py`); the MCP server and `orchestra agents tool` take the role from the
    token, and refuse a call whose `ORCHESTRA_ROLE` disagrees. `tooling.handle` checks every call
    against that role's tool groups (`access.authorize`) before it runs.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
@@ -79,7 +79,7 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     `handoff.py`), which plans them into milestones and tickets (the `planning` group) and reports
     back (`work.planned`); the Supervisor keeps only the human's decisions on existing tickets
     (priority, cancel, unblock, a note). Its and the Coordinator's sessions have no file-editing
-    tools (`Role.read_only`). `orchestra agents api` runs only inside an agent's session
+    tools (`Role.read_only`). `orchestra agents tool` runs only inside an agent's session
     (with the session's token); without a role the tool interface reads and changes nothing. The
     pages and the CLI read the organisation through `api_org.read_org`, never an agent's tool.
 11. **One package, no path hacks.** Everything importable is under `orchestra_agents/`; `demo/`
@@ -107,7 +107,9 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
   names a new session, `--resume <uuid>` continues it from the same cwd. Transcripts live under
   `$CLAUDE_CONFIG_DIR` (default `~/.claude`) at `projects/<cwd with every character but letters
   and digits as ->/<uuid>.jsonl`. Tools come from MCP servers in `--mcp-config`; MCP tools are
-  deferred behind `ToolSearch`, which the model calls itself. `--autocompact` bounds its own
+  deferred behind `ToolSearch`, which the model calls itself. Its Bash tool passes the `claude` process's environment
+  on to the commands it runs, and `--strict-mcp-config` with `{"mcpServers": {}}` loads no server
+  at all (both checked with Haiku, 2026-10-28): what `tools_via = "bash"` depends on. `--autocompact` bounds its own
   context; there is no command to compact between turns.
 - Codex: `codex exec --json` is one turn per process; the prompt is `-` on stdin (a positional
   prompt with an open stdin hangs on "Reading additional input from stdin"). Events:

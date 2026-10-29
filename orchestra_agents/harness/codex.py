@@ -5,7 +5,11 @@ stdin, streaming ``--json`` events (``thread.started``, ``turn.started``, ``item
 ``turn.completed`` / ``turn.failed``), and exiting. Codex assigns the thread id on the first
 turn; later turns are ``codex exec resume <thread_id>``. The agents' tools reach the model
 through the MCP server in ``mcp.py``, declared with a ``-c mcp_servers.orchestra=...``
-override, and the role prompt rides along as ``developer_instructions``. The transcript is
+override, and the role prompt rides along as ``developer_instructions``. With ``[agents] tools_via
+= "bash"`` there is no MCP server: the session runs ``orchestra agents tool`` from its shell
+(``bash_tools.py``), with the session's variables set in the shell's environment (Codex leaves out
+any variable whose name holds TOKEN by default). ``auto`` is the MCP server here: Codex says nothing
+before the model runs about a server it could not start. The transcript is
 Codex's own rollout file under ``$CODEX_HOME/sessions/``."""
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import sys
 import threading
 from pathlib import Path
 
+from . import bash_tools
 from .base import (
     AgentSession,
     ContextSize,
@@ -68,7 +73,7 @@ def _item_tool(item: dict) -> tuple[str, dict] | None:
     if kind == "mcp_tool_call":
         return _short(item.get("tool") or "?"), item.get("arguments") or {}
     if kind == "command_execution":
-        return "exec", {"command": item.get("command")}
+        return bash_tools.parse(str(item.get("command") or "")) or ("exec", {"command": item.get("command")})
     if kind == "file_change":
         return "apply_patch", {"changes": item.get("changes")}
     return "web_search", {"query": item.get("query")}
@@ -126,17 +131,27 @@ class CodexSession(AgentSession):
             if os.environ.get(k):
                 env[k] = os.environ[k]
         env_toml = ", ".join(f"{k}={toml_string(v)}" for k, v in env.items())
-        args = ", ".join(toml_string(a) for a in ["-m", "orchestra_agents.harness.mcp"])
+        args = ", ".join(toml_string(a) for a in ["-P", "-m", "orchestra_agents.harness.mcp"])
         return (f"mcp_servers.{MCP_SERVER}={{command={toml_string(sys.executable)}, args=[{args}], "
                 f"env={{{env_toml}}}, required=true, tool_timeout_sec={TOOL_TIMEOUT_S}}}")
+
+    def _shell_env(self) -> str:
+        """The session's variables in the environment of every command the model runs, so
+        ``orchestra agents tool`` knows the session (Codex's default policy drops ``*TOKEN*``)."""
+        env = {**self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        return f"shell_environment_policy.set={{{', '.join(f'{k}={toml_string(v)}' for k, v in env.items())}}}"
 
     def _args(self) -> list[str]:
         if self.thread_id is None and self._meta_path.exists():
             self.open()
+        bash = self.spec.tools_via == "bash"
         args = [self.binary, "exec", "--json", "--skip-git-repo-check", "--sandbox", "danger-full-access",
-                "-C", str(self.spec.cwd), "-c", self._mcp_override()]
-        if self.spec.system_prompt:
-            args += ["-c", f"developer_instructions={toml_string(self.spec.system_prompt)}"]
+                "-C", str(self.spec.cwd), "-c", self._shell_env() if bash else self._mcp_override()]
+        system = self.spec.system_prompt or ""
+        if bash:
+            system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self.spec.env.get('PATH') or os.environ.get('PATH'))}"
+        if system:
+            args += ["-c", f"developer_instructions={toml_string(system)}"]
         if self.spec.model:
             args += ["-m", self.spec.model]
         if self.spec.provider:

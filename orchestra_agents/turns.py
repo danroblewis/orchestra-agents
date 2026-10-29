@@ -27,7 +27,11 @@ class Turns:
         def fn(ev: dict) -> None:
             t = ev.get("type")
             now_t = time.time()
-            if t == "turn_start":
+            if t == "notice":
+                # the harness changed how it runs the agent (harness/base.py): the host's log, and the Supervisor tells the human
+                self.host.log(f"{sid}: {ev.get('text')}")
+                store.add_wakeup("supervisor", f"Orchestra notice: {ev.get('text')}")
+            elif t == "turn_start":
                 # the process running this turn, which is what proves the turn alive and what a later host stops if this one dies
                 store.set_session(sid, phase="prompting", phase_since=now_t, tool_name=None, pid=ev.get("pid"))
             elif t == "assistant_start":

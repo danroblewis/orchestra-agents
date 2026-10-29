@@ -82,6 +82,12 @@ no tickets yourself. To choose the harness and model yourself, tell the Supervis
     harness = "claude_code"      # pi | claude_code | codex | dummy
     model = "haiku"
     serves = ["worker", "reviewer"]   # the task system's roles these agents fill
+    tools_via = "auto"           # mcp | bash | auto: how agents call Orchestra's tools
+
+If your organisation's Claude Code policy blocks MCP servers it has not listed, the agents call
+Orchestra's tools from their shell instead (`orchestra agents tool <name> '<json>'`): `auto`, the
+default, switches when Claude Code reports the server blocked; `bash` never starts it. Tell the
+Supervisor "use bash for tools", or set `tools_via = "bash"`.
 
 The host follows a change of harness or model once no turn runs. `enabled = false` turns the
 agents off.

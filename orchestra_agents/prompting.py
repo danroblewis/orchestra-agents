@@ -61,8 +61,8 @@ def role_prompt(project: Project, role: str) -> str:
 
 
 # Every session's last word (host._open_session): Claude Code once found no Orchestra tools and "created" a ticket in its own todo list.
-NO_SUBSTITUTE = ("If Orchestra's tools (tickets, the project, the Supervisor's and your role's tools) are missing from this "
-                 "session, say so in one line and stop: never do the work some other way, and never use another task, todo "
+NO_SUBSTITUTE = ("If Orchestra's tools (tickets, the project, the Supervisor's and your role's tools; tools of this session, "
+                 "or the command this prompt gives to run them from your shell) are missing or do not run, say so in one line and stop: never do the work some other way, and never use another task, todo "
                  "or schedule list in their place; nothing outside Orchestra's tools is seen or done by anyone.")
 
 

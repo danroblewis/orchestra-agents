@@ -258,10 +258,10 @@ class AgentHost:
         return {w.split(":")[0] for w in spec.listens()} - core if spec is not None else set()
 
     def _harness_settings(self) -> tuple:
-        return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking)
+        return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking, self.cfg.tools_via)
 
     def _follow_harness(self) -> None:
-        """``[agents]`` harness, model, provider or thinking changed (the Supervisor sets them at the
+        """``[agents]`` harness, model, provider, thinking or tools_via changed (the Supervisor sets them at the
         human's choice): once no turn runs, the resident sessions are closed and the next tick opens
         them on what is configured now. A session on another harness is a new conversation."""
         want = self._harness_settings()
@@ -274,8 +274,8 @@ class AgentHost:
                 log(f"[agents] harness: {e}; the agents keep running on {self.harness.name}")
             self._running_with = ("refused", *want)
             return
-        log(f"the agents' harness changed to {harness.name}{' (' + self.cfg.model + ')' if self.cfg.model else ''}: "
-            "the resident sessions start again on it")
+        log(f"the agents' harness changed to {harness.name}{' (' + self.cfg.model + ')' if self.cfg.model else ''}, "
+            f"tools via {self.cfg.tools_via}: the resident sessions start again on it")
         self.residents.close_all()
         self.harness, self._running_with = harness, want
 
@@ -375,7 +375,7 @@ class AgentHost:
                  "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token},
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            read_only=read_only))
+            tools_via=self.cfg.tools_via, read_only=read_only))
         if not ticket_id:
             self._session_models[role] = model
         self._announce(source, role, model)        # once it exists: a session that failed to start is no machine

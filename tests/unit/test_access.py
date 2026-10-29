@@ -33,13 +33,13 @@ def project(tmp_path, monkeypatch):
 
 
 def call_api(project, monkeypatch, capsys, env: dict, command: str, args: dict | None = None) -> tuple[int, dict]:
-    """`orchestra agents api` as a shell inside a session runs it, with ``env`` as that shell's environment."""
+    """`orchestra agents tool` as a shell inside a session runs it, with ``env`` as that shell's environment."""
     for k in ("ORCHESTRA_ROLE", access.TOKEN_ENV, "ORCHESTRA_TICKET"):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     capsys.readouterr()
-    code = main(["--repo", str(project.repo_root), "api", command, "--args", json.dumps(args or {})])
+    code = main(["--repo", str(project.repo_root), "tool", command, json.dumps(args or {})])
     return code, json.loads(capsys.readouterr().out)
 
 
@@ -82,10 +82,8 @@ def test_a_worker_forging_its_role_is_refused(project, monkeypatch, capsys):
     for env in ({"ORCHESTRA_ROLE": "supervisor", access.TOKEN_ENV: "made-up"},):
         code, out = call_api(project, monkeypatch, capsys, env, "pause_agent", {"name": "supervisor"})
         assert code == 1 and "was not issued by the host" in out["error"]
-    monkeypatch.setenv("ORCHESTRA_ROLE", "supervisor")                    # no token at all: the api does not run
-    monkeypatch.delenv(access.TOKEN_ENV, raising=False)
-    with pytest.raises(SystemExit, match=access.TOKEN_ENV):
-        main(["--repo", str(project.repo_root), "api", "pause_agent", "--args", '{"name": "supervisor"}'])
+    code, out = call_api(project, monkeypatch, capsys, {"ORCHESTRA_ROLE": "supervisor"}, "pause_agent", {"name": "supervisor"})
+    assert code == 1 and access.TOKEN_ENV in out["error"]                # no token at all: nothing runs
     with pytest.raises(StoreError, match="no ORCHESTRA_SESSION_TOKEN"):
         access.identify(store, {"ORCHESTRA_ROLE": "supervisor"})
     assert not store.agent_state("supervisor").get("paused")

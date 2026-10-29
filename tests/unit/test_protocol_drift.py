@@ -59,8 +59,10 @@ def test_the_copied_event_names_and_states_match_the_task_systems_source():
     assert emitted <= known, f"orchestra-tasking emits {sorted(emitted - known)}, which protocol.py does not list"
     for state in STATES:
         assert f"State.{state}" in source or f'"{state}"' in source, f"{state} is in protocol.STATES but not a State in orchestra-tasking"
-    members = re.findall(r"^\s+([A-Z_]+) = \"[A-Z_]+\"$", source[source.index("class State"):], re.MULTILINE)[:len(STATES) + 1]
-    assert set(members) == set(STATES)                                                 # and no eleventh state
+    body = source[source.index("class State"):]
+    body = body[:body.index("\n\n\n")]                                              # the class alone
+    members = re.findall(r"^\s+([A-Z_]+) = \"[A-Z_]+\"\s*(?:#.*)?$", body, re.MULTILINE)   # a member may carry a comment
+    assert set(members) == set(STATES)                                                 # and no other state
 
 
 def test_the_planner_role_names_match_the_task_systems():

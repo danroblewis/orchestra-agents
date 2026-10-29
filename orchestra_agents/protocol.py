@@ -68,7 +68,9 @@ PLANNER_ROLES = (COORDINATOR, SUPERVISOR)
 HEARTBEAT_S = 30.0
 CREATED, LANDED = "ticket.created", "gate.landed"
 # The task system's ticket states (its ``State``), copied by hand like the event names below.
-STATES = ("OPEN", "BLOCKED", "IN_PROGRESS", "READY_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED", "MERGING", "DONE", "CANCELLED")
+# PREPARING (code mode): picked for a worker, its worktree still being made; held by nobody, offered once ready.
+STATES = ("OPEN", "BLOCKED", "PREPARING", "IN_PROGRESS", "READY_FOR_REVIEW", "IN_REVIEW", "REJECTED", "APPROVED",
+          "IN_EXTERNAL_REVIEW", "MERGING", "DONE", "CANCELLED")
 TERMINAL = STATES[-2:]                # DONE and CANCELLED: a ticket in one of these has ended; the runner archives its sessions
 
 # The task system's other event types, which an agent may wake on. Copied by hand; the truth is

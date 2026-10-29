@@ -2,6 +2,7 @@
 Supervisor, and the execution health a wake-up reads from the task system's snapshot."""
 
 import subprocess
+import time
 
 import pytest
 from conftest import agents_project
@@ -57,6 +58,11 @@ def test_execution_health_reads_the_snapshot_as_the_task_system_sends_it():
     lines = execution_health(snap)
     assert lines[0] == "Worker capacity: 2 of a configured maximum 2"
     assert any(ln.startswith("DIAGNOSIS: tickets are ready and capacity exists but no worker is running") for ln in lines)
+    # a worktree still being prepared (the task system's PREPARING) is named, and is the diagnosis
+    snap["preparing"] = [{"id": "T-2.worker.x", "ticket": "T-2", "role": "worker", "from": "OPEN", "since": time.time() - 180}]
+    lines = execution_health(snap)
+    assert "Worktrees being prepared (PREPARING; offered when ready): T-2 for a worker 3m" in lines
+    assert any(ln.startswith("DIAGNOSIS: no worker yet because their worktrees are still being prepared") for ln in lines)
 
 
 def test_the_digest_stays_short_however_busy_the_bus_was(project):

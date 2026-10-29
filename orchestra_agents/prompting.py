@@ -5,6 +5,7 @@ assignment's brief, or a query's answer), read through ``TicketView``."""
 from __future__ import annotations
 
 import hashlib
+import time
 from pathlib import Path
 from typing import ClassVar
 
@@ -378,6 +379,9 @@ def execution_health(snapshot: dict) -> list[str]:
            f"Ready tickets (OPEN, deps DONE, milestone open): {len(ready)} {ready[:8]}",
            f"OPEN but not ready: {len(waiting)}" + (f" e.g. {waiting[0]['id']}: {waiting[0].get('why_waiting')}" if waiting else ""),
            f"BLOCKED: {len(blocked)} {blocked[:8]}",
+           *(["Worktrees being prepared (PREPARING; offered when ready): "
+              + ", ".join(f"{p['ticket']} for a {p['role']} {int(time.time() - (p.get('since') or time.time())) // 60}m"
+                          for p in snapshot["preparing"][:8])] if snapshot.get("preparing") else []),
            f"Pipeline: {'PAUSED: ' + str(snapshot['pipeline'].get('reason')) if snapshot['pipeline'].get('paused') else 'running'}"]
     if ready and not workers:
         if cap.get("workers", 0) == 0 and cap.get("max_workers", 0) == 0:
@@ -386,6 +390,10 @@ def execution_health(snapshot: dict) -> list[str]:
         elif cap.get("workers", 0) == 0:
             out.append("DIAGNOSIS: work is stalled because the runtime worker capacity dial is 0. "
                        "Raise it with set_capacity if there is no reason to keep it paused.")
+        elif snapshot.get("preparing"):
+            out.append("DIAGNOSIS: no worker yet because their worktrees are still being prepared (PREPARING): a large "
+                       "checkout or a slow [tasks] worktree_setup. If one stays PREPARING for long, the setup is the "
+                       "thing to look at; escalate_to_supervisor if it persists.")
         else:
             out.append("DIAGNOSIS: tickets are ready and capacity exists but no worker is running; the task system "
                        "offers them within a tick. If this persists across check-ins, escalate_to_supervisor.")

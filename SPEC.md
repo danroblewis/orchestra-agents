@@ -407,9 +407,19 @@ server loads either); the session runs `orchestra agents tool <name> '<json>'` f
 whatever the session's PATH and working directory, and each tool with one line
 (`harness/bash_tools.py`; `--help` gives a tool's schema). Some organisations' Claude Code policy
 allows only listed MCP servers; every session can run commands. `auto` (the default): MCP, until
-Claude Code's init event reports the server not connected; then that turn is stopped before the
-model runs and run again from the shell, and every Claude Code session of this host calls the tools
-from its shell until it restarts (`mcp_status.Fallback`), said once as a `notice`. The command
+the server is found blocked; then every Claude Code session of this host calls the tools from its
+shell until it restarts (`mcp_status.Fallback`), said once as a `notice`. Blocked is: Claude Code's
+init event reports the server not connected, or connected with none of its tools (a `permissions`
+deny rule), and then that turn is stopped before the model runs and run again from the shell; or a
+call to one of its tools comes back refused by Claude Code (a `PreToolUse` hook, as an
+organisation's whitelist of MCP servers is often written, or a permission rule:
+`mcp_status.refusal`), and then that turn is stopped at the refusal and the session is resumed from
+the shell, told that its call was refused and to carry on from there. Claude Code keeps a resumed
+session's system prompt as the session began (a new `--append-system-prompt-file` is not read), so
+a session begun on the MCP server that now calls the tools from its shell (after the switch, or a
+changed `tools_via`) gets the shell section in its next message instead, once (`SHELL_NOW`; the
+session's metadata records which way its prompt says). With `mcp` a refused call
+fails the turn as a server that did not connect does, below. The command
 and the MCP server call through one path (`harness/caller.py`: the schema check, the session by
 its token, `tooling.handle`), and the token reaches the command only through the session's
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
@@ -427,7 +437,9 @@ tools, `ScheduleWakeup`, `RemoteTrigger`: a private todo list and schedules that
 process); subagents (`Task`) stay. A Claude Code turn whose first event (`system`/`init`) does not
 list the `orchestra` MCP server as `connected` is stopped there, before the model runs, as a
 failed turn whose reason names the server's status, the managed settings that can block MCP
-servers and the command to start the server by hand (`harness/mcp_status.py`); it is a
+servers and the command to start the server by hand (`harness/mcp_status.py`); so is a turn whose
+call to one of its tools Claude Code refuses (a hook or a permission rule), stopped at the refusal,
+its reason naming the settings where hooks and permission rules live; it is a
 `session.error` in the transcript, the host log and the attention banner. No Claude Code turn
 starts again for five minutes, doubling to an hour, unless those settings change or the host
 restarts. The MCP server that cannot load its tools exits non-zero and writes why to the session's

@@ -7,12 +7,20 @@ Code's own todo list) and reports work that never happened. So such a turn is en
 failure that says why and what to check, and no Claude Code turn starts again for a while
 (``Backoff``): a broken server or a policy that blocks it fails the same way every time.
 
+A server can also connect and still be of no use: a permission rule in Claude Code's settings
+withholds every one of its tools (the init event's ``tools`` lists none of them), or a hook (an
+organisation's whitelist of MCP servers, say) refuses each call as the model makes it, which the
+stream shows as the call's ``tool_result``, an error that begins ``PreToolUse:<tool> hook error``
+(``refusal``). Both are the server being blocked, found at the init event or at the first call.
+
 That is for ``[agents] tools_via = "mcp"``. With ``auto`` (the default) a turn that finds no server
 is not failed: the host's sessions call the tools from their shell from then on (``Fallback``,
-``bash_tools.py``), and that turn runs again so, before the model has done anything."""
+``bash_tools.py``), and that turn runs again so: before the model has done anything, or, when a
+call was refused, from where it stopped (``CONTINUE``)."""
 
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 import threading
@@ -20,6 +28,12 @@ import time
 from pathlib import Path
 
 SERVER = "orchestra"
+TOOL_PREFIX = f"mcp__{SERVER}__"
+REASON_KEPT = 600       # a refusal's reason as the human reads it
+# What Claude Code puts in a call's result when it did not run it: a PreToolUse hook that exited 2
+# or answered "deny" ("PreToolUse:mcp__orchestra__report_ticket hook error: <its reason>"), or a
+# permission rule. An error Orchestra's server answers is its own JSON ({"ok": false, ...}).
+REFUSED = re.compile(r"^PreToolUse:\S* hook error|\bhook error\b|\bpermission to use \S+ (has been )?denied|\bdenied by\b", re.IGNORECASE)
 BACKOFF_FIRST_S, BACKOFF_MAX_S = 5 * 60, 60 * 60
 
 
@@ -47,20 +61,54 @@ def status(init: dict) -> str | None:
     return None
 
 
+def withheld(init: dict) -> bool:
+    """The server connected, but the session was given none of its tools (a permission rule in the
+    settings denies them). Judged only when the init event lists the session's tools."""
+    tools = init.get("tools")
+    return bool(tools) and isinstance(tools, list) and not any(str(t).startswith(TOOL_PREFIX) for t in tools)
+
+
+def refusal(content) -> str | None:
+    """Why Claude Code did not run a call to one of Orchestra's tools (a hook or a permission rule
+    refused it), from the call's ``tool_result`` content; None for a call that ran, one the server
+    answered with an error included."""
+    if isinstance(content, list):
+        content = "".join(b.get("text", "") for b in content if isinstance(b, dict))
+    text = str(content or "").strip()
+    if not text or text.startswith("{") or not REFUSED.search(text):
+        return None
+    return text if len(text) <= REASON_KEPT else text[:REASON_KEPT - 1] + "…"
+
+
+def refused_problem(tool: str, reason: str, *, settings: list[Path]) -> str:
+    """What the human reads when the server connected but a call to it was refused."""
+    where = ", ".join(f"`{p}`" for p in settings)
+    return (f"Orchestra's tools are not usable in Claude Code: the MCP server `{SERVER}` connected, but Claude Code refused "
+            f"the call to `{tool.removeprefix(TOOL_PREFIX)}` before it reached Orchestra. It said:\n\n{reason}\n\n"
+            "A hook or a permission rule in Claude Code's settings blocks the server's tools: an organisation's whitelist of "
+            f"MCP servers, typically. Check the hooks (`PreToolUse`) and `permissions` in {where}. Orchestra stopped the turn "
+            "there; what the model had done before the call stands, and nothing was reported.\n\n"
+            "Or let the agents call Orchestra's tools from their shell instead of the MCP server: set `tools_via = \"bash\"` "
+            "(or `\"auto\"`, which switches when the server is blocked) under `[agents]` in orchestra.toml.")
+
+
 def problem(init: dict, *, config_dir: Path, try_cmd: str, log_path: Path) -> str | None:
     """None when the server is connected; otherwise what the human reads: what happened, the two
     likely causes and what to check for each."""
     st = status(init)
-    if st == "connected":
+    denied = st == "connected" and withheld(init)
+    if st == "connected" and not denied:
         return None
     files = policy_files(config_dir)
     found = [str(p) for p in files if p.exists()]
-    said = f"its status is `{st}`" if st else "it was not loaded at all (Claude Code did not list it)"
+    said = (f"its status is `{st}`" if st else "it was not loaded at all (Claude Code did not list it)")
     policy = (f"1. An organisation policy blocks MCP servers. Check `managed-mcp.json` and `allowedMcpServers` / "
               f"`deniedMcpServers` in `managed-settings.json` under `{managed_dir()}`, and `{config_dir / 'settings.json'}`"
               + (f" (present here: {', '.join(f'`{f}`' for f in found)})." if found else " (none of them exists here)."))
     start = (f"2. The server fails to start. Try it by hand: `{try_cmd}` should print one JSON line (its `initialize` "
              f"reply); a traceback is the reason. The server writes why it stopped to `{log_path}`.")
+    if denied:
+        said = "it connected, but the session was given none of its tools: a `permissions` deny rule in the settings withholds them"
     head = (f"Orchestra's tools are not available to Claude Code: the MCP server `{SERVER}` did not connect ({said}). "
             "Orchestra stopped the turn before the model ran, so nothing was done: no ticket was created, nothing changed, and no other "
             "task list was used.")
@@ -150,7 +198,16 @@ class Fallback:
 
 
 FALLBACK = Fallback()
-SWITCHED = ("Orchestra's MCP server did not connect in Claude Code (an organisation policy may block it, or it failed to "
-            "start), so from now on the agents call Orchestra's tools from their shell (`orchestra agents tool`) instead "
+SWITCHED = ("Orchestra's MCP server did not connect in Claude Code, or Claude Code refused a call to it (an organisation "
+            "policy may block it, or it failed to start), so from now on the agents call Orchestra's tools from their shell (`orchestra agents tool`) instead "
             "([agents] tools_via = \"auto\"). Nothing was lost: the turn ran again that way. To make it permanent, set "
-            "tools_via = \"bash\"; to try the MCP server again, restart Orchestra. Why the server did not connect:\n\n")
+            "tools_via = \"bash\"; to try the MCP server again, restart Orchestra. Why:\n\n")
+# The turn run again after a refused call: the session resumes with what it did before the call.
+CONTINUE = ("[Orchestra] Your call to Orchestra's `{tool}` through its MCP server was refused by this machine's Claude Code "
+            "settings, so that turn was stopped there. What you already did stands: carry on from where you were, starting "
+            "with the call that was refused, made from your shell as above. What you were asked:\n\n")
+# A resumed session that began with the tools through the MCP server and now calls them from its shell
+# (Claude Code keeps a resumed session's first system prompt): told once, before its message.
+SHELL_NOW = ("[Orchestra] From now on Orchestra's tools are called from your shell, not through its MCP server: the "
+             "`mcp__orchestra__*` tools are gone (ToolSearch will not find them). This replaces what your instructions "
+             "said about how to call them:\n\n{section}\n\n---\n\n")

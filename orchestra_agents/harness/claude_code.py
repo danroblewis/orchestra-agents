@@ -33,15 +33,28 @@ from .base import (
     records,
     resolve_binary,
 )
-from .mcp_status import BACKOFF, FALLBACK, SWITCHED, policy_files, problem, try_command, until
+from .mcp_status import (
+    BACKOFF,
+    CONTINUE,
+    FALLBACK,
+    SHELL_NOW,
+    SWITCHED,
+    TOOL_PREFIX,
+    policy_files,
+    problem,
+    refusal,
+    refused_problem,
+    try_command,
+    until,
+)
 
-TOOL_PREFIX = "mcp__orchestra__"
 # Claude Code's own tools that stand in for Orchestra's work: a private todo list the model can
 # "create a task" in, and schedules that die with the one-shot process. With them, a turn without
 # Orchestra's tools reports work nobody will ever see; without them, it can only say it has none.
 # Subagents (Task/Agent) stay: they research inside the turn, and their work is in the transcript.
+# ReportFindings is the product's own review report: a reviewer that calls it reports to nobody.
 NOT_ORCHESTRA = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
-                 "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "RemoteTrigger")
+                 "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "RemoteTrigger", "ReportFindings")
 EDITS = ("Edit", "Write", "NotebookEdit")    # taken from a read-only agent: it reads, searches and runs read-only commands
 
 
@@ -68,6 +81,7 @@ class ClaudeCodeSession(AgentSession):
         self._closed = False
         self.session_file = None
         self.uuid: str | None = None
+        self.told: str | None = None     # how the session's system prompt says to call the tools: mcp or bash
 
     @property
     def harness_name(self) -> str:
@@ -77,12 +91,32 @@ class ClaudeCodeSession(AgentSession):
         """Create or load the session's uuid. Claude writes the transcript on the first turn."""
         if self._meta_path.exists():
             meta = json.loads(self._meta_path.read_text(encoding="utf-8"))
-            self.uuid = meta["uuid"]
+            self.uuid, self.told = meta["uuid"], meta.get("tools")
         else:
             self.uuid = str(uuid.uuid4())
-            self._meta_path.write_text(json.dumps({"uuid": self.uuid, "cwd": str(self.spec.cwd),
-                                                   "session_id": self.spec.session_id}) + "\n", encoding="utf-8")
+            self._write_meta()
         self.session_file = str(transcript_path(self.spec.cwd, self.uuid))
+
+    def _write_meta(self) -> None:
+        meta = {"uuid": self.uuid, "cwd": str(self.spec.cwd), "session_id": self.spec.session_id}
+        if self.told:
+            meta["tools"] = self.told
+        self._meta_path.write_text(json.dumps(meta) + "\n", encoding="utf-8")
+
+    def _resuming(self) -> bool:
+        if self.uuid is None:
+            self.open()
+        return bool(self.session_file and Path(self.session_file).exists())
+
+    def _tell(self, text: str, via: str) -> str:
+        """The turn's message. Claude Code keeps a resumed session's system prompt as it was when the
+        session began (a new --append-system-prompt-file is not read), so a session begun with the
+        tools through the MCP server that now calls them from its shell (``auto`` after the switch, or
+        ``tools_via`` changed) is told how in its next message, once."""
+        if via == "bash" and self._resuming() and self.told != "bash":      # (_resuming opens the session: told is read)
+            section = bash_tools.prompt(self.spec.tool_groups, self._env().get("PATH"))
+            return SHELL_NOW.format(section=section.strip()) + text
+        return text
 
     @property
     def pid(self) -> int | None:
@@ -135,9 +169,7 @@ class ClaudeCodeSession(AgentSession):
 
     def _args(self, via: str | None = None) -> list[str]:
         via = via or self.via()
-        if self.uuid is None:
-            self.open()
-        resume = self.session_file and Path(self.session_file).exists()
+        resume = self._resuming()
         args = [self.binary, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--dangerously-skip-permissions", "--strict-mcp-config", "--mcp-config", str(self._mcp_config(via))]
         if self.spec.model:
@@ -164,15 +196,24 @@ class ClaudeCodeSession(AgentSession):
                 return TurnResult(error=refused)
             result, switched = self._turn(text, timeout, idle_timeout, emit, via)
             if switched:            # auto, and the server is not there: the same turn again, the tools from the shell
-                result, _ = self._turn(text, timeout, idle_timeout, emit, "bash")
+                again = text
+                if switched != "init" and self._resuming():
+                    again = CONTINUE.format(tool=switched) + text     # resumed after a refused call: carry on from there
+                cost = result.cost_usd
+                result, _ = self._turn(again, timeout, idle_timeout, emit, "bash")
+                if cost is not None:
+                    result.cost_usd = (result.cost_usd or 0.0) + cost
             return result
 
     def _turn(self, text: str, timeout: float | None, idle_timeout: float | None, emit: _Normalizer,
-              via: str) -> tuple[TurnResult, bool]:
-        """One ``claude -p`` run. Returns its result, and True when it was stopped at its init event
-        to run again with the tools from the shell (``tools_via = "auto"``)."""
+              via: str) -> tuple[TurnResult, str | None]:
+        """One ``claude -p`` run. Returns its result, and, when it was stopped to run again with the
+        tools from the shell (``tools_via = "auto"``), why: ``"init"`` when the server was found
+        blocked at the init event, before the model ran; the tool's name when a call to it was refused."""
         result = TurnResult()
         self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
+        text = self._tell(text, via)
+        resume = self._resuming()
         stderr = self.spec.log_path.open("a", encoding="utf-8")
         try:
             self.proc = subprocess.Popen(self._args(via), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
@@ -181,8 +222,11 @@ class ClaudeCodeSession(AgentSession):
         except OSError as e:
             result.error = f"cannot start {self.binary}: {e}"
             stderr.close()
-            return result, False
+            return result, None
         emit.pid = self.proc.pid
+        if not resume or via == "bash":      # a new session's system prompt says it; a resumed one's message did
+            self.told = via
+            self._write_meta()
         try:
             try:
                 self.proc.stdin.write(text)  # type: ignore[union-attr]
@@ -192,12 +236,13 @@ class ClaudeCodeSession(AgentSession):
             clock = _Deadlines(timeout, idle_timeout)
             reader = _LineReader(self.proc.stdout)
             last_text = ""
+            calls: dict[str, str] = {}       # Orchestra's tool calls through the server: tool_use id -> tool
             while True:
                 why = clock.expired()
                 if why:
                     result.timed_out, result.stopped_by, result.text = True, why, last_text
                     self.kill()
-                    return result, False
+                    return result, None
                 line = reader.next(clock.wait())
                 if line is None:          # EOF: the process exited
                     break
@@ -213,12 +258,20 @@ class ClaudeCodeSession(AgentSession):
                     stop = self._no_orchestra(ev, result, emit)
                     if stop:
                         self.kill()
-                        return result, stop == "switch"
+                        return result, "init" if stop == "switch" else None
                 emit(ev)
                 if t == "assistant":
                     for part in (ev.get("message") or {}).get("content") or []:
                         if part.get("type") == "text" and part.get("text", "").strip():
                             last_text = part["text"]
+                        elif part.get("type") == "tool_use" and str(part.get("name", "")).startswith(TOOL_PREFIX):
+                            calls[part.get("id", "")] = part["name"]
+                elif t == "user" and via == "mcp" and calls:
+                    stop = self._refused(ev, calls, result, emit)
+                    if stop:
+                        self.kill()
+                        result.text = last_text
+                        return result, stop if self.spec.tools_via == "auto" else None
                 elif t == "result":
                     if isinstance(ev.get("total_cost_usd"), int | float):
                         result.cost_usd = float(ev["total_cost_usd"])
@@ -232,13 +285,42 @@ class ClaudeCodeSession(AgentSession):
             result.text = last_text
             if not result.error:
                 emit.settled(last_text)
-            return result, False
+            return result, None
         finally:
             self.proc = None
             stderr.close()
 
     def _policy_files(self) -> list[Path]:
-        return policy_files(claude_config_dir())
+        return policy_files(claude_config_dir()) + self._project_settings()
+
+    def _project_settings(self) -> list[Path]:
+        """The settings Claude Code reads in the session's working directory, where a hook can be."""
+        d = Path(self.spec.cwd) / ".claude"
+        return [d / "settings.json", d / "settings.local.json"]
+
+    def _refused(self, ev: dict, calls: dict[str, str], result: TurnResult, emit: _Normalizer) -> str | None:
+        """A ``tool_result`` that says Claude Code refused a call to one of Orchestra's tools (a hook or a
+        permission rule: mcp_status.refusal) is the server blocked, found at its first call. With
+        ``tools_via = "auto"`` the turn is stopped and run again from the shell (said once, as at the
+        init); returns the tool's name. With ``mcp`` it is a failure that says why, and no turn starts
+        again for a while; returns ``"fail"``."""
+        content = (ev.get("message") or {}).get("content")
+        for part in content if isinstance(content, list) else []:
+            if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("tool_use_id") in calls):
+                continue
+            reason = refusal(part.get("content")) if part.get("is_error") else None
+            if reason is None:
+                continue
+            tool = calls[part["tool_use_id"]]
+            why = refused_problem(tool, reason, settings=[claude_config_dir() / "settings.json", *self._project_settings()])
+            if self.spec.tools_via == "auto":
+                if FALLBACK.switch(why):
+                    emit._emit({"type": "notice", "text": SWITCHED + why})
+                return tool.removeprefix(TOOL_PREFIX)
+            at = BACKOFF.failed(why, self._policy_files())
+            result.error = f"{why}\n\n{until(at)}"
+            return "fail"
+        return None
 
     def _no_orchestra(self, init: dict, result: TurnResult, emit: _Normalizer) -> str | None:
         """The turn's first event: when Orchestra's MCP server is not connected, the turn ends
@@ -279,9 +361,8 @@ class ClaudeCodeSession(AgentSession):
     def retire(self) -> str | None:
         """A new uuid for the next turn; the transcript stays where Claude keeps it."""
         old = self.session_file if self.session_file and Path(self.session_file).exists() else None
-        self.uuid = str(uuid.uuid4())
-        self._meta_path.write_text(json.dumps({"uuid": self.uuid, "cwd": str(self.spec.cwd),
-                                               "session_id": self.spec.session_id}) + "\n", encoding="utf-8")
+        self.uuid, self.told = str(uuid.uuid4()), None
+        self._write_meta()
         self.session_file = str(transcript_path(self.spec.cwd, self.uuid))
         return old
 

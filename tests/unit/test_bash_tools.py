@@ -120,8 +120,12 @@ def test_bad_arguments_are_answered_with_what_the_tool_takes(project, monkeypatc
 def test_the_prompt_names_the_command_and_each_tool_in_a_line():
     text = bash_tools.prompt(("report_ticket", "observe"), path="")
     assert f"    {shlex.quote(sys.executable)} -P -m orchestra agents tool <tool> '<arguments as one JSON object>'" in text
-    assert "- `report_ticket`: " in text and "--help" in text and "--list" in text
-    assert all(len(ln) < 200 for ln in text.splitlines() if ln.startswith("- `"))   # a name and one line each, no schemas
+    assert "- `report_ticket` {" in text and "--help" in text and "--list" in text
+    assert all(len(ln) < 400 and '"type"' not in ln for ln in text.splitlines() if ln.startswith("- `"))   # one line each, no schemas
+    # the arguments by name, so a call is not guessed from the description ("the outcome of your work")
+    assert "- `report_ticket` {state*: READY_FOR_REVIEW|BLOCKED, summary*, blocked_reason}: " in text
+    assert "priority: integer" in bash_tools.prompt(("tickets",), path="")                # not "normal"
+    assert "<<'JSON'\n{\"state\": \"...\", \"summary\": \"...\"}\nJSON\n" in text   # text goes on stdin, the closer at its line's start
     assert "TOKEN=" not in text
 
 
@@ -130,7 +134,10 @@ def test_a_call_from_the_shell_is_read_as_the_tool_it_called():
     assert bash_tools.parse(f"orchestra agents tool report_ticket {shlex.quote(json.dumps(READY))}") == ("report_ticket", READY)
     assert bash_tools.parse(shlex.join(["/bin/zsh", "-lc", f"{py} -P -m orchestra agents tool report_ticket '{{\"state\": \"BLOCKED\"}}'"])) \
         == ("report_ticket", {"state": "BLOCKED"})
-    assert bash_tools.parse("orchestra agents tool report_ticket - <<'JSON'\n{\"it's\": 1}\nJSON") == ("report_ticket", {})
+    assert bash_tools.parse("orchestra agents tool report_ticket - <<'JSON'\n{\"it's\": 1}\nJSON") == ("report_ticket", {"it's": 1})
+    assert bash_tools.parse("cd /wt && orchestra agents tool report_ticket - <<JSON\n{\"state\": \"BLOCKED\"}\nJSON\necho done") \
+        == ("report_ticket", {"state": "BLOCKED"})                                 # the heredoc's body, whatever follows it
+    assert bash_tools.parse("orchestra agents tool report_ticket - <<'JSON'\n{not json\nJSON") == ("report_ticket", {})
     assert bash_tools.parse("orchestra agents tool report_ticket --help") is None
     assert bash_tools.parse("ls -la") is None and bash_tools.parse("orchestra agents tool no_such_tool '{}'") is None
 
@@ -248,3 +255,153 @@ def test_the_transcript_shows_a_bash_call_as_the_tool(tmp_path):
     f.write_text(json.dumps({"type": "assistant", "message": {"content": [use]}}) + "\n")
     msgs = ClaudeCodeHarness.read_transcript(f)
     assert msgs[0]["tool_calls"] == [{"name": "report_ticket", "args": READY}]
+
+
+# What Claude Code 2.1 streams when a PreToolUse hook refuses a call to an MCP tool (recorded live):
+# a hook that exits 2 with its reason on stderr, and one that answers {"permissionDecision": "deny"}.
+HOOK_EXIT_2 = ("PreToolUse:mcp__orchestra__report_ticket hook error: [python3 /etc/company/mcp_whitelist.py]: "
+               "MCP server is not in the whitelist\n")
+HOOK_DENY = "PreToolUse:mcp__orchestra__report_ticket hook error: MCP server is not in the whitelist"
+
+
+@pytest.mark.parametrize("content", [HOOK_EXIT_2, HOOK_DENY, [{"type": "text", "text": HOOK_DENY}],
+                                     "Permission to use mcp__orchestra__report_ticket has been denied."])
+def test_a_refused_call_is_told_from_one_that_ran(content):
+    assert "MCP server is not in the whitelist" in mcp_status.refusal(content) or "denied" in mcp_status.refusal(content)
+
+
+@pytest.mark.parametrize("content", ['{"ok": false, "error": "report_ticket: no argument outcome; a hook error"}',
+                                     "Report recorded. You may stop now.", "", None])
+def test_an_answer_or_the_servers_own_error_is_no_refusal(content):
+    assert mcp_status.refusal(content) is None
+
+
+def test_a_connected_server_whose_tools_are_all_denied_is_blocked(tmp_path):
+    init = {"mcp_servers": [{"name": "orchestra", "status": "connected"}], "tools": ["Bash", "Read", "ToolSearch"]}
+    why = mcp_status.problem(init, config_dir=tmp_path, try_cmd="x", log_path=tmp_path / "l")
+    assert why and "none of its tools" in why and "`permissions` deny rule" in why
+    ok = {**init, "tools": ["Bash", "mcp__orchestra__report_ticket"]}
+    assert mcp_status.problem(ok, config_dir=tmp_path, try_cmd="x", log_path=tmp_path / "l") is None
+    assert mcp_status.problem({**init, "tools": []}, config_dir=tmp_path, try_cmd="x", log_path=tmp_path / "l") is None   # not listed: not judged
+
+
+def _claude_with_a_whitelist_hook(tmp_path) -> str:
+    """A `claude` whose orchestra MCP server connects but whose settings have a hook that refuses every
+    call to it, as an organisation's whitelist does: the model calls report_ticket, Claude Code answers
+    with the hook's error, and the model would go on (retrying, giving up) for a minute. Started with no
+    server, it answers from the shell. Each start records how it was started and the prompt it got, and
+    writes the session's transcript where the harness looks for it."""
+    f = tmp_path / "fake-claude"
+    f.write_text(f"""#!{sys.executable}
+import json, os, re, sys, time
+from pathlib import Path
+prompt = sys.stdin.read()
+a = sys.argv
+servers = json.load(open(a[a.index("--mcp-config") + 1]))["mcpServers"]
+sid = a[a.index("--resume") + 1] if "--resume" in a else a[a.index("--session-id") + 1]
+with open({str(tmp_path / "starts")!r}, "a") as out:
+    out.write(json.dumps({{"via": "mcp" if servers else "bash", "resume": "--resume" in a, "prompt": prompt}}) + "\\n")
+key = re.sub(r"[^A-Za-z0-9]", "-", str(Path.cwd().resolve()))
+t = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / key / (sid + ".jsonl")
+t.parent.mkdir(parents=True, exist_ok=True)
+t.open("a").write(json.dumps({{"type": "user", "message": {{"content": prompt}}}}) + "\\n")
+def say(ev):
+    print(json.dumps(ev), flush=True)
+if servers:
+    say({{"type": "system", "subtype": "init", "mcp_servers": [{{"name": "orchestra", "status": "connected"}}],
+         "tools": ["Bash", "ToolSearch", "mcp__orchestra__report_ticket"]}})
+    say({{"type": "assistant", "message": {{"content": [{{"type": "tool_use", "id": "toolu_1", "name": "mcp__orchestra__report_ticket",
+                                                       "input": {{"state": "READY_FOR_REVIEW", "summary": "done"}}}}]}}}})
+    say({{"type": "user", "message": {{"content": [{{"type": "tool_result", "tool_use_id": "toolu_1", "is_error": True,
+                                                  "content": {HOOK_EXIT_2!r}}}]}}}})
+    time.sleep(60)
+say({{"type": "system", "subtype": "init", "mcp_servers": []}})
+say({{"type": "result", "subtype": "success", "result": "reported from the shell", "total_cost_usd": 0.01}})
+""")
+    f.chmod(0o755)
+    return str(f)
+
+
+def _starts(tmp_path) -> list[dict]:
+    return [json.loads(ln) for ln in (tmp_path / "starts").read_text().splitlines()]
+
+
+def test_auto_switches_to_the_shell_when_a_hook_refuses_a_call_and_carries_on(tmp_path, fresh):
+    import time
+    binary = _claude_with_a_whitelist_hook(tmp_path)
+    seen: list[dict] = []
+    began = time.time()
+    res = ClaudeCodeSession(spec(tmp_path, "auto"), binary=binary).prompt("do T-1", timeout=30, on_event=seen.append)
+    assert time.time() - began < 15 and res.error is None and res.text == "reported from the shell"
+    notices = [e for e in seen if e["type"] == "notice"]
+    assert len(notices) == 1 and "call Orchestra's tools from their shell" in notices[0]["text"]
+    assert "MCP server is not in the whitelist" in notices[0]["text"] and "PreToolUse" in notices[0]["text"]
+    assert claude_code.FALLBACK.on and claude_code.BACKOFF.refusal([]) is None
+    first, again = _starts(tmp_path)
+    assert first["via"] == "mcp" and again["via"] == "bash" and again["resume"]          # the same session, resumed
+    # Claude Code keeps a resumed session's first system prompt: the message says how to call the tools
+    assert again["prompt"].startswith("[Orchestra] From now on Orchestra's tools are called from your shell")
+    assert "agents tool <tool> '<arguments as one JSON object>'" in again["prompt"] and "`report_ticket` {state*" in again["prompt"]
+    assert "[Orchestra] Your call to Orchestra's `report_ticket`" in again["prompt"] and again["prompt"].endswith("do T-1")
+    seen.clear()
+    other = ClaudeCodeSession(spec(tmp_path, "auto", session_id="other"), binary=binary).prompt("more", timeout=30, on_event=seen.append)
+    assert other.text == "reported from the shell" and not [e for e in seen if e["type"] == "notice"]   # said once
+    assert [s["via"] for s in _starts(tmp_path)] == ["mcp", "bash", "bash"] and _starts(tmp_path)[-1]["prompt"] == "more"
+
+
+def test_mcp_mode_fails_a_turn_whose_call_a_hook_refuses(tmp_path, fresh):
+    import time
+    began = time.time()
+    s = ClaudeCodeSession(spec(tmp_path, "mcp"), binary=_claude_with_a_whitelist_hook(tmp_path))
+    res = s.prompt("do T-1", timeout=30)
+    assert time.time() - began < 15                                   # stopped at the refusal, not after the model's minute
+    assert res.error and "refused the call to `report_ticket`" in res.error and "MCP server is not in the whitelist" in res.error
+    assert 'tools_via = "bash"' in res.error and str(tmp_path / "wt" / ".claude" / "settings.json") in res.error
+    assert "will not start another Claude Code turn until" in res.error and not claude_code.FALLBACK.on
+    assert [x["via"] for x in _starts(tmp_path)] == ["mcp"]
+    assert "MCP server is not in the whitelist" in s.prompt("again", timeout=5).error        # backing off, Claude Code not started
+    assert len(_starts(tmp_path)) == 1
+
+
+def test_a_server_error_does_not_switch(tmp_path, fresh):
+    f = tmp_path / "fake-claude"
+    f.write_text(f"""#!{sys.executable}
+import json, sys
+sys.stdin.read()
+for ev in [{{"type": "system", "subtype": "init", "mcp_servers": [{{"name": "orchestra", "status": "connected"}}]}},
+           {{"type": "assistant", "message": {{"content": [{{"type": "tool_use", "id": "t1", "name": "mcp__orchestra__report_ticket", "input": {{}}}}]}}}},
+           {{"type": "user", "message": {{"content": [{{"type": "tool_result", "tool_use_id": "t1", "is_error": True,
+                                                     "content": '{{"ok": false, "error": "missing state"}}'}}]}}}},
+           {{"type": "result", "subtype": "success", "result": "fixed it"}}]:
+    print(json.dumps(ev), flush=True)
+""")
+    f.chmod(0o755)
+    res = ClaudeCodeSession(spec(tmp_path, "auto"), binary=str(f)).prompt("do T-1", timeout=30)
+    assert res.error is None and res.text == "fixed it" and not claude_code.FALLBACK.on
+
+
+def test_a_resumed_session_begun_on_the_server_is_told_the_shell_once(tmp_path, fresh):
+    """Claude Code keeps a resumed session's system prompt as the session began (a new
+    --append-system-prompt-file is not read), so a session begun with the MCP server's tools that
+    now calls them from its shell is told how in its next message, once; a session begun on the
+    shell has it in its system prompt and is not told again."""
+    binary = _claude_with_a_whitelist_hook(tmp_path)
+    claude_code.FALLBACK.switch("blocked earlier")
+    s = ClaudeCodeSession(spec(tmp_path, "auto"), binary=binary)
+    s.open()
+    s.told = "mcp"                                                    # begun on the server, in an earlier turn
+    s._write_meta()
+    Path(s.session_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(s.session_file).write_text("{}\n")
+    s.prompt("first", timeout=30)
+    s2 = ClaudeCodeSession(spec(tmp_path, "auto"), binary=binary)    # the host restarted: what it was told is kept
+    s2.prompt("second", timeout=30)
+    first, second = (x["prompt"] for x in _starts(tmp_path))
+    assert first.startswith("[Orchestra] From now on") and first.endswith("first") and "agents tool <tool>" in first
+    assert second == "second"
+    fresh_one = ClaudeCodeSession(spec(tmp_path, "bash", session_id="other"), binary=binary)
+    fresh_one.prompt("new", timeout=30)
+    fresh_one.prompt("next", timeout=30)
+    assert [x["prompt"] for x in _starts(tmp_path)][2:] == ["new", "next"]           # its system prompt says it
+    fresh_one.retire()
+    assert fresh_one.told is None

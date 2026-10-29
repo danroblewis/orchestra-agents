@@ -5,7 +5,7 @@
  * The tool definitions are the agents' (orchestra_agents/harness/tools.py); this file fetches them
  * once at load with `$ORCHESTRA_PYTHON -m orchestra agents tools --json`, filtered to the groups in
  * ORCHESTRA_TOOLS, and registers each one. Every call shells out to
- * `$ORCHESTRA_PYTHON -m orchestra agents api <command>` against the project named by ORCHESTRA_REPO
+ * `$ORCHESTRA_PYTHON -m orchestra agents tool <command> <json>` (the same command a session without MCP runs) against the project named by ORCHESTRA_REPO
  * (ORCHESTRA_PYTHON is the host's own interpreter, so the call never depends on the session's PATH);
  * it works whether or not the agents' host is up (a task request still needs the task system).
  */
@@ -24,7 +24,7 @@ const CALL_MS = 420_000;
 
 function api(command: string, args: Record<string, unknown>): string {
   try {
-    const out = execFileSync(PYTHON, ["-m", "orchestra", "agents", "api", command, "--args", JSON.stringify(args)], {
+    const out = execFileSync(PYTHON, ["-P", "-m", "orchestra", "agents", "tool", command, JSON.stringify(args)], {
       env: ENV, cwd: REPO || process.cwd(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: CALL_MS,
     });
     return out.trim();

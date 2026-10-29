@@ -239,7 +239,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
 
 def test_without_a_role_nothing_is_called(project, monkeypatch):
     """An empty role is nobody: every tool, a read too, is refused before it runs, and
-    `orchestra agents api` refuses to run at all without the role and the token the host sets
+    `orchestra agents tool` refuses every call without the token the host sets
     inside an agent's session. The pages and the CLI read the organisation through read_org."""
     from orchestra_agents.api_org import read_org
     store = AgentStore(project)
@@ -254,8 +254,9 @@ def test_without_a_role_nothing_is_called(project, monkeypatch):
     with pytest.raises(StoreError, match="not a read"):
         read_org(project, store, "create_role", {"name": "owner"})
     monkeypatch.delenv("ORCHESTRA_ROLE", raising=False)
-    with pytest.raises(SystemExit, match="ORCHESTRA_ROLE"):
-        main(["--repo", str(project.repo_root), "api", "list_roles"])
+    monkeypatch.delenv("ORCHESTRA_SESSION_TOKEN", raising=False)
+    monkeypatch.setenv("ORCHESTRA_REPO", str(project.repo_root))
+    assert main(["tool", "list_roles"]) == 1
 
 
 def test_custom_agent_with_tickets_tools_may_create_tickets(project):

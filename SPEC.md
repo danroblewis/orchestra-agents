@@ -387,16 +387,34 @@ in `orchestra.toml`, are its; they are not these.)
 A harness is the product that runs a session. Each implements the same interface
 (`harness/base.py`): open a named, resumable session with a system prompt, a working directory
 and tool groups; run one turn and stream events in one normalized vocabulary (`turn_start`,
-`assistant_start`, `token`, `tool_start`, `tool_end`, `assistant_end`, `settled`); name its
+`assistant_start`, `token`, `tool_start`, `tool_end`, `assistant_end`, `settled`, and `notice` when
+the harness changed how it runs the agent, which the host logs and wakes the Supervisor with); name its
 transcript, which is the only one kept (`read_transcript` parses it); kill a turn; close.
 
 - **Pi** (`pi.py`): one `pi --mode rpc` process per live session, resident between turns; tools
-  through the extension `pi_extension.ts`, which calls `orchestra agents api`.
+  through the extension `pi_extension.ts`, which calls `orchestra agents tool`.
 - **Claude Code** (`claude_code.py`): `claude -p` per turn, resumed by session id, the
-  transcript under `$CLAUDE_CONFIG_DIR`; tools through the MCP server `harness/mcp.py`. It
+  transcript under `$CLAUDE_CONFIG_DIR`; tools through the MCP server `harness/mcp.py`, or from
+  the shell (`[agents] tools_via`, below). It
   compacts its own context (`--autocompact`). `CLAUDE_BINARY` names the binary to run.
 - **Codex** (`codex.py`): `codex exec --json` per turn, resumed by thread id, the rollout under
-  `$CODEX_HOME`; tools through the same MCP server.
+  `$CODEX_HOME`; tools through the same MCP server, or from the shell with `tools_via = "bash"`.
+
+**How tools reach the model** (`[agents] tools_via`). `mcp`: Orchestra's MCP server, as above.
+`bash`: no MCP server (Claude Code keeps `--strict-mcp-config`, with an empty config, so no other
+server loads either); the session runs `orchestra agents tool <name> '<json>'` from its shell
+(`cli.cmd_tool`), and the system prompt gains a section naming the command, as it can be run
+whatever the session's PATH and working directory, and each tool with one line
+(`harness/bash_tools.py`; `--help` gives a tool's schema). Some organisations' Claude Code policy
+allows only listed MCP servers; every session can run commands. `auto` (the default): MCP, until
+Claude Code's init event reports the server not connected; then that turn is stopped before the
+model runs and run again from the shell, and every Claude Code session of this host calls the tools
+from its shell until it restarts (`mcp_status.Fallback`), said once as a `notice`. The command
+and the MCP server call through one path (`harness/caller.py`: the schema check, the session by
+its token, `tooling.handle`), and the token reaches the command only through the session's
+environment, never its prompt or output. A transcript shows a call from the shell as the tool it
+called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
+command, and the dummy harness in-process; the setting changes neither.
 Sessions of the Supervisor and the Coordinator are **read-only** (`builtins.Role.read_only`,
 `SessionSpec.read_only`): they read, search and run commands in the checkout, and their harness
 withholds its file-editing tools (Claude Code: `--disallowedTools Edit,Write,NotebookEdit`; Pi:
@@ -458,10 +476,10 @@ against the caller's role before it runs (`access.py`):
 - **Who is calling.** The host gives every session it starts a token,
   `ORCHESTRA_SESSION_TOKEN`, beside `ORCHESTRA_ROLE`, and records only the token's SHA-256 with
   the role and the ticket it was issued for (`runtime.json` `grants`). The MCP server and
-  `orchestra agents api`, the two ways a tool call reaches `handle` from outside the host, take
+  `orchestra agents tool`, the two ways a tool call reaches `handle` from outside the host, take
   the role and the ticket from that record (`access.identify`), never from the environment. The
   environment alone would be cosmetic: every agent has a shell, and a shell inside a worker's
-  session could run `ORCHESTRA_ROLE=supervisor orchestra agents api pause_agent ...`. Now that
+  session could run `ORCHESTRA_ROLE=supervisor orchestra agents tool pause_agent ...`. Now that
   call still carries the worker's token and is refused, saying the session was started as
   `worker`; a missing token, one the host did not issue, and one whose session has ended (closed,
   or a new session of that id opened, or a new host started) are refused too.
@@ -491,7 +509,7 @@ reads and reaches no agent's tool.
 host's log say which was chosen and how to change it: `config.default_harness`), `enabled` (false:
 no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
-`provider`, `thinking` (`model` is the default: a machine spec's own `model` wins for its agent
+`provider`, `thinking`, `tools_via` (`mcp`, `bash` or `auto`, the default: section 6) (`model` is the default: a machine spec's own `model` wins for its agent
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
 reviewer), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review

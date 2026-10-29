@@ -197,7 +197,7 @@ def test_codex_session_identity_resume_and_args(tmp_path, monkeypatch):
     assert args[args.index("--sandbox") + 1] == "danger-full-access"
     overrides = dict(a.partition("=")[::2] for a in args[args.index("-c") + 1::2] if "=" in a)
     mcp = tomllib.loads("v = " + overrides["mcp_servers.orchestra"])["v"]
-    assert mcp["command"] == sys.executable and mcp["args"] == ["-m", "orchestra_agents.harness.mcp"] and mcp["required"] is True
+    assert mcp["command"] == sys.executable and mcp["args"] == ["-P", "-m", "orchestra_agents.harness.mcp"] and mcp["required"] is True
     assert mcp["env"]["ORCHESTRA_TOOLS"] == "report_ticket" and mcp["env"]["ORCHESTRA_TICKET"] == "T-1"
     assert tomllib.loads("v = " + overrides["developer_instructions"])["v"] == "be good"
     # The first turn's thread.started is remembered; the rollout is found under CODEX_HOME.

@@ -22,7 +22,6 @@ def test_every_command_and_argument_has_help(capsys):
     top = " ".join(build_parser().format_help().split())        # argparse wraps help text
     assert "the agents' sessions: list them, or show one's transcript" in top
     for sub, texts in (("sessions", ["list | show", "a session id from `sessions list`", "archived (its ticket closed)"]), ("roles", ["a role name"]),
-                       ("api", ["a tool name from `orchestra agents tools`", "one line of JSON"]),
                        ("run", ["serves the Supervisor chat"]), ("status", ["running, idle, paused, down"])):
         with pytest.raises(SystemExit):
             build_parser().parse_args([sub, "--help"])

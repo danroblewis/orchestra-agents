@@ -3,7 +3,9 @@
 Claude Code has no resident process: each turn is ``claude -p`` reading the prompt from
 stdin, streaming ``--output-format stream-json`` events, and exiting. The session is the
 transcript Claude keeps under its own config directory, resumed with ``--resume``.
-The agents' tools reach the model through the MCP server in ``mcp.py``."""
+The agents' tools reach the model through the MCP server in ``mcp.py``, or, with ``[agents]
+tools_via = "bash"`` (or ``auto`` once the server is found blocked), through the command the
+session runs from its Bash tool (``bash_tools.py``), with no MCP server at all."""
 
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ import threading
 import uuid
 from pathlib import Path
 
+from . import bash_tools
 from .base import (
     AgentSession,
     ContextSize,
@@ -30,7 +33,7 @@ from .base import (
     records,
     resolve_binary,
 )
-from .mcp_status import BACKOFF, policy_files, problem, try_command, until
+from .mcp_status import BACKOFF, FALLBACK, SWITCHED, policy_files, problem, try_command, until
 
 TOOL_PREFIX = "mcp__orchestra__"
 # Claude Code's own tools that stand in for Orchestra's work: a private todo list the model can
@@ -98,10 +101,26 @@ class ClaudeCodeSession(AgentSession):
                 env[k] = os.environ[k]
         return env
 
-    def _mcp_config(self) -> Path:
-        env = self._mcp_env()
-        cfg = {"mcpServers": {"orchestra": {"command": sys.executable, "args": ["-m", "orchestra_agents.harness.mcp"], "env": env}}}
-        p = self._dir / f"{self.spec.session_id}.mcp.json"
+    def via(self) -> str:
+        """How this turn calls Orchestra's tools: ``mcp`` or ``bash`` (``auto`` is MCP until the
+        server is found not connected, then bash for every session: mcp_status.Fallback)."""
+        if self.spec.tools_via == "bash" or (self.spec.tools_via == "auto" and FALLBACK.on):
+            return "bash"
+        return "mcp"
+
+    def _env(self) -> dict[str, str]:
+        """The turn's process environment, which Claude Code's Bash tool passes on to the commands it
+        runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
+        ``orchestra agents tool`` reads."""
+        return {**os.environ, **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+
+    def _mcp_config(self, via: str = "mcp") -> Path:
+        """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the
+        shell (with --strict-mcp-config, no other configured server is loaded either)."""
+        servers = {} if via == "bash" else {"orchestra": {"command": sys.executable, "args": ["-P", "-m", "orchestra_agents.harness.mcp"],
+                                                          "env": self._mcp_env()}}
+        cfg = {"mcpServers": servers}
+        p = self._dir / f"{self.spec.session_id}.{'none' if via == 'bash' else 'mcp'}.json"
         p.write_text(json.dumps(cfg, indent=1) + "\n", encoding="utf-8")
         return p
 
@@ -114,20 +133,24 @@ class ClaudeCodeSession(AgentSession):
             return None
         return {"mode": "auto", "limit": max(100_000, int(self.spec.compact_tokens))}
 
-    def _args(self) -> list[str]:
+    def _args(self, via: str | None = None) -> list[str]:
+        via = via or self.via()
         if self.uuid is None:
             self.open()
         resume = self.session_file and Path(self.session_file).exists()
         args = [self.binary, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                "--dangerously-skip-permissions", "--strict-mcp-config", "--mcp-config", str(self._mcp_config())]
+                "--dangerously-skip-permissions", "--strict-mcp-config", "--mcp-config", str(self._mcp_config(via))]
         if self.spec.model:
             args += ["--model", self.spec.model]
         args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(max(100_000, int(self.spec.compact_tokens)))]
-        if self.spec.system_prompt:
+        system = self.spec.system_prompt or ""
+        if via == "bash":
+            system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self._env().get('PATH'))}"
+        if system:
             sp = self._dir / f"{self.spec.session_id}.system.md"
-            sp.write_text(self.spec.system_prompt, encoding="utf-8")
+            sp.write_text(system, encoding="utf-8")
             args += ["--append-system-prompt-file", str(sp)]
         args += ["--resume", self.uuid] if resume else ["--session-id", self.uuid]
         return args
@@ -135,92 +158,106 @@ class ClaudeCodeSession(AgentSession):
     def prompt(self, text: str, timeout: float | None, on_event: OnEvent | None = None,
                idle_timeout: float | None = None) -> TurnResult:
         with self._lock:
-            result = TurnResult()
-            refused = BACKOFF.refusal(self._policy_files())
-            if refused:
-                result.error = refused
-                return result
             emit = _Normalizer(on_event)
-            self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
-            stderr = self.spec.log_path.open("a", encoding="utf-8")
+            via = self.via()
+            if via == "mcp" and self.spec.tools_via == "mcp" and (refused := BACKOFF.refusal(self._policy_files())):
+                return TurnResult(error=refused)
+            result, switched = self._turn(text, timeout, idle_timeout, emit, via)
+            if switched:            # auto, and the server is not there: the same turn again, the tools from the shell
+                result, _ = self._turn(text, timeout, idle_timeout, emit, "bash")
+            return result
+
+    def _turn(self, text: str, timeout: float | None, idle_timeout: float | None, emit: _Normalizer,
+              via: str) -> tuple[TurnResult, bool]:
+        """One ``claude -p`` run. Returns its result, and True when it was stopped at its init event
+        to run again with the tools from the shell (``tools_via = "auto"``)."""
+        result = TurnResult()
+        self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
+        stderr = self.spec.log_path.open("a", encoding="utf-8")
+        try:
+            self.proc = subprocess.Popen(self._args(via), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
+                                         text=True, cwd=str(self.spec.cwd), env=self._env(),
+                                         bufsize=1, start_new_session=True)
+        except OSError as e:
+            result.error = f"cannot start {self.binary}: {e}"
+            stderr.close()
+            return result, False
+        emit.pid = self.proc.pid
+        try:
             try:
-                self.proc = subprocess.Popen(self._args(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
-                                             text=True, cwd=str(self.spec.cwd), env={**os.environ, **self.spec.env},
-                                             bufsize=1, start_new_session=True)
-            except OSError as e:
-                result.error = f"cannot start {self.binary}: {e}"
-                stderr.close()
-                return result
-            emit.pid = self.proc.pid
-            try:
+                self.proc.stdin.write(text)  # type: ignore[union-attr]
+                self.proc.stdin.close()      # type: ignore[union-attr]
+            except (BrokenPipeError, OSError):
+                pass
+            clock = _Deadlines(timeout, idle_timeout)
+            reader = _LineReader(self.proc.stdout)
+            last_text = ""
+            while True:
+                why = clock.expired()
+                if why:
+                    result.timed_out, result.stopped_by, result.text = True, why, last_text
+                    self.kill()
+                    return result, False
+                line = reader.next(clock.wait())
+                if line is None:          # EOF: the process exited
+                    break
+                if not line:
+                    continue
+                clock.touch()
                 try:
-                    self.proc.stdin.write(text)  # type: ignore[union-attr]
-                    self.proc.stdin.close()      # type: ignore[union-attr]
-                except (BrokenPipeError, OSError):
-                    pass
-                clock = _Deadlines(timeout, idle_timeout)
-                reader = _LineReader(self.proc.stdout)
-                last_text = ""
-                while True:
-                    why = clock.expired()
-                    if why:
-                        result.timed_out, result.stopped_by, result.text = True, why, last_text
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = ev.get("type")
+                if t == "system" and ev.get("subtype") == "init" and via == "mcp":
+                    stop = self._no_orchestra(ev, result, emit)
+                    if stop:
                         self.kill()
-                        return result
-                    line = reader.next(clock.wait())
-                    if line is None:          # EOF: the process exited
-                        break
-                    if not line:
-                        continue
-                    clock.touch()
-                    try:
-                        ev = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    t = ev.get("type")
-                    if t == "system" and ev.get("subtype") == "init" and self._no_orchestra(ev, result):
-                        self.kill()
-                        return result
-                    emit(ev)
-                    if t == "assistant":
-                        for part in (ev.get("message") or {}).get("content") or []:
-                            if part.get("type") == "text" and part.get("text", "").strip():
-                                last_text = part["text"]
-                    elif t == "result":
-                        if isinstance(ev.get("total_cost_usd"), int | float):
-                            result.cost_usd = float(ev["total_cost_usd"])
-                        if ev.get("is_error"):
-                            result.error = str(ev.get("result") or ev.get("subtype") or "error")
-                        else:
-                            last_text = ev.get("result") or last_text
-                rc = self.proc.wait()
-                if rc != 0 and not result.error:
-                    result.error = f"claude exited with status {rc}"
-                if result.error:
-                    result.text = last_text
-                    return result
-                result.text = last_text
+                        return result, stop == "switch"
+                emit(ev)
+                if t == "assistant":
+                    for part in (ev.get("message") or {}).get("content") or []:
+                        if part.get("type") == "text" and part.get("text", "").strip():
+                            last_text = part["text"]
+                elif t == "result":
+                    if isinstance(ev.get("total_cost_usd"), int | float):
+                        result.cost_usd = float(ev["total_cost_usd"])
+                    if ev.get("is_error"):
+                        result.error = str(ev.get("result") or ev.get("subtype") or "error")
+                    else:
+                        last_text = ev.get("result") or last_text
+            rc = self.proc.wait()
+            if rc != 0 and not result.error:
+                result.error = f"claude exited with status {rc}"
+            result.text = last_text
+            if not result.error:
                 emit.settled(last_text)
-                return result
-            finally:
-                self.proc = None
-                stderr.close()
+            return result, False
+        finally:
+            self.proc = None
+            stderr.close()
 
     def _policy_files(self) -> list[Path]:
         return policy_files(claude_config_dir())
 
-    def _no_orchestra(self, init: dict, result: TurnResult) -> bool:
+    def _no_orchestra(self, init: dict, result: TurnResult, emit: _Normalizer) -> str | None:
         """The turn's first event: when Orchestra's MCP server is not connected, the turn ends
-        here, before the model runs, as a failure that says why; and no turn starts again for a
-        while (mcp_status.Backoff)."""
+        here, before the model runs. With ``tools_via = "auto"`` it is run again with the tools
+        from the shell ("switch"; said once, as a notice the host passes to the Supervisor);
+        with ``mcp`` it is a failure that says why ("fail"), and no turn starts again for a while
+        (mcp_status.Backoff)."""
         why = problem(init, config_dir=claude_config_dir(), try_cmd=try_command(sys.executable, self._mcp_env()),
                       log_path=self.spec.log_path)
         if why is None:
             BACKOFF.ok()
-            return False
+            return None
+        if self.spec.tools_via == "auto":
+            if FALLBACK.switch(why):
+                emit._emit({"type": "notice", "text": SWITCHED + why.split("\n\n", 1)[-1]})
+            return "switch"
         at = BACKOFF.failed(why, self._policy_files())
         result.error = f"{why}\n\n{until(at)}"
-        return True
+        return "fail"
 
     def kill(self) -> None:
         p = self.proc
@@ -253,6 +290,15 @@ def _short(name: str) -> str:
     return name.removeprefix(TOOL_PREFIX)
 
 
+def _call(part: dict) -> tuple[str, dict]:
+    """A tool_use part as (tool, arguments): an Orchestra tool by its own name, whether it came
+    through the MCP server or as ``orchestra agents tool`` run by the Bash tool (bash_tools.parse)."""
+    args = part.get("input") or {}
+    if part.get("name") == "Bash" and isinstance(args, dict) and (called := bash_tools.parse(str(args.get("command") or ""))):
+        return called
+    return _short(part.get("name", "?")), args
+
+
 class _Normalizer(_NormalizerBase):
     """Claude Code stream-json events -> normalized events."""
 
@@ -275,10 +321,10 @@ class _Normalizer(_NormalizerBase):
             calls = []
             for part in content:
                 if part.get("type") == "tool_use":
-                    name = _short(part.get("name", "?"))
+                    name, args = _call(part)
                     calls.append(name)
                     self._pending[part.get("id", "")] = name
-                    self._emit({"type": "tool_start", "name": name, "args": part.get("input") or {}})
+                    self._emit({"type": "tool_start", "name": name, "args": args})
             text = "".join(p.get("text", "") for p in content if p.get("type") == "text")
             if text.strip() or calls:
                 self._emit({"type": "assistant_end", "text": text, "tool_calls": calls})
@@ -349,9 +395,9 @@ class ClaudeCodeHarness(Harness):
                     if part.get("type") == "text":
                         text += part.get("text", "")
                     elif part.get("type") == "tool_use":
-                        name = _short(part.get("name", "?"))
+                        name, args = _call(part)
                         names[part.get("id", "")] = name
-                        tools.append({"name": name, "args": part.get("input")})
+                        tools.append({"name": name, "args": args})
                 if text or tools:
                     out.append({"role": "assistant", "text": text, "tool_calls": tools, "ts": ts})
                 continue

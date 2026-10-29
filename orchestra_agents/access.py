@@ -3,7 +3,7 @@
 **Who.** The host issues every session it starts a token (``ORCHESTRA_SESSION_TOKEN`` in the
 session's environment, beside ``ORCHESTRA_ROLE``) and keeps only its SHA-256, with the role and
 ticket it was issued for, in ``runtime.json`` (``AgentStore.set_grant``). A tool call that comes
-in from outside the host's own process (the MCP server, ``orchestra agents api``) is identified by
+in from outside the host's own process (the MCP server, ``orchestra agents tool``) is identified by
 that token (``identify``): the role and the ticket are the grant's, never the environment's. A
 shell inside a worker's session that sets ``ORCHESTRA_ROLE=supervisor`` still carries the
 worker's token and is refused; one with no token, or a token the host did not issue or has

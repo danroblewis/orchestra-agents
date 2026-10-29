@@ -5,7 +5,11 @@ Claude Code reports every MCP server it loaded in the stream's first event (``sy
 server is a turn without Orchestra's tools: the model then reaches for whatever it has (Claude
 Code's own todo list) and reports work that never happened. So such a turn is ended there, as a
 failure that says why and what to check, and no Claude Code turn starts again for a while
-(``Backoff``): a broken server or a policy that blocks it fails the same way every time."""
+(``Backoff``): a broken server or a policy that blocks it fails the same way every time.
+
+That is for ``[agents] tools_via = "mcp"``. With ``auto`` (the default) a turn that finds no server
+is not failed: the host's sessions call the tools from their shell from then on (``Fallback``,
+``bash_tools.py``), and that turn runs again so, before the model has done anything."""
 
 from __future__ import annotations
 
@@ -60,7 +64,9 @@ def problem(init: dict, *, config_dir: Path, try_cmd: str, log_path: Path) -> st
     head = (f"Orchestra's tools are not available to Claude Code: the MCP server `{SERVER}` did not connect ({said}). "
             "Orchestra stopped the turn before the model ran, so nothing was done: no ticket was created, nothing changed, and no other "
             "task list was used.")
-    return f"{head}\n\nLikely causes:\n{policy}\n{start}"
+    bash = ("Or let the agents call Orchestra's tools from their shell instead of the MCP server: set `tools_via = \"bash\"` "
+            "(or `\"auto\"`, which switches when the server is blocked) under `[agents]` in orchestra.toml.")
+    return f"{head}\n\nLikely causes:\n{policy}\n{start}\n\n{bash}"
 
 
 def try_command(python: str, env: dict[str, str]) -> str:
@@ -120,3 +126,31 @@ def until(at: float) -> str:
 
 
 BACKOFF = Backoff()
+
+
+class Fallback:
+    """With ``tools_via = "auto"``: whether the MCP server was found not connected in this host's
+    lifetime, after which every Claude Code session calls the tools from its shell (a policy that
+    blocks the server for one session blocks it for all) until the host restarts."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.why: str | None = None
+
+    def switch(self, why: str) -> bool:
+        """Record that the server is not reachable; True the first time, so it is said once."""
+        with self._lock:
+            first = self.why is None
+            self.why = self.why or why
+            return first
+
+    @property
+    def on(self) -> bool:
+        return self.why is not None
+
+
+FALLBACK = Fallback()
+SWITCHED = ("Orchestra's MCP server did not connect in Claude Code (an organisation policy may block it, or it failed to "
+            "start), so from now on the agents call Orchestra's tools from their shell (`orchestra agents tool`) instead "
+            "([agents] tools_via = \"auto\"). Nothing was lost: the turn ran again that way. To make it permanent, set "
+            "tools_via = \"bash\"; to try the MCP server again, restart Orchestra. Why the server did not connect:\n\n")

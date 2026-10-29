@@ -22,6 +22,8 @@ Normalized events (dicts with ``type``):
   tool_end {name}            it finished
   assistant_end {text, tool_calls}   an assistant message completed
   settled {text}             the turn is over
+  notice {text}              the harness changed how it runs the agent (its tools now come from the shell): the
+                             host logs it and tells the Supervisor
 """
 
 from __future__ import annotations
@@ -146,6 +148,7 @@ class SessionSpec:
     provider: str | None = None
     thinking: str | None = None
     compact_tokens: int | None = None   # ask the harness to compact its own context past this many tokens, if it can
+    tools_via: str = "mcp"     # how the session calls Orchestra's tools: mcp | bash | auto ([agents] tools_via; bash_tools.py)
     read_only: bool = False    # the agent reads the checkout and never edits a file: its harness's file-editing tools are taken away
 
 

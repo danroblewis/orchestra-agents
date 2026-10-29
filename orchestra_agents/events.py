@@ -21,7 +21,7 @@ with no source at all, is refused here. Every event goes out as the agent it is 
   ``agent.compacted``, ``agent.crashed``, ``agent.crash_loop``, ``agent.reset``);
 - a team's probe (probes.py) is published as the agent responsible for the team: its lead, or the
   Supervisor when it has none;
-- an agent's own tool call (``orchestra agents api`` or the MCP server, in the agent's
+- an agent's own tool call (``orchestra agents tool`` or the MCP server, in the agent's
   environment) is ``ORCHESTRA_SOURCE``, which the host sets to the same instance."""
 
 from __future__ import annotations

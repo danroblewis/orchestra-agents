@@ -8,10 +8,10 @@ A server that cannot load its tools says why on stderr (and in ``ORCHESTRA_MCP_L
 session's log, when the harness names one) and exits non-zero before answering anything, so the
 harness reports it as failed instead of a server with no tools.
 
-Tool calls go straight to ``orchestra_agents.tooling.handle``; there is no shelling out. The caller
-is the session the host issued the token to (``access.identify``, on every call, so a session
-that has ended is refused), not whatever ``ORCHESTRA_ROLE`` says; ``ORCHESTRA_TOOLS`` only
-chooses which tools are listed."""
+Tool calls go through ``caller.Caller``, as the shell command's do (``orchestra agents tool``);
+there is no shelling out. The caller is the session the host issued the token to
+(``access.identify``, on every call, so a session that has ended is refused), not whatever
+``ORCHESTRA_ROLE`` says; ``ORCHESTRA_TOOLS`` only chooses which tools are listed."""
 
 from __future__ import annotations
 
@@ -34,41 +34,18 @@ def _reply(req_id, result=None, error=None) -> None:
     sys.stdout.flush()
 
 
-def _tool_text(result) -> str:
-    return result if isinstance(result, str) else json.dumps(result, indent=1, default=str)
-
-
 class Server:
     def __init__(self) -> None:
-        from .tools import tools_for
-        groups = [g for g in (os.environ.get("ORCHESTRA_TOOLS") or "").split(",") if g]
-        self.tools = tools_for(groups)
-        self._project = None
-        self._store = None
-
-    def _ctx(self):
-        if self._project is None:
-            from ..config import load_project
-            from ..events import Events
-            from ..store import AgentStore
-            self._project = load_project(os.environ.get("ORCHESTRA_REPO") or None)
-            self._store = AgentStore(self._project, Events.for_project(self._project))
-        return self._project, self._store
+        from .caller import Caller, groups_of
+        self.caller = Caller(os.environ, groups_of(os.environ) or [])
+        self.tools = self.caller.tools
 
     def call(self, name: str, args: dict) -> dict:
-        from .tools import BY_NAME
-        tool = BY_NAME.get(name)
-        if tool is None or tool not in self.tools:
-            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": f"unknown tool {name}"})}], "isError": True}
+        from .caller import error, text
         try:
-            from .. import access, tooling
-            tooling.check_args(tool.name, dict(args or {}))
-            project, store = self._ctx()
-            role, ticket = access.identify(store, os.environ)
-            result = tooling.handle(project, store, tool.name, dict(args or {}), role=role, ticket_env=ticket)
-            return {"content": [{"type": "text", "text": _tool_text(result)}]}
+            return {"content": [{"type": "text", "text": text(self.caller.call(name, args))}]}
         except Exception as e:  # noqa: BLE001 - the model gets the error text, like the Pi extension
-            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}], "isError": True}
+            return {"content": [{"type": "text", "text": error(e)}], "isError": True}
 
     def handle(self, msg: dict) -> None:
         method = msg.get("method")

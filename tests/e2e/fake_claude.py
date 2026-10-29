@@ -22,19 +22,47 @@ the tools the file lists, a JSON list of {"tool", "args"}, in order, and replies
 answered, or with the text of a {"reply"} step when the list has one (a reply as a model might
 get it wrong); without it, a Supervisor only acknowledges.
 FAKE_CLAUDE_COORDINATOR=<file>: woken with a Supervisor's hand-off (work.requested), the Coordinator
-calls the tools the file lists the same way, with {request} replaced by the request's id."""
+calls the tools the file lists the same way, with {request} replaced by the request's id.
+
+With no ``orchestra`` server in the MCP config (``[agents] tools_via = "bash"``, or ``auto`` after
+the switch) every tool call is a Bash call of the command the system prompt gives (``Shell``).
+FAKE_CLAUDE_MCP_BLOCKED=1: the ``orchestra`` server, when configured, never connects (status
+``failed``), as when an organisation's policy blocks it."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
 import uuid as uuidlib
 from datetime import UTC, datetime
 from pathlib import Path
+
+
+class Shell:
+    """Orchestra's tools with no MCP server (``[agents] tools_via = "bash"``): each call is the
+    command the system prompt gives, run by a shell in the session's working directory with this
+    process's environment, as Claude Code's Bash tool runs it."""
+
+    def __init__(self):
+        system = Path(arg("--append-system-prompt-file")).read_text()
+        found = re.search(r"^    (.+) <tool> '<arguments as one JSON object>'$", system, re.MULTILINE)
+        assert found, "the system prompt does not say how to call the tools from the shell"
+        self.cmd = found.group(1)
+
+    def command(self, name: str, args: dict) -> str:
+        return f"{self.cmd} {name} {shlex.quote(json.dumps(args))}"
+
+    def run(self, command: str) -> str:
+        p = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env=dict(os.environ), check=False)
+        return (p.stdout + p.stderr).strip()
+
+    def tools(self) -> set[str]:
+        return {line.split()[0] for line in self.run(f"{self.cmd} --list").splitlines() if line.strip()}
 
 
 def reviewed_marker(cwd):
@@ -143,8 +171,8 @@ def do_what_it_asks(prompt: str, cwd: Path) -> None:
 def main() -> None:
     sid = arg("--session-id") or arg("--resume") or str(uuidlib.uuid4())
     prompt = sys.stdin.read()
-    mcp_cfg = json.loads(Path(arg("--mcp-config")).read_text())["mcpServers"]["orchestra"]
-    env = mcp_cfg.get("env", {})
+    mcp_cfg = json.loads(Path(arg("--mcp-config")).read_text())["mcpServers"].get("orchestra")
+    env = (mcp_cfg or {}).get("env") or os.environ      # no server: the tools come from the shell, with this process's env
     role, ticket = env.get("ORCHESTRA_ROLE", ""), env.get("ORCHESTRA_TICKET", "")
     cwd = Path.cwd()
     projects = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
@@ -160,29 +188,35 @@ def main() -> None:
             f.write(json.dumps({"type": entry_type, "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
                                 "message": {"role": entry_type, "content": content}, "sessionId": sid}) + "\n")
 
-    try:                                    # as Claude Code does: the MCP servers connect before the init event names them
-        mcp = Mcp(mcp_cfg)
-        mcp_status = "connected"
-    except (OSError, RuntimeError, ValueError):
-        mcp, mcp_status = None, "failed"
-    emit({"type": "system", "subtype": "init", "session_id": sid, "cwd": str(cwd),
-          "mcp_servers": [{"name": "orchestra", "status": mcp_status}]})
-    if mcp is None:                         # a real one would go on without the tools; the harness stops it here
+    mcp, servers = None, []
+    if mcp_cfg is not None:
+        try:                                # as Claude Code does: the MCP servers connect before the init event names them
+            if os.environ.get("FAKE_CLAUDE_MCP_BLOCKED"):
+                raise OSError("blocked by the organisation's policy")
+            mcp = Mcp(mcp_cfg)
+            mcp_status = "connected"
+        except (OSError, RuntimeError, ValueError):
+            mcp_status = "failed"
+        servers = [{"name": "orchestra", "status": mcp_status}]
+    emit({"type": "system", "subtype": "init", "session_id": sid, "cwd": str(cwd), "mcp_servers": servers})
+    if mcp_cfg is not None and mcp is None:  # a real one would go on without the tools; the harness stops it here
         time.sleep(30)
         return
     record("user", prompt)
-    tools = {t["name"] for t in mcp.rpc("tools/list", {}).get("result", {}).get("tools", [])}
+    shell = Shell() if mcp is None else None
+    tools = shell.tools() if shell else {t["name"] for t in mcp.rpc("tools/list", {}).get("result", {}).get("tools", [])}
 
     def use_tool(name: str, args: dict) -> str:
         assert name in tools, f"{role} was not granted {name}; has {sorted(tools)}"
         tid = f"toolu_{uuidlib.uuid4().hex[:12]}"
-        full = f"mcp__orchestra__{name}"
+        call = {"name": "Bash", "input": {"command": shell.command(name, args)}} if shell else \
+            {"name": f"mcp__orchestra__{name}", "input": args}
         emit({"type": "stream_event", "event": {"type": "message_start"}, "session_id": sid})
         emit({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": ""}}})
-        use = [{"type": "tool_use", "id": tid, "name": full, "input": args}]
+        use = [{"type": "tool_use", "id": tid, **call}]
         emit({"type": "assistant", "message": {"role": "assistant", "content": use}, "session_id": sid})
         record("assistant", use)
-        out = mcp.call(name, args)
+        out = shell.run(call["input"]["command"]) if shell else mcp.call(name, args)
         res = [{"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": out}]}]
         emit({"type": "user", "message": {"role": "user", "content": res}, "session_id": sid})
         record("user", res)
@@ -244,7 +278,8 @@ def main() -> None:
         text = replies[-1] if replies else "What I did with my tools:\n" + "\n".join(said)
     else:
         text = f"{role} acknowledges: {prompt[:60]}"
-    mcp.close()
+    if mcp is not None:
+        mcp.close()
     emit({"type": "stream_event", "event": {"type": "message_start"}, "session_id": sid})
     emit({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": text}}})
     emit({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}, "session_id": sid})

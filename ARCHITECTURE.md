@@ -115,7 +115,7 @@ flowchart LR
     subgraph Sessions["agent sessions (harness/)"]
       HAR[Pi / Claude Code / Codex]
       MCP[harness/mcp.py<br/>MCP server]
-      API[orchestra agents api<br/>cli.py]
+      API[orchestra agents tool<br/>cli.py]
     end
     TOOL[tooling.handle<br/>+ access.py + ledger.py]
     STORE[(runtime.json<br/>store.py)]
@@ -434,7 +434,7 @@ an orphan.
 | Resume | `--session-dir`/`--session-id` | `--session-id <uuid>` first, then `--resume <uuid>`; the uuid is in `sessions/claude-code/<id>.json` | `resume <thread_id>` from the first `thread.started`; kept in `sessions/codex/<id>.json` | The transcript is the session: the turn number is counted from it |
 | System prompt | `--append-system-prompt` | `--append-system-prompt-file` | `-c developer_instructions=...` | Not read (kept beside the log, as for every harness) |
 | What it does | The model decides | The model decides | The model decides | The first matching rule of the script ([below](#the-dummy-harness-and-its-scripts)) |
-| Tools | `pi_extension.ts`, which reads `orchestra agents tools --json` and calls `orchestra agents api <tool>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config` | The same MCP server, through `-c mcp_servers.orchestra={...}` | The MCP server's `Server.call`, in the agent's process |
+| Tools | `pi_extension.ts`, which reads `orchestra agents tools --json` and calls `orchestra agents tool <tool> <json>` | MCP server `harness/mcp.py`, set up with `--mcp-config` and `--strict-mcp-config`; with `tools_via = "bash"` (or `auto` after the server is found blocked) an empty config and `orchestra agents tool` from the Bash tool | The same MCP server, through `-c mcp_servers.orchestra={...}`; with `bash`, the command, the session's variables set by `shell_environment_policy.set` | The MCP server's `Server.call`, in the agent's process |
 | Permissions | — | `--dangerously-skip-permissions` | `--sandbox danger-full-access` | — |
 | Transcript | Pi's JSONL in `session_dir` | `$CLAUDE_CONFIG_DIR/projects/<cwd-key>/<uuid>.jsonl` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*-<thread>.jsonl` | `sessions/dummy/<id>.jsonl`, already in the common message shape |
 | Compaction | When asked (`{"type":"compact"}`) | Compacts itself (`--autocompact`); `compact()` answers `{"mode": "auto"}` | Cannot compact, so the session is rotated | Never needed: it records no tokens |
@@ -450,7 +450,7 @@ flowchart TB
     PIS[PiSession] -->|JSON lines on stdin| PIP["pi --mode rpc<br/>(resident process)"]
     PIP -->|events on stdout| PIN[_Normalizer]
     PIP --> EXT[pi_extension.ts]
-    EXT -->|execFileSync| APICLI["$ORCHESTRA_PYTHON -m orchestra agents api TOOL --args JSON"]
+    EXT -->|execFileSync| APICLI["$ORCHESTRA_PYTHON -P -m orchestra agents tool TOOL JSON"]
   end
 
   subgraph CC["Claude Code"]
@@ -772,11 +772,22 @@ sequenceDiagram
   `access.identify` (the role and ticket of the session's token), then
   `tooling.handle(project, store, name, args, role=<token's role>, ticket_env=<token's ticket>)`.
   The result is JSON text, and an error is `{"ok": false, "error": ...}` with `isError: true`.
+- **The command** `orchestra agents tool <tool> '<json>'` (`cli.cmd_tool`; `-` reads the JSON
+  from stdin, `<tool> --help` prints its schema, `--list` the session's tools) makes the same
+  call as the MCP server: both go through `harness/caller.py` `Caller` (the tools of
+  `ORCHESTRA_TOOLS` when it is set, `check_args`, `access.identify`, `handle`). It prints the
+  answer, or `{"ok": false, "error": ...}` with exit status 1. The project and the session come
+  from the environment, never the working directory.
 - **Pi** (`harness/pi_extension.ts`) registers the output of `orchestra agents tools --json`
   (filtered by `ORCHESTRA_TOOLS`). Each call runs
-  `$ORCHESTRA_PYTHON -m orchestra agents api <tool> --args <json>` (the host's interpreter) (`cli.cmd_api`). That command refuses to
-  run without `ORCHESTRA_SESSION_TOKEN`, runs `access.identify`, `check_args`, then `handle`, and
-  prints JSON.
+  `$ORCHESTRA_PYTHON -P -m orchestra agents tool <tool> <json>` (the host's interpreter).
+- **From the shell** (`[agents] tools_via = "bash"`, or `auto` once Claude Code reports the MCP
+  server not connected; `harness/bash_tools.py`): Claude Code and Codex get no MCP server, and
+  the system prompt gains a section with the command (`orchestra agents tool` when the
+  `orchestra` on the session's PATH is the host's installation, else the host's interpreter by
+  its absolute path with `-P`) and one line per tool. The session's process environment carries
+  the token to the shell. A transcript reads such a Bash call as the tool it ran
+  (`bash_tools.parse`).
 - **`tooling.handle`** first runs `access.authorize`, then wraps `_handle` with `ledger.record`. A successful call that changed
   something gains a `done` field (`"Changed: <line>."`), and the line is kept in the agent's
   `actions` (the newest 40).
@@ -791,7 +802,7 @@ The runner, an ephemeral wake-up and `Residents.stop_changed`/`close_all` revoke
 close the session, and `host.recover` drops every grant when a host starts. `access.identify`
 looks the token up and returns the grant's role and ticket. It refuses a missing token, a token
 with no grant, and an `ORCHESTRA_ROLE` that names another role. So a shell inside a worker's
-session that runs `ORCHESTRA_ROLE=supervisor orchestra agents api pause_agent ...` is refused.
+session that runs `ORCHESTRA_ROLE=supervisor orchestra agents tool pause_agent ...` is refused.
 `ORCHESTRA_TICKET` is no longer read for a call; a worker cannot report on another ticket.
 
 **Who may call what.** `access.authorize`, at the top of `handle`, refuses:
@@ -1321,7 +1332,7 @@ The host also reads `[project] base_branch` (default `main`), `ticket_prefix` (`
 | Path | What | Written by |
 |---|---|---|
 | `runtime.json` | `sessions`, `archived_sessions`, `reports`, `wakeups`, `agent_state` (paused, crashes, `actions`, `tickets_named`, `asked_tickets`, `turn_began`, `handoffs`, `setup`, hashes...), `grants` (each live session's token digest, role and ticket), `probes`, `control`, `metric_counts`, `supervisor_seen_at` | `store.py` only, under `.lock` (`fcntl`), with atomic replace |
-| `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` and `.system.md`; `codex/<id>.json`; `dummy/<id>.jsonl` and its `archive/` | The harnesses |
+| `sessions/` | Pi transcripts and their `archive/`; `claude-code/<id>.json`, `.mcp.json` (or `.none.json`, no server, from the shell) and `.system.md`; `codex/<id>.json`; `dummy/<id>.jsonl` and its `archive/` | The harnesses |
 | `logs/agents-host.log` | The host's log (rotated at 5 MB) | `host.log` |
 | `logs/agents/<session>.stderr.log`, `<session>.prompt.md` | Each session's stderr, and the prompt it started with | The harness, and `host._open_session` |
 | `PROJECT.md` | The project context | `prompting.write_context` (`update_project_context`) |
@@ -1374,7 +1385,7 @@ A new **built-in** role is a code change:
 3. Expose the tools from the catalogue only. Point an MCP-speaking product at
    `python -m orchestra_agents.harness.mcp` with the session's env plus `ORCHESTRA_TOOLS`.
    Otherwise write an extension that reads `orchestra agents tools --json` and calls
-   `orchestra agents api`. Never define a tool in one harness only (AGENTS.md rule 5).
+   `orchestra agents tool`. Never define a tool in one harness only (AGENTS.md rule 5).
 4. Register the class in `harness/__init__.py` `HARNESSES`.
 5. Add a fake at `tests/e2e/fake_<name>.py` that speaks the product's real protocol, and run the
    e2e tests for it (AGENTS.md rule 8; the dummy harness, which has no product, runs them as it ships). Write down the product facts the code depends on in

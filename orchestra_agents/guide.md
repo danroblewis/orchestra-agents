@@ -52,6 +52,7 @@ harness = "claude_code"   # claude_code | pi | codex | dummy; unset: claude_code
 model = "haiku"           # the harness's model name; unset with an unset harness: haiku
 provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
+tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
 serves = ["worker", "reviewer"]   # the task system's roles these agents fill (default both)
 coordinator_every = "30m" # a scheduled Coordinator check-in; unset (default): woken by events only
 turn_timeout = "30m"      # a hard cap per turn; unset (default): none
@@ -80,6 +81,25 @@ enabled = true            # false: no host, no agents
   found. A dummy Supervisor cannot read the repository or set anything up; say so to the human and
   recommend a real harness. `dummy_script` (or `.orchestra/dummy.toml`) adds rules: README
   "Dummy agents".
+
+### How the agents call Orchestra's tools (`tools_via`)
+
+- **`mcp`**: through Orchestra's MCP server, which the host gives each Claude Code or Codex turn.
+  When Claude Code reports the server not connected, the turn fails and says why, and no Claude
+  Code turn starts for a while.
+- **`bash`**: no MCP server at all; each session runs its tools from its shell, `orchestra agents
+  tool <name> '<json>'` (the system prompt names them and the exact command). The same tools, the
+  same checks, the same identity. For an organisation whose Claude Code policy allows only listed
+  MCP servers: when the human says "use bash for tools", set `[agents] tools_via` to `"bash"`
+  (`set_setting`, key `agents.tools_via`).
+- **`auto`** (the default): the MCP server, until Claude Code reports it not connected; then every
+  session calls the tools from its shell until Orchestra restarts, the turn that found it runs
+  again that way, and you are woken once with the reason (tell the human, and offer `bash` to make
+  it permanent).
+
+The sessions start again on the new setting after their turn. Pi always calls the tools through
+its extension and the dummy harness in-process: the setting changes nothing there; Codex takes
+`bash`, and `auto` is the MCP server on Codex.
 
 The harness the host runs on is on the Agents page and in `orchestra agents status`; when it was
 chosen by default, both say so and how to change it.

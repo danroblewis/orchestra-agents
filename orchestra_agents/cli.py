@@ -1,5 +1,6 @@
 """The agents' command line, `orchestra agents ...`: the agents' host, the Supervisor chat, what
-the host and its agents are doing, the agents' tool interface (what the Pi extension calls), their
+the host and its agents are doing, the agents' tools from a shell (`tool`: what the Pi extension and a
+session without MCP call), their
 sessions and roles.
 
 It is a subcommand of Orchestra's CLI, not an executable of its own: the entry point
@@ -14,7 +15,6 @@ import json
 import os
 import sys
 
-from . import access, tooling
 from .api_org import read_org
 from .config import ConfigError, Project, load_project
 from .events import Events
@@ -131,21 +131,34 @@ def cmd_tools(args) -> int:
     return 0
 
 
-def cmd_api(args) -> int:
-    if not os.environ.get(access.TOKEN_ENV):
-        sys.exit(f"{prog()} api is the agents' tool interface and runs inside an agent's session "
-                 f"(ORCHESTRA_ROLE and {access.TOKEN_ENV} are set by the host)")
-    project = _project(args)
-    store, _ = _store(project)
+def cmd_tool(args) -> int:
+    """One of the session's tools, called from its shell: the same call as the MCP server's
+    (harness/caller.py). The answer on stdout; a refusal or failure as JSON, exit 1."""
+    from .harness.caller import Caller, error, groups_of, text
+    env = {**os.environ, **({"ORCHESTRA_REPO": args.repo} if args.repo else {})}
+    caller = Caller(env, groups_of(env))
+    if args.list or not args.name:
+        if not args.name and not args.list and not args.help:
+            print(json.dumps({"ok": False, "error": f"usage: {prog()} tool <name> '<json arguments>' | <name> --help | --list"}))
+            return 2
+        width = max((len(t.name) for t in caller.tools), default=0)
+        print("\n".join(f"{t.name:{width}}  {t.description}" for t in caller.tools) if args.list else
+              f"usage: {prog()} tool <name> '<json arguments>'   (or - and the JSON on stdin); "
+              f"{prog()} tool <name> --help; {prog()} tool --list")
+        return 0
     try:
-        role, ticket = access.identify(store, os.environ)     # the session's role, as the host issued it
-        payload = json.loads(args.args) if args.args else {}
-        tooling.check_args(args.command, payload)
-        out = tooling.handle(project, store, args.command, payload, role=role, ticket_env=ticket)
-    except (StoreError, KeyError, ValueError) as e:
-        print(json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}))
+        tool = caller.tool(args.name)
+        if args.help:
+            print(json.dumps({"name": tool.name, "description": tool.description, "arguments": tool.input_schema}, indent=1))
+            return 0
+        raw = sys.stdin.read() if args.json == "-" else (args.json or "{}")
+        payload = json.loads(raw or "{}")
+        if not isinstance(payload, dict):
+            raise TypeError("the arguments are one JSON object, as {\"name\": \"value\"}")
+        print(text(caller.call(args.name, payload)))
+    except Exception as e:  # noqa: BLE001 - the session reads why, as the MCP server would answer it
+        print(error(e))
         return 1
-    print(json.dumps(out, indent=None if args.compact else 1))
     return 0
 
 
@@ -261,11 +274,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="the catalogue as JSON")
     s.add_argument("--groups", help="comma-separated tool groups (default: ORCHESTRA_TOOLS, else all)")
     s.set_defaults(fn=cmd_tools)
-    s = sub.add_parser("api", help="the interface the agents' tools call (inside an agent's session: ORCHESTRA_ROLE is set by the host)")
-    s.add_argument("command", help="a tool name from `orchestra agents tools`")
-    s.add_argument("--args", default="{}", help="JSON object of arguments")
-    s.add_argument("--compact", action="store_true", help="one line of JSON")
-    s.set_defaults(fn=cmd_api)
+    s = sub.add_parser("tool", add_help=False,
+                       help="call one of an agent's tools (inside an agent's session, which the host starts with its token)",
+                       description="An agent's tool, called from its shell: the same call as through the MCP server. The "
+                                   "session is identified by the token the host put in its environment.")
+    s.add_argument("name", nargs="?", help="the tool (`--list` lists this session's)")
+    s.add_argument("json", nargs="?", help="its arguments, one JSON object; - reads them from stdin (default {})")
+    s.add_argument("--list", action="store_true", help="this session's tools, one line each")
+    s.add_argument("-h", "--help", action="store_true", help="with a tool: its arguments as JSON schema")
+    s.set_defaults(fn=cmd_tool)
     s = sub.add_parser("roles", help="agent roles: built-in and custom")
     s.add_argument("action", choices=["list", "show"], help="list | show")
     s.add_argument("name", nargs="?", help="a role name")

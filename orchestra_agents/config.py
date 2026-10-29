@@ -28,6 +28,7 @@ from .clock import parse_interval
 __all__ = ["Config", "ConfigError", "Project", "load_project"]
 
 
+TOOLS_VIA = ("mcp", "bash", "auto")   # harness/bash_tools.py MODES
 DEFAULT_MODEL = "haiku"     # the model chosen when no harness is set and Claude Code is found: the cheapest that does the work
 
 
@@ -62,6 +63,7 @@ class Config:
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
+    tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto (harness/bash_tools.py)
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
     coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
     turn_timeout: float = 0.0           # hard cap per turn; 0 = none
@@ -95,13 +97,17 @@ class Config:
                 parse_interval(every)
             except ConfigError as e:
                 raise ConfigError(f"[agents] coordinator_every: {e}") from e
+        via = a.get("tools_via", "auto")
+        if via not in TOOLS_VIA:
+            raise ConfigError(f"[agents] tools_via is {via!r}; it is one of {', '.join(TOOLS_VIA)}: mcp, Orchestra's MCP server; "
+                              "bash, a command the session runs from its shell; auto, the MCP server until it is found blocked")
         harness, model, note = (a["harness"].replace("-", "_"), a.get("model") or None, None) if a.get("harness") else default_harness()
         if a.get("harness") is None and a.get("model"):
             model = a["model"]
         return cls(
             harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
             dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
-            model=model, thinking=a.get("thinking"),
+            model=model, thinking=a.get("thinking"), tools_via=via,
             serves=serves, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),

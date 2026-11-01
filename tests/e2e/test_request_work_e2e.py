@@ -71,8 +71,8 @@ def target(tmp_path, monkeypatch):
     toml = repo / "orchestra.toml"
     toml.write_text(toml.read_text().replace('serves = ["worker", "reviewer"]', "serves = []"))   # the scripted machines work
     (repo / ".orchestra" / "dummy.toml").write_text(SCRIPT)
-    d.git("add", "-A", cwd=repo)
-    d.git("commit", "-q", "-m", "agents on the dummy harness", cwd=repo)
+    for args in (["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-q", "-m", "agents on the dummy harness"]):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
     project.reload_config()
     monkeypatch.setenv("ORCHESTRA_REPO", str(repo))
     procs: list[subprocess.Popen] = []
@@ -119,7 +119,7 @@ def test_the_owner_starts_a_piece_of_work_from_the_chat(target):
              reason="before the floor runs")
 
     start()
-    wait(lambda: set(d.MACHINES) <= d.announced(repo), "the task loop's machines")
+    d.wait_for_machines(repo, 120)                                           # the task loop's machines announced
     wait(lambda: (store.runtime().get("control") or {}).get("port"), "the agents' host")
     wait(lambda: request_work_floor_up(project), "the floor")
     done = chat(project, store, MESSAGE)

@@ -370,8 +370,9 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   fill the session's context. The notices are marked as the Supervisor's alone, and the human's
   message follows whole after `[The human's message]` (`prompting.chat_turn`). Streamed as NDJSON.
   A reply that claims an action the turn did not take (a promise of a later action not tied to
-  anything that will happen, or a claim of a change with no tool call; `promises.py`, a
-  heuristic) gets one more turn on the session to take it or say it is not done; the human gets
+  anything that will happen, or a claim of a change with no tool call; a promise to tell the
+  human later is kept in a turn that called `hand_to_coordinator`, whose plan wakes it;
+  `promises.py`, a heuristic) gets one more turn on the session to take it or say it is not done; the human gets
   the correction after the reply. The same check runs on the Supervisor's wake-ups, whose reply
   is left for the human as a message. The prompt alone did not keep the replies true (a live
   test, 2026-10-27: "I have not done anything" right after two commits; two DONE tickets called
@@ -553,9 +554,12 @@ script says only what differs, and `harness = "dummy"` alone is a working team: 
 `work/<ticket>.md` in a code ticket's worktree (`RESULT.md` in a task's folder), commits it and
 reports READY_FOR_REVIEW; a reviewer approves; the Supervisor hands a chat message to the
 Coordinator (`hand_to_coordinator`), which makes a milestone and a ticket from it and reports the plan
-(`report_plan`), and the Supervisor tells the human the plan; on the first run the Supervisor says it
-cannot read the repository and how to get one that can; any other turn replies "Nothing to do." or
-that it is scripted. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
+(`report_plan`), titled from the request's first words, and the Supervisor tells the human the plan,
+and which ticket landed when one does; a request for another harness or model is answered that a
+scripted Supervisor cannot change it (nothing handed on); Orchestra's follow-up to a promise is
+answered "Done above."; on the first run the Supervisor says it cannot read the repository and how
+to get one that can; any other turn replies "Nothing to do." or that it is scripted and has no
+answer for it. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
 script when it exists. A rule's conditions:
 `role` (required; a role's or custom agent's name, or `"*"`), `ticket` (a glob on the ticket id),
 `prompt` (a regular expression searched in the turn's prompt; its named groups are

@@ -53,8 +53,9 @@ tickets only an AI worker can write (DEMO-3, a line-counting tool and its test; 
 collector), each reviewed by an AI reviewer and landed on main by the merge gate. With `--dummy`
 the agents run on the dummy harness, playing `demo/dummy.toml`: the four tickets land with real
 work, DEMO-3's first review rejects it and the rework lands, and the Supervisor answers a question
-in the chat ("what is going on?", "how are we doing?") with the project's status; any other
-message becomes a ticket a dummy worker lands on main. It takes about a minute, without a model
+in the chat (a message ending in "?", or with "going on", "status", "how are", "how is", "how
+far", "what is" or "doing") with the first milestone's status; any other message becomes a ticket
+a dummy worker lands on main. It takes about a minute, without a model
 and at no cost. `demo/README.md` says what you will see and where. Ctrl-C stops everything; remove
 `~/orchestra-agents-demo` first to run it again.
 

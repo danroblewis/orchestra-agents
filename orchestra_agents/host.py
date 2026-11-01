@@ -709,16 +709,16 @@ class AgentHost:
         """A Supervisor turn whose reply is for the human. A reply that claims an action the turn
         did not take (promises.py) gets one more turn on the same session to take it or say it is
         not done; the human gets both, the correction after the reply."""
-        calls = [0]
+        calls: list[str] = []
 
         def counting(ev: dict) -> None:
             if ev.get("type") == "tool_start":
-                calls[0] += 1
+                calls.append(str(ev.get("name") or ""))
             on_event(ev)
 
         limits = {"timeout": self.cfg.turn_timeout or None, "idle_timeout": self.cfg.silence_timeout}
         res = proc.prompt(text, on_event=counting, **limits)
-        said = None if res.error or res.timed_out else promises.unkept(res.text, calls[0])
+        said = None if res.error or res.timed_out else promises.unkept(res.text, calls)
         if said is None:
             return res
         log(f"supervisor: the reply claims an action the turn did not take ({said[:120]!r}); one more turn to do it or say so")

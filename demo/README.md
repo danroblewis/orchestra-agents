@@ -21,7 +21,10 @@ names, its reviewer checks that they exist, its Coordinator and Supervisor only 
 run on the dummy harness and play `dummy.toml` (copied into the target, and named by
 `[agents] dummy_script`), which works each ticket for real (the notes, `tools/line_counts.py` and
 its test, the collector), rejects DEMO-3's first round for a test that does not check the order,
-and has the Supervisor answer every message with the project's status. Nothing costs anything.
+and has the Supervisor answer a question with the project's status (a message ending in "?", or
+with "going on", "status", "how are", "how is", "how far", "what is" or "doing": the first
+milestone's tickets done); any other message becomes a ticket that a dummy worker lands on main.
+Nothing costs anything.
 
 Ctrl-C stops everything. To start over, remove the target directory and run it again: `run.py`
 removes the state a previous run left for that path (under `~/.orchestrator/<name>-<hash>/`)

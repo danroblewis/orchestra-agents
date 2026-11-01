@@ -72,11 +72,11 @@ def test_the_humans_message_is_marked_and_the_notices_are_the_supervisors_alone(
 def test_the_live_tests_unkept_promise_is_found_and_honest_replies_pass():
     live = ("The ticket is already IN_PROGRESS with worker/1, so the worker may have started from the New York default. "
             "I'll check with the coordinator to make sure they read the change.")
-    assert unkept(live, 2) == "I'll check with the coordinator to make sure they read the change."
-    assert unkept("Tell me your city and I'll update DEMO-6's description before a worker picks it up.", 1) is None
-    assert unkept("I'll tell you when DEMO-5 lands. Let me know if the interval is wrong.", 1) is None
-    assert unkept("I updated DEMO-6 with Boulder.", 1) is None
-    assert unkept("I updated DEMO-6 with Boulder.", 0) == "I updated DEMO-6 with Boulder."   # a claim with no tool call
+    assert unkept(live, ["project_status", "list_tickets"]) == "I'll check with the coordinator to make sure they read the change."
+    assert unkept("Tell me your city and I'll update DEMO-6's description before a worker picks it up.", ["list_tickets"]) is None
+    assert unkept("I'll tell you when DEMO-5 lands. Let me know if the interval is wrong.", ["list_tickets"]) is None
+    assert unkept("I updated DEMO-6 with Boulder.", ["update_ticket"]) is None
+    assert unkept("I updated DEMO-6 with Boulder.", []) == "I updated DEMO-6 with Boulder."   # a claim with no tool call
 
 
 def test_a_reply_that_promises_a_later_action_gets_one_more_turn(project):
@@ -134,3 +134,12 @@ def test_the_humans_ticket_that_is_done_wakes_the_supervisor_to_say_so(project):
     prompt = harness.sessions[0].prompts[-1]
     assert prompt.startswith(prompting.SUPERVISOR_WAKE) and "Leave the human one short message" in prompt
     assert store.find_session("supervisor")["last_text"].startswith("DEMO-5 is done")   # the message the human sees waiting
+
+
+def test_a_hand_off_s_promise_to_tell_the_plan_is_kept():
+    from orchestra_agents.harness.dummy_script import Turn, load
+    rule = load(None).pick(Turn(role="supervisor", prompt="[The human's message]\nAdd a page"))
+    reply = rule.reply.replace("{kept.h.request}", "r-0a1b2c3d")              # the built-in hand-off's reply
+    assert "I will tell you the plan" in reply
+    assert unkept(reply, ["hand_to_coordinator"]) is None                       # the plan wakes it (work.planned)
+    assert unkept(reply, ["project_status"]) is not None                         # no hand-off: nothing will wake it

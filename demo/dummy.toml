@@ -153,14 +153,15 @@ commit = "{ticket}: measure the repository"
 tool = "report_ticket"
 args = { state = "READY_FOR_REVIEW", summary = "machines/repo_stats.sh prints repo_files and repo_commits; declared under [[collect]] every 30 s." }
 
-# The Supervisor answers a question about the project with its status, read with its tools, and says
-# the milestone's counts in words; it does not think, so it says so. Any other message is the human's request: the built-in rules hand it to
+# The Supervisor answers a question (a message ending in "?", or with "going on", "status", "how
+# are", "how is", "how far", "what is" or "doing") with the project's status, read with its tools,
+# and says the first milestone's counts in words; it does not think, so it says so. Any other message is the human's request: the built-in rules hand it to
 # the Coordinator, which plans it into a milestone and a ticket that a dummy worker then does.
 [[rule]]
 role = "supervisor"
-prompt = "(?i)\\[The human's message\\]\\n.*(going on|status)"
+prompt = "(?is)\\[The human's message\\]\\n(?:[^\\n]*\\?\\s*$|.*\\b(?:going on|status|how are|how is|how far|what is|what's|doing)\\b)"
 steps = [{ tool = "project_status" }, { tool = "list_milestones", keep = "ms" }]
-reply = "{kept.ms.milestones.0.name}: {kept.ms.milestones.0.done} of its {kept.ms.milestones.0.tickets} tickets are done. I am the demo's scripted Supervisor: I answer questions about the project with its status this way, and hand any other request to the Coordinator."
+reply = "The first milestone, {kept.ms.milestones.0.name}: {kept.ms.milestones.0.done} of its {kept.ms.milestones.0.tickets} tickets are done. I am the demo's scripted Supervisor: I answer questions about the project with its status this way, and hand any other request to the Coordinator."
 
 # The owner's click on a page's confirm or discard (orchestra.intent.requested from owner) wakes the
 # Supervisor, which does what was asked with the request's id, as a real Supervisor does.

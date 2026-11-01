@@ -24,14 +24,14 @@ def test_the_built_in_rules_make_a_team():
     assert [next(iter(st)) for st in worker.steps] == ["write", "commit", "tool"] and worker.steps[-1]["tool"] == "report_ticket"
     assert [next(iter(st)) for st in s.pick(Turn(role="worker", ticket="T-1")).steps] == ["write", "tool"]   # a task: RESULT.md
     assert s.pick(Turn(role="reviewer")).steps[0]["args"]["verdict"] == "APPROVED"
-    assert s.pick(Turn(role="supervisor")).steps == () and "changed nothing" in s.pick(Turn(role="supervisor")).reply
+    assert s.pick(Turn(role="supervisor")).steps == () and "no scripted answer" in s.pick(Turn(role="supervisor")).reply
     assert s.pick(Turn(role="coordinator")).reply == "Nothing to do." == s.pick(Turn(role="po")).reply
     chat = Turn(role="supervisor", prompt="[Orchestra: ...]\n\n[The human's message]\nAdd a page")
     assert s.pick(chat).steps[0]["tool"] == "hand_to_coordinator"                  # a chat is handed on
     asked = Turn(role="coordinator", prompt="- event work.requested request=r-0a1b from supervisor: plan this\nrequirements: Add a page\n")
     plan = s.pick(asked)
     assert [st["tool"] for st in plan.steps] == ["create_milestone", "create_ticket", "report_plan"]
-    assert plan.groups(asked) == {"request": "r-0a1b", "requirements": "Add a page"}
+    assert plan.groups(asked) == {"request": "r-0a1b", "requirements": "Add a page", "title": "Add a page"}
     setup = s.pick(Turn(role="supervisor", prompt="[First run: set up this project] ..."))
     assert setup.steps[0]["tool"] == "list_guides" and "cannot read your repository" in setup.reply
 
@@ -196,3 +196,51 @@ def test_a_broken_script_fails_the_turn_with_the_reason(project, tmp_path):
     (project.repo_root / "dummy.toml").write_text('[[rule]]\nrole = "worker"\nsteps = [{ dance = 1 }]\n')
     res = session(project, "worker", (), tmp_path, ticket="T-4").prompt("work", timeout=None)
     assert res.error and "exactly one of" in res.error
+
+
+def supervisor_chat(message: str) -> Turn:
+    from orchestra_agents.prompting import CHAT_SEAM
+    return Turn(role="supervisor", prompt=f"[Orchestra: project context]\n...\n\n{CHAT_SEAM}[The human's message]\n{message}")
+
+
+def test_the_follow_up_to_a_kept_promise_is_answered_briefly():
+    from orchestra_agents.promises import follow_up
+    s = load(None)
+    rule = s.pick(Turn(role="supervisor", prompt=follow_up("I will tell you the plan.")))
+    assert rule.steps == () and rule.reply == "Done above."
+
+
+def test_a_landing_wake_up_names_the_ticket(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from orchestra_agents.harness.dummy_script import fill_match
+    from orchestra_agents.landings import Landings
+    from orchestra_agents.prompting import SUPERVISOR_WAKE
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+    store = AgentStore(agents_project(repo))
+    landings, cfg = Landings(store), SimpleNamespace(work="code", base_branch="main")
+    landings.see({"type": "ticket.created", "by": "supervisor", "ticket": "DEMO-5", "title": "List open orders"}, cfg)
+    said = landings.see({"type": "gate.landed", "ticket": "DEMO-5"}, cfg)
+    t = Turn(role="supervisor", prompt=f"{SUPERVISOR_WAKE}## Why you were woken\n- {said}\n")
+    rule = load(None).pick(t)
+    assert fill_match(rule.reply, rule.groups(t)).startswith("DEMO-5 (List open orders) is done: it landed on main.")
+
+
+def test_a_harness_request_is_not_handed_on():
+    s = load(None)
+    for message in ("Use Claude Code with sonnet, please", "switch to another model", "Which harness is this?"):
+        rule = s.pick(supervisor_chat(message))
+        assert rule.steps == () and "cannot change the harness" in rule.reply, message
+    assert s.pick(supervisor_chat("Add a data model page")).steps[0]["tool"] == "hand_to_coordinator"
+
+
+def test_the_coordinator_titles_the_plan_from_the_request():
+    s = load(None)
+    asked = Turn(role="coordinator", prompt="- event work.requested request=r-0a1b from supervisor\nrequirements: The human asked "
+                                            "for this, in their words: Add a page that lists the open orders by day. And soon.\n")
+    plan = s.pick(asked)
+    assert plan.groups(asked)["title"] == "Add a page that lists the open orders"   # its first eight words
+    assert plan.steps[1]["args"]["title"] == "{match.title}"

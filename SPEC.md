@@ -664,7 +664,9 @@ no credential's value is shown).
 
 **Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
-launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
+launcher runs; each collector's last round; what each installed plugin's `Plugin.check` says against
+the merged configuration, in its own words, a check that raises reported as `its check failed: <error>`
+without stopping the others, `plugin_findings.py`), `read_config` (orchestra.toml, whether it can be
 changed now, its recent commits; whether the owner has a private overlay and each key it sets,
 secret values left out), `list_processes` (Orchestra's runtime record and the declared
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a

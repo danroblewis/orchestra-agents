@@ -154,7 +154,7 @@ The modules, grouped by job:
 | Entry points | `cli.py` (`orchestra agents …`, the entry point `orchestra.commands: agents`; no executable of its own), `__main__.py`, `web.py` (`plugin`, the entry point `orchestra.plugins: agents`) |
 | The host | `host.py`, `residents.py`, `turns.py`, `runner.py`, `control.py`, `closing.py`, `clock.py`, `probes.py`, `fillers.py`, `landings.py`, `verdicts.py` |
 | Harnesses | `harness/base.py`, `harness/pi.py`, `harness/pi_extension.ts`, `harness/claude_code.py`, `harness/codex.py`, `harness/dummy.py`, `harness/dummy_agent.py`, `harness/dummy_script.py`, `harness/dummy_defaults.toml`, `harness/mcp.py`, `harness/tools.py`, `harness/__init__.py` |
-| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py`, `modeling.py`, `model_text.py`, `run_text.py` |
+| Tools | `tooling.py`, `access.py`, `api_org.py`, `ledger.py`, `observe.py`, `plugin_findings.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`, `gate_busy.py`, `secret_shapes.py`, `modeling.py`, `model_text.py`, `run_text.py` |
 | The Supervisor's honesty checks | `promises.py`, `facts.py`, `truth.py`, `ledger.py` |
 | Organisation | `builtins.py`, `roles.py`, `org.py`, `org_store.py`, `org_views.py`, `prompting.py`, `prompts/` |
 | Contract with the task system | `protocol.py` |
@@ -879,7 +879,7 @@ task system's `result`. A refusal or no answer raises an error. "Query" works th
 | `restart_agent` | roles | name* | Sets `restart_requested`. No event. |
 | `reset_agent` | roles | name* (resident only) | Sets `reset_requested`. `agent.reset` follows on the next tick. |
 | `create_team` / `update_team` / `delete_team` | roles | name*, lead*, responsibilities* (≥20 characters on create), description, members, access, tracked, emits, probes | Writes `.orchestra/teams/`, creates the space and `.gitignore` entry. Publishes `team.*`. Restarts the members' resident sessions. |
-| `check_setup` | observe | — | `{work, roles, not_launched, gate_tests, capacity_limit, launcher, processes, collectors, entries_left_out, config_can_change}` |
+| `check_setup` | observe | — | `{work, roles, not_launched, gate_tests, capacity_limit, launcher, processes, collectors, entries_left_out, plugin_checks[{plugin, findings[{severity: problem|error, text}]}], plugins_not_checked, config_can_change}` |
 | `read_config` | observe | — | `{path, text (secrets shown as <hidden>), can_change, recent_commits}` |
 | `list_processes` | observe | — | `{launcher, processes[{name, owner, state, pid, up_s, restarts, last_exit_code, command, log}], collectors, entries_left_out}` |
 | `read_machine_log` | observe | name*, lines (default 80, at most 400) | `{name, log, lines}`. Reads only inside the repository or Orchestra's state directory. |
@@ -953,11 +953,16 @@ process, its failures, its last exit code and its log path.
 ### Read tools (`observe.py`, `observe_model.py`)
 
 The `observe` group only reads, through Orchestra as a library. See the table in
-[section 9](#9-the-tools-agents-get). Two details:
+[section 9](#9-the-tools-agents-get). Three details:
 
 - `read_config` passes the text through `secret_shapes.redact`.
 - `check_setup.not_launched` names programs seen filling a role that Orchestra's launcher does
   not run. The Supervisor cannot restart or change those.
+- `check_setup.plugin_checks` runs every loaded plugin's `Plugin.check` (as Orchestra's
+  `config_edit.plugin_checks` finds them) on the merged configuration and the repository root
+  (`plugin_findings.py`). Each finding is the plugin's text, severity `problem` (the contract has
+  no severity; Orchestra refuses a change on any finding). A check that raises or returns other
+  than a list of strings becomes one `error`, `its check failed: <error>`; the others still run.
 
 ### Config tools (`setup_tools.py`, `config_change.py`)
 

@@ -495,8 +495,9 @@ dependencies = [
 [[package]]
 name = "orchestra-workflows"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#64a0b5d5a2d3e97d7279967b699ab42ada2dbecc" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#2371af5f5de8574299cc05e2b3cac088ad05830b" }
 dependencies = [
+    { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },
 ]
 

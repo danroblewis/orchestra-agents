@@ -5,26 +5,32 @@ Supervisor's alone, each with its reason and provenance).
 ``integrate_system`` takes the system's name and what the owner wants from it, and the strategy
 (INTEGRATING.md §2; ``integrate_kits.choose`` when none is given):
 
-- **poller** (events and series) or **collect** (series alone): the bridges plugin's kit is
-  scaffolded into the state directory (``<state>/machines/<name>/``), its test is run against the
+- **poller** (events and series) or **collect** (series alone): the bridges plugin's kit (a
+  library: the owner, 2026-11-01) is scaffolded into the owner's repository
+  (``.orchestra/machines/<name>/``, where a coding tool or the Coordinator's worker may edit it and
+  a pull request lands it), or into the state directory (``<state>/machines/<name>/``) only when
+  the owner said the repository must stay clean (``root: state``); its test is run against the
   kit's fake, and the owner's words and settings are filled into its ``machine.toml`` (after the
-  test, which reads the fake's own world). A poller's system is declared on the Machines page as
+  test, which reads the fake's own world). When the test fails, or the system has no template of
+  its own (the generic ``http`` kit), the script is handed to the Coordinator as work
+  (``hand_to_coordinator``: a worker adapts it, a review and the gate land it) instead of stopping
+  there. A poller's system is declared on the Machines page as
   a machine managed elsewhere (``managed: external``), its actor source ``bot.<system>`` joined to
   it (``alias``), with its expected effect when the owner named the stock it fills: the poller is a
   relay and never a machine (Orchestra's rule 2). Without the kits nothing is written and the
   answer proposes INTEGRATING.md's no-kit route;
-- **source**: a ``[[sources]]`` entry for a Prometheus-API store, planned (no code);
-- **bridge**: the bridges' own reader's section, planned.
+- **source**: a ``[[sources]]`` entry for a Prometheus-API store, planned (no code).
 
 Nothing reads the real system yet: the program's ``machine.toml`` stays ``clearance = "needs
 approval"`` and what runs it is only planned (``integrate_schedule``). The answer carries the
-question the Supervisor puts to the owner in the chat (``ask_owner``): their approval, and the NAME
-of the environment variable that holds the token, never the token.
+question the Supervisor puts to the owner in the chat (``ask_owner``): their approval, and where the
+token is (a variable's NAME or a file's path), never the token.
 
 ``approve_integration`` is the owner's alone (a quote of their words this turn, ``author: owner``):
-it records the clearance, the data class and the variable's name in ``machine.toml`` (or the store's
-``auth.bearer_env``), then writes the plan to the overlay, so the program then reads the real
-system. The record of each integration is the Supervisor's state (``integrations``)."""
+it records the clearance, the data class and the credentials by reference in ``machine.toml``
+(``token_env`` or ``token_file``, and ``user_env``/``user_file`` for an HTTP Basic account such as
+Jira Cloud's email; ``integrate_kits.credentials``), or the store's ``auth.bearer_env`` or
+``bearer_file``, then writes the plan to the overlay, so the program then reads the real system. The record of each integration is the Supervisor's state (``integrations``)."""
 
 from __future__ import annotations
 
@@ -39,6 +45,7 @@ from . import integrate_kits as kits
 from . import integrate_schedule as schedule
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, page_line
+from .handoff import hand_to_coordinator
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
 
@@ -72,6 +79,31 @@ def _taken(project: Project, store: AgentStore, name: str) -> str | None:
     return None
 
 
+def _where(rec: dict) -> str:
+    return ("in the owner's repository: a coding tool (or the Coordinator's worker, on a ticket) may now edit the script "
+            "there, and a pull request lands it" if rec.get("root") == "repository" else
+            "in Orchestra's state directory, outside the repository as the owner asked: edit it there and commit nothing")
+
+
+def _hand_on(store: AgentStore, rec: dict, target: Path, why: str, prov: dict) -> tuple[str, list]:
+    """The scaffolded script handed to the Coordinator as work (the way the Supervisor gives work):
+    a worker adapts it to the real system until its test passes; never a stop."""
+    name, t = rec["name"], kits.title(rec["system"])
+    req = hand_to_coordinator(store, {"requirements": (
+        f"Make the collector {name} for {t} work: {why}. It is a script scaffolded from the bridges plugin's "
+        f"{rec['kit']} kit at {target} ({name}.py, its machine.toml, test_{name}.py against the kit's fake, and AGENTS.md, "
+        f"which holds the kit's rules). The owner wants: {rec['wants']}. Adapt {name}.py (and its fake's world in the test) "
+        f"to {t}'s real API until `python -m pytest {target / f'test_{name}.py'} -q` passes. Keep AGENTS.md's rules: read "
+        "only, metadata only, the token by reference (a variable's name or a file outside any repository), never "
+        "clearance or credentials in the code (machine.toml's clearance and credentials are the owner's, written by the "
+        "Supervisor's approve_integration), and writes to the system only through the Outbox. Acceptance: the test "
+        "passes, and the script lands " + ("by a pull request." if rec.get("root") == "repository" else
+                                           "in that directory (outside the repository, as the owner asked).")),
+        "context": prov["reason"]}, MACHINE)
+    return req["request"], [(f"handed the script to the Coordinator as work ({req['request']}): {why}; a worker adapts it "
+                            "until its test passes, and you are woken with the plan")]
+
+
 def _no_kits(system: str, strategy: str) -> dict:
     return {"ok": True, "integrated": False, "said": [
         (f"the bridges plugin's kits (orchestra_bridges.kits) are not installed in Orchestra's Python, so nothing was "
@@ -91,7 +123,7 @@ def _declare(project: Project, store: AgentStore, system: str, name: str, every:
     m = {"id": mid, "title": kits.title(system), "kind": "programmatic", "managed": "external",
          "description": f"{kits.title(system)} itself: what its people and bots do there, relayed by the poller {name}",
          "tags": ["integration"], "engagement": {"mode": "continuous"}, "receives": [], "emits": emits, "reads": [],
-         "spec": {"source": actor, "receive": f"polled every {every} by {name} (a relay in the state directory, not a machine)"}}
+         "spec": {"source": actor, "receive": f"polled every {every} by {name} (a relay, not a machine)"}}
     design_machines.check_machine(m)
     known = mid in (design_machines.intended_api.current(project).get("machines") or {})
     ops = ([] if known else [{"op": "propose_machine", **m, "guessed": []}]) + [{"op": "alias", "machine": mid, "observed": actor}]
@@ -122,19 +154,22 @@ def _effect(project: Project, store: AgentStore, mid: str, sid: str, prov: dict)
     return got["said"]
 
 
-def _ask(system: str, kit_env: str | None, strategy: str, base_url_missing: bool, scope: str | None = None) -> str:
+def _ask(system: str, kit_env: str | None, base_url_missing: bool, scope: str | None = None) -> str:
     t = kits.title(system)
     parts = [(f"May I read {t}? It reads metadata only (ids, keys, accounts, states, times; never titles, text or "
              "messages), at most the configured rate, and writes nothing to it. Your yes, in your words, naming the "
              "token's scope (read-only)"),
-             (f"the NAME of the environment variable that will hold the token (for example {kit_env or system.upper() + '_TOKEN'}), "
-             "set in the environment `orchestra run` starts with; never the token itself, and not in this chat")]
+             (f"where the token is: the NAME of the environment variable that will hold it (for example "
+              f"{kit_env or system.upper() + '_TOKEN'}, set in the environment `orchestra run` starts with), or the path of a "
+              f"chmod 600 file outside any repository (~/.config/orchestra-bridges/{system}-token); never the token itself, "
+              "and not in this chat")]
+    if system == "jira":
+        parts.append("for Jira Cloud (an atlassian.net site), also where the account's email is (a variable's name or a "
+                     "file's path): Cloud logs in with the email and the token together")
     if base_url_missing:
         parts.append(f"{t}'s address (its API's base URL)")
     if scope:
         parts.append(f"{kits.SCOPE[scope]} ({scope})")
-    if strategy == "bridge":
-        parts[1] += " (the bridges' reader reads its own variable or token file: its guide names them)"
     return "; ".join(parts) + "."
 
 
@@ -145,20 +180,25 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
         raise StoreError("say what the owner wants from it, in a sentence (issue transitions and open counts)")
     strategy = a.get("strategy") or kits.choose(system)
     if strategy not in kits.STRATEGIES:
-        raise StoreError(f"strategy is one of {', '.join(kits.STRATEGIES)} (INTEGRATING.md §2)")
+        raise StoreError(f"strategy is one of {', '.join(kits.STRATEGIES)} (INTEGRATING.md §2; the bridges have no readers "
+                         "of their own: a collector is a script built from a kit)")
+    root = (a.get("root") or "repository").strip()
+    if root not in kits.ROOTS:
+        raise StoreError("root is repository (the default: .orchestra/machines/<name>/ in the owner's repository) or state "
+                         "(only when the owner said the repository must stay clean)")
     settings = kits.check_settings(a.get("settings") or {})
     base_url = (a.get("base_url") or "").strip() or None
     if base_url and not re.match(r"^https?://[^\s/]+", base_url):
         raise StoreError("base_url is the API's root, an http(s) URL")
-    name = (a.get("name") or "").strip() or (system if strategy in ("source", "bridge") else f"{system}_poller")
-    if not design_machines.ID.match(name) or (strategy in ("poller", "collect") and name in kits.BRIDGES):
-        raise StoreError(f"{name!r}: the poller's name is lower case letters, digits and _ (2 to 41), and never a bridge's "
-                         f"own name ({', '.join(kits.BRIDGES)}): {system}_poller")
+    name = (a.get("name") or "").strip() or (system if strategy == "source" else f"{system}_poller")
+    if not design_machines.ID.match(name) or (strategy in ("poller", "collect") and name == system):
+        raise StoreError(f"{name!r}: the poller's name is lower case letters, digits and _ (2 to 41), and never the system's "
+                         f"own name (the system is the machine; the poller only relays it): {system}_poller")
     if taken := _taken(project, store, name):
         raise StoreError(f"{taken} already has the name {name}: nothing was written")
     rec = {"system": system, "strategy": strategy, "wants": wants, "clearance": NEEDS, "token_env": None, "at": time.time(),
-           "base_url": base_url}
-    if strategy in ("source", "bridge"):
+           "base_url": base_url, "root": root}
+    if strategy == "source":
         return _plan_only(project, store, name, rec, settings, a, prov)
     if not kits.installed():
         return _no_kits(system, strategy)
@@ -166,7 +206,7 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     if kit not in kits.kits():
         raise StoreError(f"no kit {kit!r}: the kits are {', '.join(kits.kits())}")
     design_machines.intended_api.current(project)        # the declared layer answers (its host runs) before anything is written
-    target = kits.scaffold(project, kit, name)
+    target = kits.scaffold(project, kit, name, root)
     try:
         return _scaffolded(project, store, a, prov, rec, kit, name, target, settings)
     except BaseException:
@@ -183,17 +223,26 @@ def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: d
     mf = kits.read(target)
     every = str(mf.get("settings", {}).get("every") or "5m")
     events = strategy == "poller" and kit != "promql"
-    lines: list = [(f"scaffolded the {kit} kit's poller {name} into {target} (machine.toml, {name}.py, test_{name}.py, AGENTS.md); "
-                   "machine.toml: clearance \"needs approval\", so it reads only a fake on this machine"),
+    lines: list = [(f"scaffolded the {kit} kit's poller {name} into {target} (machine.toml, {name}.py, test_{name}.py, AGENTS.md), "
+                   f"{_where(rec)}; machine.toml: clearance \"needs approval\", so it reads only a fake on this machine"),
                    f"its test against the kit's fake: {'passed' if test['passed'] else 'NOT passed'} ({test['summary']})"]
     rec.update(name=name, kit=kit, dir=str(target), test=test, base_url=base_url or mf.get("settings", {}).get("base_url"),
                scope=next((k for k in kits.SCOPE_OF.get(kit, ()) if k not in settings), None))
     if not test["passed"]:
         rec["state"] = "test failed"
+        tail = "; ".join((test.get("tail") or [])[-3:])
+        rec["request"], said = _hand_on(store, rec, target, f"its test against the kit's fake failed ({test['summary']}"
+                                        + (f": {tail}" if tail else "") + ")", prov)
         _save(store, name, rec)
-        lines.append("nothing was declared or planned: the program is code, so hand it to the Coordinator with the test's "
-                     "failure (hand_to_coordinator) or tell the owner")
-        return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": str(target), "test": test}
+        lines += said + [("nothing was declared or planned yet: call integrate_system again under another name, or tell the "
+                         "owner, once the worker's test passes")]
+        return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": str(target), "test": test,
+                "request": rec["request"], "next": "Tell the owner the script is scaffolded at the path above, its test "
+                "failed, and the Coordinator has it as work; name no ticket yet."}
+    if not kits.templated(kit):
+        rec["request"], said = _hand_on(store, rec, target, f"the kits have no template for {kits.title(system)}, so the "
+                                        "script is the generic http kit's guess at a JSON API", prov)
+        lines += said
     changes, mid = [], None
     if events:
         done, said = _declare(project, store, system, name, every, kits.publishes(target), prov)
@@ -207,25 +256,20 @@ def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: d
     rec["steps"] = schedule.poller(name, target, every, kits.title(system), events=events, workflows=kits.workflows_installed())
     rec.update(state="needs approval", machine=mid, stock=sid)
     _save(store, name, rec)
-    return _report(project, name, rec, {"changes": changes}, lines, mf.get("settings", {}).get("token_env"), test=test, dir=str(target))
+    extra = {"request": rec["request"]} if rec.get("request") else {}
+    return _report(project, name, rec, {"changes": changes}, lines, mf.get("settings", {}).get("token_env"), test=test,
+                   dir=str(target), **extra)
 
 
 def _plan_only(project: Project, store: AgentStore, name: str, rec: dict, settings: dict, a: dict, prov: dict) -> dict:
-    system, strategy = rec["system"], rec["strategy"]
+    system = rec["system"]
     if not rec["base_url"]:
-        raise StoreError(f"base_url: the {'store' if strategy == 'source' else 'site'}'s address is needed to plan it")
-    lines: list = []
-    if strategy == "source":
-        entry = {"name": name, "url": rec["base_url"], "prefix": settings.pop("prefix", system), **settings}
-        if not entry.get("match"):
-            raise StoreError("settings.match: the PromQL selectors to read (INTEGRATING.md §8: never a whole tenant)")
-        rec["steps"] = schedule.source(entry)
-        lines.append(f"planned the [[sources]] entry {name} for {rec['base_url']}: read in place, nothing copied, no code")
-    else:
-        if system not in kits.BRIDGES:
-            raise StoreError(f"the bridges have no reader for {system}: they read {', '.join(kits.BRIDGES)}; use strategy poller")
-        rec["steps"] = schedule.bridge(system, {"api": rec["base_url"], **settings})
-        lines.append(f"planned the bridges' reader {kits.BRIDGES[system]}; never run a poller over the same items too")
+        raise StoreError("base_url: the store's address is needed to plan it")
+    entry = {"name": name, "url": rec["base_url"], "prefix": settings.pop("prefix", system), **settings}
+    if not entry.get("match"):
+        raise StoreError("settings.match: the PromQL selectors to read (INTEGRATING.md §8: never a whole tenant)")
+    rec["steps"] = schedule.source(entry)
+    lines: list = [f"planned the [[sources]] entry {name} for {rec['base_url']}: read in place, nothing copied, no code"]
     sid, said = _stock(project, store, a, prov)
     rec.update(name=name, state="needs approval", stock=sid)
     _save(store, name, rec)
@@ -236,13 +280,12 @@ def _report(project: Project, name: str, rec: dict, done: dict, lines: list, kit
     planned = [schedule.describe(s) for s in rec["steps"]]
     missing_url = kits.placeholder(rec.get("base_url"))
     lines.append(f"planned, written to the owner's overlay once approved: {'; '.join(planned)}")
-    if kits.BRIDGES.get(rec["system"]) and rec["strategy"] != "bridge":
-        lines.append(f"the bridges also read {rec['system']} ({kits.BRIDGES[rec['system']]}); never run both over the same items")
-    ask = _ask(rec["system"], kit_env, rec["strategy"], missing_url, rec.get("scope"))
-    lines.append("waiting for the owner's approval and the token's variable name (approve_integration)")
+    ask = _ask(rec["system"], kit_env, missing_url, rec.get("scope"))
+    lines.append("waiting for the owner's approval and where the token is, by name or path (approve_integration)")
     return answer(project, done, lines, integration=name, clearance=NEEDS, planned=planned, ask_owner=ask,
                   owner_must_set=[f"the approval, in their words, for {kits.title(rec['system'])}",
-                                  "an environment variable holding the token, by name, in orchestra run's environment"]
+                                  ("where the token is: an environment variable's name in orchestra run's environment, or "
+                                  "a chmod 600 file outside any repository")]
                   + ([f"{kits.title(rec['system'])}'s base URL"] if missing_url else [])
                   + ([kits.SCOPE[rec["scope"]]] if rec.get("scope") else []),
                   next="Put ask_owner to the owner in the chat, in your words. Never ask for the token itself, and never "
@@ -260,9 +303,9 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
                          "nothing was changed")
     if rec.get("state") not in ("needs approval", "approved"):
         raise StoreError(f"{name} is {rec.get('state')}: only an integration whose test passed is approved")
-    token_env = (a.get("token_env") or "").strip()
-    if not kits.ENV_NAME.match(token_env):
-        raise StoreError("token_env is the NAME of an environment variable (JIRA_TOKEN), never a token: ask the owner for it")
+    creds = kits.credentials(a)
+    if rec["strategy"] == "source" and set(creds) - {"token_env", "token_file"}:
+        raise StoreError("a store's [[sources]] entry takes a bearer token alone (token_env or token_file), no account")
     data_class = (a.get("data_class") or DATA_CLASS).strip()
     base_url = (a.get("base_url") or "").strip() or rec.get("base_url")
     if kits.placeholder(base_url):
@@ -273,32 +316,46 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     if scope and scope not in settings:
         raise StoreError(f"{kits.title(rec['system'])}'s scope ({scope}: {kits.SCOPE[scope]}) is still the template's: ask the "
                          f"owner for it and pass it in settings.{scope}; nothing was changed")
+    named = ", ".join(f"{k} {v}" for k, v in creds.items())
     lines = []
     if rec.get("dir"):
         target = Path(rec["dir"])
         if settings:
             kits.fill(target, settings, None, rec["wants"])
-        kits.clear(target, token_env, data_class, base_url)
-        lines.append(f"{rec['dir']}/machine.toml: clearance \"approved\", data_class {data_class!r}, token_env {token_env} "
-                     f"(the name only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))
+        kits.clear(target, creds, data_class, base_url)
+        lines.append(f"{rec['dir']}/machine.toml: clearance \"approved\", data_class {data_class!r}, {named} (by reference "
+                     f"only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))
         lines.append("its test ran against the kit's fake before your settings (it sets the template's variable and reads "
                      "the fake's own world); its first poll, in its log, says whether it reads the real system")
-    steps = schedule.with_token(rec["steps"], token_env)
+        if {"user_env", "user_file"} & set(creds) and "basic" not in (target / f"{name}.py").read_text(encoding="utf-8").casefold():
+            lines.append(f"{name}.py does not log in with an account and a token yet (HTTP Basic, auth_format \"Basic "
+                         "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so hand "
+                         "it to the Coordinator (hand_to_coordinator) before saying it reads")
+    steps = schedule.with_token(rec["steps"], creds)
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]
     lines += schedule.write(project, store, steps, prov["reason"])
-    if rec["strategy"] == "bridge":
-        lines.append(f"the bridges' reader takes its token from its own variable or token_file (read_guide bridges, "
-                     f"{rec['system']}), not from {token_env} unless that is its name: check it before saying it reads")
-    rec.update(state="approved", clearance="approved", token_env=token_env, data_class=data_class, base_url=base_url,
+    rec.update(state="approved", clearance="approved", token_env=creds.get("token_env"), credentials=creds,
+               data_class=data_class, base_url=base_url,
                approved={"at": time.time(), "quote": prov.get("quote"), "turn": prov.get("turn")}, steps=steps)
     _save(store, name, rec)
-    is_set = bool(os.environ.get(token_env))
-    lines.append(f"{token_env} is {'set' if is_set else 'not set'} in this process's environment; the programs orchestra "
-                 "run starts inherit its environment, so the owner sets it there and restarts orchestra run if it was "
-                 "not set when it started")
-    return answer(project, {"changes": []}, lines, integration=name, clearance="approved", token_env=token_env,
-                  env_set=is_set, owner_must_set=[] if is_set else [f"{token_env}, in the environment orchestra run starts with"])
+    missing = []
+    for k, v in creds.items():
+        if k.endswith("_env"):
+            is_set = bool(os.environ.get(v))
+            lines.append(f"{v} is {'set' if is_set else 'not set'} in this process's environment; the programs orchestra run "
+                         "starts inherit its environment, so the owner sets it there and restarts orchestra run if it was "
+                         "not set when it started")
+            if not is_set and not (k == "token_env" and "token_file" in creds) and not (k == "user_env" and "user_file" in creds):
+                missing.append(f"{v}, in the environment orchestra run starts with")
+        else:
+            state = kits.file_state(v)
+            lines.append(f"{v}: {state} (its content is never read here)")
+            if state != "there, chmod 600":
+                missing.append(f"{v}: the file, chmod 600" if state == "not there yet" else f"chmod 600 {v}")
+    return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds,
+                  token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
+                  owner_must_set=missing)
 
 
 COMMANDS = {"integrate_system": integrate_system, "approve_integration": approve_integration}

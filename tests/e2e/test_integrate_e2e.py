@@ -83,7 +83,7 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
             "system": "jira", "wants": "issue transitions and open counts", "stock": "Open issues", "unit": "issues",
             "quote": ASK, "reason": WHY}}])
     got = turn1[1]
-    d = project.orchestra.state_dir / "machines" / "jira_poller"
+    d = project.orchestra.repo_root / ".orchestra" / "machines" / "jira_poller"
     assert got["integration"] == "jira_poller" and got["dir"] == str(d)
     assert got["test"]["passed"] is True and "passed" in got["test"]["summary"], got["test"]       # against FakeJira, for real
     m = tomllib.loads((d / "machine.toml").read_text())

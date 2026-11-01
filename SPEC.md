@@ -917,10 +917,13 @@ each event type's declared and heard publishers and listeners).
 **Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
 I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
 the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
-Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone, and `bridge`, the
-bridges' own reader). For `poller` and `collect` it scaffolds the bridges plugin's kit
-(`orchestra_bridges.kits.scaffold`, a dev dependency here, imported only in `integrate_kits`) into
-Orchestra's state directory (`<state>/machines/<name>/`, the kit's `--root state`), runs the
+Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone; the bridges are a
+library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
+scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
+imported only in `integrate_kits`) into the owner's repository (`.orchestra/machines/<name>/`, the
+kit's `--root repo`, where a coding tool or the Coordinator's worker edits it and a pull request
+lands it), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
+with `root: state`, when the owner said the repository must stay clean; it runs the
 program's own test against the kit's fake in a child Python with every credential-looking variable
 left out of its environment, and only then fills the owner's words and settings into its
 `machine.toml` (the fake serves the template's world; a `token`, `token_env` or clearance in the
@@ -928,20 +931,26 @@ settings is refused). A poller's system is declared as a machine managed elsewhe
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
 Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
-plans nothing. Without the kits nothing is written, and the answer says so and names
-INTEGRATING.md's routes (the bridges plugin installed, or the one-file poller of its §5.2, which is
-code and goes to the Coordinator). `source` and `bridge` write nothing either: the `[[sources]]`
-entry or the `[bridges.<system>]` section is planned. The answer carries `ask_owner`: the owner's
-approval and the NAME of the environment variable for the token, put to them in the chat.
-`approve_integration` takes a verified quote of the owner (refused otherwise), the variable's name
-(`^[A-Z_][A-Z0-9_]{1,63}$`, never a value), the data class (`metadata only` by default) and the
-site's address when the template's placeholder is still there; it writes `clearance = "approved"`,
-`data_class` and `token_env` into `machine.toml` (renaming the template's variable in the
-scaffolded test to match, and running it again), then the plan to the owner's overlay through
+plans nothing and hands the script to the Coordinator (`hand_to_coordinator`, `work.requested`
+naming the directory, the failure and the kit's rules); so does a system with no template of its
+own (the generic `http` kit), whose integration goes on to wait for approval meanwhile. Without
+the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the bridges
+plugin installed, or the one-file poller of its §5.2, which is code and goes to the Coordinator).
+`source` writes nothing either: the `[[sources]]` entry is planned. The answer carries `ask_owner`:
+the owner's approval and where the token is (a variable's NAME or a file's path), put to them in
+the chat. `approve_integration` takes a verified quote of the owner (refused otherwise), the
+credentials by reference (`integrate_kits.credentials`: `token_env` or `token_file`, and
+`user_env` or `user_file` for an HTTP Basic account such as Jira Cloud's email; a name matches
+`^[A-Z_][A-Z0-9_]{1,63}$`, a path is absolute and outside any repository, nothing that looks like
+a secret), the data class (`metadata only` by default) and the site's address when the template's
+placeholder is still there; it writes `clearance = "approved"`, `data_class` and those references
+into `machine.toml` (dropping the template's `token_env` when the owner named only a file), says
+whether each variable is set and each file is there and `chmod 600` (never reading it), then the
+plan to the owner's overlay through
 `config_change`: a `[[machines]]` entry with `restart = "always"` (or, with the Workflows plugin
 installed, `workflows.every.<name>` and the `machine.json` it runs the program from) and a
-`[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
-bridge's section, each announced (`instruments.changed` or `config.changed`). **Nothing runs before
+`[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env` or
+`auth.bearer_file`, each announced (`instruments.changed` or `config.changed`). **Nothing runs before
 the approval** (a deviation from the task's wording, which schedules at `integrate_system`): an
 uncleared kit program exits at once, so `orchestra run` would restart it until it gave up. Each
 integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,

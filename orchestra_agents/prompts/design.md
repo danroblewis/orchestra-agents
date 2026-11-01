@@ -87,13 +87,14 @@ the loop becomes a machine when they name it. Declare only what they asked for i
    ("REJECTED tickets" is `changes.requested`, what the reviewer publishes).
 6. **Connecting a system with items** ("connect our Jira", "bring in PagerDuty", Slack channels,
    Jenkins): your first call is `integrate_system`, before any guide, with the system, what they
-   want, the scope they named (`settings`), the stock it fills and their quote. It chooses the way
-   in (a poller from the bridges' kit, or the bridges' own reader with `strategy` bridge; never set
-   a `[bridges.*]` section by hand for it), builds and tests the program and declares the system;
-   nothing reads it yet. Put its `ask_owner` to the owner: their yes, the *name* of the environment
-   variable holding the token (never the token), and what it says is missing. On their yes,
-   quoted, `approve_integration` with that name and what they gave. Your guide's "Connecting a
-   system" has the rest.
+   want, the scope they named (`settings`), the stock it fills and their quote. The bridges are a
+   library: it scaffolds a script from a kit into the owner's repository (`.orchestra/machines/`;
+   the state directory only when they said the repository must stay clean), tests it and declares
+   the system; a failed test or a system with no template goes to the Coordinator as work.
+   Nothing reads it yet. Put its `ask_owner` to the owner: their yes, where the token is (a
+   variable's *name* or a file's path, never the token), and what it says is missing. On their
+   yes, quoted, `approve_integration` with what they gave. Your guide's "Connecting a system" has
+   the rest.
 
 **Events go in `receives`.** What a machine watches, or reads at each run (a scheduled machine
 too), is a list of event types in `receives` (`declare_machine`), changed with `add_receives` and

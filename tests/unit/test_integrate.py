@@ -40,13 +40,24 @@ def overlay(project) -> dict:
     return tomllib.loads(f.read_text()) if f.exists() else {}
 
 
+def scaffolded(project, name="jira_poller"):
+    """Where integrate_system scaffolds by default: the owner's repository (the owner, 2026-11-01)."""
+    return project.repo_root / ".orchestra" / "machines" / name
+
+
 def machine_toml(project, name="jira_poller") -> dict:
-    return tomllib.loads((project.orchestra.state_dir / "machines" / name / "machine.toml").read_text())
+    return tomllib.loads((scaffolded(project, name) / "machine.toml").read_text())
+
+
+def asked(store) -> list[dict]:
+    return [e for e in store.events.read(0, 500)[0] if e["type"] == "work.requested"]
 
 
 def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(project, store):
     got = connect(project, store)
-    d = project.orchestra.state_dir / "machines" / "jira_poller"
+    d = scaffolded(project)
+    assert got["dir"] == str(d) and not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
+    assert any(str(d) in line and "a coding tool" in line and "pull request" in line for line in got["said"])
     assert got["ok"] and got["integration"] == "jira_poller" and got["clearance"] == "needs approval"
     assert {p.name for p in d.iterdir()} >= {"machine.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
     m = machine_toml(project)
@@ -62,7 +73,7 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     assert got["planned"] == ["[[machines]] jira_poller, restart always", "[[collect]] jira_poller, every 5m"]
     assert "machines" not in overlay(project) and "collect" not in overlay(project)   # nothing runs before the approval
     assert "environment variable" in got["ask_owner"] and "never the token" in got["ask_owner"]
-    assert any("bridges also read jira" in line for line in got["said"])
+    assert not asked(store) and "request" not in got                          # the jira kit's own template: no hand-off
 
 
 def test_the_owners_approval_records_the_name_and_schedules_it(project, store):
@@ -119,7 +130,7 @@ def test_a_token_in_the_settings_is_refused(project, store):
         connect(project, store, settings={"token": "abc"})
     with pytest.raises(StoreError, match="the token's variable"):
         connect(project, store, settings={"token_env": "JIRA_TOKEN"})
-    assert not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
+    assert not scaffolded(project).exists()
 
 
 def test_without_the_kits_it_says_so_and_proposes_the_no_kit_route(project, store, monkeypatch):
@@ -128,14 +139,21 @@ def test_without_the_kits_it_says_so_and_proposes_the_no_kit_route(project, stor
     assert got["ok"] and got["integrated"] is False
     said = " ".join(got["said"])
     assert "not installed" in said and "minikit.py" in said and "hand_to_coordinator" in said and "INTEGRATING.md" in said
-    assert not (project.orchestra.state_dir / "machines").exists() and "jira" not in layer(project)["machines"]
+    assert not (project.orchestra.state_dir / "machines").exists() and not scaffolded(project).exists()
+    assert "jira" not in layer(project)["machines"]
 
 
-def test_a_failed_test_declares_and_plans_nothing(project, store, monkeypatch):
+def test_a_failed_test_is_handed_to_the_coordinator_and_declares_nothing(project, store, monkeypatch):
     monkeypatch.setattr(integrate_kits, "run_test", lambda target, name, **_: {
         "ran": True, "passed": False, "summary": "1 failed", "command": "pytest", "tail": ["E assert"]})
     got = connect(project, store)
     assert got["integrated"] is False and "jira" not in layer(project)["machines"]
+    work = asked(store)
+    assert len(work) == 1 and work[0]["request"] == got["request"] and work[0]["to"] == "coordinator"
+    assert str(scaffolded(project)) in work[0]["requirements"] and "1 failed" in work[0]["requirements"]
+    assert "pull request" in work[0]["requirements"] and "Outbox" in work[0]["requirements"]
+    assert design_integrate.integrations(store)["jira_poller"]["request"] == got["request"]
+    assert scaffolded(project).is_dir()                                       # kept for the worker
     say(store, YES, 2)
     with pytest.raises(StoreError, match="test failed"):
         call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
@@ -169,7 +187,7 @@ def test_with_the_workflows_plugin_it_is_the_floors_every_item(project, store, m
     assert o["workflows"]["every"]["jira_poller"] == {"every": "5m", "role": "jira_poller", "brief": "poll Jira once"}
     assert "machines" not in o and o["collect"][0]["name"] == "jira_poller"
     import json
-    body = json.loads((project.orchestra.state_dir / "machines" / "jira_poller" / "machine.json").read_text())
+    body = json.loads((scaffolded(project) / "machine.json").read_text())
     assert body["kind"] == "programmatic" and body["spec"]["command"].endswith("--once")
 
 
@@ -183,7 +201,7 @@ def test_a_name_taken_is_refused_before_anything_is_written(project, store):
     connect(project, store)
     with pytest.raises(StoreError, match="already has the name"):
         connect(project, store)
-    with pytest.raises(StoreError, match="never a bridge's own name"):
+    with pytest.raises(StoreError, match="never the system's own name"):
         connect(project, store, name="jira")
 
 
@@ -195,16 +213,12 @@ def test_the_test_runs_without_the_environments_credentials(monkeypatch):
     assert "JIRA_TOKEN" not in env and "GH_API_KEY" not in env and "ORCHESTRA_EVENTS_TOKEN" not in env and "PATH" in env
 
 
-def test_the_bridges_own_reader_is_its_section_written_on_approval(project, store):
+def test_the_bridges_have_no_reader_of_their_own_to_choose(project, store):
     say(store, ASK)
-    got = call(project, store, "integrate_system", system="jira", strategy="bridge", wants="issue transitions and open counts",
-               base_url="https://jira.acme.test", settings={"jql": "project = OPS", "every": "5m"},
-               quote="Connect our Jira so I can see issue transitions", reason=WHY)
-    assert got["planned"] == ["[bridges.jira]"] and "bridges" not in overlay(project)
-    say(store, YES, 2)
-    call(project, store, "approve_integration", name="jira", token_env="JIRA_API_TOKEN", quote="Yes, you may read Jira",
-         reason=WHY)
-    assert overlay(project)["bridges"]["jira"] == {"api": "https://jira.acme.test", "jql": "project = OPS", "every": "5m"}
+    with pytest.raises(StoreError, match="the bridges have no readers"):
+        call(project, store, "integrate_system", system="jira", strategy="bridge", wants="issue transitions and open counts",
+             base_url="https://jira.acme.test", quote="Connect our Jira so I can see issue transitions", reason=WHY)
+    assert "bridges" not in overlay(project) and not scaffolded(project).exists()
 
 
 def test_a_failure_after_the_scaffold_leaves_nothing_behind(project, store, monkeypatch):
@@ -213,7 +227,7 @@ def test_a_failure_after_the_scaffold_leaves_nothing_behind(project, store, monk
     monkeypatch.setattr(design_integrate, "_declare", broken)
     with pytest.raises(StoreError, match="refused it"):
         connect(project, store)
-    assert not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
+    assert not scaffolded(project).exists()
     assert "jira_poller" not in design_integrate.integrations(store)
 
 
@@ -227,3 +241,80 @@ def test_the_scope_the_template_guesses_is_asked_for(project, store):
     call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN", settings={"jql": "project = OPS"},
          quote="Yes, you may read Jira", reason=WHY)
     assert machine_toml(project)["settings"]["jql"] == "project = OPS"
+
+
+def test_the_state_directory_only_when_the_owner_keeps_the_repository_clean(project, store):
+    got = connect(project, store, root="state")
+    d = project.orchestra.state_dir / "machines" / "jira_poller"
+    assert got["dir"] == str(d) and (d / "machine.toml").is_file() and not scaffolded(project).exists()
+    assert any("outside the repository" in line for line in got["said"])
+    assert git(project.repo_root, "status", "--porcelain") == ""             # the repository untouched
+    with pytest.raises(StoreError, match="root is repository"):
+        connect(project, store, name="jira_poller2", root="elsewhere")
+
+
+def test_a_system_with_no_template_is_scaffolded_and_handed_to_the_coordinator(project, store):
+    say(store, "Connect Jenkins so I can see builds")
+    got = call(project, store, "integrate_system", system="jenkins", wants="builds started and finished",
+               base_url="https://ci.acme.test", quote="Connect Jenkins so I can see builds", reason=WHY)
+    assert got["ok"] and got["clearance"] == "needs approval" and got["dir"] == str(scaffolded(project, "jenkins_poller"))
+    work = asked(store)
+    assert len(work) == 1 and got["request"] == work[0]["request"] and "no template for Jenkins" in work[0]["requirements"]
+    assert "jenkins_poller.py" in work[0]["requirements"]
+
+
+def test_jira_cloud_is_approved_with_a_token_file_and_the_accounts_email_by_reference(project, store, tmp_path):
+    connect(project, store, base_url="https://acme.atlassian.net")
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    token, email = keys / "jira-cloud-token", keys / "jira-cloud-email"
+    token.write_text("not-a-real-token\n")
+    token.chmod(0o600)
+    say(store, "Yes, you may read Jira Cloud, the token is in a file and the email beside it", 2)
+    got = call(project, store, "approve_integration", name="jira_poller", token_file=str(token), user_file=str(email),
+               quote="Yes, you may read Jira Cloud", reason=WHY)
+    s = machine_toml(project)["settings"]
+    assert s["token_file"] == str(token) and s["user_file"] == str(email)
+    assert "token_env" not in s                                               # the template's guess never shadows the file
+    assert got["credentials"] == {"token_file": str(token), "user_file": str(email)}
+    said = " ".join(got["said"])
+    assert "not-a-real-token" not in said and "there, chmod 600" in said and "not there yet" in said
+    assert got["owner_must_set"] == [f"{email}: the file, chmod 600"]
+    assert "HTTP Basic" in said                                               # the template speaks Data Center: a code change
+    rec = design_integrate.integrations(store)["jira_poller"]
+    assert rec["state"] == "approved" and rec["credentials"]["user_file"] == str(email)
+
+
+def test_jira_cloud_by_variables_records_both_names(project, store, monkeypatch):
+    monkeypatch.setenv("JIRA_EMAIL", "someone@example.test")
+    connect(project, store)
+    say(store, YES, 2)
+    got = call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN", user_env="JIRA_EMAIL",
+               quote="Yes, you may read Jira", reason=WHY)
+    s = machine_toml(project)["settings"]
+    assert s["token_env"] == "JIRA_TOKEN" and s["user_env"] == "JIRA_EMAIL" and "token_file" not in s
+    assert got["owner_must_set"] == ["JIRA_TOKEN, in the environment orchestra run starts with"]
+
+
+def test_credentials_are_references_never_values(project, store, tmp_path):
+    connect(project, store)
+    say(store, YES, 2)
+    for bad, match in (({}, "name where the token is"),
+                       ({"token_file": "jira-token"}, "full path"),
+                       ({"token_file": str(project.repo_root / "secrets" / "jira-token")}, "inside the repository"),
+                       ({"token_env": "JIRA_TOKEN", "user_env": "me@acme.test"}, "NAME of an environment variable"),
+                       ({"token_env": "ghp_" + "a" * 36}, "credential itself|NAME of an environment variable")):
+        with pytest.raises(StoreError, match=match):
+            call(project, store, "approve_integration", name="jira_poller", quote="Yes, you may read Jira", reason=WHY, **bad)
+    assert machine_toml(project)["clearance"] == "needs approval"
+
+
+def test_a_store_takes_its_token_from_a_file(project, store, tmp_path):
+    say(store, "Connect Chronosphere so I can see request rates by service")
+    call(project, store, "integrate_system", system="chronosphere", wants="request rates by service",
+         base_url="https://acme-corp.chronosphere.io/data/metrics", settings={"match": ['{__name__="http_requests_total"}']},
+         quote="Connect Chronosphere so I can see request rates by service", reason=WHY)
+    say(store, "Yes, read Chronosphere, metadata only, the token is in a file", 2)
+    call(project, store, "approve_integration", name="chronosphere", token_file=str(tmp_path / "chrono-token"),
+         quote="Yes, read Chronosphere", reason=WHY)
+    assert overlay(project)["sources"][0]["auth"] == {"bearer_file": str(tmp_path / "chrono-token")}

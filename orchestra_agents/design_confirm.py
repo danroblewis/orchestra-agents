@@ -94,7 +94,10 @@ def _starts(store: AgentStore, fn) -> dict:
 def _predict(project: Project, store: AgentStore, mid: str, edits: list[dict], horizon_s: float, change: str) -> dict:
     from orchestra.sd.predictions import PredictionError, Predictions
     try:
-        return Predictions(project.orchestra, MACHINE, events=store.events).record(edits, horizon_s, change=change,
+        # Orchestra's own Events, never the store's: this package's reads its events flat (events.flat), and
+        # Orchestra's record, which reads the bus through the Events it is given, would find no data and
+        # keep the prediction as invalid (seen in the live test, A3)
+        return Predictions(project.orchestra, MACHINE).record(edits, horizon_s, change=change,
                                                                                    subject=f"machine:{mid}")
     except PredictionError as e:
         raise StoreError(f"Orchestra refused the expected effect as a prediction: {e}") from None

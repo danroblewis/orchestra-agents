@@ -1,0 +1,59 @@
+{
+ "turn": 4,
+ "try": 2,
+ "model": "sonnet",
+ "seconds": 5,
+ "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+ "text": "That's already how Notes Improver is set up. I applied your description in the last turn (version 11, changes c11.0\u2013c11.2).\n\n- **Watches:** it runs on `gate.landed` (a ticket is DONE) and `changes.requested` (a reviewer REJECTED a ticket).\n- **Works out why:** it reads the reviewer's feedback and the gate output to find the cause. When a cause repeats, it sends one idea to the Coordinator as requirements to schedule.\n- **Merge gate failures:** these are not wired in yet. No event for a failed gate has been heard on the bus, and I won't invent one. I'll add it once one is heard.\n\nIt is still an unconfirmed draft, so it costs nothing and runs nothing. As drafted it would run about 4,142 turns a day, roughly $124 a day. That is too much, because tickets land in bursts. A daily summary run or a slower trigger would cut it. Do you want me to change that?\n\nTwo questions are still open:\n- Should I discard `notes_files_improver`? It does the same job as Notes Improver.\n- Do you want to keep the `notes_files_count` instrument? It expires 2026-11-02T10:05Z.",
+ "error": null,
+ "timed_out": false,
+ "tools": [],
+ "ok": false,
+ "why": "receives are ['gate.landed', 'changes.requested']; missing ['gate.rejected']",
+ "state": {
+  "before": [
+   "task.requested",
+   "gate.landed",
+   "changes.requested"
+  ],
+  "receives": [
+   "gate.landed",
+   "changes.requested"
+  ],
+  "dropped": [
+   "task.requested"
+  ],
+  "removed_in_journal": [
+   "task.requested"
+  ],
+  "gone_on_the_map": [],
+  "pending": [],
+  "latest": {
+   "change": "c11.2",
+   "at": 1793527633.6060858,
+   "quotes": [
+    "watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work"
+   ],
+   "added": {},
+   "removed": {},
+   "before": {
+    "engagement": {
+     "mode": "scheduled",
+     "at": "09:00",
+     "tz": "UTC",
+     "missed": "skip"
+    }
+   }
+  }
+ },
+ "cost_so_far": {
+  "usd": 1.8952,
+  "invocations": 7,
+  "usage": {
+   "input_tokens": 74,
+   "cache_creation_input_tokens": 145016,
+   "cache_read_input_tokens": 1667709,
+   "output_tokens": 18141
+  }
+ }
+}

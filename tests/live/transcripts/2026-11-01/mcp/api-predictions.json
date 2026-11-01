@@ -1,0 +1,22 @@
+{
+ "ok": true,
+ "predictions": [
+  {
+   "id": "7204d4480f664575800b77b5b921f73e",
+   "source": "supervisor",
+   "made_at": 1793526960.714,
+   "subject": "machine:notes_improver",
+   "change": "68f645227c614d6c9f724cb901c964ba",
+   "expect": [
+    {
+     "kind": "factor",
+     "flow": "outside -> repo_files by orchestra_events_total{type=\"gate.landed\"}",
+     "factor": 1.2
+    }
+   ],
+   "horizon_s": 604800.0,
+   "status": "waiting",
+   "era": null
+  }
+ ]
+}

@@ -1,0 +1,171 @@
+{
+ "ok": true,
+ "version": 8,
+ "at": 1793528280.644387,
+ "layer": {
+  "stocks": {
+   "notes_files": {
+    "id": "notes_files",
+    "part": "stock",
+    "name": "Notes Files",
+    "description": "Notes files (notes/note-NNN.txt) in the repository",
+    "unit": "files",
+    "near": null,
+    "note": "Create a Notes Files stock.",
+    "found_as": null,
+    "measure": {
+     "options": [
+      {
+       "key": "a",
+       "title": "Count tracked notes files in the repository",
+       "kind": "script",
+       "how": "A one-line shell command in the repository root counts files git tracks under notes/*.txt and prints notes_files as a level.",
+       "cost": "One git ls-files per minute; reads only the index.",
+       "caveat": "Counts committed files only, so a note written but not yet committed does not count until it lands on the branch the checkout is on.",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": "notes_files.count",
+       "commit": null,
+       "first_points": [
+        [
+         1793528205.1,
+         24.0
+        ]
+       ],
+       "provenance": "written by the Supervisor \u00b7 /private/var/folders/4m/4qkl0zz93lqcwqdcs5nhttnw0000gn/T/pytest-of-daniellewis/pytest-7257/test_the_owner_designs_notes_f0/home/demo-8ac87a4c/agents/instruments/notes_files.count.sh \u00b7 entry in the owner's overlay \u00b7 recording \u00b7 draft until kept"
+      }
+     ],
+     "chosen": null,
+     "change": "c3.0"
+    },
+    "target": null,
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/1",
+     "message": "I want a feedback loop where once per day an agent runs and tries to improve how many notes files get added per day. I think we need to start tracking notes files. Create a Notes Files stock.",
+     "quote": "Create a Notes Files stock.",
+     "reason": "The owner wants to track how many notes files the project holds, as the level the daily improvement loop tries to raise.",
+     "via": "plugin",
+     "at": 1793528199.307862
+    },
+    "change": "c1.0",
+    "guessed": [],
+    "pending": []
+   }
+  },
+  "effects": {},
+  "flows": {},
+  "machines": {
+   "notes_improver": {
+    "title": "Notes Improver",
+    "description": "Once a day, look at how many notes files the project gained and propose one concrete way to add more of them per day, so the Notes Files stock rises.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "00:00"
+    },
+    "receives": [],
+    "emits": [
+     "work.proposed"
+    ],
+    "reads": [
+     "notes_files"
+    ],
+    "spec": {
+     "invariants": [
+      "It never changes code or files itself; it only proposes work.",
+      "Every proposal names the Notes Files stock it aims to raise and says how it would be checked.",
+      "It reads the Notes Files stock and the ticket queue only.",
+      "It reads rejection and gate reasons only; it never changes tickets, code or files."
+     ],
+     "steps": [
+      "1. Once a day, read the Notes Files stock (notes_files) and the notes files added in the last day.",
+      "2. Read the day's DONE and REJECTED tickets and the merge gate's failures, with their rejection reasons (read only).",
+      "3. Group the reasons; for each recurring cause, write one idea that would stop it or add notes files, naming the stock it aims to raise and how it would be checked.",
+      "4. Publish the ideas as work.proposed events for the Coordinator to schedule; publish nothing if there are none."
+     ],
+     "uses": [
+      "the ticket queue (read only)",
+      "the ticket queue: DONE and REJECTED tickets, with their reviewer and gate rejection reasons (read only)",
+      "the merge gate's results for those tickets (read only)"
+     ]
+    },
+    "id": "notes_improver",
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "Create a new Universal Machine called Notes Improver.",
+     "quote": "Create a new Universal Machine called Notes Improver.",
+     "reason": "The owner asked for a daily agent that tries to raise the number of notes files added per day.",
+     "via": "plugin",
+     "at": 1793528232.330692
+    },
+    "change": "c4.0",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": {
+     "edits": [
+      {
+       "stock": "notes_files",
+       "rises": true
+      }
+     ],
+     "horizon_s": 604800.0,
+     "prediction": null,
+     "change": "c5.0"
+    },
+    "latest": {
+     "change": "c7.0",
+     "at": 1793528267.782793,
+     "quotes": [
+      "make it a scheduled task for 12am every day."
+     ],
+     "added": {},
+     "removed": {},
+     "before": {
+      "engagement": {
+       "mode": "scheduled",
+       "at": "09:00",
+       "tz": "America/Los_Angeles"
+      }
+     }
+    },
+    "confirmed": {
+     "by": "owner",
+     "change": "c8.0"
+    }
+   }
+  },
+  "events": {
+   "work.proposed": {
+    "type": "work.proposed",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "Create a new Universal Machine called Notes Improver.",
+     "quote": "Create a new Universal Machine called Notes Improver.",
+     "reason": "The owner asked for a daily agent that tries to raise the number of notes files added per day.",
+     "via": "plugin",
+     "at": 1793528232.330692
+    },
+    "change": "c4.0"
+   }
+  },
+  "attachments": {},
+  "targets": {},
+  "marks": {
+   "expected": {},
+   "ignored": {}
+  }
+ }
+}

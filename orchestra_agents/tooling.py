@@ -4,7 +4,7 @@ and the Pi extension both call this).
 Some tools are the agents' own: a worker's or reviewer's report (handed to the session that runs
 it, which reports to the task system on the bus), the project context, escalating to the
 Supervisor, reading the bus, the organisation (roles, agents, teams, emit_event), reading the
-whole system (``observe.py``, ``observe_model.py``), the model and experiments on it, and the
+whole system (``observe.py``, ``observe_model.py``), the system dynamics model, and the
 predictions of an agent's own changes (``modeling.py``), and the Supervisor's changes to the
 project's ``orchestra.toml`` (``setup_tools.py``, ``restart.py``). Everything
 about tickets and milestones is the task system's, asked for on the bus (protocol.TaskClient): a

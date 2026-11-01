@@ -25,7 +25,7 @@ KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
-           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "commit_prediction", "announce_change",
+           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
                          "draft_upstream_issue", "declare_workflow"}))
 
@@ -97,8 +97,6 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return "escalated to the Supervisor"
     if command == "emit_event":
         return f"raised the event {a.get('type')}"
-    if command == "commit_prediction":
-        return f"committed experiment {a.get('id')} as prediction {result.get('prediction')} of change {result.get('change')}"
     if command == "announce_change":
         return (f"announced change {a.get('change')} (system.changed)" if (a.get("when") or "now") == "now"
                 else f"set change {a.get('change')} to be announced when its ticket lands")

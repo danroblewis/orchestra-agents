@@ -240,7 +240,7 @@ def _publish(project: Project, store: AgentStore, mid: str, pairs: list[tuple[di
     apply(project, store, [{"op": "record_prediction", "machine": mid, "prediction": pid}],
           {"author": MACHINE, "source": MACHINE, "reason": f"the prediction published for {mid}'s change {change}"})
     by_host = (starts(store).get(mid) or {}).get("runs", True)
-    store.add_prediction(MACHINE, {"id": pid, "change": change, "experiment": None, "ticket": None, "source": MACHINE,
+    store.add_prediction(MACHINE, {"id": pid, "change": change, "ticket": None, "source": MACHINE,
                                    "subject": f"machine:{mid}", "horizon_s": horizon, "at": time.time(),
                                    "announced": f"by {mid}'s first turn (the host)" if by_host else None,
                                    "note": f"{mid}'s expected effect"})

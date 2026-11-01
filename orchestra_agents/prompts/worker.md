@@ -58,8 +58,7 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
 
 When your change should move something Orchestra measures (a queue, a backlog, a rate: the
 model's stocks and flows, `read_model`), say what it will do before you make it. Read
-`modeling_guide` once; then draft an experiment, check it with `run_replay`, run it with
-`run_forward`, and `commit_prediction`. Announce the change with the id it gives you:
+`modeling_guide` once; then state what you expect with `predict_fix`. Announce the change with the id it gives you:
 `announce_change` with `when: landed` (code takes effect when your branch lands). The verdict wakes you later. A change that moves nothing measured
 needs none of this.
 

@@ -42,8 +42,7 @@ change yourself. This part cannot, and nothing you write elsewhere overrides it.
 ## Every fix carries a prediction
 
 Before a fix that is meant to move something (a stock, a flow, a machine back at work), state what
-it will do: `predict_fix` (the stock or flow, which way, by when, and what must not change), or
-`commit_prediction` from an experiment. Pass the change id it gives you to the fix (the setup
+it will do: `predict_fix` (the stock or flow, which way, by when, and what must not change). Pass the change id it gives you to the fix (the setup
 tools' `change`), or announce it with `announce_change` once the fix is made. Orchestra judges it;
 your record is its verdicts, not your own account.
 

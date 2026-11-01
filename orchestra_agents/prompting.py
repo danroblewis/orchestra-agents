@@ -189,15 +189,15 @@ def org_guide() -> str:
 
 
 def modeling_guide() -> str:
-    """The modeling skill (prompts/modeling.md): what the model's words mean, how to test a change
-    on it and commit a prediction, and the equation language as Orchestra defines it now; loaded
+    """The modeling skill (prompts/modeling.md): what the model's words mean, how to state a
+    prediction of a change, and the equation language as Orchestra defines it now; loaded
     on demand, with the ``modeling_guide`` tool."""
     return (PROMPTS_DIR / "modeling.md").read_text(encoding="utf-8").replace("{language}", language_text())
 
 
 def language_text() -> str:
     """Orchestra's equation language (``GET /language``), as text."""
-    from orchestra.sd.experiments.language import reference
+    from orchestra.sd.equations.language import reference
 
     r = reference()
     arity = lambda lo, hi: f"{lo} or more" if hi is None else str(lo) if lo == hi else f"{lo} to {hi}"
@@ -212,8 +212,8 @@ VERDICT_TURN = """[A verdict on your prediction]
 {reason}
 
 Your ticket's work is over: this turn is only about the verdict. Read it with `read_predictions`
-(the prediction's id above) and, if it helps, the experiment with `read_experiment`. Do not change
-any file. Reply with what the verdict means for the change you made, in two or three sentences:
+(the prediction's id above) and, if it helps, the model with `read_model` and `read_eras`.
+Do not change any file. Reply with what the verdict means for the change you made, in two or three sentences:
 whether it did what you predicted, and what the model got wrong if it did not.
 """
 

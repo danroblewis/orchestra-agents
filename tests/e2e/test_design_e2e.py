@@ -187,6 +187,19 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
     assert m["guessed"] == []                                         # every guess was replaced by the owner's words
     assert '"at": "00:00"' in (project.state_dir / "drafts" / "feature_count_improver" / "agent.json").read_text()
     assert git(repo, "rev-parse", "HEAD") == head                      # nothing committed on the base branch
+    transcript_never_asks_the_owner_to_write_configuration(repo.parent / "claude-home")
+
+
+def transcript_never_asks_the_owner_to_write_configuration(claude_home: Path) -> None:
+    """Acceptance test 17's transcript half: nothing the session saw or said, the owner's turns,
+    Orchestra's notices and every tool's answer, holds a forbidden phrase."""
+    files = sorted((claude_home / "projects").glob("*/*.jsonl"))
+    assert files, "the fake Claude kept no transcript"
+    said = [json.loads(line)["message"]["content"] for f in files for line in f.read_text().splitlines() if line.strip()]
+    text = "\n".join(c if isinstance(c, str) else " ".join(b.get("text", "") for b in c) for c in said).lower()
+    assert "what i did with my tools" in text
+    for phrase in FORBIDDEN:
+        assert phrase not in text, phrase
 
 
 def test_no_prompt_or_guide_asks_the_owner_to_write_configuration():

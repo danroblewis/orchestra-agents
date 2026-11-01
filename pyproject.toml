@@ -14,8 +14,10 @@ dependencies = ["orchestra>=1.0.0a1,<1.0.0rc0", "psutil", "fastapi"]   # the hos
 [project.optional-dependencies]
 # orchestra-tasking: the e2e tests and the demo run the real task system beside the agents;
 # orchestra[sd]: they start `orchestra run`, whose host rediscovers the model from the metrics.
+# orchestra-bridges: its kits (scaffold, templates, fakes), which integrate_system builds a poller from.
 dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6",
        "orchestra-tasking @ git+ssh://git@github.com/danroblewis/orchestra-tasking",
+       "orchestra-bridges @ git+ssh://git@github.com/danroblewis/orchestra-bridges",
        "orchestra[sd]"]
 
 [project.entry-points."orchestra.commands"]

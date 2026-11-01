@@ -1027,6 +1027,19 @@ notes); `explain_item` gives an item's summary, its fields with the facts that s
 position per workflow, the facts not counted and its last facts. The guide's "Workflows" section
 is the Supervisor's reference.
 
+**Starting work** (tool group `work`, the Supervisor's and the Coordinator's; `request_work.py`,
+2026-11-01, W9). `request_work` publishes the plugin's `item.requested` (its machine contract:
+`workflow`, `brief`, optional `parent`; subject the new item's id, `<workflow>-<6 hex>` unless
+given) and, with `fields`, one `item.fact` setting them. Whose request it is follows the design
+tools' provenance rule: the Supervisor asks only for the owner, so it must quote the owner's words
+in their message of the turn, and the request goes out as `owner` with `via: supervisor`, as
+Orchestra's page requests (`orchestra.intent.requested`) do; without a verified quote it is
+refused. The Coordinator's request is its own, as `coordinator` (a planner by the contract).
+Refused with nothing published: the plugin not installed, a workflow the loader does not load or a
+request does not start, an id the record already holds, and no floor to offer it (no live
+`orchestra run`, or its `workflows.floor` process not running). The answer carries the id, the
+Items page link (`/items/<id>`) and `explain_item` to follow it.
+
 ## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 
 Orchestra discovers a system dynamics model of the system from its metrics, lets any machine read

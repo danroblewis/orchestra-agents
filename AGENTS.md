@@ -42,7 +42,10 @@ broken without updating the spec and saying so in the commit.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
-   subject and the agent's instance (`supervisor`, `worker/1`) the source. **The host is no
+   subject and the agent's instance (`supervisor`, `worker/1`) the source; the one exception
+   (2026-11-01, W9) is the Supervisor's `request_work` on the owner's quoted words, which is the
+   owner's request and goes out as `owner` (`via: supervisor`), as Orchestra's page requests do
+   (`request_work.py`). **The host is no
    machine** (Orchestra's rule for a plugin's infrastructure; the owner, 2026-10-27): it never
    announces itself, never publishes as `agents` or with no source (`events.py` refuses both),
    and writes no metrics (the plugin's instrument `agents.turns` reads them from the record). It

@@ -27,6 +27,8 @@ Tool groups:
                machines, confirm or discard at the owner's word, expected effects (the Supervisor only)
   workflows    write a workflow the owner describes through the Workflows plugin's validated writer (the
                Supervisor only), read the loaded definitions back, explain an item (workflow_tools.py)
+  work         request_work: start a piece of work on a workflow (item.requested), the Supervisor for the
+               owner (as owner, on their quoted words) and the Coordinator as the planner (request_work.py)
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
                overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
                collectors, any key), try a collector once, and restart a machine (the Supervisor only)
@@ -86,14 +88,15 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
-           "design", "workflows", "model", "predict", "patch"),
+           "design", "workflows", "work", "model", "predict", "patch"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}", INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
               "the project not set up yet, when the host starts (first_run.py)",
               "its review round, when the round's quick check finds something (review.py)"),
     emits=(REQUESTED, REQUESTS["update_ticket"], REQUESTS["cancel_ticket"], REQUESTS["unblock_ticket"],
            "context.updated", "role.created", "agent.created", "team.created", "agent.messaged",
-           "config.changed", "instruments.changed", "machine.restarted", "role.changed", "orchestra.prediction.made"),
+           "config.changed", "instruments.changed", "machine.restarted", "role.changed", "orchestra.prediction.made",
+           "item.requested", "item.fact"),
     read_only=True,
     description="Talks to the human; sets the project up; translates requests into requirements and hands them to the "
                 "Coordinator; keeps the project's setup able to do them; designs the system with the owner: declares what "
@@ -101,10 +104,11 @@ register(Role(
 ))
 register(Role(
     name="coordinator", prompt="coordinator",
-    tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model"),
+    tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model", "work"),
     wake_on=(f"{ATTENTION}:{COORDINATOR}", f"{REQUESTED}:{COORDINATOR}"),
     emits=(REQUESTS["create_milestone"], REQUESTS["create_ticket"], PLANNED, REQUESTS["update_ticket"],
-           REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"], REQUESTS["set_capacity"]),
+           REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"], REQUESTS["set_capacity"],
+           "item.requested", "item.fact"),
     read_only=True,
     description="Plans what the Supervisor hands it into milestones and tickets, and keeps the plan executable: clarity, "
                 "size, order, dependencies. Never changes intent.",

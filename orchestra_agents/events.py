@@ -22,7 +22,10 @@ with no source at all, is refused here. Every event goes out as the agent it is 
 - a team's probe (probes.py) is published as the agent responsible for the team: its lead, or the
   Supervisor when it has none;
 - an agent's own tool call (``orchestra agents tool`` or the MCP server, in the agent's
-  environment) is ``ORCHESTRA_SOURCE``, which the host sets to the same instance."""
+  environment) is ``ORCHESTRA_SOURCE``, which the host sets to the same instance; the one
+  exception is the Supervisor's ``request_work`` on the owner's quoted words: the request is the
+  owner's, so it goes out as ``owner`` (``via: supervisor`` in its data), as Orchestra's page
+  requests do (``request_work.py``)."""
 
 from __future__ import annotations
 

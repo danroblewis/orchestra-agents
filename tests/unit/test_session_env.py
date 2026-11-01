@@ -83,3 +83,22 @@ def test_dummy_gets_no_credentials(tmp_path, host, popen):
     with pytest.raises(Started):
         dummy.DummySession(spec(tmp_path)).prompt("hi", timeout=5)
     kept_out(popen)
+
+
+def test_the_bash_route_lets_a_tool_call_run_as_long_as_any_tool_call(tmp_path):
+    from dataclasses import replace
+
+    from orchestra_agents.harness.tools import TOOL_CALL_S
+    from orchestra_agents.integrate_kits import TEST_TIMEOUT_S
+    assert TOOL_CALL_S > TEST_TIMEOUT_S and codex.TOOL_TIMEOUT_S == TOOL_CALL_S
+    env = ClaudeCodeSession(replace(spec(tmp_path), tools_via="bash"))._env()
+    assert env["BASH_DEFAULT_TIMEOUT_MS"] == env["BASH_MAX_TIMEOUT_MS"] == str(int(TOOL_CALL_S * 1000))
+    assert "BASH_DEFAULT_TIMEOUT_MS" not in ClaudeCodeSession(replace(spec(tmp_path), tools_via="mcp"))._env()
+
+
+def test_pi_s_extension_is_given_the_limit(tmp_path, popen):
+    from orchestra_agents.harness.tools import TOOL_CALL_S
+    with pytest.raises(Started):
+        pi.PiSession(spec(tmp_path), pi_binary="pi")
+    assert popen["ORCHESTRA_TOOL_CALL_MS"] == str(int(TOOL_CALL_S * 1000))
+    assert "process.env.ORCHESTRA_TOOL_CALL_MS" in pi.EXTENSION_PATH.read_text()

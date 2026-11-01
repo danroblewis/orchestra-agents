@@ -30,6 +30,7 @@ from .base import (
     resolve_binary,
     session_env,
 )
+from .tools import TOOL_CALL_S
 
 EXTENSION_PATH = Path(__file__).parent / "pi_extension.ts"
 # The providers' API keys Pi reads from its environment (its own login is in ~/.pi): the one sign-in a
@@ -61,7 +62,7 @@ class PiSession(AgentSession):
         if spec.system_prompt:
             args += ["--append-system-prompt", spec.system_prompt]
         full_env = {**session_env(PI_AUTH), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
-                    "ORCHESTRA_PYTHON": sys.executable}
+                    "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr = spec.log_path.open("a", encoding="utf-8")
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr, text=True,

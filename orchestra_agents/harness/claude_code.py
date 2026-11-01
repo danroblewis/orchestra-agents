@@ -48,6 +48,7 @@ from .mcp_status import (
     try_command,
     until,
 )
+from .tools import TOOL_CALL_S
 
 # Claude Code's own tools that stand in for Orchestra's work: a private todo list the model can
 # "create a task" in, and schedules that die with the one-shot process. With them, a turn without
@@ -155,7 +156,11 @@ class ClaudeCodeSession(AgentSession):
         runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
         ``orchestra agents tool`` reads. The session runs with --dangerously-skip-permissions, so it
         gets none of the host's credentials (``session_env``)."""
-        return {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        env = {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        if self.via() == "bash":              # a tool run from the Bash tool may take as long as any tool call
+            ms = str(int(TOOL_CALL_S * 1000))
+            env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms}
+        return env
 
     def _mcp_config(self, via: str = "mcp") -> Path:
         """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the

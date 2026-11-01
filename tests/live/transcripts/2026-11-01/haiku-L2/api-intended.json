@@ -1,0 +1,317 @@
+{
+ "ok": true,
+ "version": 7,
+ "at": 1793557476.415433,
+ "layer": {
+  "stocks": {
+   "notes_files": {
+    "id": "notes_files",
+    "part": "stock",
+    "name": "Notes Files",
+    "description": "Notes files tracked in the repository under notes/ (one file per note)",
+    "unit": "files",
+    "near": null,
+    "note": "Create a Notes Files stock.",
+    "found_as": null,
+    "measure": {
+     "options": [
+      {
+       "key": "a",
+       "title": "Existing series repo_files: all tracked files in the repository",
+       "kind": "existing_series",
+       "how": "Already recorded by the repo_stats instrument; counts every tracked file, 32 now, of which 24 are notes/note-NNN.txt",
+       "cost": "Nothing added; already read every round",
+       "caveat": "Counts every tracked file, not only notes files (a superset): it rises with any file, not just notes",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "series": "repo_files"
+      },
+      {
+       "key": "b",
+       "title": "Count of tracked notes files under notes/",
+       "kind": "script",
+       "how": "Counts tracked files under notes/ in the repository; a level that rises one per note",
+       "cost": "One git call per round; reads only the repository index",
+       "caveat": "Counts tracked files, so it misses notes written but not yet committed",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "command": "git -C <repo> ls-files -- notes | wc -l"
+      },
+      {
+       "key": "c",
+       "title": "Simulated placeholder",
+       "kind": "simulated",
+       "how": "A made-up series for the dashboard only",
+       "cost": "None; not a real measurement",
+       "caveat": "Not a measurement at all",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": true,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null
+      }
+     ],
+     "chosen": null,
+     "change": "c2.0"
+    },
+    "target": null,
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/1",
+     "message": "I want a feedback loop where once per day an agent runs and tries to improve how many notes files get added per day. I think we need to start tracking notes files. Create a Notes Files stock.",
+     "quote": "Create a Notes Files stock.",
+     "reason": "The owner wants to track the notes files in the repository (notes/note-NNN.txt) as a stock, to see how many are added per day.",
+     "via": "plugin",
+     "at": 1793557408.3320372
+    },
+    "change": "c1.0",
+    "guessed": [],
+    "pending": []
+   }
+  },
+  "effects": {},
+  "flows": {},
+  "machines": {
+   "notes_improver": {
+    "title": "Notes Improver",
+    "description": "Once a day, looks at how many notes files were added and proposes one change to raise the daily count of notes files, as a piece of work for the Coordinator.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "00:00"
+    },
+    "receives": [
+     "gate.landed",
+     "changes.requested",
+     "gate.rejected",
+     "gate.conflict"
+    ],
+    "emits": [],
+    "reads": [
+     "notes_files"
+    ],
+    "spec": {
+     "invariants": [
+      "Never changes code or files itself; it only proposes work for the Coordinator.",
+      "Reads the Notes Files stock; never writes to a metric or removes a measurement.",
+      "Proposes at most one change per day, each with a prediction of its effect on the Notes Files stock."
+     ],
+     "steps": [
+      "1. Once a day at its scheduled time, read the tickets that reached DONE and those REJECTED (changes.requested) or failed the gate (gate.rejected, gate.conflict) since its last run.",
+      "2. For each rejection or gate failure, state the cause from the reviewer's or the gate's own words, and note whether it repeats.",
+      "3. Propose to the owner the one idea most likely to raise the daily count of notes files, with its reason and the rejections it addresses; once approved, send it to the Coordinator as an idea to schedule."
+     ],
+     "uses": [
+      "the ticket queue (read only)",
+      "the ticket queue and the merge gate's results (read only)"
+     ]
+    },
+    "id": "notes_improver",
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a new Universal Machine called Notes Improver.",
+     "quote": "Create a new Universal Machine called Notes Improver.",
+     "reason": "The owner wants a feedback loop that tries once a day to improve how many notes files are added per day, measured by the Notes Files stock.",
+     "via": "plugin",
+     "at": 1793557425.30127
+    },
+    "change": "c3.0",
+    "guessed": [],
+    "pending": [
+     {
+      "change": "c7.0",
+      "set": {
+       "expected_effect": {
+        "edits": [
+         {
+          "stock": "notes_files",
+          "rises": true
+         }
+        ],
+        "horizon_s": 604800.0,
+        "prediction": null,
+        "change": "c7.0"
+       }
+      },
+      "add": {},
+      "remove": {},
+      "guessed": [],
+      "provenance": {
+       "source": "supervisor",
+       "author": "owner",
+       "turn": "sessions/supervisor/5",
+       "message": "Confirm it. I expect notes files to rise, and the commit rate to go up 1.2 times.",
+       "quote": "Confirm it. I expect notes files to rise, and the commit rate to go up 1.2 times.",
+       "reason": "The owner expects notes files to rise; the stock has no series yet, so it waits for one.",
+       "via": "plugin",
+       "at": 1793557476.415433
+      }
+     }
+    ],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": {
+     "change": "c5.0",
+     "at": 1793557442.73782,
+     "changes": [
+      "c4.0",
+      "c4.1",
+      "c4.2",
+      "c4.3",
+      "c4.4",
+      "c4.5",
+      "c5.0"
+     ],
+     "quotes": [
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "watch the ticket queue for DONE and REJECTED tickets",
+      "make it a scheduled task for 12am every day."
+     ],
+     "added": {
+      "receives": [
+       "gate.landed",
+       "changes.requested",
+       "gate.rejected",
+       "gate.conflict"
+      ]
+     },
+     "removed": {},
+     "before": {
+      "engagement": {
+       "mode": "scheduled",
+       "at": "09:00"
+      },
+      "steps": [
+       "1. Once a day at its scheduled time, read the Notes Files stock and how many notes files were added in the last day.",
+       "2. Compare with the previous days and decide whether one change could raise the daily count.",
+       "3. If so, propose it to the owner for approval; once approved, hand it to the Coordinator as work with the Notes Files stock as its measure."
+      ],
+      "uses": [
+       "the ticket queue (read only)"
+      ]
+     }
+    },
+    "base": {
+     "fields": {
+      "receives": [],
+      "engagement": {
+       "mode": "scheduled",
+       "at": "09:00"
+      }
+     },
+     "spec": {
+      "invariants": [
+       "Never changes code or files itself; it only proposes work for the Coordinator.",
+       "Reads the Notes Files stock; never writes to a metric or removes a measurement.",
+       "Proposes at most one change per day, each with a prediction of its effect on the Notes Files stock."
+      ],
+      "steps": [
+       "1. Once a day at its scheduled time, read the Notes Files stock and how many notes files were added in the last day.",
+       "2. Compare with the previous days and decide whether one change could raise the daily count.",
+       "3. If so, propose it to the owner for approval; once approved, hand it to the Coordinator as work with the Notes Files stock as its measure."
+      ],
+      "uses": [
+       "the ticket queue (read only)"
+      ]
+     }
+    },
+    "confirmed": {
+     "by": "owner",
+     "change": "c6.0"
+    }
+   }
+  },
+  "events": {
+   "gate.landed": {
+    "type": "gate.landed",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "watch the ticket queue for DONE and REJECTED tickets",
+     "reason": "The owner wants it to look at DONE and REJECTED tickets and the merge gate, find why tickets were rejected or failed the gate, and send ideas to the Coordinator.",
+     "via": "plugin",
+     "at": 1793557436.866713
+    },
+    "change": "c4.0"
+   },
+   "changes.requested": {
+    "type": "changes.requested",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "watch the ticket queue for DONE and REJECTED tickets",
+     "reason": "The owner wants it to look at DONE and REJECTED tickets and the merge gate, find why tickets were rejected or failed the gate, and send ideas to the Coordinator.",
+     "via": "plugin",
+     "at": 1793557436.866713
+    },
+    "change": "c4.1"
+   },
+   "gate.rejected": {
+    "type": "gate.rejected",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "watch the ticket queue for DONE and REJECTED tickets",
+     "reason": "The owner wants it to look at DONE and REJECTED tickets and the merge gate, find why tickets were rejected or failed the gate, and send ideas to the Coordinator.",
+     "via": "plugin",
+     "at": 1793557436.866713
+    },
+    "change": "c4.2"
+   },
+   "gate.conflict": {
+    "type": "gate.conflict",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "watch the ticket queue for DONE and REJECTED tickets",
+     "reason": "The owner wants it to look at DONE and REJECTED tickets and the merge gate, find why tickets were rejected or failed the gate, and send ideas to the Coordinator.",
+     "via": "plugin",
+     "at": 1793557436.866713
+    },
+    "change": "c4.3"
+   }
+  },
+  "attachments": {},
+  "targets": {},
+  "marks": {
+   "expected": {},
+   "ignored": {}
+  }
+ }
+}

@@ -38,10 +38,16 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..integrate_kits import CREDENTIAL_VARS, TEST_TIMEOUT_S
+
 OnEvent = Callable[[dict], None]
 
 
 SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
+# How long one tool call may take, in every harness (Codex's MCP tool_timeout_sec, the Pi extension's
+# call, Claude Code's Bash tool on the bash route): integrate_system runs a scaffolded poller's own
+# test (up to integrate_kits.TEST_TIMEOUT_S) and then calls Orchestra's declared layer.
+TOOL_CALL_S = TEST_TIMEOUT_S + 120
 
 
 def session_env(keep: tuple[str, ...] = (), environ: dict[str, str] | None = None) -> dict[str, str]:
@@ -51,7 +57,6 @@ def session_env(keep: tuple[str, ...] = (), environ: dict[str, str] | None = Non
     rest (PATH, HOME, locale, proxies and CA bundles, the harness's config directory) and ``keep``,
     the harness's own sign-in or provider keys. Sessions run without permission prompts, so a
     credential in their environment is one any command they run can read."""
-    from ..integrate_kits import CREDENTIAL_VARS
     env = os.environ if environ is None else environ
     return {k: v for k, v in env.items()
             if k in keep or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}

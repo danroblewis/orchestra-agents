@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import bash_tools
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -48,7 +49,6 @@ from .mcp_status import (
     try_command,
     until,
 )
-from .tools import TOOL_CALL_S
 
 # Claude Code's own tools that stand in for Orchestra's work: a private todo list the model can
 # "create a task" in, and schedules that die with the one-shot process. With them, a turn without

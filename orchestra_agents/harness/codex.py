@@ -26,6 +26,7 @@ from pathlib import Path
 
 from . import bash_tools
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -39,10 +40,9 @@ from .base import (
     resolve_binary,
     session_env,
 )
-from .tools import TOOL_CALL_S
 
 MCP_SERVER = "orchestra"
-TOOL_TIMEOUT_S = TOOL_CALL_S              # how long one tool call may take (tools.TOOL_CALL_S)
+TOOL_TIMEOUT_S = TOOL_CALL_S              # how long one tool call may take (base.TOOL_CALL_S)
 CODEX_AUTH = ("OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_HOME")   # Codex's own sign-in (its login is under CODEX_HOME)
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"      # how Codex names an MCP server's functions
 _INJECTED = re.compile(r"\s*<[a-z_]+>")    # <environment_context>, <user_instructions>: Codex's own context messages

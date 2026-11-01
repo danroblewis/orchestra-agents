@@ -19,7 +19,7 @@ const REPO = process.env.ORCHESTRA_REPO ?? "";
 const TICKET = process.env.ORCHESTRA_TICKET ?? "";
 const PYTHON = process.env.ORCHESTRA_PYTHON ?? "python3";
 const ENV = { ...process.env, ORCHESTRA_REPO: REPO, ORCHESTRA_ROLE: ROLE, ORCHESTRA_TICKET: TICKET };
-// how long one tool call may take: the host's tools.TOOL_CALL_S (integrate_system runs a scaffolded
+// how long one tool call may take: the host's harness/base.py TOOL_CALL_S (integrate_system runs a scaffolded
 // poller's test), given as ORCHESTRA_TOOL_CALL_MS
 const CALL_MS = Number(process.env.ORCHESTRA_TOOL_CALL_MS) || 420_000;
 

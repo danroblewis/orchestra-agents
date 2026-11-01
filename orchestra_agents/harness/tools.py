@@ -9,13 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..integrate_kits import TEST_TIMEOUT_S
 from ..protocol import STATES as _STATES
-
-# How long one tool call may take, in every harness (Codex's MCP tool_timeout_sec, the Pi extension's
-# call, Claude Code's Bash tool on the bash route): integrate_system runs a scaffolded poller's own
-# test (up to integrate_kits.TEST_TIMEOUT_S) and then calls Orchestra's declared layer.
-TOOL_CALL_S = TEST_TIMEOUT_S + 120
 
 STATES = ", ".join(_STATES)
 

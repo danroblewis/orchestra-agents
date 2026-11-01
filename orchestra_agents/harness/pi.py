@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -30,7 +31,6 @@ from .base import (
     resolve_binary,
     session_env,
 )
-from .tools import TOOL_CALL_S
 
 EXTENSION_PATH = Path(__file__).parent / "pi_extension.ts"
 # The providers' API keys Pi reads from its environment (its own login is in ~/.pi): the one sign-in a

@@ -86,6 +86,9 @@ class RepoRoleStore:
             raise RoleError(f"no role {name!r}")
         return RoleDef.from_dict(json.loads(p.read_text(encoding="utf-8")))
 
+    def has(self, name: str) -> bool:
+        return (self.dir / f"{name}.json").exists()
+
     def prompt(self, name: str) -> str:
         p = self.dir / f"{name}.md"
         return p.read_text(encoding="utf-8") if p.exists() else ""

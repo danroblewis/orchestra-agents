@@ -9,11 +9,24 @@ from __future__ import annotations
 from importlib.metadata import entry_points
 
 TASKING = "tasks"            # the tasking plugin's entry point in ``orchestra.plugins``
-TASKING_PACKAGE = "orchestra-tasking"
+WORKFLOWS = "workflows"      # the Workflows plugin's, whose floor offers its steps to the same roles
+
+
+def _has(name: str) -> bool:
+    try:
+        return any(ep.name == name for ep in entry_points(group="orchestra.plugins"))
+    except Exception:  # noqa: BLE001 - a broken metadata read means the plugin is not known
+        return False
 
 
 def tasking() -> bool:
-    try:
-        return any(ep.name == TASKING for ep in entry_points(group="orchestra.plugins"))
-    except Exception:  # noqa: BLE001 - a broken metadata read means no tasking known
-        return False
+    return _has(TASKING)
+
+
+def workflows() -> bool:
+    return _has(WORKFLOWS)
+
+
+def plugins() -> dict[str, bool]:
+    """For the Agents page: which of the two plugins that start the built-in team's work are installed."""
+    return {"tasking": tasking(), "workflows": workflows()}

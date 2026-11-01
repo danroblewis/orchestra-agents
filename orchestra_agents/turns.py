@@ -62,12 +62,14 @@ class Turns:
                 store.set_session(sid, **fields)
         return fn
 
-    def note(self, sid: str, res: TurnResult, kind: str = "", released: Callable[[], str | None] | None = None) -> None:
+    def note(self, sid: str, res: TurnResult, kind: str = "", released: Callable[[], str | None] | None = None,
+             taken_by: str = "the task system") -> None:
         """A turn that the host cut off, or that the harness failed, is recorded as an event with
         what the agent was doing at that moment, so the transcript can show the stop instead of
         just ending. The harness's session file is still the only transcript; this is the event
         log, which the transcript view overlays. ``released`` says why the task system took the
-        assignment back, when the host killed the turn for that."""
+        assignment back, when the host killed the turn for that (``taken_by``: the task system, or the
+        Workflows floor withdrawing an offer)."""
         if not (res.timed_out or res.error):
             return
         host = self.host
@@ -77,7 +79,7 @@ class Turns:
         if res.error:
             reason = released() if released else None
             if reason:
-                host._mark("session.interrupted", session=sid, agent=agent, ticket=ticket, reason=f"released by the task system: {reason}")
+                host._mark("session.interrupted", session=sid, agent=agent, ticket=ticket, reason=f"released by {taken_by}: {reason}")
                 return
             if host.stop.is_set():
                 # The harness "failed" because the host is shutting down and closed it.
@@ -97,7 +99,8 @@ class Turns:
                    last_text=(res.text or s.get("last_text") or "")[-300:])
 
     def prompt_with_retry(self, proc: AgentSession, ticket_id: str, task: str, nudge: str,
-                          released: Callable[[], str | None] | None = None) -> tuple[dict | None, str, bool]:
+                          released: Callable[[], str | None] | None = None,
+                          taken_by: str = "the task system") -> tuple[dict | None, str, bool]:
         """A worker's or reviewer's turn: the task, and one nudge when it stopped without its
         report. Returns the report (or None), the agent's last text, and whether the turn failed.
         An assignment the task system has taken back gets no further prompt: on a harness that
@@ -110,7 +113,7 @@ class Turns:
                 res = TurnResult(error=f"released before the prompt: {reason}")
             else:
                 res = proc.prompt(text, cap, on_event=self.on_event(proc.session_id), idle_timeout=cfg.silence_timeout)
-            self.note(proc.session_id, res, released=released)
+            self.note(proc.session_id, res, released=released, taken_by=taken_by)
             return res
         res = turn(task, cfg.turn_timeout or None)
         report = self.host.store.pop_report(ticket_id)

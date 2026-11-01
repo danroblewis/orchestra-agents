@@ -19,11 +19,12 @@ import time
 import uuid
 from pathlib import Path
 
-from . import access, prompting
+from . import prompting
 from .builtins import PER_TICKET_ROLES
 from .builtins import ROLES as BUILTIN
 from .harness import AgentSession
 from .modeling import announce_landed
+from .offer_turn import heartbeat, run_turn
 from .prompting import TicketView
 from .protocol import (
     ACCEPTED,
@@ -39,7 +40,6 @@ from .protocol import (
     holder,
 )
 
-SAY_S = 2.0            # a heartbeat goes out early when what the agent is saying has changed, at most this often
 CONFIRM_S = 180.0      # how long a claim is read back for when the offer names no lease
 CONFIRM_POLL_S = 0.2   # how often it looks
 UNIT_S = 600.0         # the unit command a code worker runs for its reviewer, at most this long
@@ -129,17 +129,6 @@ class AgentRunner:
                                                        source=instance, subject=tid, **cause)
         claim = say(ACCEPTED, instance=instance)
         done = threading.Event()
-
-        def beat():
-            """``task.working`` every HEARTBEAT_S, and sooner when the agent's visible text changed:
-            the lease goes on, and whoever shows the ticket can show what the agent is doing."""
-            said, since = "", time.time()
-            while not done.wait(SAY_S) and aid not in self.released:
-                s = host.store.find_session(sid) or {}
-                text = (s.get("partial_text") or s.get("last_text") or "")[-160:]
-                if text != said or time.time() - since >= HEARTBEAT_S:
-                    said, since = text, time.time()
-                    say(WORKING, text=text)
         report, text, failed, commit, lost, passed = None, "", True, None, False, False
         spec = BUILTIN[role]
         open_session = lambda: host._open_session(sid, role, prompting.role_prompt(host.project, spec.prompt), tuple(spec.tools), path, tid)
@@ -152,21 +141,12 @@ class AgentRunner:
             if not self._held(a, instance, claim, start):
                 lost = True
                 return                                        # another instance's claim came first: no session, nothing spent
-            threading.Thread(target=beat, daemon=True, name=f"{aid}:beat").start()
-            proc = self.procs[aid] = open_session()
-            try:
-                if host.residents.trim_if_large(proc, sid, role) == "rotated":
-                    proc = self.procs[aid] = open_session()
-                if aid in self.released:
-                    proc.kill()                               # released while the session was opening: tick found nothing to kill
-                host._session_running(sid, role, proc, tid)
-                host.store.set_session(sid, ticket_title=t.title, ticket_state="IN_PROGRESS" if role == "worker" else "IN_REVIEW",
-                                       worker_turns=(a.get("brief") or {}).get("worker_turns") or 0)   # for the cards: no query needed
-                report, text, failed = host.turns.prompt_with_retry(proc, tid, task, nudge, released=lambda: self.released.get(aid))
-            finally:
-                proc.close()
-                access.revoke(host.store, sid)                # its token ends with it
-                host._session_idle(sid, text, release=False)  # the slot is given back, or kept, below
+            # ``task.working`` every HEARTBEAT_S, with what the agent is saying now
+            heartbeat(host, sid, done, lambda: aid in self.released, HEARTBEAT_S, lambda text: say(WORKING, text=text))
+            report, text, failed = run_turn(
+                host, sid, role, tid, open_session, self.procs, aid, task, nudge, lambda: self.released.get(aid),
+                {"ticket_title": t.title, "ticket_state": "IN_PROGRESS" if role == "worker" else "IN_REVIEW",
+                 "worker_turns": (a.get("brief") or {}).get("worker_turns") or 0})   # for the cards: no query needed
         except Exception as e:  # noqa: BLE001 - whatever happened, the task system hears how it ended
             text = f"{type(e).__name__}: {e}"
         finally:

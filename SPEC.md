@@ -218,6 +218,47 @@ other entry of a removed type is dropped (`org.GONE`). A new agent naming a remo
 refused. A retired `:DONE` becomes `gate.landed` only, so in tasks mode such an agent should be
 given `review.approved` as well.
 
+### 3.1 Meeting the Workflows floor (`floor.py`, `floor_roles.py`, `floor_runner.py`, `offer_turn.py`)
+
+A project may have the task system, the Workflows plugin, or both; one host answers both. The
+floor's names and claim rule are orchestra-workflows' machine contract
+(`docs/machine-contract.md`, its `orchestra_workflows/contract.py`), copied by hand into
+`floor.py` as `protocol.py` copies the task system's (nothing is imported from it;
+`tests/unit/test_floor.py` checks the copy when the plugin is installed).
+
+**Who serves which role** (`floor_roles.py`). A confirmed Universal Machine (machine-design.md
+§2.4) is a machine spec with `role = "<floor role>"` in its `machine.toml`, in
+`.orchestra/machines/<name>/` or in the state directory's `machines/<name>/` (the repository's
+wins when both hold the name), whose name is a custom agent (confirm creates its role and agent;
+a spec whose name is no agent is ignored, as every spec is). That agent answers the role's offers;
+when two specs name one role, the first by name does. The built-in worker and reviewer answer the
+floor roles of their names when `[agents] serves` lists them and no spec takes the role.
+
+**A turn** (`floor_runner.py`). For each `offer.made` with a role served here, the host takes a
+slot of the agent (`triage/1`, `worker/1`) for the session `<agent>-<item>` (one turn per item's
+session at a time; an offer addressed `to` an instance is taken only as that instance, when it is
+the agent's and free), announces the instance (`orchestra.machine.started` with `roles`: the
+floor accepts a claim for a role not named after the machine by it) and claims
+(`offer.claimed`, the offer as causationid, the item as subject). It reads the bus back from where
+it read the offer to its claim: the first claim after the offer and before any withdrawal holds it
+(`floor.winner`); a loser starts no session and says nothing more. The holder runs the agent's
+turn (`offer_turn.run_turn`, shared with the task system's runner) with the brief, in the handed
+`worktree` resource's directory, or, without one, in the repository read only; it says
+`offer.alive` with what the agent is saying now at least every `heartbeat_s`
+(`offer_turn.heartbeat`); and it finishes (`offer.finished`) with the outcome the agent's exit tool
+reported (`floor.outcome_of`): `report_outcome` (granted to a confirmed machine's agent, checked
+against the offer's `outcomes`, which the host keeps on the session's record) names it; the
+worker's `report_ticket` is `ready` or `blocked`, the reviewer's `report_review` `approved` or
+`rejected`. **The BLOCKED rule**: a turn that ends without an outcome after its one nudge, or with
+one the offer does not list, finishes `blocked` with why. An `offer.withdrawn` naming the offer,
+or its holder with no other offer, kills the turn (the transcript shows "released by the
+Workflows floor") and nothing more is said for it. When the host stops mid-turn nothing is
+finished: the floor takes the offer back when its lease runs out and offers it again.
+
+Not yet: passing an item on directly (the contract's pass-on, `offer.made` with `ends`) and
+`facts` on a finish; a worker on the floor finishes `ready` and the workflow's next step is the
+floor's to offer.
+
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
 `orchestra agents run` is one process per project, and no machine: the runtime the configured
@@ -249,6 +290,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   | the Supervisor | `ticket.created` | how it remembers which tickets were its own (`by` = supervisor) |
   | the Supervisor, the Coordinator | `work.planned`, `work.requested` (their `wake_on`) | the hand-off of the human's requirements and its plan (section 3) |
   | a worker, a reviewer | `task.assigned`, `review.requested` or `changes.requested`, `task.released` | its role's `wake_on`: the offers it answers (runner.py) |
+  | an agent that serves a Workflows floor role (section 3.1) | `offer.made`, `offer.withdrawn` | the floor's offers it answers and their withdrawals (floor_runner.py) |
 
   What wakes an agent without an event on the bus is not listed (a human's message, another
   agent's brief or message, a crash loop: `builtins.Role.triggers`), and neither is what the host
@@ -569,7 +611,9 @@ file lock and written only by `store.py`; `sessions/` (the harnesses' session re
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its
 harness keeps it and records the path on the archived run); `logs/` (the host's log and, under `agents/`, each
 session's stderr and the prompt it was started with); `PROJECT.md`, the project context the
-Supervisor maintains. The organisation's custom records are in the repository under `.orchestra/`.
+Supervisor maintains; `machines/<name>/`, a confirmed Universal Machine's spec when it is not in the
+repository (machine-design.md §2.1; read by the host, written by the Supervisor's confirm). The
+organisation's custom records are in the repository under `.orchestra/`.
 
 ## 8. The web plugin (`web.py`, `org_views.py`, `static/`)
 

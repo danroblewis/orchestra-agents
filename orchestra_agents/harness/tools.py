@@ -94,6 +94,12 @@ TOOLS: list[ToolDef] = [
              "summary": S("Short summary of the review"),
              "feedback": S("Required when REJECTED: concrete problems, with file and line where possible")},
             ("verdict", "summary")),
+    ToolDef("report_outcome", "report_outcome",
+            "Report the outcome of the Workflows offer you were handed. Call exactly once when you are finished. "
+            "The outcome is one the offer lists (any, when it lists none); `blocked` means you cannot do it, "
+            "with the reason in summary.",
+            {"outcome": S("The outcome, as the offer names it, or blocked"),
+             "summary": S("What you did, in a few sentences; when blocked, what you need")}, ("outcome", "summary")),
     # tickets
     ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, capacity, pipeline state."),
     ToolDef("list_milestones", "tickets", "List all milestones with id, name, status, and ticket counts."),

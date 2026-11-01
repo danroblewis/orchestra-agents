@@ -250,7 +250,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("run", help="run the agents' host: resident agents, wake-ups, assignments for the roles they fill",
                        description="The agents' host, one per project: keeps the resident agents' sessions up, wakes them on "
                                    "the events they listen for and on their schedules, answers the task system's assignments "
-                                   "for the roles in [agents] serves, and serves the Supervisor chat. Stop it with Ctrl-C.")
+                                   "for the roles in [agents] serves and the Workflows floor's offers for those roles and "
+                                   "the confirmed machines' roles, and serves the Supervisor chat. Stop it with Ctrl-C.")
     s.add_argument("--wait", action="store_true",
                    help="while another host holds the project or the control port is taken, wait for it to clear instead of "
                         "exiting (how Orchestra's launcher starts it, so a restart outlasts the previous host's shutdown); "

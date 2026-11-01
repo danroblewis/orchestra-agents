@@ -163,6 +163,38 @@ def test_check_setup_names_a_program_filling_a_role_that_orchestra_does_not_run(
     assert "cannot restart or change it" in line
 
 
+def test_check_setup_passes_on_each_plugins_findings_and_survives_a_check_that_raises(project, store, monkeypatch):
+    from orchestra_agents import plugin_findings
+
+    seen = {}
+
+    def says(raw, root):
+        seen["raw"], seen["root"] = raw, root
+        return ["stacking = \"git-spice\" but git-spice is not on PATH", "the worktree wt/1 has uncommitted changes"]
+
+    def raises(raw, root):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(plugin_findings, "loaded_checks", lambda project: (
+        [("broken", raises), ("tasks", says), ("quiet", lambda raw, root: []), ("odd", lambda raw, root: "nope")],
+        ["the plugin gone did not load, so its check was not run: ImportError: x"]))
+    out = see(project, store, "check_setup")
+    by = {p["plugin"]: p["findings"] for p in out["plugin_checks"]}
+    assert by["broken"] == [{"severity": "error", "text": "its check failed: RuntimeError: boom"}]
+    assert by["tasks"] == [{"severity": "problem", "text": "stacking = \"git-spice\" but git-spice is not on PATH"},
+                           {"severity": "problem", "text": "the worktree wt/1 has uncommitted changes"}]
+    assert by["quiet"] == [] and by["odd"][0]["text"].startswith("its check failed: TypeError: returned str")
+    assert out["plugins_not_checked"] == ["the plugin gone did not load, so its check was not run: ImportError: x"]
+    assert seen["root"] == project.repo_root and seen["raw"]["project"]["work"] == "tasks"
+    assert out["roles"] and out["config_can_change"] == "yes"            # the rest of the answer is still there
+
+
+def test_check_setup_runs_the_installed_plugins_checks(project, store):
+    out = see(project, store, "check_setup")
+    assert "agents" in {p["plugin"] for p in out["plugin_checks"]}
+    assert all(f["severity"] in ("problem", "error") for p in out["plugin_checks"] for f in p["findings"])
+
+
 def test_the_task_systems_snapshot_is_a_query_on_the_bus(project, store):
     with FakeTasks(project) as tasks:
         for tool, args in (("create_milestone", {"name": "M"}), ("create_ticket", {

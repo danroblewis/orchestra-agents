@@ -1105,14 +1105,7 @@ afterwards whether it did. The tools hold Orchestra's Python objects (`orchestra
 for the reads, `orchestra.sd.predictions.Predictions` for a prediction, as the agent's instance,
 its `source`) in the tool server's process: no HTTP, no token of Orchestra's.
 
-**Experiments were removed on 2026-11-01** (the owner). An experiment was a draft copy of the
-model an agent edited and ran forward, replayed over a past window or asked the inverse question
-of, and committed as a prediction (the groups `experiments` and `replay`, and `commit_prediction`).
-What replaced them: the Supervisor's design tools (A1: `declare_expected_effect` states a designed
-machine's expected effect on the declared layer, and `confirm` publishes it as
-`orchestra.prediction.made` through Orchestra's `Predictions`, `design_confirm.py`), and
-`predict_fix` for a fix's or a ticket's change. A saved role that still names `experiments` or
-`replay` simply has nothing from them.
+Predictions come from the design tools (`declare_expected_effect` and `confirm`, `design_confirm.py`) and `predict_fix`.
 
 **The tools, in two groups.** `model` reads: the model (`read_model`), series (`read_series`),
 the eras and what changed at the last boundary (`read_eras`), observability, an equation checked

@@ -1,26 +1,28 @@
-"""The modeling tools: an agent reads Orchestra's system dynamics model, experiments on a copy of
-it, and commits an experiment as the prediction of a change it is about to make (Orchestra's
-experiments, ``orchestra.sd.experiments.api.Experiments``, called in this process: the agents'
-tool server runs with Orchestra importable, so it holds the object rather than going over HTTP).
+"""The modeling tools: an agent reads Orchestra's system dynamics model, and states the expected
+effect of a change it is about to make as a prediction (Orchestra's reads,
+``orchestra.sd.reads.ModelReads``, and predictions, ``orchestra.sd.predictions.Predictions``,
+called in this process: the agents' tool server runs with Orchestra importable, so it holds the
+objects rather than going over HTTP).
 
 Every answer leads with ``summary``, short lines with the key numbers first (``model_text`` and
-``run_text``); Orchestra's own JSON, trajectories included, comes only with ``raw: true``.
+``run_text``); Orchestra's own JSON comes only with ``raw: true``.
 
 Who may do what (the groups are checked before any of this runs, ``access.authorize``):
 
-- ``model``: read the model, series, eras, observability, predictions and verdicts, experiments
-  and their runs, check an equation, and the modeling guide;
-- ``experiments``: make, edit, run forward and inverse, and discard one's own experiments
-  (an experiment is its owner's, the agent instance that made it: Orchestra refuses another's);
-- ``replay``: replay any experiment over a past window (a reviewer checks a worker's equations);
-- ``predict``: commit one's own experiment as the prediction of a change, and announce the change.
-  A session on a ticket commits only an experiment it made on that ticket (``add_experiment``),
-  and only the agent that committed a prediction announces its change (``announce_change`` here,
+- ``model``: read the model, series, eras, observability, predictions and verdicts, check an
+  equation, and the modeling guide;
+- ``predict``: state a fix's expected effect as a prediction (``predict_fix``), and announce the
+  change. Only the agent that made a prediction announces its change (``announce_change`` here,
   or the ``change`` of a Supervisor's setup tool, ``claim_change``).
 
-Nothing here changes a machine, the model or a metric: an experiment is a statement about the
-model and a prediction is judged later; the one thing published is the change's announcement
-(``system.changed``), as the agent that makes the change."""
+The experiments (a draft copy of the model edited and run forward, replayed or inverted, and
+committed as a prediction) were removed on 2026-11-01 (the owner); the Supervisor's design tools
+(``declare_expected_effect``, ``confirm``: ``design_confirm.py``) and ``predict_fix`` make the
+predictions now.
+
+Nothing here changes a machine, the model or a metric: a prediction is judged later; the one
+thing published is the change's announcement (``system.changed``), as the agent that makes the
+change."""
 
 from __future__ import annotations
 
@@ -36,22 +38,21 @@ from .protocol import ended
 from .store import AgentStore, StoreError
 
 READS = frozenset({"modeling_guide", "read_model", "read_series", "read_eras", "read_observability", "check_equation",
-                   "read_predictions", "list_experiments", "read_experiment", "diff_experiment", "read_run"})
-WRITES = frozenset({"create_experiment", "edit_experiment", "load_model", "discard_experiment", "run_forward", "run_inverse"})
-COMMANDS = READS | WRITES | frozenset({"run_replay", "commit_prediction", "announce_change", "predict_fix"})
+                   "read_predictions"})
+COMMANDS = READS | frozenset({"announce_change", "predict_fix"})
 CHANGED = "system.changed"
 SERIES_POINTS = 20_000         # Orchestra's cap on the points of one series answer
 RECENT = 6                     # the last readings a series summary shows
 PREDICTIONS_SHOWN = 10
-NO_SD = ("running the model needs Orchestra's simulation extra beside the agents (numpy and scipy: "
-         "pip install 'orchestra[sd]'); reading the model does not")
+NO_SD = ("this read needs Orchestra's simulation extra beside the agents (numpy and scipy: "
+         "pip install 'orchestra[sd]')")
 
 
-def experiments(project: Project, source: str):
-    """Orchestra's experiments as ``source`` (the agent instance). Tests replace this to read
-    a history they made instead of the metrics store."""
-    from orchestra.sd.experiments.api import Experiments
-    return Experiments(project.orchestra, source)
+def reads(project: Project):
+    """Orchestra's model reads. Tests replace this to read a history they made instead of the
+    metrics store."""
+    from orchestra.sd.reads import ModelReads
+    return ModelReads(project.orchestra)
 
 
 def seconds(v, what: str) -> float:
@@ -81,14 +82,13 @@ def answer(lines: list[str], raw: dict | None = None, **extra) -> dict:
 
 
 def handle_model(project: Project, store: AgentStore, command: str, a: dict, role: str, ticket: str) -> dict:
-    from orchestra.sd.experiments.api import ExperimentError
+    from orchestra.sd.reads import ReadError
 
     source = store.events.source or role
     try:
         return _handle(project, store, command, a, role, ticket, source)
-    except ExperimentError as e:
-        where = f" (edit {e.extra['index']}; the draft is unchanged)" if e.extra.get("index") is not None else ""
-        raise StoreError(f"{e}{where}") from None
+    except ReadError as e:
+        raise StoreError(str(e)) from None
     except ImportError as e:
         raise StoreError(f"{NO_SD}: {e}") from None
 
@@ -99,7 +99,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
         return {"ok": True, "guide": prompting.modeling_guide()}
     if command == "announce_change":
         return announce_change(store, role, ticket, a)
-    x = experiments(project, source)
+    x = reads(project)
     raw = bool(a.get("raw"))
     if command == "read_model":
         m = x.model(a.get("version"), raw=raw)["model"]
@@ -113,7 +113,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
         o = x.observability(a.get("version"))
         return answer(T.observability_lines(o), {"observability": o} if raw else None)
     if command == "check_equation":
-        got = x.check_equation(a.get("equation"), a.get("params"), experiment=a.get("experiment"))
+        got = x.check_equation(a.get("equation"), a.get("params"), version=a.get("version"))
         if not got.get("ok"):
             return {"ok": False, "summary": [f"refused: {got.get('error')}"], "error": got.get("error")}
         r = got["reads"]
@@ -122,51 +122,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
                        f"{names('inputs')}, parameters {names('params')}, functions {names('functions')}")], reads=r)
     if command == "read_predictions":
         return read_predictions(x, a, source)
-    if command == "list_experiments":
-        rows = x.list(owner=source if a.get("mine") else a.get("owner"), status=a.get("status"), era=a.get("era"))["experiments"]
-        lines = [f"{len(rows)} experiment(s)" + (" of yours" if a.get("mine") else "")]
-        verdict = lambda r: ((r.get("verdict") or {}).get("verdict") or (r.get("verdict") or {}).get("status")) if r.get("verdict") else None
-        lines += [f"  {r['id']} \"{r.get('title')}\" ({r.get('status')}, {r.get('owner')}): {r.get('runs')} run(s)"
-                  + (f", prediction {r['prediction']}" if r.get("prediction") else "") + (f": {verdict(r)}" if verdict(r) else "")
-                  for r in rows[-40:]]
-        return answer(lines)
-    if command == "read_experiment":
-        e = x.get(a["id"], base=raw)["experiment"]
-        return answer(T.experiment_lines(e, x.diff(a["id"])["diff"], source, model=bool(a.get("draft"))), {"experiment": e} if raw else None)
-    if command == "diff_experiment":
-        d = x.diff(a["id"])["diff"]
-        return answer(T.diff_lines(d), {"diff": d} if raw else None)
-    if command == "read_run":
-        got = x.run_result(a["experiment"], a["run"])["run"]
-        return answer(R.RUN_LINES[got["mode"]](got), {"run": got} if raw else None)
-    if command == "create_experiment":
-        e = x.create(a.get("title"), a.get("purpose") or "", a.get("version"))["experiment"]
-        store.add_experiment(role, e["id"], ticket)
-        return answer(T.experiment_lines(e, None, source) + [
-            ("the draft is a copy of the model above (read_model shows it): change it with edit_experiment or load_model, check it "
-            "with run_replay, see what it does next with run_forward")], experiment=e["id"])
-    if command in ("edit_experiment", "load_model"):
-        edits = [{"op": "load_model", "model": a.get("model")}] if command == "load_model" else edit_list(a)
-        got = x.edit(a["id"], edits)
-        return answer(T.experiment_lines(got["experiment"], got["diff"], source, model=command == "load_model"), experiment=a["id"])
-    if command == "discard_experiment":
-        e = x.discard(a["id"])["experiment"]
-        return answer([f"experiment {e['id']} discarded: it stays readable and changes no more"])
-    if command in ("run_forward", "run_replay", "run_inverse"):
-        return run(x, store, command, a, role, ticket, raw)
-    if command == "commit_prediction":
-        return commit(x, store, a, role, ticket, source)
     raise StoreError(f"unknown command {command!r}")
-
-
-def edit_list(a: dict) -> list:
-    if a.get("edits") is not None and a.get("edit") is not None:
-        raise StoreError("give edit (one) or edits (a batch), not both")
-    edits = a.get("edits") if a.get("edits") is not None else [a.get("edit")] if a.get("edit") is not None else None
-    if not isinstance(edits, list) or not edits:
-        raise StoreError("edits: a list of edits, applied together or not at all (or edit: one), each with its op "
-                         "(add_flow, replace_flow, remove_flow, set_params, add_stock, remove_stock, set_level, set_input)")
-    return edits
 
 
 def read_series(x, a: dict) -> dict:
@@ -191,9 +147,7 @@ def read_series(x, a: dict) -> dict:
 
 
 def read_predictions(x, a: dict, source: str) -> dict:
-    if a.get("experiment"):
-        preds = [x.prediction(a["experiment"])["prediction"]]
-    elif a.get("id"):
+    if a.get("id"):
         preds = [x.predictions(a["id"])["prediction"]]
     else:
         preds = [p for p in x.predictions()["predictions"]
@@ -207,56 +161,10 @@ def read_predictions(x, a: dict, source: str) -> dict:
     return answer(lines, raw if a.get("raw") else None)
 
 
-def run(x, store: AgentStore, command: str, a: dict, role: str, ticket: str, raw: bool) -> dict:
-    mode = command.removeprefix("run_")
-    opts: dict[str, Any] = {}
-    if mode == "forward":
-        opts["horizon_s"] = seconds(a.get("horizon") or "1h", "horizon")
-        for k in ("stocks", "bounds", "members"):
-            if a.get(k) is not None:
-                opts[k] = a[k]
-    else:
-        opts.update(window(a))
-    if mode == "inverse":
-        for k in ("targets", "hold", "new_flows", "max_changes", "alternatives", "check"):
-            if a.get(k) is not None:
-                opts[k] = a[k]
-        opts["deadline_s"] = a.get("deadline_s") or 60
-    got = x.run(a["id"], mode, **opts)["run"]
-    if mode == "inverse" and got["result"].get("experiment"):
-        store.add_experiment(role, got["result"]["experiment"], ticket)
-    lines = R.RUN_LINES[mode](got)
-    return answer(lines, {"run": got} if raw else None, run=got["id"], experiment=a["id"])
-
-
-def commit(x, store: AgentStore, a: dict, role: str, ticket: str, source: str) -> dict:
-    """The experiment as the prediction of the caller's own change. A session on a ticket commits
-    only an experiment it made on that ticket."""
-    eid = a["id"]
-    if ticket:
-        mine = {e["id"]: e.get("ticket") for e in store.agent_state(role).get("experiments") or []}
-        if mine.get(eid) != ticket:
-            raise StoreError(f"refused: experiment {eid} was not made on your ticket {ticket}; a prediction is for your own "
-                             "ticket's change, so commit an experiment you made on it")
-    horizon = seconds(a.get("horizon"), "horizon")
-    made = x.commit(eid, horizon, subject=a.get("subject") or ticket or None)
-    p, change = made["prediction"], made["change"]
-    store.add_prediction(role, {"id": p.get("id"), "change": change, "experiment": eid, "ticket": ticket, "source": source,
-                                "horizon_s": horizon, "at": time.time(), "announced": None})
-    lines = [f"prediction {p.get('id')} recorded for change {change}; it will be judged {T.dur(horizon)} after the change is announced",
-             "  expects: " + ("nothing to change (the null test)" if not p.get("expect") else
-                              "; ".join(R.expectation(e) for e in p.get("expect") or [])),
-             "  stocks' predicted trajectories: " + ("from your forward run" if p.get("trajectories") else
-                                                      "none (Orchestra will run the previous era's model with your edits)"),
-             (f"next: make the change, then announce it with this change id ({change}): announce_change, or, for a configuration "
-             "change, the setup tool's change argument. Until it is announced nothing is judged.")]
-    return answer(lines, prediction=p.get("id"), change=change)
-
-
 def own_prediction(store: AgentStore, role: str, change: str) -> dict:
     found = store.find_prediction(change)
     if found is None or found[0] != role:
-        raise StoreError(f"refused: {change!r} is not the change of a prediction you committed; commit_prediction gives the id")
+        raise StoreError(f"refused: {change!r} is not the change of a prediction you made; predict_fix (or the Supervisor's confirm) gives the id")
     rec = found[1]
     if rec.get("announced"):
         raise StoreError(f"change {change} was already announced ({rec['announced']})")
@@ -291,7 +199,7 @@ def announce_change(store: AgentStore, role: str, ticket: str, a: dict) -> dict:
 
 
 def publish(store: AgentStore, rec: dict, note: str, source: str | None = None) -> dict:
-    ev = store.events.publish(CHANGED, {"prediction": rec.get("id"), "experiment": rec.get("experiment"), "ticket": rec.get("ticket") or None,
+    ev = store.events.publish(CHANGED, {"prediction": rec.get("id"), "ticket": rec.get("ticket") or None,
                                         "note": note}, source=source, id=rec["change"],
                               **({"subject": rec["ticket"]} if rec.get("ticket") else {}))
     store.update_prediction(rec["change"], announced=f"{CHANGED} at {T.when(time.time())}")
@@ -319,7 +227,7 @@ def announce_landed(store: AgentStore, ev: dict, work: str) -> list[str]:
 
 
 def predict_fix(project: Project, store: AgentStore, a: dict, role: str, ticket: str) -> dict:
-    """A fix's expected effect, stated before it is made without an experiment (the Supervisor's
+    """A fix's expected effect, stated before it is made (the Supervisor's
     flow-keeping: every fix carries a prediction): Orchestra's ``Predictions.record`` publishes
     ``orchestra.prediction.made`` as the caller, and the record is the caller's, so its setup
     tools' ``change`` and ``announce_change`` take its id."""
@@ -338,9 +246,10 @@ def predict_fix(project: Project, store: AgentStore, a: dict, role: str, ticket:
     except PredictionError as e:
         raise StoreError(f"Orchestra refused the prediction: {e}") from None
     change = made.get("change") or (made.get("data") or {}).get("change")
-    store.add_prediction(role, {"id": made.get("id"), "change": change, "experiment": None, "ticket": ticket, "source": source,
+    store.add_prediction(role, {"id": made.get("id"), "change": change, "ticket": ticket, "source": source,
                                 "horizon_s": horizon, "at": time.time(), "announced": None, "note": note})
-    effect = "the fix should change nothing measured (the null test)" if not expect else "; ".join(R.expectation(e) for e in expect)
+    stated = made.get("expect") or (made.get("data") or {}).get("expect") or expect       # Orchestra's checked shape, with each kind
+    effect = "the fix should change nothing measured (the null test)" if not expect else "; ".join(R.expectation(e) for e in stated)
     lines = [f"prediction {made.get('id')} recorded for change {change}: {effect}",
              (f"next: make the fix with change={change} (a setup tool), or announce it with announce_change once it is made; "
               f"Orchestra judges it {T.dur(horizon)} after the announcement")]

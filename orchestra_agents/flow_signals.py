@@ -129,7 +129,7 @@ def _own_record(store: AgentStore, evs: list[dict], since: float) -> list[dict]:
             out.append({"key": f"verdict:{ev.get('prediction')}", "kind": "verdict",
                         "text": f"your prediction {ev.get('prediction')} was judged {ev.get('verdict')!r}"})
     fixes = [a for a in st.get("actions") or [] if a.get("at", 0) >= since and a.get("tool") in FIX_TOOLS]
-    predicted = [a for a in st.get("actions") or [] if a.get("at", 0) >= since and a.get("tool") in ("predict_fix", "commit_prediction")]
+    predicted = [a for a in st.get("actions") or [] if a.get("at", 0) >= since and a.get("tool") == "predict_fix"]
     if len(fixes) > len(predicted):
         out.append({"key": f"unpredicted:{round(since)}", "kind": "unpredicted",
                     "text": f"{len(fixes) - len(predicted)} fix(es) since the last round without a prediction: "

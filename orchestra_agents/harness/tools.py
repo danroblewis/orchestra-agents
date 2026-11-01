@@ -63,20 +63,12 @@ def OS(d: str) -> dict:
 
 
 DURATION = S("A duration such as 90s, 30m, 2h or 1d (plain digits are seconds)")
-EXPERIMENT = S("The experiment's id (x-...)")
 RAW = B("Also give Orchestra's whole answer as JSON (trajectories, every number); default: the summary only")
 WINDOW = {"span": S("The past window back from now, such as 30m, 2h or 1d (default 1h)"),
           "start": {"type": "number", "description": "Or the window's start, unix seconds"},
-          "end": {"type": "number", "description": "And its end, unix seconds (default now)"},
-          "era": S("Or a whole era, by its id (e1, ...): read_eras lists them")}
-CHANGE = S("The change id commit_prediction gave you, when this change is the one you predicted: Orchestra judges "
+          "end": {"type": "number", "description": "And its end, unix seconds (default now)"}}
+CHANGE = S("The change id predict_fix (or confirm) gave you, when this change is the one you predicted: Orchestra judges "
            "the prediction from this announcement")
-EDIT_OPS = ("Each edit is an object with an op: add_flow {id, from, to, equation, params} (from/to a stock id, or null for "
-            "outside); replace_flow {id, equation, params, from?, to?} (the whole equation); remove_flow {id}; set_params "
-            "{flow, params}; add_stock {id, initial} (a hidden stock); remove_stock {id}; set_level {stock, level}; set_input "
-            "{input, scenario} (scenario: {kind: hold|value|scale|step|ramp|series, ...}). Equations are in the language "
-            "modeling_guide describes.")
-
 
 # create_role, update_role, create_agent, update_agent on a confirmed designed machine (api_org._root)
 DESIGNED_ROOT = {"root": S("Only for a confirmed designed machine, and only when the owner asked: 'repository' writes it "
@@ -197,7 +189,7 @@ TOOLS: list[ToolDef] = [
             "what it never does, how it reports). No schedule, no team: those belong to agents and teams.",
             {"name": S("lowercase_with_underscores"), "description": S("One line: what this kind of agent is good at"),
              "prompt": S("The job description in markdown, under sixty lines"),
-             "tools": A("Tool groups the role needs: tickets, planning, guides, context, pipeline, capacity, escalate, events, model, experiments, replay, predict"),
+             "tools": A("Tool groups the role needs: tickets, planning, guides, context, pipeline, capacity, escalate, events, model, predict"),
              **DESIGNED_ROOT},
             ("name", "description", "prompt")),
     ToolDef("update_role", "roles", "Change a custom role's description, tools, or prompt.",
@@ -267,7 +259,7 @@ TOOLS: list[ToolDef] = [
     ToolDef("get_model", "observe",
             "The system dynamics model Orchestra discovered from the metrics, for a diagnosis: the series each stock is, flows "
             "with their equations and the machines attributed to them, and the series the last discovery left out, with why. "
-            "To experiment on the model, read_model."),
+            "To read its equations in the equation language, read_model."),
     ToolDef("read_instrument", "observe",
             "A declared instrument ([[collect]], [[scrape]] or [[sources]]) as Orchestra sees it: when it last wrote, how "
             "many points, failures and its last error, the end of its log, and the latest values of each series it stored "
@@ -387,9 +379,8 @@ TOOLS: list[ToolDef] = [
             {"name": S("The [[machines]] entry's name"), "reason": S("Why, in a sentence")}, ("name", "reason")),
     # model: read the system dynamics model and what was done with it (modeling.py)
     ToolDef("modeling_guide", "model",
-            "How to read the system dynamics model and experiment on it: what stocks, flows, equations, eras, trust and "
-            "verdicts mean, the equation language, and how to test a hypothesis before you believe it. Read it before your "
-            "first experiment."),
+            "How to read the system dynamics model: what stocks, flows, equations, eras, trust and verdicts mean, the "
+            "equation language, and how to state a prediction. Read it before your first prediction."),
     ToolDef("read_model", "model",
             "The system dynamics model Orchestra discovered from the metrics, summarised: each stock with its level now, each "
             "flow with its ends, its equation in the equation language, its origin and error, and whether to trust it.",
@@ -397,7 +388,7 @@ TOOLS: list[ToolDef] = [
     ToolDef("read_series", "model",
             "Measured history of stocks (levels), flows (rates) or measured inputs, summarised: first and last, range, mean, "
             "trend an hour, the latest readings. points: true gives the points themselves, paged.",
-            {"ids": A("Stock, flow or input ids from read_model (at most 64)"), **{k: WINDOW[k] for k in ("span", "start", "end")},
+            {"ids": A("Stock, flow or input ids from read_model (at most 64)"), **WINDOW,
              "points": B("Also give the points, [unix seconds, value], at most limit a series"), "limit": I("Points a series, default 500"),
              "after": {"type": "number", "description": "Continue a series cut short: its next"}, "version": I("A saved version")},
             ("ids",)),
@@ -408,71 +399,17 @@ TOOLS: list[ToolDef] = [
             "Which stocks what is measured determines, which are hidden, and the model's modes (how fast it settles).",
             {"version": I("A saved version"), "raw": RAW}),
     ToolDef("check_equation", "model",
-            "Whether an equation parses in the equation language against the model (or an experiment's draft), and what it reads.",
+            "Whether an equation parses in the equation language against the model, and what it reads.",
             {"equation": S("e.g. k * min(queue, 2 * workers)"), "params": O("Its parameters, e.g. {\"k\": 0.5}"),
-             "experiment": S("Check against this experiment's draft")}, ("equation",)),
+             "version": I("Check against a saved version")}, ("equation",)),
     ToolDef("read_predictions", "model",
             "Predictions and their verdicts (passed, no effect, side effect, model wrong elsewhere, interrupted, undecided), "
             "with the numbers each was judged by.",
-            {"id": S("One prediction"), "experiment": S("The prediction this experiment became"), "change": S("The change id"),
+            {"id": S("One prediction"), "change": S("The change id"),
              "mine": B("Only yours"), "raw": RAW}),
-    ToolDef("list_experiments", "model", "Experiments, newest last: id, title, status, owner, runs, prediction.",
-            {"mine": B("Only yours"), "owner": S("Only this machine's"), "status": S("draft, committed or discarded"),
-             "era": S("Only those made on this era's model or predicting the change that began it")}),
-    ToolDef("read_experiment", "model",
-            "One experiment: what its draft changed from the base model, its runs, its prediction.",
-            {"id": EXPERIMENT, "draft": B("Also the whole draft model, summarised"), "raw": RAW}, ("id",)),
-    ToolDef("diff_experiment", "model", "What an experiment's draft changed from its base model: flows, stocks, the scenario.",
-            {"id": EXPERIMENT, "raw": RAW}, ("id",)),
-    ToolDef("read_run", "model", "An earlier run of an experiment again, summarised, or whole with raw.",
-            {"experiment": EXPERIMENT, "run": S("The run's id (r-...)"), "raw": RAW}, ("experiment", "run")),
-    # experiments: a draft copy of the model, edited and run; it changes nothing in the system
-    ToolDef("create_experiment", "experiments",
-            "Start an experiment: a draft copy of the model (the current era's latest, or a saved version) that you edit and run. "
-            "It changes nothing in the system.",
-            {"title": S("What you are trying, in a few words"), "purpose": S("The question it answers"),
-             "version": I("Copy a saved version instead")}, ("title",)),
-    ToolDef("edit_experiment", "experiments",
-            "Edit your experiment's draft: one edit (edit) or a batch (edits), applied together or not at all. " + EDIT_OPS,
-            {"id": EXPERIMENT, "edits": OS("The batch, in order"), "edit": O("One edit")}, ("id",)),
-    ToolDef("load_model", "experiments",
-            "Replace your experiment's whole draft: {stocks: [{id, initial?}], flows: [{id, from, to, equation, params}]}. A stock "
-            "the base measures keeps its series; a new one is hidden.",
-            {"id": EXPERIMENT, "model": O("The whole model")}, ("id", "model")),
-    ToolDef("run_forward", "experiments",
-            "Run the base model and your draft forward from the levels now: each stock's base, experiment and difference with "
-            "a band, the limits they hit, and what not to trust.",
-            {"id": EXPERIMENT, "horizon": S("How far ahead, such as 30m, 2h or 1d (default 1h)"),
-             "stocks": A("Only these stocks"), "bounds": O("Limits to watch: {stock: [lo, hi]}"),
-             "members": I("Runs in the band, default 24"), "raw": RAW}, ("id",)),
-    ToolDef("run_inverse", "experiments",
-            "Ask what would have had to be different for a past window to come out otherwise: the fewest changes to the "
-            "draft's numbers (and, with new_flows, a new flow) under which a replay meets the targets. The answer is a new "
-            "draft of yours. Hold what must not move; treat an ambiguous answer as a warning.",
-            {"id": EXPERIMENT, "targets": OS("{stock, scale} (its mean ×), {stock, level}, {stock, below|above}, {flow, scale}, "
-                                             "{flow, total}"),
-             "hold": OS("{flow} (its equation stays) or {series} (that history stays)"), **WINDOW,
-             "new_flows": B("Also consider a new inflow or outflow of a target stock"), "max_changes": I("1 to 8, default 3"),
-             "deadline_s": I("Seconds to search, up to 300, default 60"), "alternatives": I("Other answers to report, default 3"),
-             "check": B("Check the answer's uniqueness by rediscovery (default true)"), "raw": RAW}, ("id", "targets")),
-    ToolDef("discard_experiment", "experiments", "End an experiment of yours you will not commit; it stays readable.",
-            {"id": EXPERIMENT}, ("id",)),
-    # replay: a past window run again on an experiment's equations
-    ToolDef("run_replay", "replay",
-            "Replay a past window with the base model and an experiment's draft, from the levels measured at its start, against "
-            "what was measured: whether the draft's equations explain what happened (each stock's error, each counted "
-            "flow's fit), not only the outcome wanted. Any experiment may be replayed.",
-            {"id": EXPERIMENT, **WINDOW, "raw": RAW}, ("id",)),
-    # predict: an experiment as the prediction of the caller's own change
-    ToolDef("commit_prediction", "predict",
-            "Commit your experiment as the prediction of the change you are about to make: its edits become what the change "
-            "is expected to do, its forward run what the stocks will do. Returns the change id; make the change, then announce "
-            "it with that id. Orchestra judges it after the horizon and the verdict wakes you.",
-            {"id": EXPERIMENT, "horizon": S("How long after the change to judge it, such as 30m or 2h: long enough for the "
-                                            "flows you changed to count a few dozen events"),
-             "subject": S("What the change is about (default: your ticket, or the experiment)")}, ("id", "horizon")),
+    # predict: the expected effect of the caller's own change, and its announcement
     ToolDef("predict_fix", "predict",
-            "State what a fix will do before you make it, without an experiment: which stocks or flows move and which way, "
+            "State what a fix will do before you make it: which stocks or flows move and which way, "
             "and what must not change. Commits orchestra.prediction.made and returns its change id: pass it to the fix (a "
             "setup tool's change) or announce it with announce_change once the fix is made. Orchestra judges it.",
             {"expect": OS("Each one of: {flow, factor} (its rate times factor; 0 stops it), {flow, unchanged: true}, "
@@ -482,7 +419,7 @@ TOOLS: list[ToolDef] = [
     ToolDef("announce_change", "predict",
             "Announce that the change you predicted is made (system.changed, carrying its change id): a new era begins and the "
             "prediction is judged from it. when: now (it is in effect) or landed (code that takes effect when your ticket lands).",
-            {"change": S("The change id commit_prediction gave you"), "note": S("What changed, in a sentence"),
+            {"change": S("The change id predict_fix gave you"), "note": S("What changed, in a sentence"),
              "when": {"type": "string", "enum": ["now", "landed"], "description": "now (default) or landed"}}, ("change",)),
     # guides: how to configure Orchestra and each installed plugin (orchestra.guides)
     ToolDef("list_guides", "guides",

@@ -100,8 +100,8 @@ setting there are no check-ins: attention events alone wake you.
 
 When plans differ in what they would do to the flow of work (more reviewers or smaller tickets,
 another order), compare them on the model rather than by feel: read `modeling_guide` once, then
-one experiment a plan and `run_forward` on each. Say which numbers decided, and what the runs
-did not trust. You commit no predictions.
+`read_model`, `read_eras` and `read_series` for the stocks each plan should move. Say which numbers
+decided, and what the model does not trust. You make no predictions.
 
 ## The one rule
 

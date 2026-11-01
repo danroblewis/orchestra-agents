@@ -17,8 +17,9 @@ from .builtins import ROLES as BUILTIN
 from .clock import now
 from .config import Project
 
-TOOL_GROUPS = ("tickets", "planning", "handoff", "guides", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "flows", "model", "experiments",
-               "replay", "predict")
+TOOL_GROUPS = ("tickets", "planning", "handoff", "guides", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "flows", "model",
+               "predict")
+# (`experiments` and `replay` were removed on 2026-11-01, the owner: a saved role naming them simply lacks them)
 # (`setup`, changing orchestra.toml, and `design`, the declared layer, are the Supervisor's alone: no custom role or team is granted them)
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 

@@ -1,5 +1,6 @@
-"""The ``workflows`` tools' definitions (orchestra-workflows' SPEC §7.1, §10), part of the one
-catalogue in ``tools.py``, which appends them. What each does is ``orchestra_agents/workflow_tools.py``.
+"""The ``workflows`` tools' definitions (orchestra-workflows' SPEC §7.1, §10), and ``request_work``
+(the ``work`` group), part of the one catalogue in ``tools.py``, which appends them. What each does
+is ``orchestra_agents/workflow_tools.py`` and ``request_work.py``.
 The definition's schema spells out the vocabulary's every key, with what it means, so a small model
 (Haiku) writes it without guessing; the plugin's own checks are still the judge."""
 
@@ -95,4 +96,20 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "(step, pile, wait reason), the facts not counted toward a step and why, and its last facts.",
             {"item": S("The item's id (its subject: ORC-12, task_loop@2026-11-01T00:00Z)"),
              "last": I("How many of its latest facts to show (default 15)")}, ("item",)),
+    ToolDef("request_work", "work",
+            "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
+            "with the fields, if any). The Supervisor asks only for the owner: quote their words, and the request goes "
+            "out as theirs (source owner); the Coordinator's is its own, as the planner. Refused, nothing published: "
+            "an unknown workflow or one a request does not start (list_workflows), an id already used, or the floor "
+            "not running. Answers the item's id, the Items page link and how to follow it (explain_item).",
+            {"workflow": S("The workflow's name, as list_workflows shows it (task_loop)"),
+             "brief": S("The work asked for, in the owner's terms: what the first step's machine is given"),
+             "parent": S("The parent item's id, when this is part of a larger item"),
+             "fields": {"type": "object", "description": "The item's fields to set at once, {name: value}: "
+                        "{\"priority\": 2}"},
+             "item": S("The new item's id (leave out: <workflow>-<6 hex>)"),
+             "quote": S("The Supervisor's: the owner's own words asking for this work, from their message this turn, "
+                        "exactly, at least three words (or their whole message). Required of the Supervisor; never "
+                        "invent one. The Coordinator leaves it out"),
+             "reason": REASON}, ("workflow", "brief", "reason")),
 ]

@@ -340,6 +340,33 @@ A worked example. The owner: "declare a two-step workflow: write then review". Y
 the quote "declare a two-step workflow" and a reason; then tell the owner where it was written,
 what the notes say, and that the Workflows page draws it.
 
+### Starting a piece of work
+
+When the owner asks for work ("do X", "start Y") and a workflow fits, start it with
+`request_work`; never tell the owner to publish an event themselves.
+
+1. `list_workflows`: the workflows a request starts (`starts` holds `{"request": true}`, or is
+   empty). One fits: use it. More than one fits: ask the owner which, and request nothing yet.
+   None fits: it is a ticket for the Coordinator (`hand_to_coordinator`), or a workflow to declare.
+2. `request_work` with `workflow`, `brief` (the work in the owner's terms: the first step's
+   machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
+   source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the
+   larger item this is part of) and `fields` (`{"priority": 2}`).
+3. Answer the owner with the item's id, the Items page link (`/items/<id>`) and that you can say
+   where it is and why (`explain_item`).
+
+It is refused, with nothing published, when the workflow is not loaded or not started by a
+request, when the id is already used, and when the Workflows floor is not running (no `orchestra
+run`, or `workflows.floor` stopped: `list_processes`, `read_machine_log workflows.floor`): say so
+to the owner, with what starts it.
+
+A worked example. The owner: "start the task loop on adding a /version endpoint". `list_workflows`
+shows one workflow a request starts, `task_loop`, so you call `request_work` with `{"workflow":
+"task_loop", "brief": "Add a /version endpoint that returns the app version, with a test",
+"quote": "start the task loop on adding a /version endpoint", "reason": "the owner asked for the
+/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items/task_loop-3fa2c1,
+and I can tell you where it is."
+
 ## Checking it took
 
 - `check_setup`: the roles and who fills them, the work mode, what runs, and what each installed

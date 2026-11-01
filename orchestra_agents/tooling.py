@@ -33,6 +33,7 @@ from . import (
     observe_model,
     patching,
     prompting,
+    request_work,
     source_tools,
     transcripts,
     upstream,
@@ -152,6 +153,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handle_org(project, store, command, a, author, role)
     if command in DESIGN_COMMANDS:
         return design.handle(project, store, command, a, role)
+    if command == "request_work":
+        return request_work.request_work(project, store, a, role)
     if command in workflow_tools.COMMANDS:
         return workflow_tools.handle(project, store, command, a, role)
 

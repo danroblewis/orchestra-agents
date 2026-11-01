@@ -82,7 +82,7 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "Write a workflow the owner describes (the Workflows plugin's definition): the plugin's checks first; with any "
             "problem nothing is written and every problem is said; otherwise it is written to the state directory (or the "
             "repository's .orchestra/ when the owner says so) and the answer says what the project still lacks for it. "
-            "The Workflows, Items and Piles pages show it. Never write a definition file any other way.",
+            "The Items page shows its items, and the Dynamics page its piles. Never write a definition file any other way.",
             {"definition": DEFINITION,
              "root": E(["state", "repository"], "state (default): the state directory, never committed; repository: "
                                                 "the repository's .orchestra/, only when the owner says so (quote them)"),

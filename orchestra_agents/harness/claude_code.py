@@ -69,6 +69,23 @@ def transcript_path(cwd: Path, session_uuid: str) -> Path:
     return claude_config_dir() / "projects" / key / f"{session_uuid}.jsonl"
 
 
+# Claude Code's own ways to sign in without its login (which is in the macOS keychain or under its
+# config directory): without them a session signed in that way cannot start.
+CLAUDE_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
+SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
+
+
+def session_env(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """The host's environment without anything that may hold a credential (a name
+    ``integrate_kits.CREDENTIAL_VARS`` matches, or one ending in ``SECRET_SUFFIXES``), the
+    host's ``ORCHESTRA_*`` tokens among them: a session has its own (``SessionSpec.env``). Kept:
+    the rest (PATH, HOME, locale, proxies, CLAUDE_CONFIG_DIR) and Claude Code's own sign-in."""
+    from ..integrate_kits import CREDENTIAL_VARS
+    env = os.environ if environ is None else environ
+    return {k: v for k, v in env.items()
+            if k in CLAUDE_AUTH or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}
+
+
 class ClaudeCodeSession(AgentSession):
     def __init__(self, spec: SessionSpec, binary: str | None = None):
         self.spec = spec
@@ -145,8 +162,9 @@ class ClaudeCodeSession(AgentSession):
     def _env(self) -> dict[str, str]:
         """The turn's process environment, which Claude Code's Bash tool passes on to the commands it
         runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
-        ``orchestra agents tool`` reads."""
-        return {**os.environ, **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        ``orchestra agents tool`` reads. The session runs with --dangerously-skip-permissions, so it
+        gets none of the host's credentials (``session_env``)."""
+        return {**session_env(), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
 
     def _mcp_config(self, via: str = "mcp") -> Path:
         """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the

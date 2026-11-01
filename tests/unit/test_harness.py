@@ -518,3 +518,28 @@ def test_a_tool_call_with_arguments_the_tool_does_not_have_is_refused_with_what_
         check_args("escalate_to_supervisor", {"ticket_id": "T-1", "decision": "split it"})
     check_args("escalate_to_supervisor", {"note": "T-1 needs a decision: split it or narrow it"})
     check_args("not_a_tool", {"anything": 1})
+
+
+def test_claude_session_gets_none_of_the_hosts_credentials(tmp_path, monkeypatch):
+    for k in ("JIRA_TOKEN", "SLACK_BOT_SECRET", "DB_PASSWORD", "OPENAI_API_KEY", "ORCHESTRA_EVENTS_TOKEN", "AWS_SECRET_ACCESS_KEY"):
+        monkeypatch.setenv(k, "secret")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "claude-login")      # Claude Code's own sign-in
+    monkeypatch.setenv("LANG", "en_GB.UTF-8")
+    env = ClaudeCodeSession(spec(tmp_path))._env()
+    assert "JIRA_TOKEN" not in env and "secret" not in env.values()
+    assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "claude-login" and env["LANG"] == "en_GB.UTF-8"
+    assert env["PATH"] and env["HOME"] and env["ORCHESTRA_TICKET"] == "T-1"     # the spec's env is kept
+
+
+def test_claude_turn_starts_without_the_hosts_credentials(tmp_path, no_backoff, monkeypatch):
+    monkeypatch.setenv("JIRA_TOKEN", "secret")
+    f = tmp_path / "fake-claude"
+    f.write_text(f"""#!{sys.executable}
+import json, os, sys
+sys.stdin.read()
+print(json.dumps({{"type": "system", "subtype": "init", "mcp_servers": [{{"name": "orchestra", "status": "connected"}}]}}))
+print(json.dumps({{"type": "result", "subtype": "success", "result": os.environ.get("JIRA_TOKEN", "none")}}))
+""")
+    f.chmod(0o755)
+    res = ClaudeCodeSession(spec(tmp_path), binary=str(f)).prompt("hi", timeout=10)
+    assert res.error is None and res.text == "none"

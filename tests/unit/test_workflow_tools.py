@@ -166,7 +166,7 @@ def test_a_definition_is_written_to_the_state_directory_by_default(project, stor
     path = project.orchestra.state_dir / "workflows" / "write_review" / "workflow.json"
     assert out["ok"] and out["root"] == "state" and out["path"] == str(path) and path.is_file()
     assert fake.calls == [("problems", "write_review"), ("write", "state")]
-    assert "worktree" in out["notes"][0] and "/workflows" in out["shown"] and "Items" in out["shown"]
+    assert "worktree" in out["notes"][0] and "/workflows" not in out["shown"] and "/piles" not in out["shown"] and "Items" in out["shown"]
     assert out["author"] == "supervisor" and "committed" not in out
     assert "wrote the workflow write_review" in out["done"] and "as your proposal" in out["done"]
     assert store.agent_state("supervisor")["actions"][-1]["tool"] == "declare_workflow"

@@ -330,15 +330,15 @@ not installed: tell the owner, and write nothing.
   a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
   what the project still lacks (a program or a resource kind no one declares): say them to the
   owner. `list_workflows` reads them all back; `explain_item` says why an item is where it is.
-- **The owner reads them** on the plugin's pages: Workflows (`/workflows`, each drawn), Items
-  (`/items`) and Piles (`/piles`). Nothing there changes anything.
+- **The owner reads them** on the Items page (`/items`: every item, its step and who holds it) and
+  the Dynamics page (each pile a stock). Nothing there changes anything.
 
 A worked example. The owner: "declare a two-step workflow: write then review". You call
 `declare_workflow` with `{"name": "write_review", "starts": [{"request": true}], "steps": [{"name":
 "write", "who": {"role": "worker"}, "outcomes": {"ready": "review"}}, {"name": "review", "who":
 {"role": "reviewer"}, "outcomes": {"approved": null, "rejected": "write"}, "guards": {"rounds": 3}}]}`,
 the quote "declare a two-step workflow" and a reason; then tell the owner where it was written,
-what the notes say, and that the Workflows page draws it.
+what the notes say, and that its items will show on the Items page.
 
 ## Checking it took
 

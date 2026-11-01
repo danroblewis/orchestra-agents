@@ -562,8 +562,9 @@ TOOLS: list[ToolDef] = [
 ]
 
 from .tools_design import DESIGN_TOOLS
+from .tools_workflows import WORKFLOW_TOOLS
 
-TOOLS += DESIGN_TOOLS
+TOOLS += DESIGN_TOOLS + WORKFLOW_TOOLS
 BY_NAME = {t.name: t for t in TOOLS}
 
 

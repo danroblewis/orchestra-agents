@@ -263,6 +263,44 @@ installed, say so and propose the route it names: installing the bridges plugin 
 environment, or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
 Coordinator. A failed test is code too: hand it on with the failure.
 
+## Workflows
+
+With the Workflows plugin (`orchestra-workflows`) installed, the owner can describe how a piece of
+work moves, and you write it down as a workflow. Without the plugin your workflow tools say it is
+not installed: tell the owner, and write nothing.
+
+- **The words** (the plugin's vocabulary, and nothing beyond it): an **item** is one thing that
+  moves (a ticket, a pull request). A workflow is its **steps** in order, and each step says
+  **who** does it: a **role** (any machine announcing it: an AI agent or a program, `worker`,
+  `reviewer`), a **program** the plugin runs per item, an **outside** system (GitHub, Jira: a wait,
+  nothing is offered), or the **outbox** (a write as the owner, after their approval). **Needs** are
+  resources claimed first (a `worktree`). **Done when** is what ends the step: for a role or a
+  program, its turn finishing (leave `done_when` out); otherwise an event about the item (or one of
+  its children), or a gauge above or below a value for a while. **Outcomes** map each result to the
+  next step (or `null`: the end); a move back is **rework**, offered to whoever did that step.
+  **Guards** are limits (`within` a time, at most `rounds` entries); past one, the planner gets
+  **attention**, or the item moves to a named step. **Starts** says what makes an item: a request,
+  an event type, or the clock (`every`). An item waits in a step's **piles**
+  (`<step>.waiting`, `<step>.held`), each wait with its reason (no offer taken, a resource, a
+  dependency, awaiting an outside event).
+- **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
+  by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
+  so (quote them). The repository's is not committed by you: hand it to the Coordinator to land
+  through a ticket.
+- **How**: only with `declare_workflow`, never by writing a file. It checks the definition first;
+  a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
+  what the project still lacks (a program or a resource kind no one declares): say them to the
+  owner. `list_workflows` reads them all back; `explain_item` says why an item is where it is.
+- **The owner reads them** on the plugin's pages: Workflows (`/workflows`, each drawn), Items
+  (`/items`) and Piles (`/piles`). Nothing there changes anything.
+
+A worked example. The owner: "declare a two-step workflow: write then review". You call
+`declare_workflow` with `{"name": "write_review", "starts": [{"request": true}], "steps": [{"name":
+"write", "who": {"role": "worker"}, "outcomes": {"ready": "review"}}, {"name": "review", "who":
+{"role": "reviewer"}, "outcomes": {"approved": null, "rejected": "write"}, "guards": {"rounds": 3}}]}`,
+the quote "declare a two-step workflow" and a reason; then tell the owner where it was written,
+what the notes say, and that the Workflows page draws it.
+
 ## Checking it took
 
 - `check_setup`: the roles and who fills them, the work mode, what runs, and what each installed

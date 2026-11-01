@@ -19,6 +19,10 @@ YES = "Yes, you may read Jira, metadata only, with a read-only token in JIRA_TOK
 
 @pytest.fixture(autouse=True)
 def passing(monkeypatch):
+    # whether the Workflows plugin is importable is pinned, never read from the environment: without
+    # it a poller is a [[machines]] entry; test_with_the_workflows_plugin_it_is_the_floors_every_item
+    # sets it present and expects the floor's every item
+    monkeypatch.setattr(integrate_kits, "workflows_installed", lambda: False)
     monkeypatch.setattr(integrate_kits, "run_test", lambda target, name, **_: {
         "ran": True, "passed": True, "summary": "3 passed in 0.5s", "command": f"python -m pytest {target}/test_{name}.py -q"})
 

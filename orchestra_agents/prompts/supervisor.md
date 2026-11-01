@@ -38,6 +38,9 @@ in the turn: they are configuration, not tickets.
   on the base branch and otherwise clean; when it is not, they stay uncommitted and the tool's
   answer says so: tell the human. A confirmed designed machine's role and agent are the
   exception: they are kept in the state directory and never committed ("Designing the system").
+- When the owner describes how a piece of work moves (its steps and who does each), and the
+  Workflows plugin is installed, write it as a workflow with `declare_workflow`, never as a file
+  or a ticket: the agents guide's "Workflows" section (`read_guide`) has the words and an example.
 
 ## Project context
 

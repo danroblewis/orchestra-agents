@@ -996,6 +996,28 @@ already it is named as the expected publisher, never a new one proposed), each l
 neighbours the one before proposed to redraft, and it stops when one finds nothing new; it wakes
 the Supervisor once with one batched proposal; it proposes, never declares.
 
+**Workflows** (tool group `workflows`, the Supervisor's; `workflow_tools.py`,
+`harness/tools_workflows.py`; orchestra-workflows' SPEC §7.1, §8, §10). The owner describes a
+workflow (an item's steps, who does each, when each is done, its outcomes and guards); the
+Supervisor writes it with `declare_workflow`, the only way a definition is written from here. The
+Workflows plugin is an **optional dependency**, imported lazily in that one module for its
+validated writer (`define.check`, `define.write`), its loader (`define.load`) and its record's
+read API (`record.api.Record`): the one exception to rule 3's "nothing is imported from that
+plugin". Without the plugin each tool says it is not installed. `declare_workflow` takes the
+definition in §7.1's shape (its schema spells out each key), a `reason` and an optional `quote`
+(verified as the design tools verify one); the plugin's checks run first and any refusing problem
+refuses the call, every problem said, nothing written; otherwise it is written to the state
+directory (`~/.orchestrator/<key>/workflows/<name>/workflow.json`, the default) or, only with the
+owner's quoted words, to the repository's `.orchestra/workflows/<name>/workflow.json`, **left
+uncommitted**: the answer says so and the Supervisor hands it to the Coordinator to land through a
+ticket and a pull request (rule 2). The answer carries the path, the plugin's notes (what the
+project still lacks for it, shadowing) and where it shows (the plugin's Workflows, Items and Piles
+pages); the ledger keeps the line. `list_workflows` reads the loaded definitions back (where each
+is defined, its planner, starts, each step's who, needs and outcomes, the loader's problems and
+notes); `explain_item` gives an item's summary, its fields with the facts that set them, its
+position per workflow, the facts not counted and its last facts. The guide's "Workflows" section
+is the Supervisor's reference.
+
 ## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 
 Orchestra discovers a system dynamics model of the system from its metrics, and lets any machine

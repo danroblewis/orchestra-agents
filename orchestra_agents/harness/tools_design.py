@@ -43,7 +43,8 @@ OPTION = {"type": "object", "properties": {
     "how": S("Where it is read and what is counted"),
     "cost": S("How long a round takes and what it reads; for a store, its request rate against the store's limit"),
     "caveat": S("What it gets wrong, if anything"),
-    "series": S("For existing_series: the series' name"),
+    "series": S("For existing_series: the series' name, with the labels that pick the one meant when list_metrics "
+                "shows several under it (workflow_pile_items{pile=\"sail_check.waiting\"})"),
     "system": S("The company system it reads, if any (jira, github, prometheus, jenkins): it then needs the owner's approval"),
     "bearer_env": S("The NAME of the environment variable holding its token (WORK_TOKEN), never a value"),
     "url": S("For scrape: the URL it reads; add_instrument runs only this"),

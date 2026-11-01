@@ -184,7 +184,11 @@ def propose_measurements(project, store, a, prov):
     first, el = options[0], (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
     stock = discovered_stock_of(project, first["series"]) if first["kind"] == "existing_series" and first.get("series") else None
     linking = bool(stock and not el.get("found_as") and eid not in declined(store))
-    ops = [{"op": "record_measurement", "part": part, "id": eid, "options": options, "chosen": first["key"] if linking else chosen}]
+    waits = bool(first["kind"] == "existing_series" and first.get("series") and not stock and not el.get("found_as")
+                 and eid not in declined(store) and not stocks_named(project, first["series"])
+                 and recorded(project, first["series"]))
+    ops = [{"op": "record_measurement", "part": part, "id": eid, "options": options,
+            "chosen": first["key"] if linking or waits else chosen}]
     if linking:                                           # the existing series first: linked here, not left to the model
         ops.append({"op": "link", "part": part, "id": eid, "found_as": stock})
         if first.get("caveat"):
@@ -200,24 +204,73 @@ def propose_measurements(project, store, a, prov):
                      + f". Tell the owner it is linked, with the caveat; if they do not want it, they say so and you unlink "
                        f"it (link declared={eid} unlink=true, quoting them), and only then add another option")
     else:
+        if waits:
+            lines.append(f"{eid} is measured by option a, the existing series {first['series']}, chosen; no discovered stock "
+                         "is that series yet, so it waits for a link (the Dynamics page says so). Nothing new is recorded or "
+                         "run: once a discovery has it as a stock, link it (link, read_model for its key)")
         lines += link_hints(project, eid, [o.get("series") for o in options if o["kind"] == "existing_series"])
     return answer(project, done, lines, options=[{k: o[k] for k in ("key", "title", "kind", "clearance")} for o in options])
 
 
+LABEL = re.compile(r"""\s*([A-Za-z_]\w*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,}\s]*))\s*,?""")
+
+
+def _name_and_labels(series: str) -> tuple[str, dict[str, str]]:
+    """``name{a="x",b=y}`` as its name and labels (quoted or bare values)."""
+    name, _, rest = series.strip().partition("{")
+    return name.strip(), {m.group(1): next(g for g in m.groups()[1:] if g is not None)
+                          for m in LABEL.finditer(rest.rstrip().removesuffix("}"))}
+
+
 def discovered_stock_of(project: Project, series: str) -> str | None:
-    """The key of the current model's stock that is ``series`` (its key, or the key's name before
-    its labels), or None."""
+    """The key of the current model's stock that is ``series``: its key, or the one stock of that
+    name whose labels include every label the series gives. A name several stocks share (one per
+    label value: a pile per step) with no label to tell them apart is none of them (L3: the first
+    such stock was linked, a pile the owner had not asked for)."""
+    hits = stocks_named(project, series)
+    return hits[0] if len(hits) == 1 else None
+
+
+DAY_S = 86400.0
+
+
+def recorded(project: Project, series: str) -> bool:
+    """Whether the project's metrics store holds a series of that name (and labels, when given),
+    written in the last day."""
+    from orchestra.metrics import for_project
+
+    name, labels = _name_and_labels(series)
+    store = for_project(project.orchestra)
+    try:
+        return any(n == name and labels.items() <= {k: str(v) for k, v in ls.items()}.items()
+                   for n, ls, _ in store.recent(name, {"project": project.key}, since=time.time() - DAY_S))
+    except Exception:  # noqa: BLE001 - a store that cannot be read: nothing is chosen for it
+        return False
+    finally:
+        store.close()
+
+
+def stocks_named(project: Project, series: str) -> list[str]:
+    """The keys of the current model's stocks that ``series`` may name: its key, or those of its
+    name whose labels include every label it gives."""
     keys = intended_api.Keys(intended_api.current_model(project))
-    return next((k for k in keys.stocks if k == series or k.split("{", 1)[0] == series), None)
+    if series in keys.stocks:
+        return [series]
+    name, labels = _name_and_labels(series)
+    return [k for k in keys.stocks if (kn := _name_and_labels(k))[0] == name and labels.items() <= kn[1].items()]
 
 
 def link_hints(project: Project, eid: str, series: list[str | None]) -> list[str]:
     """For each existing series an option names that the model already has as a stock: link it."""
     out = []
     for name in dict.fromkeys(s for s in series if s):
-        if key := discovered_stock_of(project, name):
-            out.append(f"{name} is already a discovered stock ({key}): if it is what {eid} means, link it now "
-                       f"(link declared={eid} discovered={key}), so its expected effects can be judged")
+        hits = stocks_named(project, name)
+        if len(hits) == 1:
+            out.append(f"{name} is already a discovered stock ({hits[0]}): if it is what {eid} means, link it now "
+                       f"(link declared={eid} discovered={hits[0]}), so its expected effects can be judged")
+        elif hits:
+            out.append(f"{name} is {len(hits)} discovered stocks, one per label value ({'; '.join(hits[:8])}): name the one "
+                       f"{eid} means with its labels (series {hits[0]}), or link it (link declared={eid} discovered=<that key>)")
     return out
 
 

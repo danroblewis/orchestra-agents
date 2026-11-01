@@ -1,0 +1,48 @@
+{
+ "turn": 1,
+ "model": "haiku",
+ "seconds": 43,
+ "message": "I want to see how many pull requests are waiting on SAIL at any moment. Create a stock called PRs Waiting for SAIL.",
+ "text": "I declared the stock **PRs Waiting for SAIL** (`prs_waiting_for_sail`), added by you, and recorded how to measure it.\n\n- **Measurement:** the store already has `workflow_pile_items{workflow=\"delivery_live\", step=\"sail_check\", place=\"waiting\"}`, which counts items waiting at the SAIL check. Nothing new is recorded or run.\n- **Caveat:** that pile covers only the `delivery_live` workflow, and \"items at the SAIL check\" may not match \"pull requests waiting on SAIL\" exactly. A sibling pile, `step=\"sail\"`, also exists; I did not use it.\n- **Not yet linked:** no model exists yet (`read_model` says the host has not discovered one), so the stock has no link to a discovered stock. Once discovery runs under `orchestra run`, I'll link it to the matching stock.\n- **Where to look:** the Dynamics page shows it in the Expected group as a ghost, \"no series yet\", until the link is made. Its drawer lists the measurement under \"How to measure it\".\n\nIf the pile is not the number you mean, tell me which pull requests should count and I'll look for a better series.",
+ "error": null,
+ "timed_out": false,
+ "tools": [
+  "ToolSearch",
+  "declare_stock",
+  "list_metrics",
+  "read_model",
+  "propose_measurements"
+ ],
+ "ok": true,
+ "why": "",
+ "state": {
+  "stock": {
+   "id": "prs_waiting_for_sail",
+   "name": "PRs Waiting for SAIL",
+   "state": "declared",
+   "found_as": null,
+   "linked": null
+  },
+  "chosen": "a",
+  "options": [
+   {
+    "key": "a",
+    "kind": "existing_series",
+    "title": "Waiting pile at the SAIL check",
+    "series": "workflow_pile_items{workflow=\"delivery_live\", step=\"sail_check\", place=\"waiting\"}",
+    "instrument": null,
+    "first_points": []
+   }
+  ]
+ },
+ "cost_so_far": {
+  "usd": 0.0097,
+  "invocations": 1,
+  "usage": {
+   "input_tokens": 8,
+   "cache_creation_input_tokens": 36931,
+   "cache_read_input_tokens": 132573,
+   "output_tokens": 1991
+  }
+ }
+}

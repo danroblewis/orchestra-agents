@@ -88,6 +88,7 @@ EXPECTS = (
     re.compile(rf"\b\d+(?:\.\d+)?\s*(?:times|x|×|%|percent)\s+(?:more|less|fewer|higher|lower|faster|slower)\b{UPTO}*",
                re.IGNORECASE),
     re.compile(rf"\b(?:expect|expecting|predict)\s+(?:more|fewer|less|higher|lower|faster|slower)\b{UPTO}*", re.IGNORECASE),
+    re.compile(r"(?:\b[\w-]+\s+){0,4}(?:×\s?|\bx)\d+(?:\.\d+)?(?![\d\w])", re.IGNORECASE),   # "SAILED per day ×1.2"
 )
 
 

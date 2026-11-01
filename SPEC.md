@@ -1041,34 +1041,40 @@ notes); `explain_item` gives an item's summary, its fields with the facts that s
 position per workflow, the facts not counted and its last facts. The guide's "Workflows" section
 is the Supervisor's reference.
 
-## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
+## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 
-Orchestra discovers a system dynamics model of the system from its metrics, and lets any machine
-experiment on a copy of it and commit an experiment as the prediction of a change (Orchestra's
-USING_ORCHESTRA §5.8–5.9, SPEC §4.5). The agents get that as tools, so an agent can say what a
-change will do before it makes it, and is told afterwards whether it did. The tools hold
-Orchestra's Python API (`orchestra.sd.experiments.api.Experiments`, as the agent's instance, its
-`source`) in the tool server's process: no HTTP, no token of Orchestra's.
+Orchestra discovers a system dynamics model of the system from its metrics, lets any machine read
+it, and records and judges a machine's prediction of a change (Orchestra's SPEC §4.5). The agents
+get that as tools, so an agent can say what a change will do before it makes it, and is told
+afterwards whether it did. The tools hold Orchestra's Python objects (`orchestra.sd.reads.ModelReads`
+for the reads, `orchestra.sd.predictions.Predictions` for a prediction, as the agent's instance,
+its `source`) in the tool server's process: no HTTP, no token of Orchestra's.
 
-**The tools, in four groups.** `model` reads: the model (`read_model`), series (`read_series`),
+**Experiments were removed on 2026-11-01** (the owner). An experiment was a draft copy of the
+model an agent edited and ran forward, replayed over a past window or asked the inverse question
+of, and committed as a prediction (the groups `experiments` and `replay`, and `commit_prediction`).
+What replaced them: the Supervisor's design tools (A1: `declare_expected_effect` states a designed
+machine's expected effect on the declared layer, and `confirm` publishes it as
+`orchestra.prediction.made` through Orchestra's `Predictions`, `design_confirm.py`), and
+`predict_fix` for a fix's or a ticket's change. A saved role that still names `experiments` or
+`replay` simply has nothing from them.
+
+**The tools, in two groups.** `model` reads: the model (`read_model`), series (`read_series`),
 the eras and what changed at the last boundary (`read_eras`), observability, an equation checked
-(`check_equation`), predictions and their verdicts, experiments, their diffs and runs, and the
-modeling guide. `experiments` makes, edits (one edit, a batch, or the whole model with
-`load_model`), runs forward and inverse, and discards the caller's own experiments. `replay` runs
-any experiment over a past window. `predict` commits the caller's own experiment as the prediction
-of its own change (`commit_prediction`) and announces the change (`announce_change`).
+(`check_equation`), predictions and their verdicts, and the modeling guide. `predict` states the
+caller's expected effect of its own change as a prediction (`predict_fix`: `{flow, factor}`,
+`{flow, unchanged}`, `{stock, below|above}`, or nothing for the null test) and announces the
+change (`announce_change`).
 
 **Answers an LLM can use.** Each answer leads with `summary`: lines with the key numbers first
-(`stock queue: base 12 -> 15; experiment 12 -> 22 by +2h (band 19–25); not trusted: flow
-done: declared`), written by `model_text` and `run_text` from Orchestra's JSON. Trajectories and
-every number come only with `raw: true`; series points only with `points: true`, paged.
+(`  drain (ready -> outside) = k * ready [k=0.3]; fitted on 500 events, ±4%`), written by
+`model_text` and `run_text` from Orchestra's JSON. Every number comes only with `raw: true`;
+series points only with `points: true`, paged.
 
-**Grants** (`builtins.py`): the Supervisor has all four; the Coordinator `model`, `experiments`
-and `replay` (it compares plans, and commits nothing); a worker all four; a reviewer `model` and
-`replay` (it can replay a worker's experiment). A custom role or team may be granted any of them.
-Beyond the groups: an experiment is its owner's to change (Orchestra refuses another instance);
-a session on a ticket commits only an experiment it made on that ticket (`AgentStore.add_experiment`);
-only the agent that committed a prediction announces its change, once (`AgentStore.add_prediction`).
+**Grants** (`builtins.py`): the Supervisor and a worker have both; the Coordinator and a reviewer
+`model` (they read and compare, and predict nothing). A custom role or team may be granted either.
+Beyond the groups: only the agent that made a prediction announces its change, once
+(`AgentStore.add_prediction`).
 
 **Announcing the change.** Nothing is judged until the change is announced with the prediction's
 change id. A worker calls `announce_change`: `when: now` publishes `system.changed` (id: the change,
@@ -1079,7 +1085,7 @@ ticket's change is never announced). The Supervisor passes `change` to the setup
 a configuration change, whose `config.changed` then carries it as its id.
 
 **The verdict wakes the predictor** (`verdicts.py`). The host matches `orchestra.prediction.judged`
-by its `correlationid` (the change) to the agent that committed it: a resident or custom agent gets a
+by its `correlationid` (the change) to the agent that made it: a resident or custom agent gets a
 wake-up saying the verdict; a worker, whose ticket session is over by then, gets one short turn of
 its own (`<role>-<ticket>-verdict-<time>`, the `model` tools only, a scratch directory, not the
 workspace) to read the verdict and say what it means. Every agent with `predict` lists the
@@ -1088,15 +1094,12 @@ agent may also wake on `orchestra.prediction.judged`, filtered by verdict
 (`orchestra.prediction.judged:side effect`).
 
 **The skill.** `prompts/modeling.md`, read with the `modeling_guide` tool, says what stocks, flows,
-equations, origins, trust, eras, observability and verdicts mean, how to test a change (read, draft,
-replay to check the equations explain what happened, run forward, read what is not trusted), how to
-ask an inverse question (hold what must not move; an ambiguous answer is a warning), and when to
-commit and how to read a verdict. The equation language in it is Orchestra's own reference
+equations, origins, trust, eras, observability and verdicts mean, what to read before predicting,
+how to state a prediction, and how to read a verdict. The equation language in it is Orchestra's own reference
 (`GET /language`), filled in when it is read. The role prompts only say when to reach for it.
 
 Limits: a verdict published while the host is down wakes nobody (it is still in
-`read_predictions`); running the model needs `orchestra[sd]` beside the agents (reading it does
-not), and a tool says so when it is missing.
+`read_predictions`); a read that needs `orchestra[sd]` beside the agents says so when it is missing.
 
 
 ## 12. The Supervisor grows (`machine_spec.py`, `spec_git.py`, `supervisor_spec.py`, `duties.py`, `review.py`, `flow_signals.py`, `load.py`, `split_proposal.py`, `budget.py`, `patching.py`, `upstream.py`, `transcripts.py`)
@@ -1158,7 +1161,7 @@ in the same turn with the owner's words as the reason. Every change:
 the series, the events, machine logs and, new, agent transcripts (`read_transcript`, group
 `observe`: an agent's latest session or one by id, the turns around a time, trimmed). Every fix
 carries a prediction: `predict_fix` (group `predict`) commits `orchestra.prediction.made` with the
-expected effect (`{flow, factor}`, `{stock, below|above}`, ...) without an experiment, and its
+expected effect (`{flow, factor}`, `{stock, below|above}`, ...), and its
 change id goes with the fix (a setup tool's `change`) or is announced with `announce_change`.
 Orchestra judges it, and a verdict that did not pass is a review round's finding. The events wake
 it through `machine_spec.apply`; their filters match the envelope's `subject`, which `events.flat`

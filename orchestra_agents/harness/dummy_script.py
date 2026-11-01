@@ -23,7 +23,7 @@ agents' tools, with ``args``, and ``keep``: a name for its answer), ``sleep`` (s
 (the turn fails, with this error). In every string ``{ticket}``, ``{role}``, ``{turn}``,
 ``{instance}`` and ``{message}`` (the human's message in a chat turn, else the prompt's first
 line) are replaced, and so is ``{kept.<name>.<field>...}`` (in the reply too): a field of an answer
-an earlier step of the turn kept (``{kept.e.experiment}``; a list's item by its index, ``{kept.m.summary.0}``).
+an earlier step of the turn kept (``{kept.p.change}``; a list's item by its index, ``{kept.m.summary.0}``).
 A string that is only such a placeholder becomes the value itself, a number or a table too. A
 rule's ``prompt`` may name groups, ``(?P<request>r-[0-9a-f]+)``: each is ``{match.<group>}`` in its steps
 and reply.

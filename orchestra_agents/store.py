@@ -165,16 +165,8 @@ class AgentStore:
             st["actions"] = (st.get("actions") or [])[-(keep - 1):] + [action]
         self._mutate_runtime(fn)
 
-    def add_experiment(self, name: str, eid: str, ticket: str, keep: int = 200) -> None:
-        """An experiment an agent made, with the ticket its session was on (modeling.py: a worker
-        commits only the experiments of its own ticket)."""
-        def fn(d):
-            st = d["agent_state"].setdefault(name, {})
-            st["experiments"] = (st.get("experiments") or [])[-(keep - 1):] + [{"id": eid, "ticket": ticket}]
-        self._mutate_runtime(fn)
-
     def add_prediction(self, name: str, rec: dict, keep: int = 100) -> None:
-        """A prediction an agent committed (modeling.py), so the change can be announced only by
+        """A prediction an agent made (modeling.py, design_confirm.py), so the change can be announced only by
         it and its verdict wakes it (verdicts.py)."""
         def fn(d):
             st = d["agent_state"].setdefault(name, {})

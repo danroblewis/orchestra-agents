@@ -1,5 +1,6 @@
 """Waking the agent that made a prediction when Orchestra judges it (``orchestra.prediction.judged``,
-whose ``correlationid`` is the change's id, the one ``modeling.commit`` recorded with the agent).
+whose ``correlationid`` is the change's id, the one ``modeling.predict_fix`` or the Supervisor's
+``confirm`` recorded with the agent).
 
 - A resident or custom agent (the Supervisor, a curator agent) gets a wake-up like any other,
   saying the verdict and where to read it.
@@ -25,8 +26,8 @@ VERDICT_TOOLS = ("model",)
 def reason(ev: dict, rec: dict) -> str:
     v = ev.get("verdict") or "?"
     where = f"ticket {rec['ticket']}, " if rec.get("ticket") else ""
-    what = f"{rec['subject']}, {rec.get('note') or 'a designed machine'}" if rec.get("subject") and not rec.get("experiment") \
-        else f"{where}experiment {rec.get('experiment')}"
+    what = f"{rec['subject']}, {rec.get('note') or 'a designed machine'}" if rec.get("subject") \
+        else f"{where}{rec.get('note') or 'a fix'}"
     return (f"event {JUDGED}: your prediction {rec.get('id')} ({what}) of change "
             f"{rec.get('change')} was judged: {v} ({VERDICTS.get(v, 'see the numbers')}). read_predictions with id "
             f"{rec.get('id')} gives the numbers it was judged by.")

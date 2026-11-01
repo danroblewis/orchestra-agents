@@ -1,7 +1,8 @@
 """A live check of the modeling tools with a real model: Claude Code on Haiku, as the Supervisor,
 asked "What would happen if review were twice as fast?" about a project whose metrics are a ticket
-pipeline (tickets created, worked, then reviewed). It should read the model, make an experiment
-that speeds up the review flow, run it forward and answer with the numbers.
+pipeline (tickets created, worked, then reviewed). It should read the model (and its series) and
+answer with the numbers. (Until 2026-11-01 it also made an experiment and ran it forward; the
+experiments were removed then.)
 
 It costs money and needs a logged-in ``claude``, so it runs only when asked:
 
@@ -60,9 +61,9 @@ def pipeline(store, key: str, end: float, minutes: int = 120):
     store.write(pts)
 
 
-def test_haiku_answers_a_what_if_with_an_experiment(tmp_path, monkeypatch):
+def test_haiku_answers_a_what_if_from_the_model(tmp_path, monkeypatch):
     from orchestra.metrics import for_project
-    from orchestra.sd.experiments.api import Experiments
+    from orchestra.sd.reads import ModelReads
     from orchestra.sd.rediscover import rediscover
 
     from orchestra_agents import access, prompting
@@ -87,7 +88,7 @@ def test_haiku_answers_a_what_if_with_an_experiment(tmp_path, monkeypatch):
     metrics = for_project(project.orchestra)
     pipeline(metrics, project.orchestra.key, time.time())
     rediscover(project.orchestra, metrics)
-    assert {f["id"] for f in Experiments(project.orchestra).model()["model"]["flows"]} >= {"tickets_reviewed_total"}
+    assert {f["id"] for f in ModelReads(project.orchestra).model()["model"]["flows"]} >= {"tickets_reviewed_total"}
 
     log = tmp_path / "claude-stream.jsonl"                 # Claude Code's own stream, for its cost
     wrapper = tmp_path / "claude"
@@ -115,9 +116,5 @@ def test_haiku_answers_a_what_if_with_an_experiment(tmp_path, monkeypatch):
     print("\nREPLY:\n" + res.text + f"\n\nTOOLS: {calls}\nCOST: ${cost:.4f}\nTRANSCRIPT: {session.session_file}\nSTREAM: {log}")
     assert not res.error and not res.timed_out, res
     names = [c.removeprefix("mcp__orchestra__") for c in calls]
-    assert "create_experiment" in names and ("run_forward" in names or "run_replay" in names), names
-    mine = [e for e in Experiments(project.orchestra).list(owner="supervisor")["experiments"]]
-    assert mine, "it made an experiment"
-    changed = [c for e in mine for c in Experiments(project.orchestra).diff(e["id"])["diff"]["flows"]["changed"]]
-    assert any(c["id"] == "tickets_reviewed_total" for c in changed), changed
+    assert "read_model" in names, names
     assert any(ch.isdigit() for ch in res.text), "the answer has numbers"

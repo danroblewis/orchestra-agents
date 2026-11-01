@@ -149,6 +149,15 @@ class AgentStore:
             return dict(st)
         return self._mutate_runtime(fn)
 
+    def update_agent_state(self, name: str, key: str, fn) -> Any:
+        """One field of an agent's state read, changed by ``fn`` and written back under the lock, so
+        two processes (the MCP server and the host) never lose each other's change; the new value."""
+        def mutate(d):
+            st = d["agent_state"].setdefault(name, {})
+            st[key] = fn(json.loads(json.dumps(st.get(key))))
+            return st[key]
+        return self._mutate_runtime(mutate)
+
     def add_action(self, name: str, action: dict, keep: int) -> None:
         """One change an agent's tool made (ledger.py), kept in its state, the newest ``keep``."""
         def fn(d):

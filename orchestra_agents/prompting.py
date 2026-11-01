@@ -55,6 +55,9 @@ def role_prompt(project: Project, role: str) -> str:
         text = path.read_text(encoding="utf-8")
     else:
         text = RepoRoleStore(project).prompt(role)
+        if not text.strip():                        # a confirmed designed machine's, in the state directory
+            from . import state_machines
+            text = state_machines.prompt(project, role)
         if not text.strip():
             text = f"You are good at being the {role}. Act on the wake-up you receive using your tools, then summarize."
     return _fill(project, text)

@@ -96,7 +96,8 @@ register(Role(
            "config.changed", "instruments.changed", "machine.restarted", "role.changed", "orchestra.prediction.made"),
     read_only=True,
     description="Talks to the human; sets the project up; translates requests into requirements and hands them to the "
-                "Coordinator; keeps the project's setup able to do them.",
+                "Coordinator; keeps the project's setup able to do them; designs the system with the owner: declares what "
+                "they expect, measures it, drafts and refines machines.",
 ))
 register(Role(
     name="coordinator", prompt="coordinator",

@@ -24,7 +24,10 @@ turn, so nothing the Supervisor writes here can remove its guardrails.
 
 Orchestra reads none of this (its rule 2: the Machines page reads what is observed). The files
 are read through ``spec_git.read_files``: the working tree, or the side branch while a change
-committed there is not merged yet."""
+committed there is not merged yet. A machine the owner designed with the Supervisor and confirmed
+has its spec in the state directory instead (``state_machines``, machine-design.md §2.1), with an
+``emits`` list, the only types its ``emit_event`` may raise; the repository's spec wins on a name
+both have."""
 
 from __future__ import annotations
 
@@ -80,11 +83,13 @@ class MachineSpec:
     review_every: str | None = None
     duties: list[Duty] = field(default_factory=list)
     publishes: list[dict] = field(default_factory=list)
+    emits: list[str] = field(default_factory=list)            # the only types its emit_event may raise (a designed machine's)
     files: dict[str, str] = field(default_factory=dict)       # this machine's files, relative to its directory
+    root: str = ROOT                                          # where its directory is: the repository's, or the state directory's
 
     @property
     def dir(self) -> str:
-        return f"{ROOT}/{self.name}"
+        return f"{self.root}/{self.name}"
 
     def duty(self, name: str) -> Duty | None:
         return next((d for d in self.duties if d.name == name), None)
@@ -122,12 +127,16 @@ def parse(name: str, files: dict[str, str]) -> MachineSpec:
     return MachineSpec(name=raw.get("name") or name, description=str(raw.get("description") or ""),
                        engagement=str(raw.get("engagement") or "continuous"), model=raw.get("model") or None,
                        created_by=str(raw.get("created_by") or ""), review_every=review.get("every") or None, duties=duties,
-                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)], files=dict(files))
+                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)],
+                       emits=[str(x) for x in raw.get("emits") or []], files=dict(files))
 
 
 def load_all(project: Project) -> dict[str, MachineSpec]:
-    """Every spec in the project, by machine name. A spec that does not parse is left out (the
-    agent runs as its record says; ``lint`` says why)."""
+    """Every spec in the project, by machine name: the repository's (``.orchestra/machines/``) and
+    the confirmed designed machines' in the state directory (``state_machines``); the repository's
+    wins on a name both have. A spec that does not parse is left out (the agent runs as its record
+    says; ``lint`` says why)."""
+    from . import state_machines
     by: dict[str, dict[str, str]] = {}
     for path, text in read_files(project).items():
         rest = path[len(ROOT) + 1:]
@@ -135,6 +144,13 @@ def load_all(project: Project) -> dict[str, MachineSpec]:
         if NAME.match(name) and inner:
             by.setdefault(name, {})[inner] = text
     out = {}
+    for name, files in state_machines.spec_files(project).items():
+        if NAME.match(name) and name not in by:
+            try:
+                out[name] = parse(name, files)
+                out[name].root = str(state_machines.root(project))
+            except SpecError:
+                continue
     for name, files in by.items():
         if "machine.toml" not in files:
             continue
@@ -170,6 +186,8 @@ def render(spec: MachineSpec) -> str:
         v = getattr(spec, k)
         if v:
             lines.append(f"{k} = {_s(v)}")
+    if spec.emits:
+        lines.append(f"emits = [{', '.join(_s(x) for x in spec.emits)}]")
     if spec.review_every:
         lines += ["", "[review]", f"every = {_s(spec.review_every)}"]
     for d in spec.duties:

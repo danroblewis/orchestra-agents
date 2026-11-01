@@ -19,7 +19,10 @@ from .store import AgentStore
 
 def role_definition(project: Project, role: RoleDef) -> dict:
     """What makes a role that role: its prompt, where it comes from, the tools behind its groups."""
-    source = str(prompting.prompt_path(project, role.name) if role.builtin else project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
+    from . import state_machines
+    repo = project.repo_root / ".orchestra" / "roles" / f"{role.name}.md"
+    designed = state_machines.root(project) / role.name / "role.md"
+    source = str(prompting.prompt_path(project, role.name) if role.builtin else designed if designed.exists() and not repo.exists() else repo)
     return {"prompt": prompting.role_prompt(project, role.name), "prompt_source": source,
             "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
 

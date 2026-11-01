@@ -1,0 +1,358 @@
+"""The stand-in's ops (``intended_standin.py``), each applied to a layer in place, ported from
+Orchestra's at C1 65c80ca2 (``orchestra/sd/intended/ops.py``, ``machine_ops.py``, ``revise.py``,
+``checks.py``) so the design tools meet the same rules before and after Orchestra's own is
+installed. Deleted with the stand-in.
+
+What the owner asks for (``author: owner`` with a quote) is declared at once, a re-declaration of
+a proposed stock or effect included; anything else is proposed. A revision by the owner applies at
+once, except on a machine no longer proposed, where it waits as a pending change like anyone
+else's. A proposal or a pending change is settled only by the owner or in answer to their request
+(``provenance.request``). **One difference, on purpose:** a revision answering the owner's request
+(the Universal | Programmatic switch) applies at once here, where Orchestra's at C1 keeps it
+pending until confirmed again; that is the coordinator's open question (a) on C1's
+``revise.at_once``."""
+
+from __future__ import annotations
+
+import copy
+import re
+
+from .expect_grammar import expect_edit
+from .store import StoreError
+
+ID = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
+SLUG = re.compile(r"^[a-z0-9][a-z0-9_.\-]{0,80}$")
+GROUP = {"stock": "stocks", "effect": "effects", "flow": "flows", "machine": "machines", "attachment": "attachments",
+         "event": "events"}
+KINDS = ("universal", "programmatic")
+MANAGED = ("orchestra", "external")
+MODES = ("ad hoc", "continuous", "scheduled")
+MISSED = ("skip", "run once")
+LISTS = ("tags", "receives", "emits", "reads")
+ENVELOPE = ("id", "title", "description", "tags", "kind", "managed", "engagement", "receives", "emits", "reads", "spec")
+DEFAULTS = {"title": None, "description": None, "tags": [], "kind": "universal", "managed": "orchestra",
+            "engagement": {"mode": "ad hoc"}, "receives": [], "emits": [], "reads": [], "spec": {}}
+OPTION = ("key", "title", "how", "kind", "instrument", "simulated", "cost", "caveat", "clearance", "provenance", "commit",
+          "first_points")
+DERIVED = frozenset({"present", "heard", "recording", "points", "points_series", "measured", "met", "instances",
+                     "candidates", "alias_candidates", "unexpected", "verdict", "verdicts"})
+
+
+def empty() -> dict:
+    return {"stocks": {}, "effects": {}, "flows": {}, "machines": {}, "events": {}, "attachments": {}, "targets": {},
+            "marks": {"expected": {}, "ignored": {}}}
+
+
+def make_slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")[:80] or "element"
+
+
+def only(op: dict, allowed: tuple) -> None:
+    if bad := sorted(set(op) & DERIVED):
+        raise StoreError(f"{', '.join(bad)} derived on read, never declared")
+    if extra := sorted(set(op) - set(allowed) - {"op", "guessed"}):
+        raise StoreError(f"{op.get('op')}: unknown field(s) {', '.join(extra)}")
+
+
+def strings(v, name: str) -> list[str]:
+    if v is None:
+        return []
+    if not isinstance(v, list) or not all(isinstance(x, str) and x.strip() for x in v):
+        raise StoreError(f"{name} must be a list of non-empty strings, not {v!r}")
+    return list(v)
+
+
+def engagement(e) -> dict:
+    if not isinstance(e, dict) or e.get("mode") not in MODES:
+        raise StoreError(f"engagement is {{mode, at?, tz?, missed?}} with mode one of {', '.join(MODES)}")
+    if extra := set(e) - {"mode", "at", "tz", "missed"}:
+        raise StoreError(f"engagement has no {sorted(extra)}")
+    if e["mode"] != "scheduled" and any(k in e for k in ("at", "tz", "missed")):
+        raise StoreError("at, tz and missed belong to a scheduled engagement only")
+    if "missed" in e and e["missed"] not in MISSED:
+        raise StoreError(f"missed is one of {', '.join(MISSED)}")
+    return dict(e)
+
+
+def envelope_field(k: str, v):
+    if k == "id":
+        if not isinstance(v, str) or not ID.match(v):
+            raise StoreError(f"a machine's id is its bus source: ^[a-z][a-z0-9_]{{1,40}}$ (not {v!r})")
+    elif k in LISTS:
+        strings(v, k)
+    elif k == "kind" and v not in KINDS:
+        raise StoreError(f"kind is {' or '.join(KINDS)}")
+    elif k == "managed" and v not in MANAGED:
+        raise StoreError(f"managed is {' or '.join(MANAGED)}")
+    elif k == "engagement":
+        return engagement(v)
+    elif k == "spec" and not isinstance(v, dict):
+        raise StoreError("spec is an object")
+    elif k not in ENVELOPE:
+        raise StoreError(f"unknown envelope field {k} (the rest of a machine is its spec)")
+    return v
+
+
+def element(L: dict, part: str, eid) -> dict:
+    if part not in GROUP:
+        raise StoreError(f"part must be one of {', '.join(GROUP)}, not {part!r}")
+    el = L[GROUP[part]].get(eid)
+    if el is None:
+        raise StoreError(f"there is no {part} {eid!r} in the declared layer")
+    return el
+
+
+def _new(ctx: dict, **fields) -> dict:
+    prov = ctx["provenance"]
+    return {**fields, "state": "declared" if prov.get("author") == "owner" else "proposed", "provenance": prov,
+            "change": ctx["change"], "guessed": strings(ctx["op"].get("guessed"), "guessed"), "pending": []}
+
+
+def _at_once(prov: dict) -> bool:
+    return prov.get("author") == "owner" and bool(prov.get("quote"))
+
+
+def _apply(el: dict, set_: dict, add: dict, remove: dict) -> dict:
+    """Change ``el`` in place; the difference {added, removed, before} (Orchestra's ``revise._apply``)."""
+    added, removed, before = {}, {}, {}
+    for k, v in set_.items():
+        if k == "spec" and isinstance(el.get("spec"), dict):
+            for sk in dict.fromkeys([*el["spec"], *v]):
+                if el["spec"].get(sk) != v.get(sk):
+                    before[sk] = copy.deepcopy(el["spec"].get(sk))
+        elif el.get(k) != v:
+            before[k] = copy.deepcopy(el.get(k))
+        el[k] = v
+    for k, items in add.items():
+        cur = list(el.get(k) or [])
+        if new := [x for x in items if x not in cur]:
+            el[k] = cur + new
+            added[k] = new
+    for k, items in remove.items():
+        cur = list(el.get(k) or [])
+        if gone := [x for x in items if x in cur]:
+            el[k] = [x for x in cur if x not in gone]
+            removed[k] = gone
+    return {"added": added, "removed": removed, "before": before}
+
+
+def _guesses(el: dict, touched: set[str], guessed: list[str]) -> None:
+    kept = [g for g in el.get("guessed") or [] if g.split("[", 1)[0] not in touched]
+    el["guessed"] = kept + [g for g in guessed if g not in kept]
+
+
+def revise(el: dict, set_: dict, add: dict, remove: dict, guessed: list[str], ctx: dict, waits_once_confirmed: bool = False) -> None:
+    prov, cid = ctx["provenance"], ctx["change"]
+    now = (_at_once(prov) and (not waits_once_confirmed or el.get("state") == "proposed")) or bool(prov.get("request"))
+    if not now:
+        el.setdefault("pending", []).append({"change": cid, "set": set_, "add": add, "remove": remove, "guessed": guessed,
+                                             "provenance": prov})
+        return
+    diff = _apply(el, set_, add, remove)
+    _guesses(el, set(set_) | set(add) | set(remove), guessed)
+    el["latest"] = {"change": cid, "at": prov["at"], "quotes": [prov["quote"]] if prov.get("quote") else [], **diff}
+
+
+def declare_level(L: dict, op: dict, ctx: dict, part: str) -> tuple[str, str]:
+    only(op, ("id", "name", "unit", "near", "note"))
+    name = op.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise StoreError("a stock or effect needs a name")
+    eid = op.get("id") or make_slug(name)
+    if not SLUG.match(eid):
+        raise StoreError(f"id must be a slug, not {eid!r}")
+    fields = {"name": name, **{k: op.get(k) for k in ("unit", "near", "note")}}
+    other = "effects" if part == "stock" else "stocks"
+    if eid in L[other]:
+        raise StoreError(f"{eid} is already declared as {'an effect' if part == 'stock' else 'a stock'}")
+    group = L[GROUP[part]]
+    if eid in group:
+        el = group[eid]
+        revise(el, {k: v for k, v in fields.items() if op.get(k) is not None}, {}, {}, strings(op.get("guessed"), "guessed"), ctx)
+        if el.get("state") == "proposed" and _at_once(ctx["provenance"]):
+            el.update(state="declared", confirmed={"by": "owner", "change": ctx["change"]})
+        return part, eid
+    group[eid] = _new(ctx, id=eid, part=part, **fields, found_as=None, measure=None, target=None)
+    return part, eid
+
+
+def set_target(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("part", "id", "key", "target", "value", "hi", "over_s"))
+    part = op.get("part")
+    if part not in ("stock", "effect", "flow") or op.get("target") not in ("below", "above", "within"):
+        raise StoreError("a target is on a stock, effect or flow, with op below, above or within")
+    t = {"op": op["target"], "value": op.get("value"), "over_s": op.get("over_s"), **({"hi": op["hi"]} if "hi" in op else {})}
+    if op.get("id") is not None:
+        element(L, part, op["id"])["target"] = t
+        return part, op["id"]
+    L["targets"][op["key"]] = {"part": part, "key": op["key"], "target": t, "provenance": ctx["provenance"], "change": ctx["change"]}
+    return part, op["key"]
+
+
+def mark(L: dict, op: dict, ctx: dict, which: str, on: bool) -> tuple[str, str]:
+    only(op, ("part", "key"))
+    if op.get("part") not in ("stock", "flow") or not op.get("key"):
+        raise StoreError("a mark names a discovered stock or flow by key")
+    box = L["marks"][which]
+    if on:
+        box[op["key"]] = {"part": op["part"], "key": op["key"], "provenance": ctx["provenance"], "change": ctx["change"]}
+    elif box.pop(op["key"], None) is None:
+        raise StoreError(f"{op['key']} is not {which}")
+    return op["part"], op["key"]
+
+
+def link(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("id", "part", "found_as"))
+    part = op.get("part") or ("stock" if op.get("id") in L["stocks"] else "effect")
+    if part not in ("stock", "effect"):
+        raise StoreError(f"link joins a declared stock or effect to what discovery found, not a {part}")
+    el = element(L, part, op.get("id"))
+    el["found_as"] = op.get("found_as")
+    el["linked"] = {"by": ctx["provenance"].get("author"), "change": ctx["change"]} if el["found_as"] else None
+    return part, el["id"]
+
+
+def declare_event(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("type", "description"))
+    if not isinstance(op.get("type"), str) or not op["type"].strip():
+        raise StoreError("an event type is named")
+    L["events"][op["type"]] = {"type": op["type"], "description": op.get("description"), "implicit": False,
+                               "provenance": ctx["provenance"], "change": ctx["change"]}
+    return "event", op["type"]
+
+
+def record_measurement(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("part", "id", "options", "chosen"))
+    part = op.get("part") or "stock"
+    if part not in ("stock", "effect"):
+        raise StoreError(f"a measurement is recorded for a declared stock or effect, not a {part}")
+    el = element(L, part, op.get("id"))
+    opts = op.get("options")
+    if not isinstance(opts, list) or not opts:
+        raise StoreError("options is a non-empty list")
+    for o in opts:
+        if not isinstance(o, dict) or (extra := set(o) - set(OPTION)):
+            raise StoreError(f"an option's unknown fields: {sorted(extra) if isinstance(o, dict) else o!r}")
+        if not isinstance(o.get("key"), str) or not o["key"]:
+            raise StoreError("each option has its key")
+    keys = [o["key"] for o in opts]
+    if len(set(keys)) != len(keys):
+        raise StoreError("each option's key is used once")
+    if op.get("chosen") is not None and op["chosen"] not in keys:
+        raise StoreError(f"chosen must be one of the options' keys ({', '.join(keys)}), not {op['chosen']!r}")
+    el["measure"] = {"options": [dict(o) for o in opts], "chosen": op.get("chosen"), "change": ctx["change"]}
+    return part, el["id"]
+
+
+def _implicit(L: dict, m: dict, ctx: dict) -> None:
+    for t in [*m.get("receives", []), *m.get("emits", [])]:
+        L["events"].setdefault(t, {"type": t, "description": None, "implicit": True, "provenance": ctx["provenance"],
+                                   "change": ctx["change"]})
+
+
+def propose_machine(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    fields = {k: envelope_field(k, v) for k, v in op.items() if k not in ("op", "guessed")}
+    mid = fields.get("id")
+    if mid is None:
+        raise StoreError("a machine needs its id: the source it is expected to publish under")
+    if mid in L["machines"]:
+        raise StoreError(f"machine {mid} is already in the declared layer: revise it")
+    m = {**copy.deepcopy(DEFAULTS), **fields}
+    m["title"] = m["title"] or mid
+    m.update(state="proposed", provenance=ctx["provenance"], change=ctx["change"], guessed=strings(op.get("guessed"), "guessed"),
+             pending=[], aliases=[], expected_effect=None, latest=None)
+    L["machines"][mid] = m
+    _implicit(L, m, ctx)
+    return "machine", mid
+
+
+def revise_machine(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("id", "set", "add", "remove"))
+    m = element(L, "machine", op.get("id"))
+    set_, add, remove = (op.get(k) or {} for k in ("set", "add", "remove"))
+    if "id" in set_:
+        raise StoreError("a machine's id is not revised: retract it and propose another")
+    set_ = {k: envelope_field(k, v) for k, v in set_.items()}
+    for what, d in (("add", add), ("remove", remove)):
+        for k, v in d.items():
+            if k not in LISTS:
+                raise StoreError(f"{what} takes the list fields ({', '.join(LISTS)}), not {k}")
+            strings(v, f"{what}.{k}")
+    revise(m, set_, add, remove, strings(op.get("guessed"), "guessed"), ctx, waits_once_confirmed=True)
+    _implicit(L, m, ctx)
+    return "machine", m["id"]
+
+
+def set_expected_effect(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("machine", "edits", "horizon_s"))
+    m = element(L, "machine", op.get("machine"))
+    if not isinstance(op.get("edits"), list):
+        raise StoreError("edits is a list, in the grammar of orchestra.prediction.made")
+    edits = [expect_edit(e) for e in op["edits"]]
+    h = op.get("horizon_s")
+    if isinstance(h, bool) or not isinstance(h, int | float) or h <= 0:
+        raise StoreError("horizon_s must be a number above 0")
+    prev = m.get("expected_effect") or {}
+    m["expected_effect"] = {"edits": edits, "horizon_s": float(h), "prediction": prev.get("prediction"), "change": ctx["change"]}
+    return "machine", m["id"]
+
+
+def record_prediction(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    only(op, ("machine", "prediction"))
+    m = element(L, "machine", op.get("machine"))
+    if not m.get("expected_effect"):
+        raise StoreError(f"machine {m['id']} has no expected effect to link a prediction to")
+    if not isinstance(op.get("prediction"), str) or not op["prediction"]:
+        raise StoreError("prediction is the prediction's id")
+    m["expected_effect"]["prediction"] = op["prediction"]
+    return "machine", m["id"]
+
+
+def confirm(L: dict, op: dict, ctx: dict, accept: bool) -> tuple[str, str]:
+    only(op, ("part", "id", "change"))
+    part, eid = op.get("part"), op.get("id")
+    el = element(L, part, eid)
+    prov = ctx["provenance"]
+    if prov.get("author") != "owner" and not prov.get("request"):
+        raise StoreError("a proposal is confirmed by the owner: give the owner's quote or the request's event id")
+    if op.get("change"):
+        pend = el.get("pending") or []
+        p = next((x for x in pend if x["change"] == op["change"]), None)
+        if p is None:
+            raise StoreError(f"{eid} has no pending change {op['change']}")
+        el["pending"] = [x for x in pend if x is not p]
+        if accept:
+            diff = _apply(el, p["set"], p["add"], p["remove"])
+            _guesses(el, set(p["set"]) | set(p["add"]) | set(p["remove"]), p.get("guessed") or [])
+            el["latest"] = {"change": op["change"], "at": prov["at"], "confirmed_by": ctx["change"],
+                            "quotes": [q for q in (p["provenance"].get("quote"), prov.get("quote")) if q], **diff}
+        return part, eid
+    if el.get("state") != "proposed":
+        raise StoreError(f"{part} {eid} is {el.get('state')}, not proposed" + ("" if accept else ": retract it"))
+    if accept:
+        el.update(state="declared", guessed=[], confirmed={"by": prov.get("author"), "change": ctx["change"]})
+    else:
+        del L[GROUP[part]][eid]
+        if part == "machine":
+            L["attachments"] = {k: a for k, a in L["attachments"].items() if a.get("machine") != eid}
+    return part, eid
+
+
+def apply_op(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
+    if not isinstance(op, dict):
+        raise StoreError(f"an op is an object, not {op!r}")
+    name, ctx = op.get("op"), {**ctx, "op": op}
+    table = {"declare_stock": lambda: declare_level(L, op, ctx, "stock"),
+             "declare_effect": lambda: declare_level(L, op, ctx, "effect"),
+             "set_target": lambda: set_target(L, op, ctx),
+             "expect": lambda: mark(L, op, ctx, "expected", True), "unexpect": lambda: mark(L, op, ctx, "expected", False),
+             "ignore": lambda: mark(L, op, ctx, "ignored", True), "unignore": lambda: mark(L, op, ctx, "ignored", False),
+             "link": lambda: link(L, op, ctx), "declare_event": lambda: declare_event(L, op, ctx),
+             "record_measurement": lambda: record_measurement(L, op, ctx),
+             "propose_machine": lambda: propose_machine(L, op, ctx), "revise_machine": lambda: revise_machine(L, op, ctx),
+             "set_expected_effect": lambda: set_expected_effect(L, op, ctx),
+             "record_prediction": lambda: record_prediction(L, op, ctx),
+             "confirm": lambda: confirm(L, op, ctx, True), "discard": lambda: confirm(L, op, ctx, False)}
+    if name not in table:
+        raise StoreError(f"unknown op {name!r}")
+    return table[name]()

@@ -63,6 +63,8 @@ control_port = 0          # the Supervisor chat's local port; 0 (default): any f
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
 review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
 review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
+design_passes = 3         # the most refinement passes over the event map in one round (default 3)
+draft_expiry = "24h"      # how long a draft instrument records before it is removed unkept (default 24h)
 enabled = true            # false: no host, no agents
 # [agents.prompts] worker = "prompts/worker.md"   # a role's prompt replaced by a file of the repository's
 ```
@@ -144,28 +146,37 @@ day's cap it does not wake you, and nor do your duties' own events; the owner's 
 ## Designing the system
 
 The owner names what they expect (a stock, an effect, a target, a machine); you declare it with the
-`design` tools in the same turn, measure it at once, and the Dynamics and Machines pages draw it.
-Nothing here is a setting the owner writes: never ask them to edit a file.
+`design` tools in the same turn and measure it at once. When Orchestra keeps the declared layer
+itself (`kept_in` says so), its Dynamics and Machines pages draw it; until then nothing draws it,
+and you summarise it from `read_design` instead of naming a page. Nothing here is a setting the
+owner writes: never ask them to edit a file.
 
 - **The tools**: `declare_stock`, `declare_effect`, `set_target`, `propose_measurements`,
   `add_instrument`, `keep_instrument`, `mark_expected`, `ignore`, `link`, `declare_machine`,
   `refine_machine`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`; `read_design`
-  reads it all back. Each takes a `reason`; a `quote` of the owner's words makes it theirs ("added
-  by you"); without one it is your proposal.
+  reads it all back. Each takes a `reason`; a `quote` of the owner's words (three words or more, or
+  their whole message) makes it theirs ("added by you"); without one it is your proposal. Confirm
+  and discard need the owner: their quote, or the `request` of their click, which backs that one call.
 - **Where writes go**: a measurement script (at most 100 lines) to
   `~/.orchestrator/<key>/agents/instruments/<name>.sh` and its `[[collect]]` or `[[scrape]]` entry
-  to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`,
-  moved to `agents/machines/<name>/` when the owner confirms it. A script the owner wants in the
-  repository goes through the Coordinator (`add_instrument` with `where = "repo"`).
+  to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`;
+  a confirmed Universal Machine's spec, role and agent records to `agents/machines/<name>/`, which
+  the host runs it from, nothing committed. A script the owner wants in the repository goes through
+  the Coordinator (`add_instrument` with `where = "repo"`).
 - **Drafts expire**: an instrument records at once as a draft and is removed, entry and script,
-  after `[agents] draft_expiry` (default `24h`) unless the owner keeps it (`keep_instrument`). Its
+  after `[agents] draft_expiry` (default `24h`) unless the owner keeps it (`keep_instrument`). Where
+  Orchestra takes it, the entry carries `draft = true` and `expires`, and discovery leaves the series
+  out until it is kept; an Orchestra without the flag reads it at once, and the answer says so. Its
   points stay in the store.
-- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins) are "needs approval" until the
-  owner clears them; a credential is named by its environment variable (`bearer_env`), set in the
-  overlay out of band, never written or shown.
-- **The refinement passes** (`refine_map`): at most `[agents] design_passes` (default 3) passes a
-  round, run in your review round when the declared layer changed, spending `review_usd_per_day`.
-  They propose; you put the findings to the owner in one message.
+- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins, anything on another host) are
+  "needs approval" until the owner clears them, decided from what an option reads; such an option
+  is named and costed, never previewed. A credential is named by its environment variable
+  (`bearer_env`), set in the overlay out of band, never written or shown.
+- **The refinement passes** (`refine_map`, when your spec has the duty): at most `[agents]
+  design_passes` (default 3) passes a round, run in your review round when the declared layer
+  changed and after the owner's confirm or discard, spending `review_usd_per_day`. They are a quick
+  heuristic check with no model; the judgement is yours, in the one wake-up a round sends. They
+  propose; you put the findings to the owner in one message.
 
 ### The machine fields (a reference)
 
@@ -173,9 +184,9 @@ Nothing here is a setting the owner writes: never ask them to edit a file.
 |---|---|
 | `kind` | `universal` (an abstract machine described by its steps) or `programmatic` (a program) |
 | `managed` | `orchestra` (started and kept here) or `external` (runs elsewhere, known by its events) |
-| `engagement` | `{mode: ad hoc | continuous | scheduled, at, tz, missed: skip | run once}` |
+| `engagement` | `mode` (`ad hoc`, `continuous`, `scheduled`), and for scheduled `at` (HH:MM), `tz`, `missed` (`skip`, `run once`): flat arguments of `declare_machine` and `refine_machine` |
 | `receives`, `emits`, `reads` | event types it wakes on, event types it publishes, stocks and effects it may read |
-| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names |
+| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names. Switched to programmatic (`set_kind`), they are kept as `spec.specification` |
 | `spec` (programmatic, ad hoc or scheduled) | `command`, or `trigger` when external; `arguments`, `environment`, `stdin`, `exit` |
 | `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
 | `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |

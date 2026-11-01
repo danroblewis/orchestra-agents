@@ -39,6 +39,15 @@ class Verdicts:
         """A verdict on a prediction an agent here committed: wake that agent."""
         if ev.get("type") != JUDGED:
             return
+        from .design_confirm import renew
+        try:                                        # a designed machine's prediction an era interrupted: renewed
+            if said := renew(self.host.project, self.host.store, ev):
+                self.host.store.add_wakeup("supervisor", said)
+                return
+        except Exception as e:  # noqa: BLE001 - the verdict is still seen; the renewal is said to have failed
+            self.host.store.add_wakeup("supervisor", f"event {JUDGED}: a designed machine's prediction was interrupted and "
+                                                     f"could not be renewed: {e}")
+            return
         found = self.host.store.find_prediction(ev.get("correlationid"))
         if found is None or found[1].get("judged"):
             return

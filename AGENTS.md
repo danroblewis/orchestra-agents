@@ -23,7 +23,10 @@ broken without updating the spec and saying so in the commit.
    the state directory on its own branch `supervisor/patch-<name>`, which is removed after and
    whose branch only a ticket takes onward (`patching.py`); and an override file under
    `.orchestra/overrides/`, committed alone on the same terms as `orchestra.toml`. A change to the
-   owner's private overlay is never committed. (`restart_machine` takes one entry out in the
+   owner's private overlay is never committed. Nor is anything the Supervisor's design tools write
+   (since 2026-11-01, proposal 4, `machine-design.md` §2.1: at work the base branch is protected):
+   a confirmed Universal Machine's spec and its role and agent records are written to the state
+   directory (`machines/<name>/`, `state_machines.py`), never to `.orchestra/`, and read beside it. (`restart_machine` takes one entry out in the
    overlay and puts the overlay back byte for byte; it commits nothing.)
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
@@ -61,13 +64,16 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
    each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host and
    the harnesses, and `PROJECT.md` is seeded by the first read and written by the Supervisor's
    context tool. Since 2026-11-01 (proposal 4, `machine-design.md` §2.1) the Supervisor's design
-   tools also write `instruments/` (its measurement scripts), `drafts/` (a drafted machine's
-   implementation, not official) and `machines/` (a confirmed Universal Machine's spec), and
-   `intended/`, the stand-in for Orchestra's declared layer until Orchestra has its own
-   (`intended_api.py`). The organisation's custom records are in the repository under `.orchestra/`.
+   tools also write `instruments/` (its measurement scripts), `trials/` (a script's trial round),
+   `drafts/` (a drafted machine's implementation, not official), `machines/` (a confirmed Universal
+   Machine's spec, role and agent records, which the host runs it from) and `intended/`, the
+   stand-in for Orchestra's declared layer until Orchestra has its own (`intended_api.py`), renamed
+   `intended.replayed.<time>` once its calls are carried into Orchestra's. The organisation's custom records are in the repository under `.orchestra/`.
    Nothing else touches a backend or those files directly.
 10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
-    write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or
+    write a person has is the Supervisor chat (a page's confirm, discard or kind switch changes
+    nothing: Orchestra publishes it as `orchestra.intent.requested` from `owner`, and the Supervisor
+    answers that request, and only one from `owner`, with its design tools). Pausing, resuming, restarting, resetting or
     deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration and
@@ -76,7 +82,8 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     measurement script of at most 100 lines is configuration the Supervisor writes, to the state
     directory (`instruments/<name>.sh`, `add_instrument`), with its entry in the owner's overlay, as
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
-    One the owner wants in the repository still goes through the Coordinator. Its one exception is a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
+    One the owner wants in the repository still goes through the Coordinator. So the Supervisor
+    writes code of its own in exactly two cases: that measurement script, and a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,
     never of Orchestra or this package, with its upstream issue an outbox draft the owner approves.

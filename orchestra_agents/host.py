@@ -42,7 +42,7 @@ from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer, token_file
-from .events import GAVE_UP, Events
+from .events import GAVE_UP, INTENT_REQUESTED, Events
 from .facts import SupervisorFacts
 from .fillers import Fillers
 from .first_run import FirstRun
@@ -455,6 +455,8 @@ class AgentHost:
             if landed := self.landings.see(ev, self.cfg):
                 self.store.add_wakeup("supervisor", landed)
             self.verdicts.see(ev)
+            if ev.get("type") == INTENT_REQUESTED and str(ev.get("source") or "").split("/")[0] != "owner":
+                continue                                    # only the owner's click is a request (design_confirm.wake_reason)
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
@@ -470,7 +472,7 @@ class AgentHost:
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
-        if said := handoff.wake_reason(ev) or design_confirm.wake_reason(ev):
+        if said := handoff.wake_reason(ev) or design_confirm.wake_reason(ev, self.project):
             return said
         if ev["type"] == GAVE_UP:
             name = ev.get("name")
@@ -631,15 +633,19 @@ class AgentHost:
                                                        "at": time.time()})
 
     def _expire_drafts(self) -> None:
-        """Draft instruments the owner did not keep, past their expiry (design_instruments.py), once a minute."""
+        """Once a minute: draft instruments the owner did not keep, past their expiry, removed
+        (design_instruments.py); and a confirmed machine's expected edits that waited for a series
+        published once it is linked (design_confirm.publish_waiting)."""
         if time.time() - self._drafts_at < 60:
             return
         self._drafts_at = time.time()
         try:
-            if gone := design_instruments.expire(self.project, self.store):
+            if gone := design_instruments.expire(self.project, self.store, log=log):
                 log(f"draft instruments expired unkept: {', '.join(gone)}")
+            for said in design_confirm.publish_waiting(self.project, self.store):
+                log(said)
         except Exception as e:  # noqa: BLE001 - tried again in a minute
-            log(f"draft instruments: {e!r}")
+            log(f"design: {e!r}")
 
     def _honest(self, proc: AgentSession, text: str, on_event) -> TurnResult:
         """A Supervisor turn whose reply is for the human. A reply that claims an action the turn

@@ -109,17 +109,26 @@ A measurement the project wants taken over time is an instrument the Supervisor 
 a one-liner over tools already there (`git grep`, `sqlite3`, `curl`) it tries once as Orchestra
 would, declares under `[[collect]]` itself and reads back once Orchestra stored its first points;
 a `[[scrape]]` of a URL that already serves Prometheus metrics; a `[[sources]]` read of another
-metrics store; or, when it takes a script, a small program under `machines/` (shell or any
-language, importing nothing of Orchestra's) that a worker writes through the Coordinator, which
-needs `work = "code"` (Orchestra's `docs/machines.md`).
+metrics store; or, when it takes a script, a measurement script of at most 100 lines that the
+Supervisor writes itself, tries, and keeps in the state directory
+(`~/.orchestrator/<key>/agents/instruments/<name>.sh`), with its entry in your private overlay and
+nothing committed. It records at once as a draft and is removed after a day (`[agents]
+draft_expiry`) unless you keep it. A longer program, or one you want in the repository, is a
+worker's, through the Coordinator (Orchestra's `docs/machines.md`).
+
+The Supervisor's `design` tools are how you design the system by talking: it declares the stocks,
+effects, targets and machines you name, measures them at once, drafts and refines machines as you
+talk, and starts one only when you confirm it (Orchestra's `docs/proposals/machine-design.md`).
 
 The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
 processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
 snapshot) and, when the setup cannot do what is asked, changes `orchestra.toml` with its setup
 tools: which roles the AI agents fill, the kind of work, the gate's tests, the capacity limit,
-`[[machines]]`, `[[collect]]` and `[[scrape]]` entries, and restarting a program. Each change is a
-commit of `orchestra.toml` alone on the base branch with the reason, and a `config.changed` event
-on the bus; it tells you in the chat what it changed and why. It never changes code: that is a
+`[[machines]]`, `[[collect]]` and `[[scrape]]` entries, and restarting a program. A change for the
+team is a commit of `orchestra.toml` alone on the base branch with the reason; one for you alone
+(and every instrument it adds while designing) goes in your private overlay and is committed
+nowhere; either way a `config.changed` event goes on the bus and it tells you in the chat what it
+changed and why. It never changes code: that is a
 worker's, through a ticket, a review and the merge gate.
 
 With the task plugin in the same `orchestra web`, a ticket's drawer lists every agent turn that
@@ -129,7 +138,8 @@ done; a ticket link on a transcript leads back. Without it, the agents still run
 link on the Agents page opens no ticket drawer and no banner says a ticket is blocked.
 
 State is in `~/.orchestrator/<key>/agents/`; custom roles, agents and teams in the repository
-under `.orchestra/`. The Supervisor designs the organisation in conversation; the Agents page
+under `.orchestra/`, except a machine you designed with the Supervisor and confirmed, whose spec,
+role and agent records stay in the state directory (`machines/<name>/`). The Supervisor designs the organisation in conversation; the Agents page
 shows it.
 
 ## Dummy agents

@@ -12,6 +12,7 @@ from typing import Any
 
 from . import prompting
 from .config import Project
+from .machine_spec import load as load_spec
 from .org import (
     EVENT_TYPES,
     AgentDef,
@@ -246,7 +247,11 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         if not role:
             raise StoreError("no role")
         emitter = role
-        if emitter != "supervisor":
+        designed = load_spec(project, emitter) if emitter != "supervisor" else None
+        if designed is not None and designed.emits:                  # a confirmed designed machine: its declared emits only
+            if etype not in designed.emits:
+                raise StoreError(f"{emitter} may emit only what its declaration names: {', '.join(designed.emits)}; not {etype!r}")
+        elif emitter != "supervisor":
             ag = ags.get(emitter)
             allowed = sorted({e for t in team_chain(teams, ag.team if ag else None) for e in t.emits})
             if etype not in allowed:

@@ -69,5 +69,5 @@ def ensure(project: Project) -> dict | None:
     # first spec goes to the side branch, merged by the Supervisor's first change on a clean checkout.
     busy = "the merge gate may be landing on the base branch (work = code)" if project.config.work == "code" else None
     return spec_git.commit(project, files(starting()), "orchestra-agents: the Supervisor's spec and its starting duties\n\n"
-                           "Written the first time the agents ran in this project: keep_flow and review_round, on Sonnet. "
+                           "Written the first time the agents ran in this project: keep_flow, review_round and refine_map, on Sonnet. "
                            "From now on the spec is the project's.", allow_plain=True, not_base=busy)

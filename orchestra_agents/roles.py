@@ -138,11 +138,16 @@ def commit_orchestra_files(project: Project, message: str) -> str:
 
 
 def all_roles(project: Project) -> dict[str, RoleDef]:
-    """Built-in roles plus the project's custom roles, by name."""
+    """Built-in roles plus the project's custom roles, by name: the confirmed designed machines'
+    in the state directory (``state_machines``), then the repository's, which win on a name."""
+    from . import state_machines
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
         out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), created_by=None, created_at=None,
                               updated_at=None, builtin=True)
+    for r in state_machines.roles(project):
+        if r.name not in out:
+            out[r.name] = r
     for r in RepoRoleStore(project).list():
         out[r.name] = r
     return out

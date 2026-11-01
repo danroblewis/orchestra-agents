@@ -1,25 +1,30 @@
 """The owner's scenario (machine-design.md §2.6), turns 1, 3, 4 and 5, with the fake Claude Code: a
 real host, each turn a fake `claude -p` whose tool calls go through the real MCP server (or, with
 `[agents] tools_via = "bash"`, the session's shell), so provenance is recorded where a real
-session's calls are (the turn and the owner's message the host keeps). The assertions are on the
-declared layer (the stand-in until Orchestra has project.intended: intended_api.py)."""
+session's calls are (the turn and the owner's message the host keeps). Every tool's answer is read
+back from the reply and must be `ok`. The assertions are on the declared layer: the stand-in, or
+Orchestra's own through its host's endpoint when the installed Orchestra has it (served here)."""
 
 import json
+import re
 import shutil
 import stat
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 from conftest import agents_project
+from design_fixtures import CORE, core_endpoint, journal
 from fake_tasks import FakeTasks
 
-from orchestra_agents import intended_api
+from orchestra_agents import intended_api, prompting
 from orchestra_agents.events import Events
 from orchestra_agents.host import AgentHost
 from orchestra_agents.store import AgentStore
 
 FAKE = Path(__file__).parent / "fake_claude.py"
+PACKAGE = Path(prompting.__file__).parent
 TURN1 = ("I want a feedback loop where once per day an agent runs and tries to improve how many features get delivered per "
          "day. I think we need to start tracking features … I'm going to create a Features stock.")
 TURN3 = "Create a new Universal Machine called Feature Count Improver."
@@ -40,9 +45,24 @@ def git(repo, *args) -> str:
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout
 
 
+def answers(text: str) -> list[dict]:
+    """Each tool's answer in the fake's reply ("- tool: <answer>"), parsed."""
+    assert text.startswith("What I did with my tools:"), text
+    out = []
+    for chunk in re.split(r"\n- (?=[a-z_]+: )", text.split("\n", 1)[1].removeprefix("- ")):
+        tool, _, body = chunk.partition(": ")
+        try:
+            out.append({"tool": tool, **json.loads(body)})
+        except ValueError:
+            pytest.fail(f"{tool} did not answer with its result: {body[:400]}")
+    return out
+
+
 @pytest.fixture(params=["mcp", "bash"])
 def chat(request, tmp_path, monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
+    monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
     fake = tmp_path / "claude"
     shutil.copy(FAKE, fake)
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
@@ -64,12 +84,16 @@ def chat(request, tmp_path, monkeypatch):
     events = Events.for_project(project)
     host = AgentHost(project, AgentStore(project, events), events)
     host._refresh_org(host.store.runtime()["agent_state"])
-    with FakeTasks(project):
-        def say(message: str, steps: list[dict]) -> str:
+    with FakeTasks(project), (core_endpoint(project) if CORE else nullcontext()):
+        def say(message: str, steps: list[dict]) -> list[dict]:
             script.write_text(json.dumps(steps))
             out = host.prompt_supervisor(message, lambda e: None)
             assert not out.get("error"), out
-            return out["text"]
+            got = answers(out["text"])
+            assert [a["tool"] for a in got] == [s["tool"] for s in steps]
+            for a in got:
+                assert a.get("ok") is True, a
+            return got
         try:
             yield say, project, repo
         finally:
@@ -81,7 +105,7 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
     head = git(repo, "rev-parse", "HEAD")
     why = "the owner's words this turn"
 
-    replies = [say(TURN1, [
+    turn1 = say(TURN1, [
         {"tool": "declare_stock", "args": {"name": "Features", "unit": "features", "near": "DONE",
                                            "quote": "I'm going to create a Features stock.", "reason": why}},
         {"tool": "list_metrics", "args": {}},
@@ -93,57 +117,72 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
              "cost": "nothing new", "caveat": "counts what was planned as a feature, not what works"},
             {"label": "a simulated ramp", "kind": "simulated", "how": "a ramp", "cost": "nothing"}]}},
         {"tool": "add_instrument", "args": {"element": "features", "option": "a", "name": "features.acceptance",
-                                            "kind": "collect", "script": SCRIPT, "every": "15m", "reason": why}},
-        {"reply": "Features is declared and recording from the acceptance tests (features.acceptance, a draft): see its drawer "
-                  "on the Dynamics page."}])]
+                                            "script": SCRIPT, "every": "15m", "reason": why}}])
     L = intended_api.current(project)
     assert L["stocks"]["features"]["state"] == "declared" and L["stocks"]["features"]["provenance"]["author"] == "owner"
     assert L["stocks"]["features"]["provenance"]["message"] == TURN1
-    assert L["stocks"]["features"]["measure"]["chosen"] == "a"
+    assert L["stocks"]["features"]["measure"]["options"][0]["instrument"] == "features.acceptance"
     assert (project.state_dir / "instruments" / "features.acceptance.sh").exists()
     project.reload_config()
-    assert [e["name"] for e in project.orchestra.config.raw["collect"]] == ["features.acceptance"]
+    entry = next(e for e in project.orchestra.config.raw["collect"] if e["name"] == "features.acceptance")
+    assert turn1[-1]["draft"] is CORE and (entry.get("draft") is True) is CORE          # the flag, where Orchestra takes it
 
-    replies.append(say(TURN3, [
+    turn3 = say(TURN3, [
         {"tool": "read_design", "args": {}},
         {"tool": "read_events", "args": {"minutes": 60}},
         {"tool": "declare_machine", "args": {
             "name": "Feature Count Improver", "kind": "universal", "description": "Improves how many features get delivered a day",
-            "engagement": {"mode": "scheduled", "at": "09:00", "tz": "America/Los_Angeles", "missed": "skip"},
-            "receives": ["session.settled", "task.reported"], "emits": ["work.improvement_proposed"],
+            "mode": "continuous", "receives": ["session.settled", "task.reported"], "emits": ["work.improvement_proposed"],
             "reads": ["features", "acceptance_tests_passing"],
             "spec": {"invariants": ["never changes code itself; it proposes work", "at most one proposal a run",
                                     "reads only what it is given"], "steps": STEPS, "uses": ["the coordinator's queue"]},
-            "guesses": ["engagement", "receives[0]", "receives[1]"],
+            "guesses": ["mode", "receives[0]", "receives[1]"],
             "quote": "Create a new Universal Machine called Feature Count Improver.", "reason": why}},
         {"tool": "declare_expected_effect", "args": {"machine": "feature_count_improver", "horizon": "3d", "reason": why,
                                                      "expect": [{"flow": "tasks_done_rate", "factor": 1.2},
-                                                                {"stock": "features", "rises": True}]}},
-        {"reply": "Drafted feature_count_improver, unconfirmed, on the Machines page; about a turn a day on haiku."}]))
+                                                                {"stock": "features", "rises": True}]}}])
     m = intended_api.current(project)["machines"]["feature_count_improver"]
-    assert m["state"] == "proposed" and m["provenance"]["author"] == "owner" and m["engagement"]["at"] == "09:00"
+    assert m["state"] == "proposed" and m["provenance"]["author"] == "owner" and m["engagement"] == {"mode": "continuous"}
+    assert m["receives"] == ["session.settled", "task.reported"]
+    assert any("woken by session.settled, task.reported" in line for line in turn3[2]["said"])     # the cost as drafted
     assert m["expected_effect"]["edits"][1] == {"stock": "features", "rises": True}      # it waits for a series
 
-    replies.append(say(TURN4, [{"tool": "refine_machine", "args": {
+    turn4 = say(TURN4, [{"tool": "refine_machine", "args": {
         "name": "feature_count_improver", "quote": "watch the ticket queue for DONE and REJECTED tickets, and the Merge Gate",
         "reason": "REJECTED tickets are changes.requested and DONE is gate.landed: what the reviewer and the gate publish",
-        "edits": [{"op": "add_receive", "type": "changes.requested"}, {"op": "add_receive", "type": "gate.rejected"},
-                  {"op": "add_receive", "type": "gate.landed"}, {"op": "remove_receive", "type": "session.settled"},
-                  {"op": "remove_receive", "type": "task.reported"}, {"op": "rewrite_steps", "steps": NEW_STEPS}]}},
-        {"reply": "It now watches changes.requested, gate.rejected and gate.landed: see its receives on the Machines page."}]))
+        "add_receives": ["changes.requested", "gate.rejected", "gate.landed"],
+        "remove_receives": ["session.settled", "task.reported"], "steps": NEW_STEPS}}])
     m = intended_api.current(project)["machines"]["feature_count_improver"]
-    assert m["receives"] == ["changes.requested", "gate.rejected", "gate.landed"]
+    assert m["receives"] == ["changes.requested", "gate.rejected", "gate.landed"] and len(turn4[0]["changes"]) == 6
+    assert m["latest"]["before"] == {"steps": STEPS}
+    revs = [op for e in journal(project) for op in (e.get("sent") or e["ops"]) if op["op"] == "revise_machine"]
+    assert [r.get("add") or r.get("remove") for r in revs[:5]] == [
+        {"receives": ["changes.requested"]}, {"receives": ["gate.rejected"]}, {"receives": ["gate.landed"]},
+        {"receives": ["session.settled"]}, {"receives": ["task.reported"]}]
 
-    replies.append(say(TURN5, [{"tool": "refine_machine", "args": {
+    turn5 = say(TURN5, [{"tool": "refine_machine", "args": {
         "name": "feature_count_improver", "quote": "make this a scheduled task for 12am every day", "reason": why,
-        "edits": [{"op": "set_engagement", "mode": "scheduled", "at": "00:00", "tz": "America/Los_Angeles", "missed": "skip"},
-                  {"op": "rewrite_steps", "steps": DAILY_STEPS}]}}]))
+        "mode": "scheduled", "at": "00:00", "tz": "America/Los_Angeles", "missed": "skip", "steps": DAILY_STEPS}}])
     m = intended_api.current(project)["machines"]["feature_count_improver"]
     assert m["engagement"] == {"mode": "scheduled", "at": "00:00", "tz": "America/Los_Angeles", "missed": "skip"}
-    revs = [op for e in intended_api.layer(project).journal() for op in e["ops"] if op["op"] == "revise_machine"]
+    assert m["latest"]["before"]["engagement"]["mode"] == "continuous"
+    assert any("scheduled once a day at 00:00" in line and "it never runs" in line for line in turn5[0]["said"])
+    revs = [op for e in journal(project) for op in (e.get("sent") or e["ops"]) if op["op"] == "revise_machine"]
     assert len(revs) == 8 and m["expected_effect"]["edits"]
     assert m["guessed"] == []                                         # every guess was replaced by the owner's words
-    assert (project.state_dir / "drafts" / "feature_count_improver" / "machine.toml").read_text().count('at = "00:00"') == 1
+    assert '"at": "00:00"' in (project.state_dir / "drafts" / "feature_count_improver" / "agent.json").read_text()
     assert git(repo, "rev-parse", "HEAD") == head                      # nothing committed on the base branch
-    for text in replies:
-        assert "Error" not in text and not any(p in text.lower() for p in FORBIDDEN), text
+
+
+def test_no_prompt_or_guide_asks_the_owner_to_write_configuration():
+    """The Supervisor's prompts (what it says to the owner comes from them) and its guide. The
+    guide's `[agents]` block is a reference for the Supervisor, not addressed to the owner, so
+    only the phrases are checked there."""
+    prompts = PACKAGE / "prompts"
+    mine = [*prompts.glob("supervisor*.md"), prompts / "operator.md", prompts / "design.md", *(prompts / "duties").glob("*.md")]
+    for p in mine:
+        for phrase in FORBIDDEN:
+            assert phrase not in p.read_text(encoding="utf-8").lower(), (p.name, phrase)
+    guide = (PACKAGE / "guide.md").read_text(encoding="utf-8").lower()
+    for phrase in FORBIDDEN[:-1]:
+        assert phrase not in guide, ("guide.md", phrase)

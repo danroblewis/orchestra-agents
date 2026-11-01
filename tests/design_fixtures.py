@@ -1,12 +1,18 @@
 """What the design tools' tests share: a project in a git checkout on main, the Supervisor's
 store, a turn begun with the owner's message (as the host records it), and a call through
-``tooling`` as an agent's session makes it. The declared layer is the agents' stand-in
-(``intended_standin.py``): an in-process, file-backed fake of Orchestra's ``project.intended``
-in the proposal's shapes, until Orchestra has its own (``intended_api.py``, the seam)."""
+``tooling`` as an agent's session makes it.
+
+The declared layer is each of the two the seam can choose (``intended_api.py``), so every test runs
+against both when it can: ``standin``, the agents' file-backed stand-in, and ``core``, Orchestra's
+own (task C1) through its host's events endpoint, served here in-process. ``core`` runs only when
+the installed Orchestra has it (``uv run --with-editable ~/orchestra-wt/C1 ...``) and is skipped
+otherwise; with it installed, ``standin`` forces the stand-in. A test of a choice the two make
+differently on purpose says so with ``differs``."""
 
 from __future__ import annotations
 
 import subprocess
+from contextlib import contextmanager
 
 import pytest
 from conftest import agents_project
@@ -16,14 +22,41 @@ from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
 WHY = "the owner asked for it in the chat just now"
+CORE = intended_api.has_core()
 
 
 def git(repo, *args):
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout
 
 
+@contextmanager
+def core_endpoint(project):
+    """Orchestra's events endpoint for ``project``, as its host serves it (only with C1 installed)."""
+    from orchestra import endpoint
+    from orchestra.endpoint.server import EventsEndpoint
+    from orchestra.events import Events as CoreEvents
+    ep = EventsEndpoint(project.orchestra, CoreEvents.for_project(project.orchestra), ("127.0.0.1", 0),
+                        endpoint.token(project.orchestra), log=lambda _: None)
+    ep.start()
+    try:
+        yield ep
+    finally:
+        ep.stop()
+
+
+@pytest.fixture(params=["standin", "core"])
+def layer_kind(request, monkeypatch):
+    if request.param == "core" and not CORE:
+        pytest.skip("the installed Orchestra has no declared layer (task C1): run with --with-editable ~/orchestra-wt/C1")
+    if request.param == "standin" and CORE:
+        monkeypatch.setattr(intended_api, "has_core", lambda: False)
+    monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
+    monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
+    return request.param
+
+
 @pytest.fixture
-def project(tmp_path, monkeypatch):
+def project(tmp_path, monkeypatch, layer_kind):
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -33,12 +66,22 @@ def project(tmp_path, monkeypatch):
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     p.reload_config()
-    return p
+    if layer_kind == "core":
+        with core_endpoint(p):
+            yield p
+    else:
+        yield p
 
 
 @pytest.fixture
 def store(project):
     return AgentStore(project, Events.for_project(project, source="supervisor"))
+
+
+def differs(layer_kind: str, why: str) -> None:
+    """A choice the stand-in makes on purpose where Orchestra's does not yet (the coordinator's list)."""
+    if layer_kind == "core":
+        pytest.xfail(why)
 
 
 def say(store, message: str, n: int = 1) -> None:
@@ -55,9 +98,23 @@ def layer(project) -> dict:
     return intended_api.current(project)
 
 
+def journal(project) -> list[dict]:
+    """The declared layer's journal: the stand-in's, or (in a test only) Orchestra's read in process."""
+    lay = intended_api.layer(project)
+    return lay.journal() if hasattr(lay, "journal") else project.orchestra.intended.journal()
+
+
 def changes(project) -> list[dict]:
     """Every change of the journal, in order, with its op as sent."""
     out = []
-    for e in intended_api.layer(project).journal():
-        out += [{**op, "change": c["change"]} for op, c in zip(e["ops"], e["changes"], strict=True)]
+    for e in journal(project):
+        out += [{**op, "change": c["change"]} for op, c in zip(e.get("sent") or e["ops"], e["changes"], strict=True)]
     return out
+
+
+def request(store, control: str, element: str, change: str | None = None, source: str = "owner") -> str:
+    """The owner's click on a page, as Orchestra's web server publishes it; its id."""
+    part, _, eid = element.partition(":")
+    ev = store.events.publish("orchestra.intent.requested", {"control": control, "part": part, "id": eid, "change": change,
+                                                            "from": "Machines page"}, source=source, subject=element)
+    return ev["id"]

@@ -234,9 +234,24 @@ def link(project, store, a, prov):
     found = (a.get("discovered") or "").strip()
     if not declared or part not in ("stock", "effect") or not found:
         raise StoreError("declared is a declared stock or effect's id; discovered, the key of the discovered stock or series")
-    done = apply(project, store, [{"op": "link", "part": part, "id": eid, "found_as": found}], prov)
+    caveat = (a.get("caveat") or "").strip()
+    no_secret(caveat)
+    if caveat:
+        prov = {**prov, "reason": f"{prov['reason'].rstrip('.')}. Caveat: {caveat}"}
+    ops = [{"op": "link", "part": part, "id": eid, "found_as": found}]
+    measure = options_of(project, part, eid)
+    if option := next((o for o in measure["options"] if o["kind"] == "existing_series"
+                       and o.get("series") in (found, found.split("{", 1)[0])), None):
+        option.update({"caveat": caveat or option.get("caveat")})
+        ops.append({"op": "record_measurement", "part": part, "id": eid, "options": measure["options"], "chosen": option["key"]})
+    done = apply(project, store, ops, prov)
     lines = [(f"{eid} linked to {found}: a manual binding, origin declared, drawn as an assumption until fitted; {found} "
               "keeps its name")]
+    if option:
+        lines.append(f"option {option['key']} ({found}) marked chosen")
+    if caveat:
+        lines.append(f"caveat recorded with the link: {caveat}. Tell the owner, and offer a new instrument only if they "
+                     "reject this series")
     lines += publish_waiting(project, store)
     if again := rewrite_readers(project, store, eid):
         lines.append(f"the records of {', '.join(again)}, which read {eid}, are written again: they read {found} now")

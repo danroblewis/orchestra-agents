@@ -174,10 +174,12 @@ a file. Follow it top to bottom:
    It is drawn as a ghost in the Dynamics page's Expected group until a series measures it.
 2. **Measure, at once, from the store first.** `propose_measurements` is refused until
    `list_metrics` was called in the session: a series already recorded always beats a script, and
-   is option `a` (`existing_series`, nothing added); when the model has it as a discovered stock,
-   `link` the declared stock to it in the same turn (yours to do; it is how its expected effects
-   are judged). Then the repository's reports, other plugins' counters, another store: three or
-   four options with their cost. Only when no series holds it, `add_instrument` the best, its
+   is option `a` (`existing_series`, nothing added), a superset or a proxy of the quantity
+   included, offered with its `caveat`; when the model has it as a discovered stock, `link` the
+   declared stock to it in the same turn, with the caveat (yours to do; it is how its expected
+   effects are judged). Then the repository's reports, other plugins' counters, another store:
+   three or four options with their cost. Only when no series holds it, or the owner rejects the
+   one offered (quoted), `add_instrument` the best, its
    option chosen at once (the Dynamics page draws a draft as recording only on the chosen
    option): a script of at most 100 lines, tried
    before it is written, to `~/.orchestrator/<key>/agents/instruments/<name>.sh`, and its

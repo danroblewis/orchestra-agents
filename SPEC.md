@@ -227,7 +227,9 @@ starts it: the plugin declares it in `Plugin.processes` (`web.processes`) whethe
 their Supervisor sets the project up), so `orchestra run` keeps it running in the interpreter
 Orchestra runs in, as the process `agents.host`; `[agents] enabled = false` declares none. It is started with `--wait`: while another host holds the project, or the control port is
 taken, it waits for that to clear instead of exiting, so a host restarted while the previous one
-still shuts down takes over afterwards. Its shutdown closes the running turns together, waits up
+still shuts down takes over afterwards; and it watches the `orchestra run` that started it (every
+2 s, `parent.py`), stopping as on SIGTERM when that process is gone (killed before it could stop
+its processes), so no host outlives its launcher. Its shutdown closes the running turns together, waits up
 to `SHUTDOWN_REPORTS_S` (10 s) for their reports, then closes the resident sessions together, each
 close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace it declares
 (`web.STOP_GRACE_S`), so Orchestra's launcher never kills it mid-way. It:
@@ -686,7 +688,9 @@ no credential's value is shown).
 
 **Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
-launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
+launcher runs; each collector's last round; what each installed plugin's `Plugin.check` says against
+the merged configuration, in its own words, a check that raises reported as `its check failed: <error>`
+without stopping the others, `plugin_findings.py`), `read_config` (orchestra.toml, whether it can be
 changed now, its recent commits; whether the owner has a private overlay and each key it sets,
 secret values left out), `list_processes` (Orchestra's runtime record and the declared
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a

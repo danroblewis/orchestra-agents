@@ -2,7 +2,7 @@
 configuration (``orchestra.toml`` and its history, and the owner's private overlay, through
 Orchestra's objects), the processes Orchestra's launcher keeps running (its runtime
 record), the collectors the file declares, any machine's log, and a summary of the setup (which
-machines fill the task system's roles, the work mode, what runs). The metrics and the model are in
+machines fill the task system's roles, the work mode, what runs, what each plugin's check says). The metrics and the model are in
 ``observe_model.py``; the event stream is ``read_events`` and the task system's picture is its
 ``snapshot`` query (``tooling.py``).
 
@@ -24,6 +24,7 @@ from orchestra.web.machine_logs import readable, tail
 from .config import Project
 from .config_change import file_name, git, why_not_committable
 from .fillers import Fillers
+from .plugin_findings import findings as plugin_findings
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
 
@@ -131,11 +132,13 @@ def _not_launched(project: Project, fillers: Fillers, procs: dict) -> list[str]:
 def check_setup(project: Project, store: AgentStore) -> dict:
     """Whether the system can do what is asked of it: which machines fill the task system's roles
     (and which of them Orchestra does not run), the kind of work, the gate's tests, the capacity,
-    and what the launcher runs."""
+    what the launcher runs, and what each installed plugin's check says against the configuration
+    (``plugin_findings``: a missing tool a setting needs, a dirty worktree, a bad setting)."""
     raw = project.orchestra.config.raw
     p, t, g = raw.get("project") or {}, raw.get("tasks") or {}, raw.get("gate") or {}
     procs = list_processes(project)
     fillers = Fillers(store.events)
+    plugins = plugin_findings(project)
     return {"ok": True,
             "work": p.get("work", "tasks") + (" (a branch per ticket, reviewed and landed through the merge gate)"
                                               if p.get("work") == "code" else
@@ -149,4 +152,6 @@ def check_setup(project: Project, store: AgentStore) -> dict:
                           for x in procs["processes"]],
             "collectors": [f"{c['name']}: {c['last_log_line']}" for c in procs["collectors"]],
             "entries_left_out": procs["entries_left_out"],
+            "plugin_checks": plugins["plugins"],
+            "plugins_not_checked": plugins["not_checked"],
             "config_can_change": why_not_committable(project) or "yes"}

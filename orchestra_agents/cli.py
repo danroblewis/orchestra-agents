@@ -253,7 +253,8 @@ def build_parser() -> argparse.ArgumentParser:
                                    "for the roles in [agents] serves, and serves the Supervisor chat. Stop it with Ctrl-C.")
     s.add_argument("--wait", action="store_true",
                    help="while another host holds the project or the control port is taken, wait for it to clear instead of "
-                        "exiting (how Orchestra's launcher starts it, so a restart outlasts the previous host's shutdown)")
+                        "exiting (how Orchestra's launcher starts it, so a restart outlasts the previous host's shutdown); "
+                        "it also stops when the process that started it is gone")
     s.set_defaults(fn=cmd_run)
     s = sub.add_parser("metrics", help="the measurements (agents working, turns started and finished) as Prometheus text, for the instrument")
     s.set_defaults(fn=cmd_metrics)

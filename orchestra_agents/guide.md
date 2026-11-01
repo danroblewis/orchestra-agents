@@ -161,7 +161,8 @@ day's cap it does not wake you, and nor do your duties' own events; the owner's 
 
 ## Checking it took
 
-- `check_setup`: the roles and who fills them, the work mode, what runs.
+- `check_setup`: the roles and who fills them, the work mode, what runs, and what each installed
+  plugin's check says against the configuration (`plugin_checks`; a check that failed says so).
 - `orchestra agents status` (the human's terminal) or the Agents page: the host, its harness and
   model, each agent's state.
 - After a harness or model change: the host's log (`read_machine_log agents.host`) says the

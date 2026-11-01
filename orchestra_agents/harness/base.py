@@ -257,6 +257,11 @@ class Harness(ABC):
         Default: none taken (a harness whose model names differ says which it accepts)."""
         return None
 
+    def turn_usd(self, model: str | None) -> float | None:
+        """An estimate of what one turn of a narrow machine costs on ``model`` (for a drafted
+        machine's cost line), or None when it is not known. Default: not known."""
+        return None
+
     @staticmethod
     @abstractmethod
     def read_transcript(session_file: str | Path) -> list[dict]:

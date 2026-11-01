@@ -334,6 +334,14 @@ def test_a_dummy_harness_turn_costs_nothing_and_a_model_turn_its_price(project, 
     assert design_machines.turn_usd(project) == pytest.approx(0.03)
 
 
+@pytest.mark.real_harness            # Pi's harness object, for its turn_usd; opens no session
+def test_a_harness_that_knows_no_price_says_the_cost_is_unknown(project, store, monkeypatch):
+    monkeypatch.setattr(project.config, "harness", "pi")
+    assert design_machines.turn_usd(project) is None
+    line = design_machines.cost_line(project, store, {"receives": ["ticket.created"]})
+    assert "at a cost per turn this harness does not report" in line and "$" not in line
+
+
 def test_events_from_a_short_history_are_scaled_to_a_day_and_said_so(store, monkeypatch):
     now = time.time()
 

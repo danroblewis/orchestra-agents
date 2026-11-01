@@ -46,9 +46,6 @@ EXTERNAL = ("source", "log")
 SPEC_KEYS = tuple(dict.fromkeys((*UNIVERSAL, *PROGRAM_FIELDS, *EXTERNAL)))
 AI_WORDS = re.compile(r"\b(AI|LLM|LLMs|GPT|haiku|sonnet|opus|claude|gemini|prompt|prompts|language model|tool call|tool group)\b",
                       re.IGNORECASE)
-# an estimate of one turn of a narrow machine by model, for the cost line (the first whose name is in the model's)
-TURN_USD = (("haiku", 0.03), ("sonnet", 0.12), ("opus", 0.60))
-NO_COST = ("dummy",)     # harnesses with no model behind them
 EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
 DAY = 86_400.0
 # the flat shape of one expected edit (tools_design.EXPECT): its kind, and the fields each kind needs
@@ -193,21 +190,20 @@ def runs_a_day(store: AgentStore, m: dict, now: float | None = None) -> tuple[fl
     return per_day, (f"{woken}: {plural(n, 'such event')} in the last {_span(covered)}, about {round(per_day):,} a day")
 
 
-def turn_usd(project: Project) -> float:
-    """What one turn of a designed machine costs on this project's harness and model: nothing on a
-    harness with no model behind it."""
+def turn_usd(project: Project) -> float | None:
+    """What one turn of a designed machine costs on this project's harness and model (the harness's
+    estimate, ``Harness.turn_usd``), or None when the harness does not know."""
     from .harness import get_harness
     h = get_harness(project.config.harness)
-    if h.name in NO_COST:
-        return 0.0
-    model = str(h.model_for(state_machines.DEFAULT_MODEL) or project.config.model or state_machines.DEFAULT_MODEL).lower()
-    return next((usd for name, usd in TURN_USD if name in model), TURN_USD[0][1])
+    return h.turn_usd(h.model_for(state_machines.DEFAULT_MODEL) or project.config.model or state_machines.DEFAULT_MODEL)
 
 
 def cost_line(project: Project, store: AgentStore, m: dict) -> str:
     per_day, how = runs_a_day(store, m)
-    return (f"as drafted: about {plural(round(per_day), 'turn')} a day on {state_machines.runs_on(project)}, about "
-            f"${per_day * turn_usd(project):.2f} a day ({how}); unconfirmed, it never runs and costs nothing")
+    usd = turn_usd(project)
+    cost = f"about ${per_day * usd:.2f} a day" if usd is not None else "at a cost per turn this harness does not report"
+    return (f"as drafted: about {plural(round(per_day), 'turn')} a day on {state_machines.runs_on(project)}, {cost} "
+            f"({how}); unconfirmed, it never runs and costs nothing")
 
 
 def listeners(project: Project, store: AgentStore, types: list[str], but: str) -> dict[str, list[str]]:

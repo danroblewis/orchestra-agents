@@ -155,6 +155,9 @@ class DummyHarness(Harness):
         """No model runs: the name is recorded as asked, so a spec's model shows as it would run."""
         return (wanted or "").strip() or None
 
+    def turn_usd(self, model: str | None) -> float | None:
+        return 0.0                                  # no model behind it
+
     @staticmethod
     def read_transcript(session_file: str | Path) -> list[dict]:
         """The agent writes the common shape already: {role, text, tool_calls, ts, ...}."""

@@ -56,7 +56,9 @@ from .mcp_status import (
 # ReportFindings is the product's own review report: a reviewer that calls it reports to nobody.
 NOT_ORCHESTRA = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
                  "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "RemoteTrigger", "ReportFindings")
-EDITS = ("Edit", "Write", "NotebookEdit")    # taken from a read-only agent: it reads, searches and runs read-only commands
+EDITS = ("Edit", "Write", "NotebookEdit")
+# an estimate of one turn of a narrow machine by model family (a drafted machine's cost line: turn_usd)
+TURN_USD = (("haiku", 0.03), ("sonnet", 0.12), ("opus", 0.60))    # taken from a read-only agent: it reads, searches and runs read-only commands
 
 
 def claude_config_dir() -> Path:
@@ -437,6 +439,11 @@ class ClaudeCodeHarness(Harness):
         """Claude Code takes the aliases (``haiku``, ``sonnet``, ``opus``) and full model ids."""
         w = (wanted or "").strip()
         return w if w in ("haiku", "sonnet", "opus") or w.startswith("claude-") else None
+
+    def turn_usd(self, model: str | None) -> float | None:
+        """One turn of a narrow machine, by the model family in its name; None for one not named so."""
+        m = (model or "").lower()
+        return next((usd for name, usd in TURN_USD if name in m), None)
 
     @staticmethod
     def context(session_file: str | Path) -> ContextSize:

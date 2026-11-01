@@ -63,7 +63,9 @@ DRAFT = {"type": "object", "description": (
     "An outbox step's act (required there, refused on any other step): what the Outbox plugin performs as the owner "
     "after their approval. Each value is " + VALUE + ". The text comes from an item field an earlier step wrote "
     "(a role writes the ping's text into the nudge field; the outbox step drafts from it): there is no text template"),
-    "properties": {"kind": S("The outbox's kind, as its configuration names it (sail.label, review.ping)"),
+    "properties": {"kind": S("A kind in the owner's [outbox.kinds], by its name there (review.request); one not "
+                             "configured yet is a kind for the owner to add to their overlay, with its sender and "
+                             "template"),
                    "target": {"type": "object", "description": "Where the act lands, {name: value}: the repository "
                               "and pull request, the ticket, the channel"},
                    "content": {"description": "The text or the label: " + VALUE},
@@ -108,7 +110,6 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
                   "name": S("The pile's name"),
                   "where": {"type": "object", "description": "Predicates, all to hold: step, held, set, unset, equals, "
                             "contains, seen, unseen, open_child, unmet_dependency, closed"}}}},
-    "lifecycle": {"type": "object", "properties": {"keep_final": B("Keep the final snapshot once closed (default true)")}},
     "settings": {"type": "object", "description": "Parameters a project fills in [workflows.settings.<name>]: "
                  "{\"label\": {\"type\": \"string\", \"default\": \"SAIL\"}}"},
 }, "required": ["name", "steps"]}

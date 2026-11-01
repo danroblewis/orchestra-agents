@@ -135,9 +135,11 @@ def test_the_tools_are_the_supervisors_group_and_the_schema_spells_out_the_defin
     d = BY_NAME["declare_workflow"].input_schema
     assert d["required"] == ["definition", "reason"] and d["properties"]["root"]["enum"] == ["state", "repository"]
     props = d["properties"]["definition"]["properties"]
-    assert set(props) == {"name", "planner", "starts", "steps", "piles", "lifecycle", "settings"}
+    assert set(props) == {"name", "planner", "starts", "steps", "piles", "settings"}
     step = props["steps"]["items"]["properties"]
     assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends", "draft"}
+    words = pytest.importorskip("orchestra_workflows.define.words")
+    assert set(props) == words.WORKFLOW_KEYS and set(step) == words.STEP_KEYS   # the schema offers no key it refuses
     assert set(step["who"]["properties"]) == {"role", "program", "outside", "person", "outbox"}
     assert props["steps"]["items"]["required"] == ["name"]          # a fan-in or an after step has no who
 
@@ -253,3 +255,9 @@ def test_without_the_plugin_each_tool_says_it_is_not_installed(project, store, m
                        ("explain_item", {"item": "ORC-1"})):
         with pytest.raises(StoreError, match="Workflows plugin .* is not installed"):
             call(project, store, tool, **args)
+
+
+def test_a_drafts_kind_is_one_the_owner_configures_never_an_example_that_exists_nowhere():
+    step = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["steps"]["items"]["properties"]
+    kind = step["draft"]["properties"]["kind"]["description"]
+    assert "[outbox.kinds]" in kind and "sail.label" not in kind and "review.ping" not in kind

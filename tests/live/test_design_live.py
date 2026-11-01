@@ -359,7 +359,7 @@ def rehearsal(turn: int, model: dict) -> list[dict]:
             "add_receives": sorted(RECEIVES - {"gate.landed"}), "reason": why}}],
         5: [{"tool": "refine_machine", "args": {
             "name": "notes_improver", "quote": "make it a scheduled task for 12am every day", "mode": "scheduled",
-            "at": "00:00", "missed": "skip", "steps": steps, "guesses": ["engagement"], "reason": why}}],
+            "at": "00:00", "missed": "skip", "steps": steps, "reason": why}}],
         6: [{"tool": "declare_expected_effect", "args": {"machine": "notes_improver", "horizon": "3d", "reason": why,
                                                          "expect": [{"kind": "rises", "stock": "notes_files"}, *flows]}},
             {"tool": "confirm", "args": {"element": "machine:notes_improver", "quote": "I expect notes files to rise", "reason": why}}],

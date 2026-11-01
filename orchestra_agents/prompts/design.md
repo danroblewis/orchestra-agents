@@ -91,9 +91,9 @@ you cannot.
 
 **Time zones are the owner's.** A scheduled machine's `at` is the time the owner said; its `tz` is
 the zone from their message, or the project's configured zone. The agents configure none, so when
-the owner has not named one, give `mode` and `at` from their words, leave `tz` out, list
-`engagement` in `guesses`, and ask in that reply which zone they mean; it is confirmed only after
-they answer or confirm. Never write UTC or the host's zone as theirs.
+the owner has not named one, give `mode` and `at` from their words, leave `tz` out (on
+`declare_machine`, list `engagement` in `guesses`), and ask in that reply which zone they mean:
+until they say, it runs on the host's clock. Never write UTC or the host's zone as theirs.
 
 **Confirm and discard are the owner's**, for every part and every pending change. "Confirm it" in
 the chat (quoted), or their click on a page: you are woken with `orchestra.intent.requested` and

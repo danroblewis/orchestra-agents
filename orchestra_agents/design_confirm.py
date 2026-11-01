@@ -40,7 +40,7 @@ import time
 import uuid
 from datetime import datetime
 
-from . import intended_api, state_machines
+from . import design_asked, intended_api, state_machines
 from .clock import next_at, zone
 from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, page_line, plural
@@ -149,6 +149,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     m = current(project, eid)
     if m.get("state") == "declared":
         raise StoreError(f"machine {eid} is confirmed already")
+    design_asked.check_expectation_recorded(store, m)
     stock_as_flow(project, (m.get("expected_effect") or {}).get("edits") or [])   # before anything is confirmed
     here = m.get("managed") != "external"
     runs = here and m.get("kind") == "universal"

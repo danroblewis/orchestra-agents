@@ -116,8 +116,9 @@ DESIGN_TOOLS: list[ToolDef] = [
             "list_metrics in this session: a series already in the store (existing_series, its series named) always beats a "
             "script, and is option a, also when it counts more than the owner means (a superset: every tracked file for "
             "the notes files) or stands for it (a proxy): offer it with that caveat (caveat). When that series is a "
-            "discovered stock (read_model), link the declared one to it (link, with the caveat). A new instrument is "
-            "proposed for recording only when the owner rejects the series. Then "
+            "discovered stock (read_model), this call links the declared one to it itself, with the option's caveat: tell "
+            "the owner it is linked; only their words unlink it (link unlink=true). A new instrument is proposed for "
+            "recording only when the owner rejects the series. Then "
             "the repository's own reports (a CI JUnit report through orchestra.instruments.test_reports; "
             "never run a suite in the working tree), other plugins' counters, another store or company system (named and "
             "costed only: never previewed until the owner clears it), and a simulated placeholder last. It only records. "
@@ -162,8 +163,9 @@ DESIGN_TOOLS: list[ToolDef] = [
             {"declared": ELEMENT, "discovered": S("The discovered stock's (or series') key"),
              "caveat": S("What the series gets wrong for the declared stock, if anything (it counts every tracked file, "
                          "not the notes files only): recorded with the link and on its option; tell the owner"),
+             "unlink": B("Take the link off, on the owner's words only (quote): they do not want that series"),
              "quote": QUOTE, "reason": REASON},
-            ("declared", "discovered", "reason")),
+            ("declared", "reason")),
     ToolDef("declare_machine", "design",
             "Declare a machine the owner asked for in this turn's message (\"Create a new Universal Machine called Feature "
             "Count Improver\"): no more than it asks for (a loop described in passing asks for none; refused past that). "

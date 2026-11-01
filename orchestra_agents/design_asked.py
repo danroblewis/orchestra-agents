@@ -74,3 +74,39 @@ def note(store: AgentStore, mid: str) -> None:
         turn["machines"] = list(dict.fromkeys([*(turn.get("machines") or []), mid]))
         return turn
     store.update_agent_state(MACHINE, "turn", add)
+
+
+# What the owner expects a machine to change, as their message says it: a direction ("notes files to
+# rise", "the error rate falls"), a factor ("up 1.2 times", "double", "20% more") or an effect
+# ("I expect fewer rejections"). ``confirm`` refuses a machine none of it was recorded for.
+DIRECTION = (r"(?:rise|rises|rising|grow|grows|increase|increases|go(?:es)?\s+up|climb|climbs|fall|falls|drop|drops|"
+             r"decrease|decreases|shrink|shrinks|go(?:es)?\s+down|decline|declines|improve|improves|double|doubles|halve|halves)")
+UPTO = r"(?:[^.;!?]|\.\d)"                       # within a sentence (1.2 is not its end)
+EXPECTS = (
+    re.compile(rf"\b(?:expect|expecting|predict|should\s+see|hope)\b{UPTO}*?\b{DIRECTION}\b{UPTO}*", re.IGNORECASE),
+    re.compile(rf"\b(?:up|down|by)\s+\d+(?:\.\d+)?\s*(?:times|x|×|%|percent)(?!\w){UPTO}*", re.IGNORECASE),
+    re.compile(rf"\b\d+(?:\.\d+)?\s*(?:times|x|×|%|percent)\s+(?:more|less|fewer|higher|lower|faster|slower)\b{UPTO}*",
+               re.IGNORECASE),
+    re.compile(rf"\b(?:expect|expecting|predict)\s+(?:more|fewer|less|higher|lower|faster|slower)\b{UPTO}*", re.IGNORECASE),
+)
+
+
+def expectations_in(message: str) -> list[str]:
+    """The owner's expectations in ``message``, each as the words that say it, in order."""
+    found: list[tuple[int, str]] = []
+    for pat in EXPECTS:
+        for m in pat.finditer(message or ""):
+            if not any(a <= m.start() < a + len(t) for a, t in found):
+                found.append((m.start(), m.group(0).strip(" ,")))
+    return [t for _, t in sorted(found)]
+
+
+def check_expectation_recorded(store: AgentStore, m: dict) -> None:
+    """Refuse to confirm machine ``m`` while the owner's message this turn states an expectation and
+    no expected effect is recorded for it."""
+    heard = expectations_in(turn_of(store).get("message") or "")
+    if heard and not ((m.get("expected_effect") or {}).get("edits")):
+        raise StoreError(f"not confirmed: the owner's message states what they expect ({'; '.join(heard)}), and "
+                         f"{m.get('id')} has no expected effect recorded. Record it first (declare_expected_effect, read_model "
+                         "for the flows: a rate is factor on a flow, a level rises or falls on a stock), then confirm, so "
+                         "the prediction is published as it is confirmed. Nothing was confirmed")

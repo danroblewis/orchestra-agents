@@ -181,12 +181,26 @@ def propose_measurements(project, store, a, prov):
         if (was := kept.get(o["key"])) and was.get("title") == o["title"]:
             o.update({k: was[k] for k in ("instrument", "commit", "first_points", "provenance") if was.get(k)})
     chosen = old.get("chosen") if old.get("chosen") in {o["key"] for o in options} else None
-    done = apply(project, store, [{"op": "record_measurement", "part": part, "id": eid, "options": options, "chosen": chosen}], prov)
+    first, el = options[0], (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
+    stock = discovered_stock_of(project, first["series"]) if first["kind"] == "existing_series" and first.get("series") else None
+    linking = bool(stock and not el.get("found_as") and eid not in declined(store))
+    ops = [{"op": "record_measurement", "part": part, "id": eid, "options": options, "chosen": first["key"] if linking else chosen}]
+    if linking:                                           # the existing series first: linked here, not left to the model
+        ops.append({"op": "link", "part": part, "id": eid, "found_as": stock})
+        if first.get("caveat"):
+            prov = {**prov, "reason": f"{prov['reason'].rstrip('.')}. Caveat: {first['caveat']}"}
+    done = apply(project, store, ops, prov)
     lines = [f"{plural(len(options), 'way')} to measure {eid}, in order: " + "; ".join(f"{o['key']} {o['title']} ({o['kind']})" for o in options),
              page_line(project, "the Dynamics page shows them in the element's drawer, \"How to measure it\"")]
     if waiting := [f"{o['key']} ({why})" for o, (_, why) in zip(options, pairs, strict=True) if o["clearance"] == NEEDS_APPROVAL]:
         lines.append(f"{', '.join(waiting)}: recorded \"needs approval\"; nothing reads or previews it {UNTIL}")
-    lines += link_hints(project, eid, [o.get("series") for o in options if o["kind"] == "existing_series"])
+    if linking:
+        lines.append(f"{eid} linked to {stock} (option a, the existing series), so its expected effects can be judged"
+                     + (f"; caveat: {first['caveat']}" if first.get("caveat") else "")
+                     + f". Tell the owner it is linked, with the caveat; if they do not want it, they say so and you unlink "
+                       f"it (link declared={eid} unlink=true, quoting them), and only then add another option")
+    else:
+        lines += link_hints(project, eid, [o.get("series") for o in options if o["kind"] == "existing_series"])
     return answer(project, done, lines, options=[{k: o[k] for k in ("key", "title", "kind", "clearance")} for o in options])
 
 
@@ -232,6 +246,8 @@ def link(project, store, a, prov):
     from .design_machines import rewrite_readers
     part, eid, declared = resolve(project, a.get("declared"))
     found = (a.get("discovered") or "").strip()
+    if a.get("unlink"):
+        return unlink(project, store, part, eid, declared, prov)
     if not declared or part not in ("stock", "effect") or not found:
         raise StoreError("declared is a declared stock or effect's id; discovered, the key of the discovered stock or series")
     caveat = (a.get("caveat") or "").strip()
@@ -256,6 +272,34 @@ def link(project, store, a, prov):
     if again := rewrite_readers(project, store, eid):
         lines.append(f"the records of {', '.join(again)}, which read {eid}, are written again: they read {found} now")
     return answer(project, done, lines)
+
+
+def declined(store: AgentStore) -> list[str]:
+    """The declared elements whose link the owner took off: never linked again by propose_measurements."""
+    return list(store.agent_state(MACHINE).get("declined_links") or [])
+
+
+def unlink(project: Project, store: AgentStore, part: str, eid: str, declared: bool, prov: dict) -> dict:
+    """The owner does not want the link: it is taken off on their words only (a link made by
+    propose_measurements is declined by the owner, never by the model)."""
+    from .design_instruments import _set_option
+    if not declared or part not in ("stock", "effect"):
+        raise StoreError("declared is a declared stock or effect's id")
+    if prov.get("author") != "owner":
+        raise StoreError(f"unlinking {eid} is the owner's to ask: quote their words (quote). An existing series that counts "
+                         "more than they mean stays linked, with its caveat, until they say otherwise")
+    el = (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
+    if not el.get("found_as"):
+        raise StoreError(f"{eid} is not linked")
+    done = apply(project, store, [{"op": "link", "part": part, "id": eid, "found_as": ""}], prov)
+    store.update_agent_state(MACHINE, "declined_links", lambda v: sorted({*(v or []), eid}))
+    measure = options_of(project, part, eid)
+    if (chosen := measure.get("chosen")) and next((o for o in measure["options"] if o["key"] == chosen
+                                                    and o["kind"] == "existing_series"), None):
+        _set_option(project, store, part, eid, chosen, prov, chosen=False)
+    said = (f"{eid} unlinked from {el['found_as']}, on the owner's words: it is a ghost again until a series measures it; "
+            "add the option they choose (add_instrument, quoting them)")
+    return answer(project, done, [said])
 
 
 def _event_edges(project: Project, store: AgentStore, layer: dict) -> dict:

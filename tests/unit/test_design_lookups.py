@@ -59,12 +59,18 @@ def test_a_list_from_an_earlier_session_does_not_count(project, store):
     call(project, store, "propose_measurements", element="notes_files", reason=WHY, options=[EXISTING])
 
 
-def test_an_existing_series_that_is_a_discovered_stock_is_offered_for_a_link(project, store):
+def test_an_existing_series_that_is_a_discovered_stock_is_linked_as_option_a_or_offered_for_a_link(project, store):
     model_with(project, {"repo_files": ("repo_files", {})})
     notes(project, store)
     out = call(project, store, "propose_measurements", element="notes_files", reason=WHY, options=[EXISTING])
-    assert any("repo_files is already a discovered stock" in x and "link declared=notes_files discovered=repo_files" in x
-               for x in out["said"])
+    assert layer(project)["stocks"]["notes_files"]["found_as"] == "repo_files"          # option a: linked here (L2)
+    assert any("notes_files linked to repo_files" in x for x in out["said"])
+    script = {"label": "notes files git tracks", "kind": "script", "how": "git ls-files notes", "cost": "under a second"}
+    say(store, "Track the review backlog too.", 2)
+    call(project, store, "declare_stock", name="Review Backlog", reason=WHY)
+    out = call(project, store, "propose_measurements", element="review_backlog", reason=WHY, options=[script, EXISTING])
+    assert any("repo_files is already a discovered stock" in x and "link declared=review_backlog discovered=repo_files" in x
+               for x in out["said"])                                                  # not option a: offered
 
 
 # ---- 4. the option an instrument records is chosen at once (test_design_dynamics covers the write) ----
@@ -173,6 +179,6 @@ def test_the_design_prompt_says_store_first_receives_flows_and_the_owners_zone()
     assert "An existing series always beats a new script" in text and "`propose_measurements` is refused until" in text
     assert "Events go in `receives`." in text and "Never put them only in `steps` or `uses`" in text
     assert "An announced type counts as heard" in text
-    assert "`link` the declared stock to it in the same turn" in text and "never the stock's own key" in text
+    assert "`propose_measurements` links the declared stock to it itself" in text and "never the stock's own key" in text
     assert "Never write UTC or the host's zone as theirs" in text and "ask in that reply which zone" in text
     assert "Your tools are the ones this session lists" in text

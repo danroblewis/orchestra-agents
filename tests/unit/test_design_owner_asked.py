@@ -4,7 +4,7 @@ asks for; an existing series that is a superset or a proxy linked with its cavea
 instrument; a schedule that keeps every receive."""
 
 import pytest
-from design_fixtures import WHY, call, journal, layer, say
+from design_fixtures import WHY, call, journal, layer, model_with, say
 
 from orchestra_agents import design_asked
 from orchestra_agents.harness.tools_design import DESIGN_TOOLS
@@ -114,3 +114,61 @@ def test_the_schemas_say_it():
     assert "superset" in tools["propose_measurements"].description and "rejects" in tools["propose_measurements"].description
     assert "scheduling keeps every receive" in tools["refine_machine"].properties["remove_receives"]["description"]
     assert "no more than it asks for" in tools["declare_machine"].description
+
+
+def test_option_a_a_discovered_stock_is_linked_by_propose_measurements_with_its_caveat(project, store):
+    model_with(project, {"repo_files": ("repo_files", {})})
+    say(store, TURN1, 1)
+    call(project, store, "declare_stock", name="Notes Files", quote="Create a Notes Files stock.", reason=WHY)
+    out = call(project, store, "propose_measurements", element="notes_files", reason=WHY, options=[
+        {"label": "files git tracks", "kind": "existing_series", "series": "repo_files", "how": "repo_stats",
+         "cost": "nothing new", "caveat": "it counts every tracked file"},
+        {"label": "notes files git tracks", "kind": "script", "how": "git ls-files notes | wc -l", "cost": "under a second"}])
+    s = layer(project)["stocks"]["notes_files"]
+    assert s["found_as"] == "repo_files" and s["measure"]["chosen"] == "a"
+    assert any("linked to repo_files" in x and "caveat: it counts every tracked file" in x and "unlink=true" in x
+               for x in out["said"])
+    entry = next(e for e in journal(project) if any(op.get("op") == "link" for op in e.get("sent") or e["ops"]))
+    assert "Caveat: it counts every tracked file" in str(entry)
+    with pytest.raises(StoreError, match="the owner's to ask"):                  # the model never declines it
+        call(project, store, "link", declared="notes_files", unlink=True, reason=WHY)
+    say(store, "No, unlink repo_files, it counts everything.", 2)
+    call(project, store, "link", declared="notes_files", unlink=True, quote="unlink repo_files, it counts everything", reason=WHY)
+    s = layer(project)["stocks"]["notes_files"]
+    assert not s["found_as"] and s["measure"]["chosen"] is None
+    call(project, store, "propose_measurements", element="notes_files", reason=WHY, options=[
+        {"label": "files git tracks", "kind": "existing_series", "series": "repo_files", "how": "repo_stats", "cost": "nothing"}])
+    assert not layer(project)["stocks"]["notes_files"]["found_as"]              # declined once: not linked again
+
+
+@pytest.mark.parametrize(("message", "heard"), [
+    ("Confirm it. I expect notes files to rise, and the commit rate to go up 1.2 times.",
+     ["expect notes files to rise, and the commit rate to go up 1.2 times"]),
+    ("Confirm it, I expect fewer rejections.", ["expect fewer rejections"]),
+    ("Confirm it; it should make landings 20% faster.", ["20% faster"]),
+    ("Confirm it.", []), ("Confirm the Notes Files stock.", [])])
+def test_the_expectations_a_message_states(message, heard):
+    assert design_asked.expectations_in(message) == heard
+
+
+def test_confirm_refuses_a_machine_whose_stated_expectation_is_unrecorded(project, store):
+    model_with(project, {"notes_files_s": ("repo_files", {})})
+    say(store, TURN3, 3)
+    machine(project, store, "notes_improver", quote=TURN3)
+    confirm = "Confirm it. I expect notes files to rise, and the commit rate to go up 1.2 times."
+    say(store, confirm, 6)
+    with pytest.raises(StoreError, match=r"states what they expect \(expect notes files to rise.*1.2 times\).*Nothing was confirmed"):
+        call(project, store, "confirm", element="machine:notes_improver", quote="I expect notes files to rise", reason=WHY)
+    assert layer(project)["machines"]["notes_improver"]["state"] == "proposed"
+    call(project, store, "declare_expected_effect", machine="notes_improver", horizon="3d", reason=WHY,
+         expect=[{"kind": "rises", "stock": "notes_files_s"}])
+    call(project, store, "confirm", element="machine:notes_improver", quote="I expect notes files to rise", reason=WHY)
+    assert layer(project)["machines"]["notes_improver"]["state"] == "declared"
+
+
+def test_confirm_with_no_expectation_stated_is_not_held(project, store):
+    say(store, TURN3, 3)
+    machine(project, store, "notes_improver", quote=TURN3)
+    say(store, "Confirm it.", 6)
+    call(project, store, "confirm", element="machine:notes_improver", quote="Confirm it.", reason=WHY)
+    assert layer(project)["machines"]["notes_improver"]["state"] == "declared"

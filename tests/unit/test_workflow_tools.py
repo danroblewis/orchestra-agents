@@ -135,9 +135,11 @@ def test_the_tools_are_the_supervisors_group_and_the_schema_spells_out_the_defin
     d = BY_NAME["declare_workflow"].input_schema
     assert d["required"] == ["definition", "reason"] and d["properties"]["root"]["enum"] == ["state", "repository"]
     props = d["properties"]["definition"]["properties"]
-    assert set(props) == {"name", "planner", "starts", "steps", "piles", "lifecycle", "settings"}
+    assert set(props) == {"name", "planner", "starts", "steps", "piles", "settings"}
     step = props["steps"]["items"]["properties"]
     assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends", "draft"}
+    words = pytest.importorskip("orchestra_workflows.define.words")
+    assert set(props) == words.WORKFLOW_KEYS and set(step) == words.STEP_KEYS   # the schema offers no key it refuses
     assert set(step["who"]["properties"]) == {"role", "program", "outside", "person", "outbox"}
     assert props["steps"]["items"]["required"] == ["name"]          # a fan-in or an after step has no who
 
@@ -247,9 +249,47 @@ def test_the_loaded_definitions_are_listed_with_where_and_the_loaders_problems(p
     assert out["problems"] == ["x/workflows/broken/workflow.json: no steps"]
 
 
+def test_the_open_items_are_listed_as_the_items_page_lists_them(project, store, fake, monkeypatch):
+    seen = {}
+
+    def item_list(record, defs, now, workflow=None):
+        seen.update(record=record, workflows=[w.name for w in defs.workflows], workflow=workflow)
+        rows = [{"item": f"SCRUM-{i}", "step": "sail_check", "pile": "sail_check.waiting", "held": False,
+                 "wait": {"reason": "waiting for github.pr.labeled SAILED", "by": "github"}, "holder": None,
+                 "since": "t1", "age_s": 600 + i, "reworked": 1 if i == 8 else 0, "priority": None, "facts": 9,
+                 "fields": {"pull": i - 6, "commit": "abc", "log": "x" * 500, "list": [1, 2]}} for i in (8, 9)]
+        rows += [{"item": f"SCRUM-{i}", "step": None, "last_step": "close_ticket", "pile": "<end>", "closed": True,
+                  "done": True, "finished": "t0", "outcome": "closed", "fields": {"pull": i}} for i in range(1, 15)]
+        return {"workflows": [{"workflow": "delivery_live", "steps": ["write", "sail_check"], "items": rows}], "open": 2}
+
+    record = object()
+    Record = SimpleNamespace(for_project=lambda o: record)
+    monkeypatch.setattr(workflow_tools, "plugin",
+                        lambda: SimpleNamespace(**vars(fake.ns()), Record=Record, item_list=item_list))
+    out = call(project, store, "list_items", workflow="delivery_live")
+    (w,) = out["workflows"]
+    assert seen["workflow"] == "delivery_live" and seen["record"] is record and out["open"] == 2
+    assert [r["item"] for r in w["open"]] == ["SCRUM-8", "SCRUM-9"]
+    assert w["open"][0] == {"item": "SCRUM-8", "step": "sail_check", "pile": "sail_check.waiting", "since": "t1",
+                            "wait": {"reason": "waiting for github.pr.labeled SAILED", "by": "github"}, "age_s": 608,
+                            "reworked": 1, "fields": {"pull": 2, "commit": "abc"}}      # long and nested fields left out
+    assert len(w["closed_recently"]) == workflow_tools.CLOSED_SHOWN and w["closed_recently"][0]["outcome"] == "closed"
+    assert "a pull request's number" in out["shown"]
+    assert BY_NAME["list_items"].group == "workflows"
+    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(**vars(fake.ns()), Record=Record, item_list=None))
+    with pytest.raises(StoreError, match="no Items list"):
+        call(project, store, "list_items")
+
+
 def test_without_the_plugin_each_tool_says_it_is_not_installed(project, store, monkeypatch):
     monkeypatch.setattr(workflow_tools, "plugin", lambda: None)
     for tool, args in (("declare_workflow", {"definition": DEF, "reason": WHY}), ("list_workflows", {}),
-                       ("explain_item", {"item": "ORC-1"})):
+                       ("list_items", {}), ("explain_item", {"item": "ORC-1"})):
         with pytest.raises(StoreError, match="Workflows plugin .* is not installed"):
             call(project, store, tool, **args)
+
+
+def test_a_drafts_kind_is_one_the_owner_configures_never_an_example_that_exists_nowhere():
+    step = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["steps"]["items"]["properties"]
+    kind = step["draft"]["properties"]["kind"]["description"]
+    assert "[outbox.kinds]" in kind and "sail.label" not in kind and "review.ping" not in kind

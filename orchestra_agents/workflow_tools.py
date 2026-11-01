@@ -12,10 +12,14 @@ validated writer, its loader and its record's read API, the one exception to AGE
   ``.orchestra/`` only with the owner's quoted words, and then it is **not committed** (at work the
   base branch is protected, and the plugin's writer leaves landing it to a pull request): the answer
   says so, and the Supervisor hands it to the Coordinator to land through a ticket.
-- ``list_workflows`` and ``explain_item`` only read."""
+- ``list_workflows``, ``list_items`` and ``explain_item`` only read. ``list_items`` is the Items
+  page's list (the plugin's ``pages.items``): what the owner asks when they ask what is stuck, and
+  what needs them (L3: without it the Supervisor asked the task system, which this project does not
+  run, and named no item)."""
 
 from __future__ import annotations
 
+import time
 from importlib import import_module
 from types import SimpleNamespace
 
@@ -40,7 +44,11 @@ def plugin() -> SimpleNamespace | None:
         api = import_module("orchestra_workflows.record.api")
     except ImportError:
         return None
-    return SimpleNamespace(define=define, problems=check.problems, roots=loader.roots, Record=api.Record)
+    try:
+        listing = import_module("orchestra_workflows.pages.items").items
+    except (ImportError, AttributeError):
+        listing = None                                    # an older plugin: list_items says so
+    return SimpleNamespace(define=define, problems=check.problems, roots=loader.roots, Record=api.Record, item_list=listing)
 
 
 def _plugin() -> SimpleNamespace:
@@ -175,6 +183,41 @@ def explain_item(project: Project, a: dict) -> dict:
     return out
 
 
+OPEN_SHOWN, CLOSED_SHOWN = 40, 10
+ROW_KEYS = ("item", "title", "step", "pile", "held", "wait", "holder", "since", "age_s", "reworked", "last_step",
+            "finished", "outcome")
+
+
+def _row(r: dict) -> dict:
+    out = {k: r[k] for k in ROW_KEYS if r.get(k) not in (None, "", [], {}, False, 0)}
+    fields = {k: v for k, v in (r.get("fields") or {}).items() if isinstance(v, str | int | float) and len(str(v)) <= 200}
+    return out | ({"fields": fields} if fields else {})
+
+
+def list_items(project: Project, a: dict) -> dict:
+    p = _plugin()
+    if getattr(p, "item_list", None) is None:
+        raise StoreError("this Workflows plugin has no Items list to read: explain_item reads one item by its id, and the "
+                         "Items page (/items) lists them")
+    project.reload_config()
+    o = project.orchestra
+    workflow = str(a.get("workflow") or "").strip() or None
+    got = p.item_list(p.Record.for_project(o), p.define.load(o), time.time(), workflow=workflow)
+    out = []
+    for w in got.get("workflows") or []:
+        rows = w.get("items") or []
+        live = [_row(r) for r in rows if not r.get("closed")]
+        done = [_row(r) for r in rows if r.get("closed")]
+        out.append({"workflow": w.get("workflow"), "steps": w.get("steps"), "open": live[:OPEN_SHOWN],
+                    "closed_recently": done[:CLOSED_SHOWN],
+                    **({"more_open": len(live) - OPEN_SHOWN} if len(live) > OPEN_SHOWN else {})})
+    return {"ok": True, "open": got.get("open"), "workflows": out, "problems": got.get("problems") or [],
+            "shown": "The Items page (/items) lists the same; explain_item says why one item is where it is, fact by fact. "
+                     "An item whose wait names the owner (an approval, attention) needs them; one waiting long on an "
+                     "outside system (CI, a review, a check) is stuck there: say which, with its fields (a ticket's key, "
+                     "a pull request's number)."}
+
+
 def _summary(row: dict, snap: dict) -> dict:
     """The item in a few values: the index's row while it is open, else its snapshot's."""
     got = {"item": snap.get("item"), "open": bool(row), "facts": snap.get("facts"), "first": snap.get("first"),
@@ -184,7 +227,7 @@ def _summary(row: dict, snap: dict) -> dict:
     return {k: v for k, v in got.items() if v not in (None, "", [], {}) or k == "open"}
 
 
-READS = {"list_workflows": list_workflows, "explain_item": explain_item}
+READS = {"list_workflows": list_workflows, "list_items": list_items, "explain_item": explain_item}
 COMMANDS = frozenset({"declare_workflow", *READS})
 
 

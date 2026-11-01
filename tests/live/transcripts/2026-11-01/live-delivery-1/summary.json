@@ -1,0 +1,80 @@
+{
+ "example": "orchestra-workflows 3cc9d1f examples/delivery_live",
+ "model": "haiku",
+ "tools_via": "mcp",
+ "sent_once": true,
+ "cost": {
+  "usd": 0.0684,
+  "invocations": 4,
+  "usage": {
+   "input_tokens": 30,
+   "cache_creation_input_tokens": 54657,
+   "cache_read_input_tokens": 737699,
+   "output_tokens": 6758
+  }
+ },
+ "minutes": 2.6,
+ "tickets": [
+  "SCRUM-8",
+  "SCRUM-9"
+ ],
+ "prs": {
+  "SCRUM-7": "https://github.com/danroblewis/orchestra-live-delivery/pull/3",
+  "SCRUM-5": "https://github.com/danroblewis/orchestra-live-delivery/pull/2",
+  "SCRUM-6": "https://github.com/danroblewis/orchestra-live-delivery/pull/1"
+ },
+ "failures": [
+  "turn 2: no \u00d71.2 factor among the expected edits []",
+  "turn 3: leaves out the open tickets ['SCRUM-8', 'SCRUM-9']"
+ ],
+ "turns": [
+  {
+   "turn": 1,
+   "model": "haiku",
+   "seconds": 43,
+   "ok": true,
+   "why": "",
+   "tools": [
+    "ToolSearch",
+    "declare_stock",
+    "list_metrics",
+    "read_model",
+    "propose_measurements"
+   ],
+   "text": "I declared the stock **PRs Waiting for SAIL** (`prs_waiting_for_sail`), added by you, and recorded how to measure it.\n\n- **Measurement:** the store already has `workflow_pile_items{workflow=\"delivery_live\", step=\"sail_check\", place=\"waiting\"}`, which counts items waiting at the SAIL check. Nothing new is recorded or run.\n- **Caveat:** that pile covers only the `delivery_live` workflow, and \"items at the SAIL check\" may not match \"pull requests waiting on SAIL\" exactly. A sibling pile, `step=\"sail\"`, also exists; I did not use it.\n- **Not yet linked:** no model exists yet (`read_model` says the host has not discovered one), so the stock has no link to a discovered stock. Once discovery runs under `orchestra run`, I'll link it to the matching stock.\n- **Where to look:** the Dynamics page shows it in the Expected group as a ghost, \"no series yet\", until the link is made. Its drawer lists the measurement under \"How to measure it\".\n\nIf the pile is not the number you mean, tell me which pull requests should count and I'll look for a better series.",
+   "error": null
+  },
+  {
+   "turn": 2,
+   "model": "haiku",
+   "seconds": 24,
+   "ok": false,
+   "why": "no \u00d71.2 factor among the expected edits []",
+   "tools": [
+    "ToolSearch",
+    "read_events",
+    "declare_machine",
+    "confirm",
+    "read_model"
+   ],
+   "text": "I declared **Review Nudger** (`review_nudger`) but did not confirm it, so it does not run yet.\n\n- **Declared:** a scheduled machine at 09:00, listening to `github.pr.opened`, `github.pr.reviewed`, `github.pr.merged` and `sail.check.completed`. It only drafts reminders for you to approve; it never sends one. Drafted cost is about $0.03 a day. The Machines page shows it dashed, \"unconfirmed\".\n- **Not confirmed:** confirm needs the expected effect recorded first. Your \"SAILED per day \u00d71.2\" must name a flow in the discovered model, and there is no model yet (`read_model` says the host has not discovered one, which happens under `orchestra run`). I did not guess a flow id. Once a model exists I will record the effect on the flow that counts SAILED, then confirm.\n- **Guessed, needs your answer:**\n  1. **Time zone:** the 09:00 runs on the host's clock until you say which zone you mean.\n  2. **Wait threshold:** how long a pull request may wait before it counts as too long. I have not set one.",
+   "error": null
+  },
+  {
+   "turn": 3,
+   "model": "haiku",
+   "seconds": 75,
+   "ok": false,
+   "why": "leaves out the open tickets ['SCRUM-8', 'SCRUM-9']",
+   "tools": [
+    "ToolSearch",
+    "snapshot",
+    "check_setup",
+    "list_processes",
+    "snapshot"
+   ],
+   "text": "I can't tell you what is stuck on tickets right now. The task system did not answer my snapshot request within 30 s, so I have no ticket states to report. Its scheduler may be down or busy.\n\nWhat I can see:\n\n- **Processes:** all ten are running with zero restarts for about 112 s: the agents host, the GitHub and Jira live feeds, the PagerDuty stand-in, the reviewer stand-in, the SAIL stand-in, two workers, and the workflows floor and programs.\n- **Setup:** no plugin reports a problem. The task system is on `tasks` with one worker and one reviewer slot, and the gate has no tests configured. No machine is filling a worker or reviewer role.\n- **Measurement:** the SAIL waiting pile is being written (last point a few seconds ago), so the PRs Waiting for SAIL stock has a live series. It is not yet linked to a discovered stock, because no model exists.\n\nWhat needs you:\n\n1. **Review Nudger** is drafted but unconfirmed, so it does not run. I need the time zone for 09:00 and how long a pull request may wait before it counts as too long.\n2. **\"SAILED per day \u00d71.2\"** cannot be recorded yet. It needs a flow from the discovered model, and the host has not produced one. Confirm is blocked until it does.\n\nI'll look at the task system again on your next message.\n\nI retried the task-system snapshot just now and it timed out again, so I still have no ticket states. I won't look again unless you ask; the scheduler probably needs checking first.",
+   "error": null
+  }
+ ]
+}

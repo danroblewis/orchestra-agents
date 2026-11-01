@@ -63,7 +63,9 @@ DRAFT = {"type": "object", "description": (
     "An outbox step's act (required there, refused on any other step): what the Outbox plugin performs as the owner "
     "after their approval. Each value is " + VALUE + ". The text comes from an item field an earlier step wrote "
     "(a role writes the ping's text into the nudge field; the outbox step drafts from it): there is no text template"),
-    "properties": {"kind": S("The outbox's kind, as its configuration names it (sail.label, review.ping)"),
+    "properties": {"kind": S("A kind in the owner's [outbox.kinds], by its name there (review.request); one not "
+                             "configured yet is a kind for the owner to add to their overlay, with its sender and "
+                             "template"),
                    "target": {"type": "object", "description": "Where the act lands, {name: value}: the repository "
                               "and pull request, the ticket, the channel"},
                    "content": {"description": "The text or the label: " + VALUE},
@@ -108,7 +110,6 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
                   "name": S("The pile's name"),
                   "where": {"type": "object", "description": "Predicates, all to hold: step, held, set, unset, equals, "
                             "contains, seen, unseen, open_child, unmet_dependency, closed"}}}},
-    "lifecycle": {"type": "object", "properties": {"keep_final": B("Keep the final snapshot once closed (default true)")}},
     "settings": {"type": "object", "description": "Parameters a project fills in [workflows.settings.<name>]: "
                  "{\"label\": {\"type\": \"string\", \"default\": \"SAIL\"}}"},
 }, "required": ["name", "steps"]}
@@ -132,6 +133,12 @@ WORKFLOW_TOOLS: list[ToolDef] = [
     ToolDef("list_workflows", "workflows",
             "The project's workflows as the plugin loads them: each with where it is defined, its planner, starts and "
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),
+    ToolDef("list_items", "workflows",
+            "The open items of every workflow, as the Items page lists them, oldest first: each with its step and pile, "
+            "why it waits and on whom (its wait: reason, by, until), its holder, how long it has been there (age_s), how "
+            "often it was reworked, and its fields (a ticket's key, a pull request's number); then the recently closed, "
+            "with their outcome. What to read first when the owner asks what is stuck or what needs them.",
+            {"workflow": S("Only this workflow's items (leave out: every workflow)")}),
     ToolDef("explain_item", "workflows",
             "Why an item is where it is: its summary, each field with the fact that set it, its position in each workflow "
             "(step, pile, wait reason), the facts not counted toward a step and why, and its last facts.",

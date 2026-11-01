@@ -25,6 +25,7 @@ from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
+from . import installed
 from .api_org import read_org
 from .attention import unread
 from .config import Config, ConfigError, Project
@@ -149,7 +150,7 @@ def router(project) -> APIRouter:
         an agent may wake on means."""
         current(project)
         cfg = project.config
-        return {"ok": True, "now": time.time(), "serves": cfg.serves, "event_help": EVENT_HELP,
+        return {"ok": True, "now": time.time(), "serves": cfg.serves, "event_help": EVENT_HELP, "plugins": installed.plugins(),
                 "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note,
                 "supervisor_model": supervisor_model(project),
                 "roles": read_org(project, store, "list_roles", {})["roles"],

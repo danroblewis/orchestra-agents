@@ -255,7 +255,7 @@ TOOLS: list[ToolDef] = [
     ToolDef("list_metrics", "observe",
             "The metrics catalogue: every series name in the project's own store, its labels, when it was last written "
             "and how many points in the last hour. A measurement that is not here is not being stored.",
-            {"prefix": S("Only names starting with this")}),
+            {"prefix": S("Only names starting with this; when none does, those with it in their name or a label value")}),
     ToolDef("get_model", "observe",
             "The system dynamics model Orchestra discovered from the metrics, for a diagnosis: the series each stock is, flows "
             "with their equations and the machines attributed to them, and the series the last discovery left out, with why. "
@@ -318,7 +318,7 @@ TOOLS: list[ToolDef] = [
              "turns": I("How many turns, default 2, at most 6")}),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
-            "pipeline, and which machine instance holds each assignment."),
+            "pipeline, and which machine instance holds each assignment. A workflow's items are not here: list_items."),
     # setup: the configuration, changed by the Supervisor only, through Orchestra: in orchestra.toml
     # (target repo, each change a commit with its reason) or the owner's private overlay (target overlay)
     ToolDef("set_setting", "setup",

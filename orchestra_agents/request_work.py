@@ -110,7 +110,7 @@ def request_work(project: Project, store: AgentStore, a: dict, role: str) -> dic
     data = {"workflow": name, "brief": brief, **({"parent": parent} if parent else {}), **extra}
     ev = store.events.publish("item.requested", data, source=source, subject=item)
     out = {"ok": True, "item": item, "workflow": name, "source": source, "requested": ev.get("id"),
-           "shown": f"The Items page shows it: /items/{urlquote(item, safe='')}; explain_item with item {item!r} says "
+           "shown": f"The Items page shows it: /items#item={urlquote(item, safe='')}; explain_item with item {item!r} says "
                     "where it is and why.",
            "say": f"Tell the owner the item's id, {item}, and where to watch it."}
     if parent:

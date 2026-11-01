@@ -46,7 +46,7 @@ ROOTS = {"repository": "repo", "state": "state"}      # integrate_system's word 
 REINSTALL = ("uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main' "
              "(with tasking or workflows added when the project has them)")
 STORES = ("chronosphere", "prometheus", "mimir", "thanos", "victoriametrics", "cortex")
-KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", **{s: "promql" for s in STORES}}
+KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", "github": "github", **{s: "promql" for s in STORES}}
 SCOPE = {"jql": "which Jira projects to follow (or a JQL filter)", "channels": "which Slack channels to follow (their ids)"}
 SCOPE_OF = {"jira": ("jql",), "slack": ("channels",)}      # what a kit's template only guesses: the owner's to name
 TITLES = {"jira": "Jira", "slack": "Slack", "pagerduty": "PagerDuty", "github": "GitHub", "chronosphere": "Chronosphere"}

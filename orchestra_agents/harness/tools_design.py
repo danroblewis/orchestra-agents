@@ -270,14 +270,14 @@ DESIGN_TOOLS: list[ToolDef] = [
             "managed elsewhere. A failed test, or a system with no template of its own, is handed to the Coordinator as "
             "work. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
-            {"system": S("The system's name: jira, slack, pagerduty, chronosphere, jenkins"),
+            {"system": S("The system's name: jira, github, slack, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),
              "strategy": E(["poller", "collect", "source"],
                            "Leave out for INTEGRATING.md's default: source for a Prometheus-API store, poller otherwise"),
              "name": S("The poller's name (default <system>_poller); never the system's own name"),
              "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
                        "when the owner said their repository must stay clean"),
-             "kit": E(["jira", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
+             "kit": E(["jira", "github", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
              "base_url": S("The system's address (its API's root URL), when the owner gave it"),
              "settings": INTEGRATION_SETTINGS,
              "stock": S("The stock the owner expects it to fill, in their words (Open issues): declared, with the system's "

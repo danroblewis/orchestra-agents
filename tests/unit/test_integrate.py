@@ -62,7 +62,7 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     assert m["settings"]["base_url"] == "https://jira.acme.test" and "wanted" not in m   # the owner's words are the record's
     jira = layer(project)["machines"]["jira"]
     assert jira["managed"] == "external" and jira["kind"] == "programmatic" and jira["aliases"] == ["bot.jira"]
-    assert jira["emits"] == ["jira.issue.transitioned"] and jira["spec"]["source"] == "bot.jira"
+    assert {"jira.issue.transitioned", "jira.issue.assigned"} <= set(jira["emits"]) and jira["spec"]["source"] == "bot.jira"
     assert jira["provenance"]["author"] == "owner"
     assert "jira_poller" not in layer(project)["machines"]                     # the poller is a relay, never a machine
     sid = next(k for k, s in layer(project)["stocks"].items() if s["name"] == "Open issues")
@@ -339,7 +339,7 @@ def test_jira_cloud_is_approved_with_a_token_file_and_the_accounts_email_by_refe
     said = " ".join(got["said"])
     assert "not-a-real-token" not in said and "there, chmod 600" in said and "not there yet" in said
     assert got["owner_must_set"] == [f"{email}: the file, chmod 600"]
-    assert "HTTP Basic" in said                                               # the template speaks Data Center: a code change
+    assert "HTTP Basic" not in said and "hand_to_coordinator" not in said     # the template speaks Cloud too (flavour): no code change
     rec = design_integrate.integrations(store)["jira_poller"]
     assert rec["state"] == "approved" and rec["credentials"]["user_file"] == str(email)
 
@@ -377,3 +377,10 @@ def test_a_store_takes_its_token_from_a_file(project, store, tmp_path):
     call(project, store, "approve_integration", name="chronosphere", token_file=str(tmp_path / "chrono-token"),
          quote="Yes, read Chronosphere", reason=WHY)
     assert overlay(project)["sources"][0]["auth"] == {"bearer_file": str(tmp_path / "chrono-token")}
+
+
+def test_every_kit_the_bridges_have_is_offered_and_github_is_its_own():
+    from orchestra_agents.harness.tools import BY_NAME as DESIGN
+    offered = DESIGN["integrate_system"].input_schema["properties"]["kit"]["enum"]
+    assert set(offered) == set(integrate_kits.kits())                                 # the enum drifts from the bridges never
+    assert integrate_kits.KIT_OF["github"] == "github" and integrate_kits.kit_for("github", "poller") == "github"

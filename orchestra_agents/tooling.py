@@ -15,13 +15,14 @@ call is checked against that role's tool groups before it runs (access.authorize
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
 from typing import Any
 
 from . import (
     access,
     balance_tools,
+    bus_reads,
     design,
+    design_dynamics,
     duties,
     guides,
     handoff,
@@ -144,21 +145,7 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return {"ok": True, "message": "The supervisor will be woken with your note."}
 
     if command == "read_events":
-        minutes, types = int(a.get("minutes") or 60), set(a.get("types") or [])
-        since = time.time() - minutes * 60
-        end = store.events.end()
-        evs, _ = store.events.read(max(0, end - 5000), limit=5000)
-        out = []
-        for e in evs:
-            try:
-                dt = datetime.fromisoformat(e["ts"])
-                ts = (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
-            except (KeyError, TypeError, ValueError):     # an event without a time is not in a time window
-                continue
-            if ts < since or (types and e.get("type") not in types) or e.get("type") in ("session.started", "session.settled"):
-                continue
-            out.append(e)
-        return {"ok": True, "events": out[-200:], "count": len(out)}
+        return bus_reads.read_events(store, a)
 
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)
@@ -180,6 +167,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
     if command == "read_machine_log":
         return observe.read_machine_log(project, store, a)
     if command == "list_metrics":
+        if role == "supervisor":                  # propose_measurements waits for it (design_dynamics.metrics_listed)
+            design_dynamics.note_metrics_listed(store)
         return observe_model.list_metrics(project, a)
     if command == "get_model":
         return observe_model.get_model(project)

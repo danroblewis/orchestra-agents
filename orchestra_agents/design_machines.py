@@ -291,6 +291,18 @@ def spec_of(a: dict) -> dict:
     return {**nested, **{k: a[k] for k in SPEC_KEYS if a.get(k) not in (None, "", [])}}
 
 
+NO_RECEIVES = ("receives is empty: the events it watches, or reads at each run (a scheduled machine too), are event types in "
+               "receives (add_receives), never only words in steps or uses; read_events lists the types machines speak")
+
+
+def type_lines(project: Project, store: AgentStore, mid: str, receives: list[str], emits: list[str]) -> list[str]:
+    """What to say of event types nothing speaks (``bus_reads.known_types``): receives must be
+    heard, announced, or emitted by another declared machine; a new emit is declared first."""
+    from .bus_reads import unknown_line
+    return [x for x in (unknown_line(project, store, receives, "receives", mid),
+                        unknown_line(project, store, emits, "emits", mid)) if x]
+
+
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id(a)
     kind = a.get("kind")
@@ -316,6 +328,9 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     unheard = [t for t, who_ in listeners(project, store, m["emits"], mid).items() if not who_]
     if unheard:
         lines.append(f"no listener yet for {', '.join(unheard)} (the refinement pass will propose one)")
+    lines += type_lines(project, store, mid, m["receives"], m["emits"])
+    if not m["receives"]:
+        lines.append(NO_RECEIVES)
     if d:
         lines.append(f"draft implementation: {d} (not official until confirmed)")
     return answer(project, done, lines, machine=mid, draft=str(d) if d else None)
@@ -428,6 +443,9 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                   state_machines.unmapped_line(now)]
         if runs_a_day(store, after)[0] != runs_a_day(store, m)[0]:
             lines.append(cost_line(project, store, after))
+    lines += type_lines(project, store, mid, list(a.get("add_receives") or []), list(a.get("add_emits") or []))
+    if (a.get("steps") or a.get("add_uses")) and not after.get("receives"):
+        lines.append(NO_RECEIVES)
     return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"))
 
 
@@ -576,6 +594,38 @@ def flat_edit(e) -> dict:
     return {"from": e.get("from"), "to": e["to"], "appears": True}
 
 
+def flows_line(project: Project, into: str | None = None) -> str:
+    """The current model's flows, as a factor names them (id: from -> to), the ones into ``into`` first."""
+    model = intended_api.current_model(project)
+    if model is None:
+        return "the model has no flows yet (no discovery saved): read_model once discovery has run"
+    names = {s_.id: s_.name or s_.id for s_ in model.stocks}
+    rows = sorted(model.flows, key=lambda f: (into is None or into not in (f.dst, f.src), f.id))
+    shown = [f"{f.id} ({names.get(f.src, 'outside') if f.src else 'outside'} -> {names.get(f.dst, 'outside') if f.dst else 'outside'})"
+             for f in rows[:12]]
+    return "the model's flows: " + "; ".join(shown) + (f"; and {len(rows) - 12} more (read_model)" if len(rows) > 12 else "")
+
+
+def stock_as_flow(project: Project, edits: list[dict], lay: dict | None = None) -> None:
+    """Refused: an edit that names a stock (a level) where a flow (a rate) is expected, as
+    ``{flow: repo_commits, factor: 1.2}`` for "the commit rate": the message lists the flows."""
+    model = intended_api.current_model(project)
+    keys = intended_api.Keys(model)
+    lay = lay if lay is not None else intended_api.current(project)
+    stock_ids = {s_.id: s_.id for s_ in model.stocks} if model else {}
+    for e in edits:
+        name = e.get("flow")
+        if not isinstance(name, str) or name in keys.flows or name in {f.id for f in (model.flows if model else [])}:
+            continue
+        sid = stock_ids.get(name) or keys.stocks.get(name) or next(
+            (v for k, v in keys.stocks.items() if k.split("{", 1)[0] == name), None)
+        declared = name in (lay.get("stocks") or {}) or name in (lay.get("effects") or {})
+        if sid or declared:
+            raise StoreError(f"{name} is a stock (a level), not a flow: a factor multiplies a flow's rate. A rate of "
+                             f"{name} is a flow into it; {flows_line(project, sid)}. For a level, use rises, falls, above or "
+                             "below on the stock")
+
+
 def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id({"name": a.get("machine")})
     m = current(project, mid)
@@ -583,6 +633,7 @@ def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: 
     if not isinstance(expect, list) or not expect:
         raise StoreError("expect is a list of edits in SPEC's kinds; a machine with no prediction should not be there at all")
     edits = [expect_edit(flat_edit(e)) for e in expect]
+    stock_as_flow(project, edits)
     try:
         horizon = parse_duration(a.get("horizon"), 0.0)
     except ConfigError as e:

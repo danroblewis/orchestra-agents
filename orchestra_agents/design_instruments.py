@@ -259,7 +259,8 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
             f"the Supervisor removes it in {hours} h unless the owner keeps it (keep_instrument)" if until else
             "it stays until the owner keeps it (keep_instrument) or says to remove it"))]
     try:
-        result = _set_option(project, store, part, eid, key, prov, instrument=name, first_points=first,
+        # chosen at once: the Dynamics page draws a draft as recording only on the chosen option (the keep keeps it chosen)
+        result = _set_option(project, store, part, eid, key, prov, chosen=True, instrument=name, first_points=first,
                              provenance=f"{where} · entry in the owner's overlay · recording · "
                                         + ("draft until kept" if flagged else "simulated" if simulated else "pending the owner's word"))
     except StoreError as e:                          # the instrument records: say so, and what is missing

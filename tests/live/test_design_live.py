@@ -32,16 +32,15 @@ with no duties of its own (its review round once a day), so the only turns it ta
 owner's. The confirm turn carries the owner's expectation (notes files rise, the commit rate up 1.2
 times), so the prediction has something to say.
 
-A turn whose check fails is sent once more; failing again on Haiku, the Supervisor's spec is
-switched to Sonnet (the host reopens its session on the new model) and the turn is sent once more;
-the run says which turns that took. The run stops at the cost cap.
+Each turn's message is sent once and judged as it was answered: a failed turn is recorded and the
+run goes on to the next (re-sending a failed turn confused the model into declaring an extra
+machine, A3's first runs). The run stops at the cost cap.
 
 It costs money and needs a logged-in ``claude``, so it runs only when asked:
 
     ORCHESTRA_LIVE_DESIGN=1 uv run python -m pytest -q -s tests/live/test_design_live.py
     #   ORCHESTRA_LIVE_TOOLS_VIA=bash      only one way of calling the tools (default: mcp,bash)
-    #   ORCHESTRA_LIVE_MODEL=sonnet        start on another model (default haiku)
-    #   ORCHESTRA_LIVE_FALLBACK=0          never fall back to Sonnet (to see Haiku on every turn)
+    #   ORCHESTRA_LIVE_MODEL=sonnet        the Supervisor on another model (default haiku)
     #   ORCHESTRA_LIVE_CAP_USD=10          stop past this spend (default 10, the goal's cap)
     ORCHESTRA_LIVE_DESIGN=rehearse ...     the same run with the fake Claude, scripted: free
 
@@ -80,10 +79,9 @@ REPO = HERE.parents[1]
 FAKE = REPO / "tests" / "e2e" / "fake_claude.py"
 MODEL = os.environ.get("ORCHESTRA_LIVE_MODEL", "haiku")
 CAP_USD = float(os.environ.get("ORCHESTRA_LIVE_CAP_USD", "10"))
-FALLBACK = os.environ.get("ORCHESTRA_LIVE_FALLBACK", "1") != "0"   # to Sonnet after Haiku fails a turn twice
 VIAS = [v for v in os.environ.get("ORCHESTRA_LIVE_TOOLS_VIA", "mcp,bash").split(",") if v]
 AGENTS = "/api/plugins/agents"
-NEVER_PORTS = {8000, 8001, 8002, 8003, 8040, 8050, 8060, 8062, 8070, 8074, 8428, 9090}   # COORDINATOR.md §6
+NEVER_PORTS = {8000, 8001, 8002, 8003, 8040, 8050, 8060, 8062, 8070, 8074, 8096, 8428, 9090}   # COORDINATOR.md §6
 TURN_S = 900
 WARM_S = float(os.environ.get("ORCHESTRA_LIVE_WARM_S", "420"))   # notes landing before the first turn
 
@@ -153,13 +151,6 @@ def prepare(target: Path, via: str, model: str) -> None:
         p.write_text(body)
     git(target, "add", "-A")
     git(target, "commit", "-qm", f"DEMO-4 landed (the collector), the Supervisor on {model} with the design tools ({via})")
-
-
-def switch_model(target: Path, model: str) -> None:
-    p = target / ".orchestra" / "machines" / "supervisor" / "machine.toml"
-    text = p.read_text()
-    p.write_text(re.sub(r'(?m)^model = ".*"$', f'model = "{model}"', text))
-    git(target, "commit", "-qam", f"the Supervisor on {model} (the live test's fallback)")
 
 
 class NotesPlanner(threading.Thread):
@@ -344,32 +335,32 @@ def rehearsal(turn: int, model: dict) -> list[dict]:
     why = "the owner's words this turn"
     keys = [s.get("id") for s in model.get("stocks") or []]
     files = next((k for k in keys if str(k).startswith("repo_files")), keys[0] if keys else "repo_files")
-    flows = [{"kind": "factor", "flow": f["id"], "factor": 1.2} for f in (model.get("flows") or [])[:1]]
-    script = "#!/bin/sh\necho \"notes_files_tracked $(git ls-files notes | wc -l | tr -d ' ')\"\n"
+    commits = next((k for k in keys if str(k).startswith("repo_commits")), None)
+    rate = sorted(model.get("flows") or [], key=lambda f: f.get("to") != commits and f.get("dst") != commits)
+    flows = [{"kind": "factor", "flow": f["id"], "factor": 1.2} for f in rate[:1]]
     steps = ["At midnight, read the day's changes.requested, gate.rejected and gate.landed",
              "Find why each was rejected or failed the gate", "Publish one idea for the Coordinator"]
     return {
         1: [{"tool": "declare_stock", "args": {"name": "Notes Files", "quote": "Create a Notes Files stock.", "reason": why}},
+            {"tool": "list_metrics", "args": {}},
             {"tool": "propose_measurements", "args": {"element": "notes_files", "reason": why, "options": [
                 {"label": "files git tracks", "kind": "existing_series", "series": "repo_files", "how": "repo_stats",
                  "cost": "nothing new"},
                 {"label": "notes files git tracks", "kind": "script", "how": "git ls-files notes", "cost": "under a second"}]}},
-            {"tool": "add_instrument", "args": {"element": "notes_files", "option": "b", "name": "notes.files",
-                                                "script": script, "every": "15s", "reason": why}}],
+            {"tool": "link", "args": {"declared": "notes_files", "discovered": files, "reason": why}}],
         3: [{"tool": "declare_machine", "args": {
             "name": "Notes Improver", "kind": "universal", "description": "Improves how many notes files are added a day",
-            "mode": "continuous", "receives": ["task.reported"], "emits": ["work.improvement_proposed"],
+            "mode": "continuous", "receives": ["gate.landed"], "emits": ["work.requested"],
             "steps": ["Read task.reported", "Publish one idea"], "invariants": ["never changes code itself"],
             "uses": ["the ticket queue, read only"], "quote": "Create a new Universal Machine called Notes Improver.",
             "reason": why}}],
         4: [{"tool": "refine_machine", "args": {
             "name": "notes_improver", "quote": "watch the ticket queue for DONE and REJECTED tickets and the merge gate",
-            "add_receives": sorted(RECEIVES), "remove_receives": ["task.reported"], "reason": why}}],
+            "add_receives": sorted(RECEIVES - {"gate.landed"}), "reason": why}}],
         5: [{"tool": "refine_machine", "args": {
             "name": "notes_improver", "quote": "make it a scheduled task for 12am every day", "mode": "scheduled",
-            "at": "00:00", "tz": "America/Los_Angeles", "missed": "skip", "steps": steps, "reason": why}}],
-        6: [{"tool": "link", "args": {"declared": "notes_files", "discovered": files, "reason": why}},
-            {"tool": "declare_expected_effect", "args": {"machine": "notes_improver", "horizon": "3d", "reason": why,
+            "at": "00:00", "missed": "skip", "steps": steps, "guesses": ["engagement"], "reason": why}}],
+        6: [{"tool": "declare_expected_effect", "args": {"machine": "notes_improver", "horizon": "3d", "reason": why,
                                                          "expect": [{"kind": "rises", "stock": "notes_files"}, *flows]}},
             {"tool": "confirm", "args": {"element": "machine:notes_improver", "quote": "I expect notes files to rise", "reason": why}}],
     }[turn]
@@ -432,7 +423,7 @@ def test_the_owner_designs_notes_files_and_the_notes_improver_live(via, tmp_path
     for k in ("ORCHESTRA_EVENTS_URL", "ORCHESTRA_METRICS_URL", "ORCHESTRA_SOURCE", "ORCHESTRA_ROLE", "ORCHESTRA_SESSION_TOKEN"):
         monkeypatch.delenv(k, raising=False)
     target = make_project(tmp_path / "demo", tools_via=via)
-    model = MODEL
+    model = MODEL                                       # the Supervisor's, for every turn: never switched
     prepare(target, via, model)
     state_dir = home() / project_key(target)
     live_dir = state_dir / "live"
@@ -445,7 +436,6 @@ def test_the_owner_designs_notes_files_and_the_notes_improver_live(via, tmp_path
     web = Web(f"http://127.0.0.1:{port}", web_token(target, env))
     log: list[dict] = []
     failures: list[str] = []
-    fell_back: list[int] = []
     secrets = [web.token]
     t0 = time.time()
 
@@ -453,29 +443,21 @@ def test_the_owner_designs_notes_files_and_the_notes_improver_live(via, tmp_path
         (live_dir / f"{name}.json").write_text(json.dumps(what, indent=1, default=str))
 
     def turn(n: int, message: str, check, *a) -> dict:
-        nonlocal model
-        tries = [model, model] + (["sonnet"] if model == "haiku" and FALLBACK and not REHEARSE else [])
-        for i, on in enumerate(tries):
-            if (spent := costs(live_dir)["usd"]) > CAP_USD:
-                pytest.fail(f"the cost cap: ${spent:.2f} spent before turn {n} (cap ${CAP_USD:.2f}); stopped")
-            if on != model:
-                switch_model(target, on)
-                model = on
-                fell_back.append(n)
-                time.sleep(15)                            # the host's tick sees the spec's model and reopens the session
-            if REHEARSE:
-                script.write_text(json.dumps(rehearsal(n, web.get("/api/dynamics/model").get("model") or {})))
-            began = time.time()
-            reply = say(web, message)
-            ok, why, ev = check(web, *a)
-            log.append({"turn": n, "try": i + 1, "model": on, "seconds": round(time.time() - began), **reply,
-                        "ok": ok, "why": why, "state": ev, "cost_so_far": costs(live_dir)})
-            snapshot(f"turn{n}-try{i + 1}", log[-1])
-            print(f"\n[turn {n} try {i + 1} on {on}, {log[-1]['seconds']} s] ok={ok} {why}\ntools: {reply['tools']}\n"
-                  f"reply: {reply['text'][:1200]}", flush=True)
-            if ok:
-                return ev
-        failures.append(f"turn {n}: {why}")
+        """The owner's message, sent once, and judged as it was answered."""
+        if (spent := costs(live_dir)["usd"]) > CAP_USD:
+            pytest.fail(f"the cost cap: ${spent:.2f} spent before turn {n} (cap ${CAP_USD:.2f}); stopped")
+        if REHEARSE:
+            script.write_text(json.dumps(rehearsal(n, web.get("/api/dynamics/model").get("model") or {})))
+        began = time.time()
+        reply = say(web, message)
+        ok, why, ev = check(web, *a)
+        log.append({"turn": n, "model": model, "seconds": round(time.time() - began), **reply,
+                    "ok": ok, "why": why, "state": ev, "cost_so_far": costs(live_dir)})
+        snapshot(f"turn{n}", log[-1])
+        print(f"\n[turn {n} on {model}, {log[-1]['seconds']} s] ok={ok} {why}\ntools: {reply['tools']}\n"
+              f"reply: {reply['text'][:1200]}", flush=True)
+        if not ok:
+            failures.append(f"turn {n}: {why}")
         return ev
 
     try:
@@ -509,12 +491,12 @@ def test_the_owner_designs_notes_files_and_the_notes_improver_live(via, tmp_path
         secrets += [t.read_text().strip() for t in (state_dir / "agents" / "control.token", state_dir / "events.token",
                                                      state_dir / "web.token") if t.exists()]
         spent = costs(live_dir)
-        summary = {"tools_via": via, "model_started": MODEL, "fell_back_to_sonnet_on_turns": fell_back, "cost": spent,
+        summary = {"tools_via": via, "model": MODEL, "sent_once": True, "cost": spent,
                    "minutes": round((time.time() - t0) / 60, 1), "failures": failures, "processes_left": alive,
-                   "turns": [{k: e[k] for k in ("turn", "try", "model", "seconds", "ok", "why", "tools", "text", "error")}
+                   "turns": [{k: e[k] for k in ("turn", "model", "seconds", "ok", "why", "tools", "text", "error")}
                              for e in log]}
         snapshot("summary", summary)
-        run = f"{via}-{model}-only" if not FALLBACK else via
+        run = f"{via}-{model}-once"
         dest = None if REHEARSE else HERE / "transcripts" / datetime.now(UTC).strftime("%Y-%m-%d") / run
         kept = keep(target, live_dir, state_dir, secrets, dest)
         print(f"\nCOST ${spent['usd']:.4f} over {spent['invocations']} Claude Code turns; usage {spent['usage']}\n"

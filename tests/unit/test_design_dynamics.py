@@ -270,7 +270,8 @@ def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_
     assert e["command"] == str(path) and e["every"] == "15m" and "simulated" not in e
     assert git(project.repo_root, "rev-parse", "HEAD") == before and "features.acceptance" not in (project.repo_root / "orchestra.toml").read_text()
     opt = layer(project)["stocks"]["features"]["measure"]
-    assert opt["chosen"] is None and opt["options"][0]["instrument"] == "features.acceptance"   # chosen only once kept
+    # chosen at once: the Dynamics page draws a draft as recording only on the chosen option (A3's live run)
+    assert opt["chosen"] == "a" and opt["options"][0]["instrument"] == "features.acceptance"
     assert "recording · draft" in opt["options"][0]["provenance"] and str(path) in opt["options"][0]["provenance"]   # test 6
     d = design_instruments.drafts(store)["features.acceptance"]
     assert not d["kept"] and d["until"] - d["at"] == pytest.approx(86_400)

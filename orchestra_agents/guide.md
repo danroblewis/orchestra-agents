@@ -180,6 +180,23 @@ to edit a file.
   switch need the owner: their quote, or the `request` of their click, which the declared layer
   noted and which backs that one call; changing what the owner declared (its target, their expect
   mark) needs their quote too.
+- **Measuring, store first**: `propose_measurements` is refused until `list_metrics` was called in
+  the session. A series already recorded is option `a` (`existing_series`, nothing added); when the
+  model has it as a discovered stock, `link` the declared stock to it in the same turn. Only when
+  none holds it does `add_instrument` add one, its option chosen at once (the Dynamics page draws
+  a draft as recording only on the chosen option).
+- **Event types**: what a machine watches, or reads at each run, goes in `receives`
+  (`add_receives`), never only in its steps or uses. Only types a machine speaks: heard on the bus,
+  announced by a machine that listens for them (`read_events`' `announced_not_heard`), or emitted
+  by a declared machine; a new one it publishes is declared first (`declare_event`). An answer
+  says when a type is none of these. `read_events` shows the newest 20 by default (at most 100)
+  with a count of every type.
+- **Rates are flows**: an expected `factor` names a flow's id from `read_model`; a stock named
+  there is refused, with the model's flows listed (at `declare_expected_effect` and at `confirm`).
+- **Time zones**: a schedule's `tz` is the owner's, from their words; the agents configure none,
+  so without one it is left out (the host's clock), guessed, and asked for.
+- **The tools you hold** are listed at the end of each session's prompt; one not listed (such as
+  `add_duty` in a session narrowed to the design tools) is not yours there.
 - **Where writes go**: a measurement script (at most 100 lines) to
   `~/.orchestrator/<key>/agents/instruments/<name>.sh` and its `[[collect]]` or `[[scrape]]` entry
   to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`;

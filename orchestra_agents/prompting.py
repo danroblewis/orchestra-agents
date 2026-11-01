@@ -69,6 +69,19 @@ NO_SUBSTITUTE = ("If Orchestra's tools (tickets, the project, the Supervisor's a
                  "or schedule list in their place; nothing outside Orchestra's tools is seen or done by anyone.")
 
 
+def tools_held(groups) -> str:
+    """The Orchestra tools a session holds, by name (its tool groups' tools): the prompt names more
+    than one session may hold (a Supervisor narrowed to the design tools holds no add_duty)."""
+    from .harness.tools import tools_for
+    names = sorted({t.name for t in tools_for(tuple(groups or ()))})
+    if not names:
+        return ""
+    return ("## Your tools in this session\n\nThese are all the Orchestra tools you hold now: "
+            + ", ".join(f"`{n}`" for n in names)
+            + ". A tool your prompt names that is not here is not yours in this session: never look for it or say you would "
+              "use it; do the work with these, or say plainly what you cannot do.")
+
+
 MACHINES_DOC_URL = "https://github.com/danroblewis/orchestra/blob/main/docs/machines.md"
 
 

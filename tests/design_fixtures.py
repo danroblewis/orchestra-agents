@@ -59,7 +59,11 @@ def project(tmp_path, monkeypatch):
 
 @pytest.fixture
 def store(project):
-    return AgentStore(project, Events.for_project(project, source="supervisor"))
+    """The Supervisor's store, with the metrics catalogue already read this session (list_metrics),
+    which propose_measurements waits for; a test of that gate clears ``metrics_listed``."""
+    s = AgentStore(project, Events.for_project(project, source="supervisor"))
+    s.set_agent_state("supervisor", metrics_listed={"at": 1.0, "session": None})
+    return s
 
 
 @pytest.fixture

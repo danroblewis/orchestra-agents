@@ -29,6 +29,7 @@ from orchestra.config import ConfigError
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import now, parse_interval, zone
 from .config import Project
+from .events import GAVE_UP, INTENT_REQUESTED
 from .protocol import (
     ACCEPTED,
     APPROVED,
@@ -63,9 +64,8 @@ AGENT_EVENT_TYPES = (
 JUDGED = "orchestra.prediction.judged"     # Orchestra's: a prediction's verdict (verdicts.py wakes the agent that made it)
 # Orchestra's statements about the model and the bus, domain-free (its sd/announce.py, sd/stall.py, quiet.py)
 STALLED, RESUMED, QUIET = "orchestra.model.stalled", "orchestra.model.resumed", "orchestra.machine.quiet"
-DIVERGED, RETURNED, GAVE_UP_TYPE = "orchestra.model.diverged", "orchestra.model.returned", "orchestra.process.gave_up"
-INTENT_REQUESTED = "orchestra.intent.requested"   # the owner's click on a page's request control (source owner)
-ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP_TYPE, INTENT_REQUESTED)
+DIVERGED, RETURNED = "orchestra.model.diverged", "orchestra.model.returned"
+ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP, INTENT_REQUESTED)
 # Other plugins' events an agent is asked to wake on (the outbox's SPEC §7.2: the Supervisor wakes on a rate limit it cannot resolve)
 OUTBOX_STUCK = "outbox.rate_limit.unresolvable"
 PLUGIN_EVENT_TYPES = (OUTBOX_STUCK,)
@@ -112,7 +112,7 @@ EVENT_HELP = {
     STALLED: "a stock fills while its outflows stopped, or a flow that moved stopped (filter with :stock:<id> or :flow:<id>)",
     RESUMED: "a stalled stock or flow moves again", QUIET: "a machine that kept a rhythm has gone silent (filter with :<machine>)",
     DIVERGED: "a stock left the band the model predicted", RETURNED: "a diverged stock is back in its band",
-    GAVE_UP_TYPE: "Orchestra's launcher gave up restarting a program",
+    GAVE_UP: "Orchestra's launcher gave up restarting a program",
     INTENT_REQUESTED: "the owner clicks confirm, discard or the kind switch on a page: a request the Supervisor applies",
     OUTBOX_STUCK: "the outbox cannot resolve a rate limit on a draft the owner approved",
     JUDGED: "Orchestra judges a prediction (filter with the verdict: :passed, :no effect, :side effect, ...); the agent that "

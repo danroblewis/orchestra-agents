@@ -20,8 +20,7 @@ record (``metric_counts``) under the store's lock and moved in the same write as
 status, so a level and the counters read from one record balance. The plugin declares the
 instrument (``Plugin.collectors``, web.py): ``orchestra run`` runs ``orchestra agents metrics``
 every discovery step, which prints them from the record, and labels every point
-``instrument=agents.turns`` (and ``project``). The same text is served at the plugin's ``/metrics``
-(``/api/plugins/agents/metrics``), behind Orchestra's web login like every route.
+``instrument=agents.turns`` (and ``project``).
 
 Until 2026-10-27 the host wrote these points itself, each at the moment of a turn's start or end.
 The series' names and their ``role`` and ``machine`` labels are kept; ``instrument`` is new. A

@@ -7,7 +7,7 @@
 url = "file"             # Orchestra's bus: a JSONL file in ~/.orchestrator/<key>/
 
 [metrics]
-url = "file"             # Orchestra's metrics store: <state>/metrics.jsonl; every machine here writes to it
+url = "file"             # Orchestra's metrics store: <state>/metrics.jsonl; filled by the instruments declared below (and the plugins' instruments)
 
 [discovery]
 window = "60m"

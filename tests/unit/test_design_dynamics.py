@@ -106,36 +106,10 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
     assert "proposed by the Supervisor" in out["said"][0]
 
 
-def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, monkeypatch):
-    monkeypatch.setattr(intended_api, "_shipped", lambda asset: False)       # an Orchestra without the pages that draw it
-    outs = [features(project, store), options(project, store), add(project, store)]
-    for o in outs:
-        assert not any(page in line for line in o["said"] for page in ("Dynamics page", "Machines page")), o["said"]
-        assert not any("read_design" in line for line in o["said"])               # where it is kept is kept_in's alone
-        assert "no page draws it" in o["kept_in"]
-    assert all("(s)" not in line for o in outs for line in o["said"])
-    assert any("4 ways to measure features" in line for line in outs[1]["said"])
-
-
-def test_a_page_is_named_once_orchestra_says_one_draws_the_layer(project, store, monkeypatch):
-    monkeypatch.setattr(intended_api, "pages", lambda p: {"Dynamics"})
+def test_every_answer_names_both_pages_that_draw_the_layer(project, store):
     out = features(project, store)
-    assert any("Dynamics page" in line for line in out["said"]) and "the Dynamics page draws it" in out["kept_in"]
-    say(store, "Make a machine too.", 2)
-    out = call(project, store, "declare_machine", name="m_one", kind="universal", description="Does one thing", reason=WHY)
-    assert not any("Machines page" in line for line in out["said"])          # the Machines page is not drawn in this one
-
-
-def test_the_pages_that_draw_the_layer_are_the_ones_the_installed_orchestra_ships(project, monkeypatch):
-    shipped = {"intended-machines.js", "intended-dynamics.js"}
-    monkeypatch.setattr(intended_api, "_shipped", lambda asset: asset in shipped)
-    assert intended_api.pages(project) == {"Machines", "Dynamics"} and intended_api.drawn(project, "Machines")
-    intended_api._cache.clear()
-    shipped.discard("intended-machines.js")
-    assert intended_api.pages(project) == {"Dynamics"} and not intended_api.drawn(project, "Machines")
-    intended_api._cache.clear()
-    monkeypatch.undo()
-    assert intended_api.pages(project) == {p for p, a in intended_api.PAGES.items() if intended_api._shipped(a)}
+    assert out["kept_in"] == "Orchestra's declared layer: the Dynamics and Machines pages draw it"
+    assert any("Dynamics page" in line for line in out["said"])
 
 
 def test_options_are_recorded_in_order_and_a_company_system_needs_approval(project, store):
@@ -244,6 +218,30 @@ def test_add_instrument_runs_only_what_the_option_proposed(project, store):
     assert entry(project, "features.tickets")["command"] == "echo 'features_done 7'" and out["instrument"] == "features.tickets"
 
 
+def test_an_options_token_variable_is_named_by_the_layers_rule(project, store):
+    """bearer_env is checked by the rule of the layer that keeps it (orchestra.sd.intended.ops.ENV_NAME):
+    a leading underscore and lower case are names; a space is not (a poller's token_env is the kits' rule)."""
+    features(project, store)
+    for env in ("_PD_TOKEN", "work_token"):
+        call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+            {"label": "x", "kind": "source", "how": "x", "cost": "x", "system": "pagerduty", "bearer_env": env}])
+        assert layer(project)["stocks"]["features"]["measure"]["options"][0]["bearer_env"] == env
+    with pytest.raises(StoreError, match="never a value"):
+        call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+            {"label": "x", "kind": "source", "how": "x", "cost": "x", "bearer_env": "WORK TOKEN"}])
+
+
+def test_a_scrape_option_takes_no_script_and_nothing_is_written(project, store):
+    features(project, store)
+    call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+        {"label": "the app's metrics", "kind": "scrape", "how": "its /metrics", "cost": "one request a round",
+         "url": "http://127.0.0.1:9/metrics"}])
+    with pytest.raises(StoreError, match=r"a \[\[scrape\]\] reads only that URL, so it takes no script; nothing was written"):
+        add(project, store, option="a", name="features.scraped", url="http://127.0.0.1:9/metrics", script=SCRIPT)
+    assert not project.orchestra.config.raw.get("scrape") and design_instruments.drafts(store) == {}
+    assert not (project.state_dir / "instruments" / "features.scraped.sh").exists()
+
+
 def test_an_existing_series_is_an_option_with_no_instrument_and_no_binding(project, store):
     features(project, store)
     call(project, store, "propose_measurements", element="features", reason=WHY, options=[
@@ -257,7 +255,7 @@ def test_an_existing_series_is_an_option_with_no_instrument_and_no_binding(proje
     assert not project.orchestra.config.raw.get("collect")
 
 
-def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store, drafting):
+def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store):
     features(project, store)
     options(project, store)
     before = git(project.repo_root, "rev-parse", "HEAD")
@@ -316,7 +314,7 @@ def test_keeping_an_instrument_needs_the_owners_words_or_their_expect_mark(proje
     call(project, store, "keep_instrument", name="features.acceptance", reason="the owner marked its series expected")
     assert design_instruments.drafts(store)["features.acceptance"]["kept"]
     kinds = [(e.get("change") or "")[:6] for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed"]
-    assert kinds.count("kept f") == (1 if design_instruments.supports_draft() else 0)
+    assert kinds.count("kept f") == 1
 
 
 def test_add_instrument_refuses_a_long_script_a_secret_and_a_failing_trial_writing_nothing(project, store):
@@ -347,7 +345,7 @@ def test_repo_tries_the_script_then_hands_it_to_the_coordinator_and_writes_nothi
     assert "acceptance_tests_passing" in req[-1]["requirements"]
 
 
-def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store, drafting):
+def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store):
     features(project, store)
     options(project, store)
     add(project, store, every="15m")
@@ -377,7 +375,7 @@ def test_removing_the_chosen_option_clears_chosen(project, store):
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] is None
 
 
-def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch, drafting):
+def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch):
     features(project, store)
     options(project, store)
     add(project, store)
@@ -455,7 +453,7 @@ def test_link_records_a_manual_binding_and_the_discovered_stock_keeps_its_name(p
     assert layer(project)["stocks"]["features"]["target"] == {"op": "above", "value": 5, "over_s": 86_400}
     say(store, "", 4)
     with pytest.raises(StoreError, match="the owner declared this"):              # the owner's mark is the owner's to take off
-        design.apply(project, store, [{"op": "unexpect", "part": "stock", "key": "acceptance_tests_passing"}],
+        design.apply(project, [{"op": "unexpect", "part": "stock", "key": "acceptance_tests_passing"}],
                      {"author": "supervisor", "source": "supervisor", "reason": WHY})
 
 

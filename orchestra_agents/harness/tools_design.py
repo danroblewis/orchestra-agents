@@ -75,8 +75,6 @@ SPEC_FIELDS = {
     "role": S("Programmatic, ad hoc, answering a workflow's offers: the role whose offers it answers"),
     "source": S("Managed external: the relayed actor whose events it is (bot.jira), never the bridge"),
 }
-SPEC = {"type": "object", "description": "Older form, kept for one release: the same fields nested. Give them at the top level",
-        "properties": SPEC_FIELDS}
 
 INT = {"type": "integer"}
 INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own settings, from the owner's words (only what they "
@@ -154,6 +152,35 @@ DESIGN_TOOLS: list[ToolDef] = [
              "quote": QUOTE, "reason": REASON}, ("key", "reason")),
     ToolDef("ignore", "design", "Ignore a discovered suggestion: it moves to the collapsed \"ignored\" group; nothing is hidden.",
             {"part": E(["stock", "flow"]), "key": S("Its key"), "quote": QUOTE, "reason": REASON}, ("key", "reason")),
+    ToolDef("unexpect", "design",
+            "Take a discovered stock's or flow's expected mark off (the owner no longer expects it): drawn as discovery found it.",
+            {"part": E(["stock", "flow"]), "key": S("Its key, as read_design gives it"), "quote": QUOTE, "reason": REASON},
+            ("key", "reason")),
+    ToolDef("unignore", "design",
+            "List an ignored suggestion again (the page's \"to list it again, ask …\"): it leaves the ignored group.",
+            {"part": E(["stock", "flow"]), "key": S("Its key, as read_design gives it"), "quote": QUOTE, "reason": REASON},
+            ("key", "reason")),
+    ToolDef("alias", "design",
+            "Join a declared machine to the name it is heard under on the bus (the Machines panel's \"heard under another "
+            "name? … join them\"): one machine, heard as that source.",
+            {"machine": S("The declared machine's id"), "observed": S("The source it is heard as on the bus (bot.pagerduty)"),
+             "quote": QUOTE, "reason": REASON}, ("machine", "observed", "reason")),
+    ToolDef("propose_attachment", "design",
+            "Propose that an instrument's series measure a declared machine (instruments on machines): declared provenance, "
+            "never a sign it runs. Read the store first (list_metrics) and give the match explicitly; the owner confirms it "
+            "on the Machines page.",
+            {"machine": S("The declared machine's id"), "instrument": S("The instrument whose series measure it (company_prom)"),
+             "prefix": S("Which of its series: a series-name prefix (pg_)"),
+             "labels": A("Which of its series: label=value (job=postgres); a value starting =~ is a regex"),
+             "instance_label": S("The label whose values are its replicas (instance), if any"),
+             "quote": QUOTE, "reason": REASON}, ("machine", "instrument", "reason")),
+    ToolDef("revise_attachment", "design",
+            "Change a proposed or confirmed attachment's instrument, match or instance label (a confirmed one's change waits "
+            "for the owner).",
+            {"attachment": S("The attachment's id, as read_design gives it"), "instrument": S("Another instrument"),
+             "prefix": S("A new series-name prefix"), "labels": A("New label=value matches"),
+             "instance_label": S("The label whose values are its replicas"), "quote": QUOTE, "reason": REASON},
+            ("attachment", "reason")),
     ToolDef("link", "design",
             "A declared stock is a discovered one: the owner says so (\"yes, that's Features\"), or the series you measured it "
             "with is that stock (read_model), a superset or proxy of it included (say so in caveat); yours to call, quoted "
@@ -181,7 +208,7 @@ DESIGN_TOOLS: list[ToolDef] = [
                                                      "known by its events"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
              "receives": A(RECEIVES_D), "emits": A(EMITS_D),
-             "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS, "spec": SPEC,
+             "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS,
              "guesses": A("The fields you guessed, whole or one item: engagement (mode, at, tz), receives[0], ..."), "quote": QUOTE, "reason": REASON},
             ("name", "kind", "description", "reason")),
     ToolDef("refine_machine", "design",

@@ -1,11 +1,11 @@
 """The declared layer, as the design tools reach it: Orchestra's own (``docs/proposals/intended-model.md``
-§6.3, ``orchestra.sd.intended``), and every other name of Orchestra's the design tools read that
-Orchestra does not document yet, each with what to do when it is absent.
+§6.3, ``orchestra.sd.intended``), over HTTP, and the other names of Orchestra's the design tools read.
 
-**The integration seam.** This module is the one place that imports an undocumented Orchestra name
-(the coordinator's list asks for public ones). The design tools call only ``apply(ops,
-provenance)``, ``read(version)``, ``design()`` and ``open_requests()`` on what ``layer`` returns, in
-the proposal's shapes.
+**The integration seam.** This module is the design tools' only path to the declared layer. The
+core names it imports are those Orchestra's ``PLUGINS.md`` §11 lists for a plugin (the intended
+model's ``ops``, ``names``, ``keys`` and ``checks``; the model's ``store``, ``eras`` and
+``discover``). The design tools call only ``apply(ops, provenance)``, ``read(version)``,
+``design()`` and ``open_requests()`` on what ``layer`` returns, in the proposal's shapes.
 
 - **Orchestra's layer** is written only by its host and its web server (Orchestra's rule 5 as
   amended: nothing else opens anything under ``<state>/model/intended/``), so ``Core`` calls the
@@ -13,9 +13,8 @@ the proposal's shapes.
   turn, message, quote, reason, request, ops}``, 422 with the refused op's ``index``), ``GET
   /intended`` and ``GET /intended/design``. With its host not running, a call is refused, never
   written anywhere else.
-- **Drawn** where the installed Orchestra ships the page that draws it (``pages``: its Machines
-  page's ``intended-machines.js``, its Dynamics page's ``intended-dynamics.js``), or where its
-  summary says so (``draws``, if it ever has one); otherwise the tools say "kept" and read it back.
+- **Drawn** on Orchestra's Machines page (a machine) and its Dynamics page (a stock, an effect, a
+  flow).
 - **Keys and names** are Orchestra's own (``orchestra.sd.intended.keys.Keys`` and
   ``names.resolve``), so a draft edit is resolved exactly as Orchestra resolves it.
 - **One deadline per tool call** (``one_call``): after an endpoint timeout, the rest of the call
@@ -31,9 +30,9 @@ import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
-from importlib import resources
 from typing import Protocol
 
+from orchestra.sd.intended.checks import PROVENANCE
 from orchestra.sd.intended.keys import Keys
 from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK  # noqa: F401  (WAITS_LINK: the tools' wording keys on it)
 from orchestra.sd.intended.names import resolve as _core_resolve
@@ -42,13 +41,8 @@ from orchestra.sd.intended.ops import OPTION
 from .config import Project
 from .store import StoreError
 
-PROVENANCE = ("source", "author", "turn", "message", "quote", "reason", "request")
 TIMEOUT_S = 30.0
-PROBE_S = 3.0
-CACHE_S = 30.0
 BACKOFF_S = 300.0
-PAGES = {"Machines": "intended-machines.js", "Dynamics": "intended-dynamics.js"}
-_cache: dict[tuple, tuple[float, object]] = {}
 _scope: contextvars.ContextVar[dict | None] = contextvars.ContextVar("intended_call", default=None)
 _last_timeout = [0.0]                                  # when an endpoint call last timed out (the host's back-off)
 
@@ -82,15 +76,6 @@ class Layer(Protocol):
     def open_requests(self) -> dict[str, dict]: ...
 
 
-def _cached(key: tuple, fn, ttl: float = CACHE_S):
-    hit = _cache.get(key)
-    if hit and time.time() - hit[0] < ttl:
-        return hit[1]
-    v = fn()
-    _cache[key] = (time.time(), v)
-    return v
-
-
 def _recorded(project: Project) -> tuple[str, str] | None:
     url, token = os.environ.get("ORCHESTRA_EVENTS_ENDPOINT"), os.environ.get("ORCHESTRA_EVENTS_TOKEN")
     if url and token:
@@ -114,6 +99,12 @@ def _address(project: Project) -> tuple[str, str]:
     return addr
 
 
+def _applied(scope: dict | None, said: str = "applied before it in this call") -> str:
+    """What this tool call had applied when a later request failed: never "nothing" when it did."""
+    done = ", ".join((scope or {}).get("applied") or [])
+    return f"{said}: {done}" if done else "nothing was applied"
+
+
 class Core:
     """Orchestra's declared layer through its host's endpoint; refusals said as the tools say theirs."""
 
@@ -124,9 +115,8 @@ class Core:
         url, token = _address(self.project)
         scope = _scope.get()
         if scope is not None and scope["timed_out"]:
-            done = ", ".join(scope["applied"])
             raise StoreError(f"Orchestra's endpoint at {url} timed out earlier in this call ({scope['timed_out']}), so nothing more "
-                             "was tried: " + (f"applied before it: {done}" if done else "nothing was applied"))
+                             f"was tried: {_applied(scope, 'applied before it')}")
         req = urllib.request.Request(url + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         try:
@@ -139,13 +129,13 @@ class Core:
                 out = {}
             index = out.get("index")
             raise StoreError(f"Orchestra refused {'op ' + str(index) + ': ' if index is not None else ''}"
-                             f"{out.get('error') or e.reason} (HTTP {e.code}); nothing was applied") from None
+                             f"{out.get('error') or e.reason} (HTTP {e.code}); {_applied(scope)}") from None
         except (urllib.error.URLError, OSError) as e:
             if _timed_out(e):
                 _last_timeout[0] = time.time()
                 if scope is not None:
                     scope["timed_out"] = f"{method} {path} after {TIMEOUT_S:g} s"
-            raise StoreError(f"Orchestra's endpoint at {url} did not answer ({e}); nothing was applied") from None
+            raise StoreError(f"Orchestra's endpoint at {url} did not answer ({e}); {_applied(scope)}") from None
 
     def apply(self, ops, provenance):
         body = {k: provenance[k] for k in PROVENANCE if provenance.get(k) is not None}
@@ -201,60 +191,18 @@ def unpublishable(project: Project, lay: Layer | None = None) -> dict[tuple[str,
     return (lay or layer(project)).unpublishable()
 
 
-def _shipped(asset: str) -> bool:
-    try:
-        return resources.files("orchestra.web").joinpath("static", asset).is_file()
-    except (ModuleNotFoundError, OSError):
-        return False
-
-
-def pages(project: Project) -> set[str]:
-    """The pages that draw the declared layer: what its summary says (``draws``) if it says
-    anything, else the pages the installed Orchestra ships (``PAGES``)."""
-
-    def ask() -> set[str]:
-        try:
-            said = Core(project).design().get("draws")
-        except StoreError:
-            said = None
-        if isinstance(said, list | tuple | set):
-            return {p for p in PAGES if p.lower() in {str(x).lower() for x in said}}
-        return {p for p, asset in PAGES.items() if _shipped(asset)}
-    return _cached(("pages", str(project.state_dir)), ask)
-
-
-def drawn(project: Project, page: str | None = None) -> bool:
-    """Whether a page (``page``: that one) draws the declared layer."""
-    got = pages(project)
-    return page in got if page else bool(got)
-
-
 def where(project: Project) -> str:
     """Where a declaration is kept, for the tools' answers (``kept_in``)."""
-    if got := pages(project):
-        return f"Orchestra's declared layer: the {' and '.join(sorted(got))} page{'s draw' if len(got) > 1 else ' draws'} it"
-    return "Orchestra's declared layer (no page draws it in this Orchestra): kept, and read_design reads it back"
+    return "Orchestra's declared layer: the Dynamics and Machines pages draw it"
 
 
 OPTION_FIELDS = frozenset(OPTION)      # what the layer keeps on a measurement option (with C8: system, series, url, command, bearer_env)
 
 
-def draft_flag_supported() -> bool:
-    """Whether ``[[collect]]``/``[[scrape]]`` entries take ``draft`` and ``expires``."""
-    try:
-        from orchestra.collect.spec import Collector
-    except ImportError:
-        return False
-    return {"draft", "expires"} <= set(getattr(Collector, "__dataclass_fields__", {}))
-
-
 def min_era_s(cfg) -> float:
     """What discovery needs of a new era: its minimum steps on its grid, or the share of its window
     a stock must cover, whichever is longer."""
-    try:
-        from orchestra.sd.discover import MIN_COVER, MIN_STEPS
-    except ImportError:
-        MIN_COVER, MIN_STEPS = 0.5, 5
+    from orchestra.sd.discover import MIN_COVER, MIN_STEPS
     return max(MIN_STEPS * cfg.discovery_step, MIN_COVER * cfg.discovery_window)
 
 
@@ -267,10 +215,7 @@ def era_cause(project: Project, era: str | None) -> str | None:
     """The id of the event that began era ``era`` (a prediction is about that change), or None."""
     if not era:
         return None
-    try:
-        from orchestra.sd.eras import recorded
-    except ImportError:
-        return None
+    from orchestra.sd.eras import recorded
     return next((e.cause for e in recorded(_models(project)) if e.id == era), None)
 
 

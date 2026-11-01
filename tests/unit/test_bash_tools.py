@@ -7,6 +7,7 @@ import os
 import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -143,10 +144,10 @@ def test_a_call_from_the_shell_is_read_as_the_tool_it_called():
 
 
 def test_tools_via_is_read_and_checked():
-    assert Config.from_toml('[agents]\nharness = "claude_code"\n').tools_via == "auto"
-    assert Config.from_toml('[agents]\nharness = "claude_code"\ntools_via = "bash"\n').tools_via == "bash"
+    assert Config.from_raw(tomllib.loads('[agents]\nharness = "claude_code"\n')).tools_via == "auto"
+    assert Config.from_raw(tomllib.loads('[agents]\nharness = "claude_code"\ntools_via = "bash"\n')).tools_via == "bash"
     with pytest.raises(ConfigError, match="tools_via is 'shell'"):
-        Config.from_toml('[agents]\ntools_via = "shell"\n')
+        Config.from_raw(tomllib.loads('[agents]\ntools_via = "shell"\n'))
 
 
 TOKEN = "tok-not-a-real-secret"

@@ -55,7 +55,7 @@ def test_a_wake_up_and_an_external_machine_have_no_limit(project, store):
     say(store, TURN3, 3)
     machine(project, store, "notes_improver", quote=TURN3)
     call(project, store, "declare_machine", name="jira_feed", kind="programmatic", description="Jira's transitions",
-         managed="external", mode="continuous", emits=["issue.moved"], spec={"source": "bot.jira"}, reason=WHY)
+         managed="external", mode="continuous", emits=["issue.moved"], source="bot.jira", reason=WHY)
     store.set_agent_state("supervisor", turn={"n": 4, "id": "sessions/supervisor/4", "message": None, "at": 1.0})
     machine(project, store, "proposed_by_a_pass")
     assert {"jira_feed", "proposed_by_a_pass"} <= set(layer(project)["machines"])

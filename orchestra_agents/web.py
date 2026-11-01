@@ -4,8 +4,7 @@ transcripts, the Supervisor chat and the way to it on every page, and the agents
 Its API is at ``/api/plugins/agents``. Besides the pages, the plugin declares the configured
 agents (the machines it implements, for the Machines page before they run), the host that runs
 them (``Plugin.processes``), which is no machine and so is declared as none, and the instrument
-that reads their measurements (``Plugin.collectors``: ``agents.turns``, measures.py), also served
-at ``/metrics``."""
+that reads their measurements (``Plugin.collectors``: ``agents.turns``, measures.py)."""
 
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ import urllib.request
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from orchestra.collect.spec import Collector
 from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
@@ -28,15 +27,15 @@ from orchestra.runtime import alive
 
 from .api_org import read_org
 from .attention import unread
-from .config import ConfigError, Project
+from .config import Config, ConfigError, Project
 from .control import bearer as control_bearer
 from .events import Events
 from .floor_roles import served
 from .harness import read_transcript
-from .listening import listens_for
+from .listening import engaged, listens_for
 from .org import EVENT_HELP, effective_tools
 from .org_store import all_agents, all_teams
-from .org_views import agents_status, metrics_text, residents_of, session_alive
+from .org_views import agents_status, residents_of, session_alive
 from .roles import all_roles
 from .session_turns import epoch, messages, ticket_sessions
 from .store import AgentStore, StoreError
@@ -50,20 +49,36 @@ def plugin(orchestra_project) -> Plugin:
     """The plugin for the repository Orchestra serves (its entry point, in pyproject.toml)."""
     project = Project.of(orchestra_project)
     project.ensure_dirs()
-    extra = {"check": check} if "check" in getattr(Plugin, "__dataclass_fields__", {}) else {}
-    return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
+    return Plugin("agents", pages=[Page("/agents", "Agents", STATIC / "agents.html")], static=STATIC, router=router(project),
                   scripts=["attention.js", "machine-cards.js", "ticket-sessions.js"], stylesheets=["agents.css"],
                   machines=declared(project), processes=processes(project), collectors=collectors(project),
-                  guide=GUIDE, **extra)
+                  guide=GUIDE, check=check)
+
+
+def supervisor_model(project: Project) -> str | None:
+    """The model the Supervisor runs on, as the host chooses it (``host.model_of``): its spec's when
+    the harness takes that name, else ``[agents] model``."""
+    from .harness import get_harness
+    from .machine_spec import load
+    try:
+        spec = load(project, "supervisor")
+    except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
+        spec = None
+    wanted = spec.model if spec is not None else None
+    return (get_harness(project.config.harness).model_for(wanted) if wanted else None) or project.config.model
 
 
 GUIDE = Path(__file__).with_name("guide.md")     # how to configure the agents, for the Supervisor (orchestra.guides)
 
 
 def check(raw: dict, repo_root=None) -> list[str]:
-    """What the agents' reader says against a merged configuration (``Plugin.check``)."""
-    from .config_change import agents_check
-    return agents_check(raw)
+    """What the agents' reader says against a merged configuration (``Plugin.check``: Orchestra runs
+    it on every change, config_change's included)."""
+    try:
+        Config.from_raw(raw)
+    except (ConfigError, ValueError, TypeError) as e:
+        return [f"[agents]: {e}"]
+    return []
 
 
 def set_up(project) -> bool:
@@ -104,15 +119,9 @@ def declared(project) -> list[Declared]:
     that runs them is no machine and is not declared."""
     work, roles, teams = project.config.work, all_roles(project), all_teams(project)
     floor = set(served(project).values())
-    return [Declared(a.name, "agent", mode_of(a),
+    return [Declared(a.name, "agent", engaged(a),
                      listens_for(a, work, effective_tools(a, roles, teams), floor=a.name in floor))
             for a in all_agents(project).values()]
-
-
-def mode_of(a) -> str:
-    """How an agent is engaged, as the Machines page says it: continuous (resident), scheduled (at a
-    time of day, or every interval), or ad hoc."""
-    return "continuous" if a.resident else "scheduled" if a.at or a.every else "ad hoc"
 
 
 def current(project: Project) -> Project:
@@ -147,6 +156,7 @@ def router(project) -> APIRouter:
         cfg = project.config
         return {"ok": True, "now": time.time(), "serves": cfg.serves, "event_help": EVENT_HELP,
                 "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note,
+                "supervisor_model": supervisor_model(project),
                 "roles": read_org(project, store, "list_roles", {})["roles"],
                 "agents": read_org(project, store, "list_agents", {})["agents"],
                 "teams": read_org(project, store, "list_teams", {})["teams"]}
@@ -295,11 +305,6 @@ def router(project) -> APIRouter:
         markers = [m for m in s.get("markers") or [] if lo <= epoch(m.get("ts")) <= hi and m.get("type") != "session.started"]
         return {"ok": True, "session": {k: s.get(k) for k in ("id", "kind", "instance", "ticket_id", "status", "harness")},
                 "messages": page, "markers": markers, "total": len(msgs)}
-
-    @r.get("/metrics", response_class=PlainTextResponse)
-    async def metrics() -> str:
-        """The agents' measurements in the Prometheus text format (measures.py)."""
-        return metrics_text(current(project), store)
 
     @r.get("/agents")
     async def agents_view() -> dict:

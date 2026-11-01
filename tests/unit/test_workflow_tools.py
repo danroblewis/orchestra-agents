@@ -1,8 +1,8 @@
 """The Supervisor's workflow tools against a fake Workflows plugin (``workflow_tools.plugin``
 replaced): a refusal says every problem and writes nothing, the root is the state directory unless
-the owner's words say the repository (never committed), the loaded definitions and an item's
-explanation are read back trimmed, a missing plugin is said plainly, and only the Supervisor
-writes."""
+the owner's words say the repository (never committed), the loaded definitions are read back, a
+missing plugin is said plainly, and only the Supervisor writes. ``explain_item`` runs on the real
+plugin's record (tests/e2e/test_workflows_e2e.py)."""
 
 import json
 import subprocess
@@ -64,7 +64,6 @@ class FakePlugin:
     def __init__(self):
         self.refuse: list[str] = []
         self.calls: list[tuple] = []
-        self.explained: dict | None = None
         self.define = SimpleNamespace(write=self.write, load=self.load, DefinitionError=DefinitionError)
 
     def problems(self, project, raw):
@@ -92,27 +91,8 @@ class FakePlugin:
                 out.append(Workflow(raw["name"], raw.get("planner", "coordinator"), steps, raw))
         return SimpleNamespace(workflows=out, problems=["x/workflows/broken/workflow.json: no steps"], notes=[])
 
-    def Record(self):
-        return self
-
-    def for_project(self, project):
-        return self
-
-    def explain(self, item):
-        return self.explained if item == "ORC-1" else None
-
-    def item(self, item):
-        return {"item": item, "facts": 3, "first": "t1", "last": "t3", "fields": {"title": {"value": "x", "id": "e1"}},
-                "children": []}
-
-    def items(self, predicate=None):
-        rows = [{"item": "ORC-1", "facts": 3, "fields": {"title": "x"}, "wait": "offered", "closed": [], "requested": {},
-                 "at": {"write_review": {"step": "review", "pile": "review.waiting", "since": "t3", "wait": "offered",
-                                         "rounds": 2, "not_counted": [{"fact": "e9", "why": "not the holder"}]}}}]
-        return [r for r in rows if predicate is None or predicate(r)]
-
     def ns(self):
-        return SimpleNamespace(define=self.define, problems=self.problems, roots=self.roots, Record=self)
+        return SimpleNamespace(define=self.define, problems=self.problems, roots=self.roots)
 
 
 @pytest.fixture
@@ -265,23 +245,6 @@ def test_the_loaded_definitions_are_listed_with_where_and_the_loaders_problems(p
     assert w["steps"][0] == {"name": "write", "who": {"role": "worker"}, "needs": ["worktree"], "outcomes": {"ready": "review"}}
     assert w["steps"][1]["guards"] == {"rounds": 3} and w["steps"][1]["outcomes"] == {"approved": None, "rejected": "write"}
     assert out["problems"] == ["x/workflows/broken/workflow.json: no steps"]
-
-
-def test_an_item_is_explained_trimmed(project, store, fake):
-    fake.explained = {"item": "ORC-1", "facts": 3, "positions": {}, "not_counted": [],
-                      "fields": {"title": {"value": "x", "set_by": {"id": "e1", "source": "tasks", "time": "t1"},
-                                           "outranked": [{"id": "e0"}]}},
-                      "timeline": [{"id": f"e{i}", "type": "t", "source": "s", "time": f"t{i}"} for i in range(30)],
-                      "relations": [], "ended": {}, "requested": {"workflow": "write_review", "by": {"id": "e0"}}}
-    out = call(project, store, "explain_item", item="ORC-1", last=5)
-    assert out["fields"] == {"title": {"value": "x", "set_by": "tasks t1", "outranked": 1}}
-    assert out["positions"] == {"write_review": {"step": "review", "pile": "review.waiting", "since": "t3",
-                                                 "wait": "offered", "rounds": 2}}
-    assert out["not_counted"] == [{"workflow": "write_review", "fact": "e9", "why": "not the holder"}]
-    assert [e["id"] for e in out["last_facts"]] == ["e25", "e26", "e27", "e28", "e29"]
-    assert out["summary"]["open"] is True and out["summary"]["wait"] == "offered" and out["requested"]["workflow"]
-    with pytest.raises(StoreError, match="no item 'ORC-2'"):
-        call(project, store, "explain_item", item="ORC-2")
 
 
 def test_without_the_plugin_each_tool_says_it_is_not_installed(project, store, monkeypatch):

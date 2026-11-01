@@ -9,7 +9,8 @@
 <style>
   .org { max-width:1100px; margin:0 auto; padding:16px }
   .intro { color:var(--text2); font-size:12.5px; margin:0 0 14px }
-  .harness-note { background:var(--panel2); border:1px solid var(--border); border-left:3px solid #92400e; border-radius:6px; padding:8px 12px; margin:0 0 14px; font-size:13px }
+  .harness-note { background:var(--panel2); border:1px solid var(--border); border-left:3px solid var(--border2); border-radius:6px; padding:8px 12px; margin:0 0 14px; font-size:13px }
+  .harness-note.warn { border-left-color:#92400e }
   .org h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:18px 0 8px; display:flex; gap:8px; align-items:center }
   .org h2 .count { background:var(--panel3); border-radius:999px; padding:0 7px; font-size:11px }
   .team { background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px }
@@ -47,6 +48,8 @@
     .tl .row, .tl .axis { grid-template-columns:1fr; height:auto; gap:4px } .tl .row { padding:4px 0 } .tl .next { text-align:left }
     .tl .axis .marks span:not(:first-child):not(:last-child) { display:none }
     .arow { grid-template-columns:22px 1fr auto } .arow .name { white-space:normal } .arow .sched, .arow .ctls { grid-column:1 / -1 }
+    .arow > * { min-width:0 } .arow .sched { white-space:normal }
+    .arow > .chip { grid-column:2 / -1; justify-self:start; white-space:normal; max-width:100% }
     .def { grid-template-columns:1fr; gap:2px 0 } .def > div:nth-child(even) { margin-bottom:6px }
   }
 </style>
@@ -142,16 +145,27 @@ function probeRow(p, now) {
     <span class="name">${esc(p.name)}${p.team ? ` <span class="tag">${esc(p.team)}</span>` : ""}</span><span class="tag">every ${p.every >= 3600 ? Math.round(p.every / 3600) + "h" : Math.round(p.every / 60) + "m"}</span>
     <span class="sched"><code>${esc(p.command || "")}</code> · ${[since, last].filter(Boolean).join(" · ")}${p.status === "failed" && p.output ? ` · <span class="muted">${esc(p.output.trim().split("\n").slice(-1)[0].slice(0, 120))}</span>` : ""}</span>${st}</div>`;
 }
+// Each tool group and its tools; a group of one tool that has the group's name is named once.
+function toolGroups(byGroup) {
+  return Object.entries(byGroup || {}).map(([g, names]) => names.length === 1 && names[0] === g ? `<div><code>${esc(g)}</code></div>`
+    : `<div><b>${esc(g)}</b>: ${names.map((n) => `<code>${esc(n)}</code>`).join(" ")}</div>`).join("") || "none";
+}
 function nextWake(a, now) {
   if (a.paused) return "paused: wake-ups are queued until resumed";
   if (a.kind === "ad_hoc") return a.builtin ? "when the task system assigns a ticket to this role" : "when its lead calls run_agent with a brief";
   const parts = [];
+  if (a.name === "supervisor") parts.push("when you send a message, and on escalations");
   const up = upcoming(a, now);
+  const scheduled = !!(a.every || a.at);
   if (a.every && up.length) parts.push(`scheduled in ${ago(up[0].t - now)} (${clock(up[0].t)}), then every ${esc(a.every)}`);
   else if (a.every) parts.push(`every ${esc(a.every)}, first wake-up pending`);
   if (a.at) parts.push(`daily at ${esc(a.at)}`);
-  if ((a.wake_on || []).length) parts.push(`or sooner on ${a.wake_on.map((w) => `<code>${esc(w)}</code>`).join(", ")}`);
-  if (a.name === "supervisor") parts.push("when the human sends a message, and on escalations");
+  const ev = (a.wake_on || []).map((w) => `<code>${esc(w)}</code>`);
+  if (ev.length) {
+    const lead = scheduled ? "or sooner on" : parts.length ? "or on" : "on";
+    const list = ev.length > 4 ? `<details class="fold"><summary>${ev.length} events</summary>${ev.join(", ")}</details>` : ev.join(", ");
+    parts.push(`${lead} ${list}`);
+  }
   return parts.join("; ") || "only when another agent messages it";
 }
 // A built-in per-ticket role the agents here do not serve is another machine's on the bus.
@@ -211,7 +225,7 @@ async function openAgent(name) {
   const r = await fetch(`${API}/agents/${name}`).then((x) => x.json());
   if (!r.ok) { alert(r.error || "cannot load agent"); return; }
   const a = r.agent, st = r.state || {}, now = ORG ? ORG.now : Date.now() / 1000;
-  const tools = Object.entries(r.tool_names || {}).map(([g, names]) => `<div><b>${esc(g)}</b>: ${names.map((n) => `<code>${esc(n)}</code>`).join(" ")}</div>`).join("") || "none";
+  const tools = toolGroups(r.tool_names);
   openDrawer(`<h3>${esc(a.name)} <span class="tag k-${a.kind}">${a.kind.replace("_", " ")}</span> ${a.builtin ? '<span class="tag">built-in</span>' : ""} ${statusOf(a, now)}
       <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTranscript('${a.last_run_id || a.session_id}')">${a.resident ? "transcript" : "latest run"}</button><button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(a.description || "")}</div>
@@ -220,7 +234,7 @@ async function openAgent(name) {
       <div>team</div><div>${a.team ? ((r.team_chain || []).length ? r.team_chain.map((t) => `<a href="#" onclick="openTeam('${t}');return false">${esc(t)}</a>`).join(" ← ") : `<code>${esc(a.team)}</code> is not created yet; the agent runs without team responsibilities until it is`) : "none (reports to the Supervisor)"}${(r.leads || []).length ? ` · leads ${r.leads.map((t) => `<code>${esc(t)}</code>`).join(", ")}` : ""}</div>
       <div>triggers</div><div class="tools">${triggerRows(a)}</div>
       <div>next wake-up</div><div>${nextWake(a, now)}</div>
-      ${a.resident ? `<div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
+      ${a.resident ? `<div>last turn</div><div>${st.last_turn ? ago(now - st.last_turn) + " ago" : "none yet"} <span class="muted">(a wake-up or your message)</span></div><div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never, by an event or schedule"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
       <div>session</div><div>${a.resident ? "resident: one conversation that continues across wake-ups (a process only while a turn runs, on harnesses that start one per turn); it shows on the Dashboard while the host is up" : "a new session for each run; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
       <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
@@ -234,13 +248,13 @@ async function openRole(name) {
   const r = await fetch(`${API}/roles/${name}`).then((x) => x.json());
   if (!r.ok) { alert(r.error || "cannot load role"); return; }
   const role = r.role;
-  const tools = Object.entries(r.tool_names || {}).map(([g, names]) => `<div><b>${esc(g)}</b>: ${names.map((n) => `<code>${esc(n)}</code>`).join(" ")}</div>`).join("") || "none";
+  const tools = toolGroups(r.tool_names);
   openDrawer(`<h3>role ${esc(name)} ${role.builtin ? '<span class="tag">built-in</span>' : ""}<span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="closeDrawer()">close</button></span></h3>
     <div class="desc md">${md(role.description || "")}</div>
     <div class="def">
       <div>used by agents</div><div>${(r.agents || []).map((a) => `<a href="#" onclick="openAgent('${a}');return false">${esc(a)}</a>`).join(", ") || unfilled(role)}</div>
       <div>tools it needs</div><div class="tools">${tools}</div>
-      <div>defined by</div><div>${role.builtin ? "Orchestra" : `${esc(role.created_by || "supervisor")} on ${esc((role.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
+      <div>defined by</div><div>${role.builtin ? "the agents package (built in)" : `${esc(role.created_by || "supervisor")} on ${esc((role.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
       <div>prompt file</div><div><code>${esc(r.prompt_source || "")}</code></div>
     </div>
     <div class="prompt-head"><h4>Job description</h4><span class="muted">What this kind of agent is good at. Schedules, teams, and access are the agent's and the team's, not the role's.</span></div>
@@ -256,7 +270,8 @@ async function refresh() {
     // "Here" includes agents whose team does not exist yet (created before the team, which the
     // Supervisor's guide tells it to do), labelled as such.
     const loose = org.agents.filter((a) => (!a.team || a.team_exists === false) && !(a.builtin && !a.resident));
-    let html = org.harness_note ? `<div class="harness-note" id="harness-note">Running on <b>${esc(org.harness)}</b>${org.model ? " · " + esc(org.model) : ""}. ${esc(org.harness_note)}</div>` : "";
+    const sup = org.supervisor_model && org.supervisor_model !== org.model ? `; the Supervisor on ${esc(org.supervisor_model)}` : "";
+    let html = `<div class="harness-note${org.harness_note ? " warn" : ""}" id="harness-note">Running on <b>${esc(org.harness)}</b>${org.model ? " · " + esc(org.model) : ""}${sup}${org.harness === "dummy" ? " (scripted agents: no model, no cost)" : ""}.${org.harness_note ? " " + esc(org.harness_note) : ""}</div>`;
     html += timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');
     html += `<h2>Agents outside a team <span class="count">${loose.length}</span></h2>` + (loose.map((a) => agentRow(a, false, org.now)).join("") || '<div class="empty">none</div>');

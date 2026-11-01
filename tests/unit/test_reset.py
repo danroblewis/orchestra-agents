@@ -55,6 +55,7 @@ def pi_compaction(before: int) -> str:
 def session_with(project, sid, text):
     store, events = AgentStore(project), Events.for_project(project)
     host = AgentHost(project, store, events)
+    host.harness = FakeHarness()                     # reads the context as Pi does
     f = project.sessions_dir / f"2026_{sid}.jsonl"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(text)

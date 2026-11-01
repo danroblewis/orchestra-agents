@@ -23,9 +23,7 @@ words do not say how). The standard, one reply per owner's turn:
 
 **Where the owner looks.** Each answer's `kept_in` says where the declarations are kept and which
 page draws them; a `said` line names the page (Dynamics for a stock, effect or flow, Machines for a
-machine) only when the installed Orchestra has it. When none does ("no page draws it"), never point
-the owner at a page: summarise what you declared from `read_design`, in a line or two, and offer to
-read it back.
+machine).
 
 **Never ask the owner to edit a file, write configuration, or copy a snippet anywhere.** Change it with
 your tools, or say plainly what you cannot do. Asked "what do I put in orchestra.toml?", make the

@@ -79,7 +79,8 @@ def cmd_status(args) -> int:
         state = ("paused" if a["paused"] else "running" if a["name"] in live else "down" if not host["alive"] else "idle")
         next_ = f", next wake-up in {_ago(a['next_scheduled_at'] - now)}" if a.get("next_scheduled_at") and a["next_scheduled_at"] > now else ""
         if a["resident"]:
-            woken = f"last woken {_ago(now - a['last_woken'])} ago" if a.get("last_woken") else "never woken"
+            woken = (f"last turn {_ago(now - a['last_turn'])} ago" if a.get("last_turn") else "no turn yet") + (
+                f" (last woken {_ago(now - a['last_woken'])} ago)" if a.get("last_woken") else "")
             print(f"  {a['name']:{width}} {state:8} {woken}{next_}")
             continue
         when = (f"daily at {a['at']}{' ' + a['tz'] if a.get('tz') else ''}" if a.get("at") else
@@ -181,7 +182,9 @@ def _print_event(ev: dict) -> None:
             print(f"\n{txt.strip()}\n", flush=True)
 
 
-def _chat_attached(project: Project, port: int) -> int:
+def _chat_attached(project: Project, store: AgentStore, port: int) -> int:
+    """The chat in the terminal: each reply printed here is read here, so it is marked seen (as the
+    web chat marks it, ``/attention/seen``) and raises no banner on the pages."""
     import urllib.request
 
     from .control import bearer
@@ -207,6 +210,7 @@ def _chat_attached(project: Project, port: int) -> int:
                     if ev.get("type") == "done":
                         if ev.get("error") or ev.get("timed_out"):
                             print(f"[agents] turn ended: {ev.get('error') or 'timed out'}")
+                        store.mark_supervisor_seen()
                     else:
                         _print_event(ev)
         except Exception as e:  # noqa: BLE001 - whatever cut the connection, say so and leave
@@ -225,7 +229,7 @@ def cmd_chat(args) -> int:
     if ctl.get("port"):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{ctl['port']}/health", timeout=3)
-            return _chat_attached(project, int(ctl["port"]))
+            return _chat_attached(project, store, int(ctl["port"]))
         except OSError:
             print(f"[agents] the host's control endpoint on port {ctl['port']} is not answering.")
     print(f"[agents] the Supervisor is reachable while the agents' host is up: start `orchestra run` in the repository "
@@ -302,14 +306,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """``orchestra agents ARGV...``: Orchestra calls this with the arguments after ``agents``
-    (``python -m orchestra_agents`` with ``sys.argv[1:]``)."""
+    """``orchestra agents ARGV...``: Orchestra calls this with the arguments after ``agents``."""
     args = build_parser().parse_args(argv)
     return args.fn(args)
 
 
 main.help = "AI agents as Orchestra machines: their host, the Supervisor chat, sessions, roles"   # `orchestra --help`
 
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -1,7 +1,7 @@
-"""The live design test's transcript redaction (tests/live/test_design_live.py): emails only, so a
+"""The live design test's transcript redaction (tests/live/live_helpers.py): emails only, so a
 flow id made per machine (``<flow>@<machine>``) is kept as it is."""
 
-from live.test_design_live import redact
+from live.live_helpers import redact
 
 
 def test_an_email_is_redacted():

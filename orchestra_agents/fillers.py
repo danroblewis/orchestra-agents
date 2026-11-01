@@ -32,7 +32,8 @@ class Fillers:
         for ev in evs:
             at = event_time(ev) or time.time()
             if ev.get("type") == STARTED and ev.get("source"):
-                self.kinds[ev["source"]] = str(ev.get("kind") or "program")
+                kind = ev.get("kind")
+                self.kinds[ev["source"]] = kind if isinstance(kind, str) and kind else None   # none announced: "not announced"
                 if ev.get("log"):
                     self.logs[ev["source"]] = str(ev["log"])
                 else:

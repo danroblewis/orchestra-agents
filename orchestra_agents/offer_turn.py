@@ -27,7 +27,8 @@ def heartbeat(host, sid: str, done: threading.Event, stopped: Callable[[], bool]
         said, since = "", time.time()
         while not done.wait(poll) and not stopped():
             s = host.store.find_session(sid) or {}
-            text = (s.get("partial_text") or s.get("last_text") or "")[-160:]
+            said_lines = [x for x in (s.get("partial_text") or s.get("last_text") or "").splitlines() if x.strip()]
+            text = (said_lines[-1].strip() if said_lines else "")[-160:]          # offer.alive's text is one line
             if text != said or time.time() - since >= every_s - poll:
                 said, since = text, time.time()
                 say(text)

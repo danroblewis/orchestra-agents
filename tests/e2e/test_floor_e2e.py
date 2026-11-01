@@ -62,7 +62,7 @@ def host(tmp_path, monkeypatch):
     git("commit", "-q", "-m", "start", cwd=repo)
     store = AgentStore(project)
     log = (tmp_path / "host.log").open("ab")
-    proc = subprocess.Popen([sys.executable, "-m", "orchestra_agents", "run"], cwd=repo, stdout=log, stderr=subprocess.STDOUT,
+    proc = subprocess.Popen([sys.executable, "-m", "orchestra", "agents", "run"], cwd=repo, stdout=log, stderr=subprocess.STDOUT,
                             env={**os.environ, "ORCHESTRA_REPO": str(repo), "PYTHONUNBUFFERED": "1"}, start_new_session=True)
     try:
         wait_until("the agents' host", lambda: bool((store.runtime().get("control") or {}).get("port")), timeout_s=60)

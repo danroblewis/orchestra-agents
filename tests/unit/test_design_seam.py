@@ -210,6 +210,18 @@ def test_after_one_endpoint_timeout_the_rest_of_the_call_fails_at_once(project, 
     assert intended_api.backing_off()
 
 
+def test_a_refusal_after_an_applied_op_in_the_same_call_names_what_was_applied(project):
+    core = intended_api.Core(project)
+    with pytest.raises(StoreError, match="nothing was applied"):
+        core.apply([{"op": "alias", "machine": "nobody", "observed": "x"}], MINE)
+    with intended_api.one_call():
+        done = core.apply([{"op": "declare_event", "type": "work.idea", "description": "an idea"}], OWNER)
+        [change] = [c["change"] for c in done["changes"]]
+        with pytest.raises(StoreError) as e:
+            core.apply([{"op": "alias", "machine": "nobody", "observed": "x"}], MINE)
+    assert f"applied before it in this call: {change}" in str(e.value) and "nothing was applied" not in str(e.value)
+
+
 def test_the_summary_is_read_once_per_call_until_a_write(project, slow):
     slow.delay = 0.0
     core = intended_api.Core(project)
@@ -237,17 +249,14 @@ def test_the_host_skips_its_design_tick_while_backing_off(project, store, monkey
     assert ran
 
 
-def test_a_page_line_names_the_page_that_draws_the_part(project, monkeypatch):
-    monkeypatch.setattr(intended_api, "pages", lambda p: {"Machines"})
-    assert design.page_line(project, "the Machines page draws it dashed") == "the Machines page draws it dashed"
-    assert design.page_line(project, "the Dynamics page shows it") is None
-
-
-def test_a_scheduled_agent_is_declared_scheduled():
-    a = SimpleNamespace(resident=False, at="00:00", every=None)
-    assert web.mode_of(a) == "scheduled" and web.mode_of(SimpleNamespace(resident=False, at=None, every="1h")) == "scheduled"
-    assert web.mode_of(SimpleNamespace(resident=True, at=None, every=None)) == "continuous"
-    assert web.mode_of(SimpleNamespace(resident=False, at=None, every=None)) == "ad hoc"
+def test_an_agent_is_declared_and_announced_engaged_by_one_rule():
+    from orchestra_agents.listening import engaged
+    a = SimpleNamespace(resident=False, at="00:00", every=None, kind="custom")
+    assert engaged(a) == "scheduled" and engaged(SimpleNamespace(resident=False, at=None, every="1h", kind="custom")) == "scheduled"
+    assert engaged(SimpleNamespace(resident=True, at=None, every=None, kind="custom")) == "continuous"
+    assert engaged(SimpleNamespace(resident=True, at=None, every=None, kind="scheduled")) == "scheduled"   # the announcement's order
+    assert engaged(SimpleNamespace(resident=False, at=None, every=None, kind="ad_hoc")) == "ad hoc" and engaged(None) == "ad hoc"
+    assert not hasattr(web, "mode_of")
 
 
 def test_a_type_a_known_machine_publishes_the_family_of_names_it_as_the_publisher():

@@ -100,6 +100,19 @@ def test_an_honest_reply_is_one_turn(project):
     assert harness.sessions[0].prompts[0].endswith("[The human's message]\nmeasure the weather")   # the context document came first
 
 
+def test_a_chat_turn_is_the_supervisors_last_turn_though_nothing_woke_it(project):
+    from orchestra_agents.org_views import agents_status
+    harness = ScriptedHarness(["All quiet."])
+    host, store, _events = host_with(project, harness)
+    assert not store.agent_state("supervisor").get("last_turn")
+    host.prompt_supervisor("how is it going?", lambda ev: None)
+    st = store.agent_state("supervisor")
+    assert st["last_turn"] > 0 and not st.get("last_woken")             # the owner's message is a turn, not a wake-up
+    sup = next(a for a in agents_status(project, store)["agents"] if a["name"] == "supervisor")
+    assert sup["last_turn"] == st["last_turn"]
+    host.residents.close_all()
+
+
 def test_the_humans_ticket_that_is_done_wakes_the_supervisor_to_say_so(project):
     harness = ScriptedHarness([("DEMO-5 is done: the disk and git collectors are running; their series are on the Core page.", 0)])
     host, store, events = host_with(project, harness)

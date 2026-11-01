@@ -452,6 +452,7 @@ dev = [
     { name = "orchestra", extra = ["sd"] },
     { name = "orchestra-bridges" },
     { name = "orchestra-tasking" },
+    { name = "orchestra-workflows" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -464,6 +465,7 @@ requires-dist = [
     { name = "orchestra", extras = ["sd"], marker = "extra == 'dev'" },
     { name = "orchestra-bridges", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-bridges" },
     { name = "orchestra-tasking", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-tasking" },
+    { name = "orchestra-workflows", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-workflows" },
     { name = "psutil" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
@@ -473,7 +475,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-bridges"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#d5eec78cb7a7adef4fda15d886f91861adb10c97" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#44cb8f376260c0082b02924f8de0abe4fa7b50f1" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
 ]
@@ -487,6 +489,14 @@ dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "psutil" },
     { name = "tomlkit" },
+]
+
+[[package]]
+name = "orchestra-workflows"
+version = "0.1.0"
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#64a0b5d5a2d3e97d7279967b699ab42ada2dbecc" }
+dependencies = [
+    { name = "orchestra", extra = ["sd"] },
 ]
 
 [[package]]

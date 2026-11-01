@@ -5,6 +5,7 @@ unknown workflow, one a request does not start, a used id and a floor that is no
 refused with nothing published; only the Supervisor and the Coordinator have it."""
 
 import os
+from types import SimpleNamespace
 
 import pytest
 from conftest import agents_project
@@ -27,8 +28,14 @@ class Plugin(FakePlugin):
         super().__init__()
         self.held: set[str] = set()
 
+    def for_project(self, project):         # the record API: Record.for_project(...).item(...)
+        return self
+
     def item(self, item):
         return {"item": item} if item in self.held else None
+
+    def ns(self):
+        return SimpleNamespace(**vars(super().ns()), Record=self)
 
     def load(self, project):
         defs = super().load(project)

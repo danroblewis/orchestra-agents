@@ -19,10 +19,12 @@ from orchestra_agents.harness.pi import PiHarness
 pytest.register_assert_rewrite("design_fixtures")          # the design tools' fixtures, a plugin of their tests
 
 
-def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "",
+def agents_project(repo: Path | str, *, harness: str = "dummy", model: str = "", provider: str = "",
                    set_up: bool = True) -> Project:
     """Orchestra's starter ``orchestra.toml`` (if there is none) with an ``[agents]`` section
-    appended (if it has none), and the project registered with Orchestra. ``set_up``: the
+    appended (if it has none), and the project registered with Orchestra. ``harness``: the dummy by
+    default, so a host built on it opens no Pi, Claude Code or Codex session (a test of one names
+    it and stands its fake in). ``set_up``: the
     Supervisor's setup is recorded as having run, so a host started on it wakes nobody for a first
     run (first_run.py); the tests of the first run pass False."""
     o = init_orchestra(Path(repo))
@@ -40,6 +42,33 @@ def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", pr
         from orchestra_agents.store import AgentStore
         AgentStore(project).set_agent_state("supervisor", setup={"ran_at": 1.0, "harness": project.config.harness})
     return project
+
+
+REAL_HARNESSES = {"pi", "claude_code", "codex"}
+
+
+@pytest.fixture(autouse=True)
+def _no_real_harness_in_unit_tests(request, monkeypatch):
+    """A unit test never gets a real product's harness from ``get_harness`` (a host built on one
+    opens the Supervisor's and the Coordinator's sessions on the real binary, left running until
+    pytest exits): it fails instead. A test that means to read a real harness's own code imports
+    its class, or ``get_harness`` itself, directly; one that reads a real harness's model or price
+    and opens no session is marked ``real_harness``."""
+    if "tests/unit/" not in str(request.node.path).replace("\\", "/") or request.node.get_closest_marker("real_harness"):
+        return
+    import orchestra_agents.harness as harness_pkg
+    import orchestra_agents.host as host_mod
+    real = harness_pkg.get_harness
+
+    def guarded(name):
+        h = real(name)
+        if h.name in REAL_HARNESSES:
+            pytest.fail(f"a unit test got the real {h.name} harness from get_harness; use the dummy "
+                        "harness (agents_project's default) or conftest's FakeHarness")
+        return h
+
+    monkeypatch.setattr(harness_pkg, "get_harness", guarded)
+    monkeypatch.setattr(host_mod, "get_harness", guarded)
 
 
 def free_port() -> int:

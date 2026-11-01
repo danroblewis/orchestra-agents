@@ -26,7 +26,7 @@ import psutil
 from orchestra.runtime import alive
 from orchestra.tokens import owner_only
 
-from . import access, budget, handoff, promises, prompting, supervisor_spec, tooling
+from . import access, budget, handoff, parent, promises, prompting, supervisor_spec, tooling
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
@@ -130,7 +130,9 @@ class AgentHost:
         or when the control endpoint cannot be served (without it the Supervisor cannot be
         reached and the web cannot see the host: it must not run as a ghost). With ``wait`` (as
         Orchestra's launcher starts it) it waits for either to clear instead: a host restarted
-        while the previous one still shuts down takes over when that one is gone."""
+        while the previous one still shuts down takes over when that one is gone. With ``wait`` it
+        also stops when the launcher that started it is gone without stopping it (killed:
+        parent.py), as it does on SIGTERM."""
         def _stop(_sig, _frame):
             self.stop.set()
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -138,6 +140,8 @@ class AgentHost:
                 signal.signal(sig, _stop)
             except ValueError:  # not the main thread (tests)
                 pass
+        if wait:
+            parent.watch(self._orphaned, self.stop)
         if not self._take_project(wait):
             return 0 if self.stop.is_set() else 1
         self.recover()
@@ -182,6 +186,10 @@ class AgentHost:
                     self.control.stop()
                 self.store.clear_control(os.getpid())
         return 0
+
+    def _orphaned(self, launcher_pid: int) -> None:
+        log(f"the orchestra run that started this host (pid {launcher_pid}) is gone; stopping")
+        self.stop.set()
 
     def _busy(self) -> bool:
         return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())

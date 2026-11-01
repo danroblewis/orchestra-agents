@@ -2,8 +2,9 @@
 
 AI agents as Orchestra machines. A host (the process `agents.host`, which `orchestra run` starts) keeps the resident agents up
 (the Supervisor the human talks to, the Coordinator that keeps the plan executable, any custom
-agent), wakes them on events and schedules, and runs a worker or a reviewer on a ticket when a
-task system (orchestra-tasking) assigns one over Orchestra's event bus. Which product runs a
+agent), wakes them on events and schedules, and runs a worker or a reviewer on a piece of work
+when a task system (orchestra-tasking) or the Workflows floor (orchestra-workflows) assigns one
+over Orchestra's event bus. Which product runs a
 session is a setting: Pi, Claude Code or Codex, or `dummy`, scripted agents with no model, no
 network and no cost, for demos and tests. An Orchestra plugin (`agents`) adds the Agents
 page, the Supervisor chat, and the agents' machine cards to Orchestra's web UI.
@@ -31,23 +32,29 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
     uv run demo/run.py                 # a fresh demo project at ~/orchestra-agents-demo, http://127.0.0.1:8072
     uv run demo/run.py --dummy         # the same demo for free: scripted agents, no model, no network
 
-An AI reviewer (Claude Code, Haiku) and a program worker (a shell runner) work the same queue:
-fifteen tickets over about four minutes, eight at once and then one every 30 s, five of them
-rejected once and three blocked for a planner, about ten cents of Haiku; `--tickets 3` is a
-one-minute look. `demo/README.md` says what you will see and where. Ctrl-C stops everything;
-remove `~/orchestra-agents-demo` first to run it again. With `--dummy` the agents run on the
-dummy harness, playing `demo/dummy.toml`: the four tickets land with real work (one rejected once
-and reworked) and the Supervisor answers the chat, without a model and at no cost.
+One milestone of four tickets, worked by AI agents (Claude Code, Haiku) and a program worker (a
+shell runner) on one queue: two shell tickets (DEMO-1 and DEMO-2, the toolchain and the start
+date, which the program worker or an AI worker takes, whichever accepts first) and two code
+tickets only an AI worker can write (DEMO-3, a line-counting tool and its test; DEMO-4, a
+collector), each reviewed by an AI reviewer and landed on main by the merge gate. With `--dummy`
+the agents run on the dummy harness, playing `demo/dummy.toml`: the four tickets land with real
+work, DEMO-3's first review rejects it and the rework lands, and the Supervisor answers the chat
+with the project's status, in about a minute, without a model and at no cost. `demo/README.md`
+says what you will see and where. Ctrl-C stops everything; remove `~/orchestra-agents-demo`
+first to run it again.
 
 ## Use it on a repository
 
-Install Orchestra with the task system and the agents beside it, once, as one tool (no clone):
+Install Orchestra with the agents beside it, once, as one tool (no clone):
 
-    uv tool install 'orchestra[sd,tasking,agents] @ git+https://github.com/danroblewis/orchestra@main'
+    uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main'
 
-That puts one executable on your PATH, `orchestra`. The agents' command line comes with it as
-`orchestra agents …` and the task system's as `orchestra tasks …`; neither has an executable of
-its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.
+`bridges` brings the integration kits the Supervisor builds a connection to another system from
+(`integrate_system`), and `dev` brings pytest, which runs each scaffolded poller's own test in
+Orchestra's Python (as Orchestra's `docs/INTEGRATING.md` §4 installs them); add `tasking` for the
+task system and `workflows` for the Workflows floor. That puts one executable on your PATH,
+`orchestra`. The agents' command line comes with it as `orchestra agents …` and the task system's
+as `orchestra tasks …`; neither has an executable of its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.
 
 In the repository (a git repository), start Orchestra and its UI. You configure nothing: the
 Supervisor does.
@@ -60,6 +67,16 @@ Supervisor does.
 With no `[agents]` section the agents run on Claude Code with Haiku when the `claude` command is on
 the PATH `orchestra run` has (installed, and logged in once with `claude` by hand), and otherwise on
 the dummy harness (scripted, no model, no cost); the Agents page says which, and how to change it.
+The Supervisor runs on its machine spec's model, **Sonnet by default** (decision D20), where the
+harness takes the name; every other agent on `[agents] model` (Haiku by default). To change the
+Supervisor's, tell it, or edit `model` in `.orchestra/machines/supervisor/machine.toml`.
+
+On the first `orchestra run` the agents' host writes the Supervisor's spec (its duties, its role and
+a ledger of why each duty exists) and commits it to `.orchestra/machines/supervisor/`: on the base
+branch when the checkout is on it and clean and the work is not code; otherwise on the side branch
+`orchestra/supervisor`, through git's plumbing, without touching your working tree. Workers and
+reviewers run with a push guard (no `git push`, no pull-request writes from their sessions); the
+Supervisor's shell has none, and its own git writes are its tools' local commits.
 On a project that is not set up yet (no task system `[project]`, no instruments), the Supervisor is
 woken at once to set it up: it reads the operator's guides Orchestra and each plugin serve, explores
 the repository read-only (how its tests run, how it builds and is served), sets what is plainly
@@ -119,11 +136,10 @@ worker's, through the Coordinator (Orchestra's `docs/machines.md`).
 The Supervisor's `design` tools are how you design the system by talking: it declares the stocks,
 effects, targets and machines you name, measures them at once, drafts and refines machines as you
 talk, and starts one only when you confirm it (Orchestra's `docs/proposals/machine-design.md`).
-Where the installed Orchestra has a declared layer, the declarations are kept in it, and its
-Dynamics page draws the stocks, effects and flows and its Machines page the machines; the
-Supervisor's answers name the page that draws each. An Orchestra without one (such as the one this
-package pins today) draws nothing: the declarations are kept in the agents' state directory, and
-the Supervisor reads them back to you (`read_design`) instead of naming a page.
+The declarations live only in Orchestra's declared layer (its intended model), written through the
+running host's `/intended` endpoint; while `orchestra run` is down every design call is refused and
+nothing is written anywhere else. The Dynamics page draws the stocks, effects and flows and the
+Machines page the machines, and the Supervisor's answers name the page that draws each.
 
 The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
 processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
@@ -148,6 +164,18 @@ under `.orchestra/`, except a machine you designed with the Supervisor and confi
 role and agent records stay in the state directory (`machines/<name>/`). The Supervisor designs the organisation in conversation; the Agents page
 shows it.
 
+## The Workflows floor
+
+With the Workflows plugin installed (the `workflows` extra; a private repository), the agents also
+answer the floor's offers: for each `offer.made` to a role served here, the host claims it as an
+instance of the agent, runs the agent's turn on the offer's brief and finishes it with the outcome
+the agent reported (SPEC.md §3.1). A floor role is served by the built-in worker or reviewer when
+`[agents] serves` lists it, or by a confirmed Universal Machine whose spec names it (`role =
+"<role>"`, which you design with the Supervisor). The floor's `attention.needed` wakes the
+Coordinator or the Supervisor. `tests/e2e/test_floor_e2e.py` runs it end to end against a
+scripted floor on the bus (a host process on the dummy harness), and the workflows repository's
+`examples/task_loop` is a loop to try it on.
+
 ## Dummy agents
 
 `harness = "dummy"` runs every agent from a script instead of a model: each turn plays the first
@@ -169,14 +197,16 @@ as a worked example.
 
 ## Tests
 
-    uv run python -m pytest -q         # about four minutes: unit, in-process e2e per harness, the demo through a real Orchestra
+    uv run python -m pytest -q         # about twenty minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
 
-The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`) need the
-Workflows plugin, `orchestra-workflows`, which is an optional dependency named in no extra and no
-lock: installed beside the agents, the tools use it; without it they say it is not installed. Their
-unit tests use a fake plugin; `tests/e2e/test_workflows_e2e.py` runs on the real one, which the
-`dev` extra installs (as it installs the task system and the bridges).
+The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`) and the floor
+need the Workflows plugin, `orchestra-workflows`, which is optional at runtime: it is imported
+lazily and named in no runtime extra of this package (Orchestra's `workflows` extra installs it).
+Installed beside the agents, the tools use it; without it they say it is not installed. For the
+tests, the `dev` extra installs it and `uv.lock` pins it: the unit tests of `declare_workflow`
+and `list_workflows` use a fake plugin, and `tests/e2e/test_workflows_e2e.py` runs all three tools
+on the real one (`explain_item` on an item log its recorder wrote).
 
 The design tools' tests run on Orchestra's own declared layer (`orchestra.sd.intended`), served
 in process through its host's events endpoint; `uv.lock` names the Orchestra commit they ran on.
@@ -184,7 +214,9 @@ in process through its host's events endpoint; `uv.lock` names the Orchestra com
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
 protocol) or the dummy harness; nothing in the default test paths calls a model. Three opt-in live
 tests under `tests/live/` do, on Haiku only, each skipped unless its variable is set:
-`ORCHESTRA_LIVE_DESIGN=1 uv run python -m pytest -q -s tests/live/test_design_live.py`, and
+`ORCHESTRA_LIVE_DESIGN=1 uv run python -m pytest -q -s tests/live/test_design_live.py` (its free
+rehearsal, `ORCHESTRA_LIVE_DESIGN=rehearse`, plays the same scenario on a fake Claude, and runs in
+every suite as `tests/e2e/test_design_rehearsal_e2e.py`), and
 `ORCHESTRA_LIVE_HAIKU=1` for `tests/live/test_integrate_live.py` and
 `tests/live/test_modeling_live.py`. `tests/e2e/test_dummy_demo_e2e.py`
 runs the whole demo on dummy agents with no API key and no network. Its
@@ -205,9 +237,10 @@ map), that it is woken when its ticket lands, and that the agents' metrics arriv
 `pyproject.toml` requires `orchestra>=1.0.0a1,<1.0.0rc0` and takes it from GitHub's `main`
 (`[tool.uv] override-dependencies`; installed as a plugin, it gets the Orchestra it is installed
 with), and the
-dev extra takes the task system from GitHub over SSH (it is private). `uv.lock` pins both commits,
-so nothing needs cloning beside this repository. `uv lock --upgrade-package orchestra`
-(or `orchestra-tasking`) moves a pin to the newest `main`, then `uv sync --extra dev`.
+dev extra takes the task system, the bridges and the Workflows plugin from GitHub over SSH (they
+are private). `uv.lock` pins all four commits, so nothing needs cloning beside this repository.
+`uv lock --upgrade-package orchestra` (or `orchestra-tasking`, `orchestra-bridges`,
+`orchestra-workflows`) moves a pin to the newest `main`, then `uv sync --extra dev`.
 
 To run against local checkouts instead, with their uncommitted changes, lay them over this
 environment for one command:

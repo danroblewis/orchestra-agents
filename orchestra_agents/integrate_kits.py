@@ -1,7 +1,6 @@
 """The seam between ``integrate_system`` (``design_integrate.py``) and what Orchestra's
 ``docs/INTEGRATING.md`` builds an integration from: the bridges plugin's kits
-(``orchestra_bridges.kits``: its scaffold, templates and fakes), the Workflows plugin's ``every``,
-and a scaffolded poller's own files.
+(``orchestra_bridges.kits``: its scaffold, templates and fakes) and a scaffolded poller's own files.
 
 - **Which strategy** (INTEGRATING.md §2, in its order of preference): a Prometheus-API store is a
   ``[[sources]]`` entry (``source``); a system with item events is a poller built from a kit
@@ -35,6 +34,10 @@ from .secret_shapes import secret_in
 from .store import StoreError
 
 STRATEGIES = ("source", "poller", "collect", "bridge")
+# Orchestra's tool with the kits (the bridges extra) and pytest, which runs a scaffolded poller's test (the dev
+# extra); installing the tool again replaces it, so every plugin it had is named again (README, "Use it")
+REINSTALL = ("uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main' "
+             "(with tasking or workflows added when the project has them)")
 STORES = ("chronosphere", "prometheus", "mimir", "thanos", "victoriametrics", "cortex")
 KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", **{s: "promql" for s in STORES}}
 BRIDGES = {"jira": "[bridges.jira] (Data Center or Cloud: issues, changes and comments, as who did them, and counts by status)",
@@ -59,14 +62,6 @@ def installed() -> bool:
     """Whether the bridges plugin's kits are importable in this Python (Orchestra's)."""
     try:
         return importlib.util.find_spec("orchestra_bridges.kits") is not None
-    except ModuleNotFoundError:
-        return False
-
-
-def workflows_installed() -> bool:
-    """Whether the Workflows plugin is installed: a poller then runs as its ``every`` item."""
-    try:
-        return importlib.util.find_spec("orchestra_workflows") is not None
     except ModuleNotFoundError:
         return False
 
@@ -171,12 +166,21 @@ def set_keys(text: str, table: str | None, values: dict) -> str:
 
 
 def _edit(target: Path, top: dict, settings: dict) -> None:
+    """The change, written, then read back by the program's own reader (the bridges'
+    ``machinefile.read``): what it refuses is put back as it was."""
+    from orchestra_bridges.kits.machinefile import read as read_machine_file
     path = target / "machine.toml"
-    text = set_keys(set_keys(path.read_text(encoding="utf-8"), None, top), "settings", settings)
+    old = path.read_text(encoding="utf-8")
+    text = set_keys(set_keys(old, None, top), "settings", settings)
     got = tomllib.loads(text)                       # still TOML, and says what was set: refused before it is written otherwise
     if any(got.get(k) != v for k, v in top.items()) or any(got.get("settings", {}).get(k) != v for k, v in settings.items()):
         raise StoreError(f"{path}: the change did not read back as written; nothing was changed")
     path.write_text(text, encoding="utf-8")
+    try:
+        read_machine_file(path)
+    except ValueError as e:                         # MachineFileError: the program would refuse to start on it
+        path.write_text(old, encoding="utf-8")
+        raise StoreError(f"the poller's own reader refuses the change ({e}); machine.toml was put back as it was") from None
 
 
 def env_name_ok(name: str) -> bool:

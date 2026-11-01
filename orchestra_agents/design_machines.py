@@ -30,8 +30,8 @@ from orchestra.config import ConfigError, parse_duration
 
 from . import intended_api, state_machines
 from .config import Project
-from .design import MACHINE, OWNER, answer, apply, check_request, page_line, plural
-from .expect_grammar import expect_edit, is_slope, slopes
+from .design import MACHINE, OWNER, answer, apply, check_request, plural
+from .expect_grammar import expect_edit
 from .store import AgentStore, StoreError
 
 ID = re.compile(r"^[a-z][a-z0-9_]{1,40}$")         # a machine's id: the source it publishes under
@@ -283,12 +283,8 @@ def draft(project: Project, m: dict, store: AgentStore | None = None) -> Path | 
 
 
 def spec_of(a: dict) -> dict:
-    """The kind's fields from declare_machine's flat arguments (a nested ``spec``, the older form,
-    taken too: the flat ones win)."""
-    nested = a.get("spec") or {}
-    if not isinstance(nested, dict):
-        raise StoreError("spec is an object; better, give its fields at the top level (invariants, steps, uses, command, ...)")
-    return {**nested, **{k: a[k] for k in SPEC_KEYS if a.get(k) not in (None, "", [])}}
+    """The kind's fields from declare_machine's flat arguments."""
+    return {k: a[k] for k in SPEC_KEYS if a.get(k) not in (None, "", [])}
 
 
 NO_RECEIVES = ("receives is empty: the events it watches, or reads at each run (a scheduled machine too: scheduling it never "
@@ -318,11 +314,11 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
         raise StoreError("describe what it achieves, in the work's terms")
     check_machine(m)
     guessed = list(dict.fromkeys("engagement" if g in ("mode", "at", "tz", "missed") else g for g in a.get("guesses") or []))
-    done = apply(project, store, [{"op": "propose_machine", **m, "guessed": guessed}], prov)
+    done = apply(project, [{"op": "propose_machine", **m, "guessed": guessed}], prov)
     d = draft(project, {**m, "state": "proposed"}, store)
     who = "added by you (from your message)" if prov["author"] == OWNER else "proposed by the Supervisor"
     lines = [f"machine {mid} ({m['title']}) declared, {kind}, {who}: unconfirmed",
-             page_line(project, "the Machines page draws it dashed, \"unconfirmed\""), cost_line(project, store, m),
+             "the Machines page draws it dashed, \"unconfirmed\"", cost_line(project, store, m),
              state_machines.unmapped_line(m)]
     if a.get("guesses"):
         lines.append(f"guessed: {', '.join(a['guesses'])}")
@@ -428,7 +424,7 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         raise StoreError("say what changes: add_/remove_ receives, emits, reads, tags, invariants or uses; steps; mode (with "
                          "at, tz, missed); or set_field and value. A switch of kind is switch_kind")
     check_machine(after, kept=set(m.get("spec") or {}))
-    done = apply(project, store, [op for _, op in ops], prov)
+    done = apply(project, [op for _, op in ops], prov)
     now, pending = _pending(project, mid, done)
     if not pending:
         draft(project, now, store)
@@ -440,7 +436,7 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     if pending:
         lines.append("recorded as a proposed change: the owner confirms or discards it in the chat")
     else:
-        lines += ["applied", page_line(project, "the Machines page marks it \"just now\", with what it replaced"),
+        lines += ["applied", "the Machines page marks it \"just now\", with what it replaced",
                   state_machines.unmapped_line(now)]
         if runs_a_day(store, after)[0] != runs_a_day(store, m)[0]:
             lines.append(cost_line(project, store, after))
@@ -494,7 +490,7 @@ def switch_kind(project: Project, store: AgentStore, a: dict, prov: dict) -> dic
     to = "programmatic" if m.get("kind") == "universal" else "universal"
     check_request(project, store, prov, "switch_kind", "machine", mid)
     check_machine({**m, "kind": to}, kept=set(m.get("spec") or {}))
-    done = apply(project, store, [{"op": "revise_machine", "id": mid, "set": {"kind": to}}], prov)
+    done = apply(project, [{"op": "revise_machine", "id": mid, "set": {"kind": to}}], prov)
     now, pending = _pending(project, mid, done)
     lines = [f"{mid} is {'to be ' if pending else ''}{to} ({done['changes'][0]['change']}); its spec is kept as it was"
              + (": the Universal description is the program's specification" if to == "programmatic" else "")]
@@ -515,7 +511,7 @@ def declare_event(project: Project, store: AgentStore, a: dict, prov: dict) -> d
     t, purpose = (a.get("type") or "").strip(), (a.get("purpose") or "").strip()
     if not EVENT.match(t) or not purpose:
         raise StoreError("an event type is family.name (work.improvement_proposed), with its purpose in a sentence")
-    done = apply(project, store, [{"op": "declare_event", "type": t, "description": purpose}], prov)
+    done = apply(project, [{"op": "declare_event", "type": t, "description": purpose}], prov)
     return answer(project, done, [f"event type {t} declared: {purpose}"])
 
 
@@ -552,11 +548,6 @@ def waiting_line(project: Project, store: AgentStore, lay: dict, e: dict, why: s
         return (f"{decl.get('name') or name} is not linked to a discovered stock yet: published once you say which one it is "
                 f"(link)" + (f"; {', '.join(rec)} records it now" if rec else ""))
     return f"{name} is not in the current model: published once discovery finds it"
-
-
-def cannot_judge(e: dict) -> str | None:
-    """Why this Orchestra could not judge the edit once published, or None."""
-    return "this Orchestra cannot judge rises or falls yet" if is_slope(e) and not slopes() else None
 
 
 def min_horizon(project: Project, store: AgentStore, m: dict) -> tuple[float, str]:
@@ -652,7 +643,7 @@ def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: 
         horizon = floor
     if horizon <= 0:
         raise StoreError("horizon is how long after the machine starts to judge it: 3d, 7d")
-    done = apply(project, store, [{"op": "set_expected_effect", "machine": mid, "edits": edits, "horizon_s": horizon}], prov)
+    done = apply(project, [{"op": "set_expected_effect", "machine": mid, "edits": edits, "horizon_s": horizon}], prov)
     lay = intended_api.current(project)
     confirmed = m.get("state") != "proposed"
     lines.insert(0, f"expected effect of {mid}: {plural(len(edits), 'edit')}, judged {horizon / DAY:.3g} days after it starts; "
@@ -663,8 +654,6 @@ def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: 
     for e in stored:
         if (w := publishable(project, lay, mid, e, keys=keys, core=core)[1]) is not None:
             lines.append(waiting_line(project, store, lay, e, w))
-    if unjudged := [why for e in edits if (why := cannot_judge(e))]:
-        lines.append(f"{unjudged[0]}: such an edit is kept and not published until it can")
     return answer(project, done, lines, machine=mid)
 
 

@@ -28,10 +28,10 @@ def test_an_announcement_carries_what_is_read_and_a_changed_floor_role_announces
     host = AgentHost(project, AgentStore(project), Events.for_project(project))
     roles = {"triager": "worker"}
     monkeypatch.setattr("orchestra_agents.host.served", lambda p: dict(roles))
-    host._announce("worker/1", "worker", "haiku")
-    host._announce("worker/1", "worker", "sonnet")              # another model: nothing new to say
+    host._announce("worker/1", "worker")
+    host._announce("worker/1", "worker")                        # the same roles: nothing new to say
     roles["reviewing"] = "worker"
-    host._announce("worker/1", "worker", "sonnet")              # a floor role more: said again
+    host._announce("worker/1", "worker")                        # a floor role more: said again
     said = [e for e in host.events.read(0, 100)[0] if e["type"] == "orchestra.machine.started"]
     assert [e["roles"] for e in said] == [["triager"], ["reviewing", "triager"]]
     assert all("harness" not in e and "model" not in e and e["mode"] == "ad hoc" for e in said)

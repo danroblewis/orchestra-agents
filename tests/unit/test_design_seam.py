@@ -210,6 +210,18 @@ def test_after_one_endpoint_timeout_the_rest_of_the_call_fails_at_once(project, 
     assert intended_api.backing_off()
 
 
+def test_a_refusal_after_an_applied_op_in_the_same_call_names_what_was_applied(project):
+    core = intended_api.Core(project)
+    with pytest.raises(StoreError, match="nothing was applied"):
+        core.apply([{"op": "alias", "machine": "nobody", "observed": "x"}], MINE)
+    with intended_api.one_call():
+        done = core.apply([{"op": "declare_event", "type": "work.idea", "description": "an idea"}], OWNER)
+        [change] = [c["change"] for c in done["changes"]]
+        with pytest.raises(StoreError) as e:
+            core.apply([{"op": "alias", "machine": "nobody", "observed": "x"}], MINE)
+    assert f"applied before it in this call: {change}" in str(e.value) and "nothing was applied" not in str(e.value)
+
+
 def test_the_summary_is_read_once_per_call_until_a_write(project, slow):
     slow.delay = 0.0
     core = intended_api.Core(project)
@@ -235,11 +247,6 @@ def test_the_host_skips_its_design_tick_while_backing_off(project, store, monkey
     monkeypatch.setattr(intended_api, "_last_timeout", [time.time() - intended_api.BACKOFF_S - 1])
     host._expire_drafts()
     assert ran
-
-
-def test_a_page_line_names_the_page_that_draws_the_part(project):
-    assert design.page_line(project, "the Machines page draws it dashed") == "the Machines page draws it dashed"
-    assert design.page_line(project, "the Dynamics page shows it") == "the Dynamics page shows it"   # the core ships both
 
 
 def test_an_agent_is_declared_and_announced_engaged_by_one_rule():

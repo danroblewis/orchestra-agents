@@ -111,7 +111,7 @@ class AgentHost:
         self._started_at = time.time()
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
-        self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
+        self._announced: set[tuple[str, tuple[str, ...]]] = set()   # (source, floor roles) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
@@ -409,7 +409,7 @@ class AgentHost:
             tools_via=self.cfg.tools_via, read_only=read_only))
         if not ticket_id:
             self._session_models[role] = model
-        self._announce(source, role, model)        # once it exists: a session that failed to start is no machine
+        self._announce(source, role)               # once it exists: a session that failed to start is no machine
         return proc
 
     def _instance(self, session_id: str, role: str, ticket_id: str = "") -> str:
@@ -434,12 +434,12 @@ class AgentHost:
         if self._slots.pop(session_id, None) is not None:
             self.events.unbind(session_id)
 
-    def _announce(self, source: str, role: str, model: str | None = None) -> None:
+    def _announce(self, source: str, role: str) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
         mode and what it listens for): an AI agent, engaged as ``listening.engaged`` says (the rule
         its declaration shares), and the Workflows floor roles it answers. Once per source in the
         host's lifetime (``reviewer/1`` is one machine instance however many tickets it reviews),
-        again when those floor roles change. ``model`` is the turn's; nothing reads it here."""
+        again when those floor roles change."""
         floor = sorted(r for r, a in served(self.project).items() if a == role)   # the floor roles it answers (floor_roles.py)
         key = (source, tuple(floor))
         if key in self._announced:
@@ -571,6 +571,8 @@ class AgentHost:
                                last_token_at=None, tool_name=None)
         self._mark("session.started", session=sid, kind=role, ticket=ticket_id)
         self.store.count_turn(role, self._slots.get(sid, role), started=True)
+        if not ticket_id and (agent := self.agents.get(role)) is not None and agent.resident:
+            self.store.set_agent_state(role, last_turn=time.time())     # any turn: a wake-up's or the owner's message
 
     def _session_idle(self, sid: str, text: str, resident: bool = False, release: bool = True) -> None:
         """A turn ended. A per-ticket session's slot is given back here unless ``release`` is

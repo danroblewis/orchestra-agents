@@ -1,8 +1,8 @@
 """The Supervisor's ``design`` tools (``docs/proposals/machine-design.md`` §2, orchestra_2): it
 declares stocks, effects, targets and machines, finds ways to measure what was declared and starts
 recording at once, drafts and refines machines while the owner talks, and records each machine's
-expected effect. Orchestra's Dynamics and Machines pages draw the result once Orchestra keeps the
-declared layer itself (``intended_api.drawn``); the owner never writes a file.
+expected effect. Orchestra's Dynamics and Machines pages draw the result; the owner never writes a
+file.
 
 Every tool here:
 
@@ -20,8 +20,7 @@ Every tool here:
   the quote), with anything that looks like a secret hidden (``secret_shapes.redact``);
 - writes only through the declared layer (``intended_api.layer``) and ``project.config_edit``
   (``config_change``); calls no model;
-- answers with the ids recorded, where they show when a page draws them (``page_line``), and
-  where they are kept (``kept_in``).
+- answers with the ids recorded, the page that draws them, and where they are kept (``kept_in``).
 
 The tools by side: ``design_dynamics.py`` (stocks, effects, targets, marks, links, measurement
 options), ``design_clearance.py`` (whether an option needs the owner's approval),
@@ -156,16 +155,8 @@ def kept_message(message: str, quote: str = "") -> str:
     return ("…" if start else "") + text[start:start + room] + ("…" if start + room < len(text) else "")
 
 
-def apply(project: Project, store: AgentStore, ops: list[dict], prov: dict) -> dict:
+def apply(project: Project, ops: list[dict], prov: dict) -> dict:
     return intended_api.layer(project).apply(ops, prov)
-
-
-def page_line(project: Project, drawn: str, page: str | None = None) -> str | None:
-    """Where the owner sees it, when the installed Orchestra has the page that draws it (``page``:
-    Machines for a machine, Dynamics for a stock, effect or flow; read from ``drawn`` when not
-    given); otherwise nothing (where it is kept is the answer's ``kept_in``)."""
-    page = page or ("Machines" if "Machines page" in drawn else "Dynamics")
-    return drawn if intended_api.drawn(project, page) else None
 
 
 def answer(project: Project, done: dict, lines: list[str | None], **extra: Any) -> dict:

@@ -108,7 +108,6 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
 
 def test_every_answer_names_both_pages_that_draw_the_layer(project, store):
     out = features(project, store)
-    assert intended_api.pages(project) == {"Machines", "Dynamics"} and intended_api.drawn(project, "Machines")
     assert out["kept_in"] == "Orchestra's declared layer: the Dynamics and Machines pages draw it"
     assert any("Dynamics page" in line for line in out["said"])
 
@@ -217,6 +216,30 @@ def test_add_instrument_runs_only_what_the_option_proposed(project, store):
         add(project, store, option="b", name="features.tickets", command="echo 'other 1'")
     out = add(project, store, option="b", name="features.tickets", command="echo 'features_done 7'")
     assert entry(project, "features.tickets")["command"] == "echo 'features_done 7'" and out["instrument"] == "features.tickets"
+
+
+def test_an_options_token_variable_is_named_by_the_layers_rule(project, store):
+    """bearer_env is checked by the rule of the layer that keeps it (orchestra.sd.intended.ops.ENV_NAME):
+    a leading underscore and lower case are names; a space is not (a poller's token_env is the kits' rule)."""
+    features(project, store)
+    for env in ("_PD_TOKEN", "work_token"):
+        call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+            {"label": "x", "kind": "source", "how": "x", "cost": "x", "system": "pagerduty", "bearer_env": env}])
+        assert layer(project)["stocks"]["features"]["measure"]["options"][0]["bearer_env"] == env
+    with pytest.raises(StoreError, match="never a value"):
+        call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+            {"label": "x", "kind": "source", "how": "x", "cost": "x", "bearer_env": "WORK TOKEN"}])
+
+
+def test_a_scrape_option_takes_no_script_and_nothing_is_written(project, store):
+    features(project, store)
+    call(project, store, "propose_measurements", element="features", reason=WHY, options=[
+        {"label": "the app's metrics", "kind": "scrape", "how": "its /metrics", "cost": "one request a round",
+         "url": "http://127.0.0.1:9/metrics"}])
+    with pytest.raises(StoreError, match=r"a \[\[scrape\]\] reads only that URL, so it takes no script; nothing was written"):
+        add(project, store, option="a", name="features.scraped", url="http://127.0.0.1:9/metrics", script=SCRIPT)
+    assert not project.orchestra.config.raw.get("scrape") and design_instruments.drafts(store) == {}
+    assert not (project.state_dir / "instruments" / "features.scraped.sh").exists()
 
 
 def test_an_existing_series_is_an_option_with_no_instrument_and_no_binding(project, store):
@@ -430,7 +453,7 @@ def test_link_records_a_manual_binding_and_the_discovered_stock_keeps_its_name(p
     assert layer(project)["stocks"]["features"]["target"] == {"op": "above", "value": 5, "over_s": 86_400}
     say(store, "", 4)
     with pytest.raises(StoreError, match="the owner declared this"):              # the owner's mark is the owner's to take off
-        design.apply(project, store, [{"op": "unexpect", "part": "stock", "key": "acceptance_tests_passing"}],
+        design.apply(project, [{"op": "unexpect", "part": "stock", "key": "acceptance_tests_passing"}],
                      {"author": "supervisor", "source": "supervisor", "reason": WHY})
 
 

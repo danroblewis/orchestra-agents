@@ -34,6 +34,19 @@ that provides them is never one of them.
 
 ## 1. What it is, and is not
 
+The owner's words on what the plugin is (2026-10-27), which the summary above follows:
+
+> The Agents plugin extends the Machine, it gives us an implementation of a Machine. Normally,
+> the target repo would be responsible for defining its own Machines, and the author of the
+> target repo does this by writing code and programs that publish messages and subscribe to
+> messages on the event bus. That can happen either by writing to our event bus with the
+> appropriate `source` name for the machine, or it can come implicitly by setting up an
+> orchestra-bridges thing for it. The orchestra-agents plugin provides a common resource for
+> doing this. It also provides the UI modifications.
+
+Asking for an agent on the bus is the Workflows floor's: an `offer.made` to a role a confirmed
+Universal Machine serves (section 3.1).
+
 - It knows **roles, agents, teams, sessions, transcripts, harnesses and tools**: who an agent is,
   what it is told, what it may call, which product runs it, and what it said.
 - It does **not** know tickets. A ticket is what the task system said about it in an assignment's
@@ -254,7 +267,9 @@ worker's `report_ticket` is `ready` or `blocked`, the reviewer's `report_review`
 `rejected`. **The BLOCKED rule**: a turn that ends without an outcome after its one nudge, or with
 one the offer does not list, finishes `blocked` with why. An `offer.withdrawn` naming the offer kills the turn (the transcript shows "released by the
 Workflows floor") and nothing more is said for it. When the host stops mid-turn nothing is
-finished: the floor takes the offer back when its lease runs out and offers it again.
+finished, and a claim it reads back while stopping opens no session: the item waits out the lease,
+the floor takes the offer back and offers it again, and the stopped instance counts as a silent
+holder toward the step's rounds.
 
 **Attention.** The floor's `attention.needed` (`floor.ATTENTION_NEEDED`, data `to`: the planner
 role) wakes the Coordinator (`attention.needed:coordinator` in its `wake_on`) or the Supervisor
@@ -635,9 +650,8 @@ verdict wakes, `verdicts.py`), `scratch/` (the worktree of a patch the Superviso
 Beside it, in Orchestra's state directory and not the agents' own, `integrate_system` writes a
 scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffold: its
 `machine.toml`, with a top-level `kit`, and its program and test; `integrate_kits.py` edits the
-`machine.toml`'s clearance and settings) and, on the Workflows route, the `machine.json` the
-Workflows program host runs it from (`integrate_schedule.py`); those files are the bridges' and the
-Workflows plugin's, read by them. The declarations are Orchestra's declared layer
+`machine.toml`'s clearance and settings, and reads each change back with the bridges' own reader,
+`orchestra_bridges.kits.machinefile.read`); those files are the bridges', read by them. The declarations are Orchestra's declared layer
 (`orchestra.sd.intended`), reached only through `intended_api.py` and written only through its
 host's endpoint (`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with
 the host down a design call is refused. The Supervisor's agent state also keeps the turn its tools
@@ -833,18 +847,15 @@ does not wait to see them act (except `restart_machine`, which watches the launc
 `prompts/design.md`; Orchestra's `machine-design.md`). The owner talks; the Supervisor declares,
 measures, drafts and refines; the declared layer is reached only through `intended_api.layer`:
 Orchestra's (`orchestra.sd.intended`, through its host's `POST /intended`, `GET /intended`, `GET
-/intended/design`; the dependency is an Orchestra with it, and there is no other). **An answer names a page only where the installed Orchestra has
-the page that draws the layer** (`intended_api.pages`: its Machines page's `intended-machines.js`
-and its Dynamics page's `intended-dynamics.js` in its packaged assets, or a `draws` field in `GET
-/intended/design` if Orchestra ever has one): `design.page_line` names the Machines page for a
-machine and the Dynamics page for a stock, effect or flow; with no such page (an Orchestra without
-them) it adds nothing, `kept_in` alone says where it is kept, and the Supervisor
-summarises from `read_design`. A draft edit's keys and names are Orchestra's own (`keys.Keys`,
+/intended/design`; the dependency is an Orchestra with it, and there is no other: with `orchestra
+run` down, every design call is refused and nothing is written anywhere else). Each answer names
+the page that draws what it recorded, the Machines page for a machine and the Dynamics page for a
+stock, effect or flow, and `kept_in` says where it is kept. A draft edit's keys and names are Orchestra's own (`keys.Keys`,
 `names.resolve`), so the plugin resolves an edit as Orchestra does: a stock no series measures is
-keyed by the level its counters imply, and a discovered id is never accepted for a key. Every
-Orchestra name the tools read that Orchestra does not document yet (the draft flag on a collector,
-discovery's minimum era, an era's cause, the keys and names, the option's fields) is read in `intended_api.py` alone, each with what to do
-when it is absent. A tool call has one deadline (`intended_api.one_call`): after an endpoint
+keyed by the level its counters imply, and a discovered id is never accepted for a key. The core
+names the tools import (the intended model's ops, names, keys and checks; the model's store, eras
+and discovery's minimum era) are those Orchestra's `PLUGINS.md` §11 lists for a plugin, imported in
+`intended_api.py` alone. A tool call has one deadline (`intended_api.one_call`): after an endpoint
 timeout the rest of the call fails at once, saying what it applied, and `GET /intended/design` is
 read once per call until a write; the host skips its design tick for five minutes after a timeout,
 so wake-ups keep running.
@@ -886,9 +897,8 @@ value), `add_instrument` (runs only what its option proposed; refused for `exist
 repository or the overlay (or a draft) already has, so expiry never touches the owner's
 instrument; a script of at most 100 lines tried as Orchestra runs it, written to `instruments/`, its
 `[[collect]]`/`[[scrape]]` entry in the overlay, one act, with Orchestra's `draft = true` and
-`expires` when its collector spec has them; without them it records as an ordinary instrument that
-discovery reads at once, so it is not removed on a timer (it is kept pending the owner's word) and
-the answer says so; `simulated = true` and never `draft` for a placeholder, so discovery reads it
+`expires`; a `[[scrape]]` reads only its option's URL, so a script given with one is refused and
+nothing is written; `simulated = true` and never `draft` for a placeholder, so discovery reads it
 like any other, removed at its expiry unless kept and once a real option records; if the option's
 record cannot be written after the entry is, the answer says the instrument records and what is
 missing; `where = repo` tries it the same way and hands a
@@ -947,7 +957,11 @@ settings is refused). A poller's system is declared as a machine managed elsewhe
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
 Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
-plans nothing. Without the kits nothing is written, and the answer says so and names
+plans nothing (state `test failed`: code, for the Coordinator). A test that could not run because
+pytest is not in Orchestra's Python declares and plans nothing either, but is no failure (state
+`test not run`): the answer gives the reinstall with the `dev` extra, and the same call again
+begins it afresh; `approve_integration` refuses both. If a step after the declaration fails, the
+error names the changes that stayed in the declared layer. Without the kits nothing is written, and the answer says so and names
 INTEGRATING.md's routes (the bridges plugin installed, or the one-file poller of its §5.2, which is
 code and goes to the Coordinator). `source` and `bridge` write nothing either: the `[[sources]]`
 entry or the `[bridges.<system>]` section is planned. The answer carries `ask_owner`: the owner's
@@ -958,15 +972,14 @@ approval and the NAME of the environment variable for the token, put to them in 
 there; it writes `clearance = "approved"`, `data_class` and `token_env` into `machine.toml` (the
 scaffolded test reads the variable's name and the scope from there, so it is not run again), then
 the plan to the owner's overlay through
-`config_change`: a `[[machines]]` entry with `restart = "always"` (or, with the Workflows plugin
-installed, `workflows.every.<name>` and the `machine.json` it runs the program from) and a
-`[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
+`config_change`: a `[[machines]]` entry with `restart = "always"` (a process Orchestra's launcher
+keeps, never an announced machine: the poller only relays, Orchestra's rule 2; INTEGRATING.md §5.5's
+Workflows route is not taken for that reason) and a `[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
 bridge's section (with `token_env`, for the Jira and Slack readers), each announced
 (`instruments.changed` or `config.changed`). **The entries are written at the approval** (a
 deviation from the task's wording, which schedules at `integrate_system`): an uncleared poller run
 for good only waits, re-reading `machine.toml`, but its `[[collect]]` measurement would fail every
-round until the approval. The `machine.json` the Workflows floor runs it from maps exit 0 to
-`landed`, 1 to `error` and 2 (the kits' runner refusing) to `blocked`. Each
+round until the approval. Each
 integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,
 `integrations`, in `runtime.json`.
 

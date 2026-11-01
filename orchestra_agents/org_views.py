@@ -46,7 +46,8 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
             "team_exists": ag.team is None or ag.team in teams,   # an agent may be created before its team (the guide's order)
             "resident": ag.resident, "paused": bool(st.get("paused")), "deleted": bool(st.get("deleted")),
             "crash_loop": st.get("crash_loop") if st.get("paused") else None,
-            "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"), "next_review_at": st.get("next_review_at"),
+            "last_woken": st.get("last_woken"), "last_turn": st.get("last_turn"), "next_scheduled_at": st.get("next_scheduled_at"),
+            "next_review_at": st.get("next_review_at"),
             "every_seconds": parse_interval(ag.every) if ag.every else None}
 
 
@@ -119,7 +120,8 @@ def agents_status(project: Project, store: AgentStore) -> dict:
         last = None if a.resident or a.builtin else next(iter(agent_runs(store, a)), None)
         agents.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team,
                        "session_id": a.session_id, "resident": a.resident, "paused": bool(st.get("paused")),
-                       "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"),
+                       "last_woken": st.get("last_woken"), "last_turn": st.get("last_turn"),
+                       "next_scheduled_at": st.get("next_scheduled_at"),
                        "engaged": a.kind, "every": a.every, "at": a.at, "tz": a.tz, "roles": list(a.roles), "builtin": a.builtin,
                        "last_run": {"at": last.get("settled_at") or last.get("started_at"), "status": last.get("status"),
                                     "said": (last.get("last_text") or "")[-160:]} if last else None})

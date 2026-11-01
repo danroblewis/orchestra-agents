@@ -31,7 +31,7 @@ def notes(project, store):
 def improver(project, store, **over):
     say(store, TURN3, 3)
     args = {"name": "Notes Improver", "kind": "universal", "description": "Raises how many notes files land a day",
-            "mode": "scheduled", "at": "00:00", "receives": ["gate.landed"], "spec": SPEC, "quote": TURN3, "reason": WHY}
+            "mode": "scheduled", "at": "00:00", "receives": ["gate.landed"], **SPEC, "quote": TURN3, "reason": WHY}
     return call(project, store, "declare_machine", **{**args, **over})
 
 

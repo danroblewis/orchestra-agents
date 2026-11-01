@@ -43,6 +43,7 @@ packages = ["orchestra_agents"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/e2e"]
+markers = ["real_harness: a unit test that reads a real harness's model or price and opens no session (conftest's guard lets it)"]
 pythonpath = ["tests", "."]          # tests import conftest and the fakes; the demo e2e test imports demo.run
 
 [tool.ruff]

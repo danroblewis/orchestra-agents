@@ -52,10 +52,10 @@ def test_the_first_claim_after_the_offer_and_before_a_withdrawal_holds_it():
 
 
 def test_a_withdrawal_stops_the_offer_it_names():
-    assert floor.stops(ev("offer.withdrawn", "dispatch"), "I1.work.aa", "worker/1")
-    assert floor.stops(ev("offer.withdrawn", "worker", instance="worker/1"), "I1.work.aa", "worker/1")
-    assert not floor.stops(ev("offer.withdrawn", "worker", offer=None, instance="worker/1"), "I1.work.aa", "worker/1")
-    assert not floor.stops(ev("offer.withdrawn", "dispatch", offer="I2.work.bb"), "I1.work.aa", "worker/1")
+    assert floor.stops(ev("offer.withdrawn", "dispatch"), "I1.work.aa")
+    assert floor.stops(ev("offer.withdrawn", "worker", instance="worker/1"), "I1.work.aa")
+    assert not floor.stops(ev("offer.withdrawn", "worker", offer=None, instance="worker/1"), "I1.work.aa")
+    assert not floor.stops(ev("offer.withdrawn", "dispatch", offer="I2.work.bb"), "I1.work.aa")
 
 
 def test_the_workspace_is_the_handed_worktree():
@@ -159,7 +159,7 @@ def test_the_copied_names_match_the_workflows_contract():
         flat = [{"type": e["type"], "source": e["source"], **e["data"]} for e in envelopes]
         assert floor.winner(flat, oid) == contract.winner(envelopes, oid), (to, seq)
     for t, d in STOPS:                                                    # the withdrawal rule, read both ways
-        assert floor.stops({"type": t, **d}, oid, "worker/1") == contract.stops({"type": t, "data": d}, oid, "worker/1"), d
+        assert floor.stops({"type": t, **d}, oid) == contract.stops({"type": t, "data": d}, oid, "worker/1"), d
 
 
 def a_host(project, harness):
@@ -186,10 +186,29 @@ def test_a_turn_with_no_outcome_finishes_blocked_and_rework_for_another_machine_
     assert not floor_.of(other, "offer.claimed") and host._slots == {}
 
 
-def test_the_floor_s_attention_wakes_the_planner_it_names(project):
-    from orchestra_agents.host import AgentHost
-    store = AgentStore(project)
-    host = AgentHost(project, store, store.events)
+def test_a_claim_read_back_while_the_host_stops_opens_no_session_and_finishes_nothing(project, monkeypatch):
+    from conftest import FakeHarness
+    from floor_helpers import ScriptedFloor
+    monkeypatch.delenv("ORCHESTRA_SOURCE", raising=False)
+    host, floor_ = a_host(project, FakeHarness(reply="done")), ScriptedFloor(project)
+    after = host.floor.events.after
+
+    def stopping(start):                                  # the host is told to stop while it reads its claim back
+        host.stop.set()
+        return after(start)
+    monkeypatch.setattr(host.floor.events, "after", stopping)
+    oid = floor_.offer("worker", "I9", "Do it.")
+    host.floor.tick()
+    host.floor.threads[oid].join(20)
+    assert floor_.of(oid, "offer.claimed") and not floor_.of(oid, "offer.finished")   # the lease takes it back
+    assert host.harness.sessions == [] and host._slots == {}
+
+
+def test_the_floor_s_attention_wakes_the_planner_it_names(project, request):
+    from conftest import FakeHarness
+    host = a_host(project, FakeHarness())
+    store = host.store
+    request.addfinalizer(host.residents.close_all)
     host._refresh_org(store.runtime()["agent_state"])
     host._wake_at = store.events.end()
     store.events.publish(floor.ATTENTION_NEEDED, {"to": "coordinator", "reason": "review passed its within",

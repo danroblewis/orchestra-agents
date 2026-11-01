@@ -149,9 +149,10 @@ def make_project(target: Path, dummy: bool = False, tools_via: str | None = None
     subprocess.run([*git, "init", "-q", "-b", "main"], cwd=target, check=True)
     subprocess.run([*git, "add", "-A"], cwd=target, check=True)
     subprocess.run([*git, "commit", "-q", "-m", "the agents' demo"], cwd=target, check=True)
-    state = load_orchestra_project(target).state_dir
-    if state.exists():
-        shutil.rmtree(state)
+    state = load_orchestra_project(target).state_dir       # registering the project creates it, with project.json
+    left = any(p.is_file() and p.name != "project.json" for p in state.rglob("*"))
+    shutil.rmtree(state)
+    if left:
         print(f"removed the state a previous run left in {state}", flush=True)
     return target
 

@@ -39,7 +39,7 @@ def improver(project, store, **over):
     args = {"name": "Feature Count Improver", "kind": "universal", "description": "Improves how many features get delivered per day",
             "tags": ["features", "feedback loop"], "mode": "scheduled", "at": "09:00", "tz": "America/Los_Angeles", "missed": "skip",
             "receives": ["session.settled", "task.reported"], "emits": ["work.improvement_proposed"],
-            "reads": ["features", "acceptance_tests_passing"], "spec": SPEC,
+            "reads": ["features", "acceptance_tests_passing"], **SPEC,
             "guesses": ["engagement", "receives[0]", "receives[1]"],
             "quote": "Create a new Universal Machine called Feature Count Improver.", "reason": WHY}
     return call(project, store, "declare_machine", **{**args, **over})
@@ -53,7 +53,7 @@ def test_a_title_becomes_a_valid_name_and_every_field_is_recorded_with_its_guess
     assert m["engagement"] == {"mode": "scheduled", "at": "09:00", "tz": "America/Los_Angeles", "missed": "skip"}
     assert m["receives"] == ["session.settled", "task.reported"] and m["emits"] == ["work.improvement_proposed"]
     assert m["spec"] == SPEC and m["guessed"] == ["engagement", "receives[0]", "receives[1]"]
-    assert any("about 1 turn a day on the pi harness" in line and "it never runs" in line for line in out["said"])  # the cost
+    assert any("about 1 turn a day on the dummy harness" in line and "it never runs" in line for line in out["said"])  # the cost
     assert any("no listener yet for work.improvement_proposed" in line for line in out["said"])
 
 
@@ -69,11 +69,11 @@ def test_the_draft_is_in_the_format_a_machine_spec_is_read_in(project, store):
 
 def test_a_universal_declaration_says_nothing_in_ai_terms(project, store):
     with pytest.raises(StoreError, match="not described in AI terms.*haiku"):
-        improver(project, store, spec={**SPEC, "steps": ["Ask haiku to think"]})
+        improver(project, store, steps=["Ask haiku to think"])
     with pytest.raises(StoreError, match="AI terms.*create_ticket"):
         improver(project, store, description="Calls create_ticket every day")
     with pytest.raises(StoreError, match="spec has invariants, steps, uses; not command"):
-        improver(project, store, spec={**SPEC, "command": "python x.py"})
+        improver(project, store, command="python x.py")
     assert layer(project)["machines"] == {}
 
 
@@ -81,20 +81,20 @@ def test_programmatic_fields_follow_the_mode_and_an_external_one_has_its_source(
     say(store, "a nightly Jenkins job", 1)
     call(project, store, "declare_machine", name="nightly_build", kind="programmatic", description="Builds main every night",
          managed="external", mode="scheduled", at="02:00", emits=["build.finished"],
-         spec={"trigger": "https://jenkins.example/job/nightly/build", "exit": "0 when green", "source": "bot.jenkins"},
+         trigger="https://jenkins.example/job/nightly/build", exit="0 when green", source="bot.jenkins",
          reason=WHY)
     call(project, store, "declare_machine", name="task_feed", kind="programmatic", description="Serves tasks",
-         mode="continuous", spec={"command": "python feed.py", "protocol": "http", "receive": "a poll: getTasks() every 10 s"},
+         mode="continuous", command="python feed.py", protocol="http", receive="a poll: getTasks() every 10 s",
          reason=WHY)
     L = layer(project)["machines"]
     assert L["nightly_build"]["managed"] == "external" and L["nightly_build"]["spec"]["source"] == "bot.jenkins"
     assert L["task_feed"]["spec"]["protocol"] == "http" and L["task_feed"]["state"] == "proposed"
     with pytest.raises(StoreError, match="protocol is one of"):
         call(project, store, "declare_machine", name="bad_feed", kind="programmatic", description="x",
-             mode="continuous", spec={"protocol": "soap"}, reason=WHY)
+             mode="continuous", protocol="soap", reason=WHY)
     with pytest.raises(StoreError, match="trigger.*external"):
         call(project, store, "declare_machine", name="bad_job", kind="programmatic", description="x",
-             mode="ad hoc", spec={"trigger": "https://x"}, reason=WHY)
+             mode="ad hoc", trigger="https://x", reason=WHY)
     with pytest.raises(StoreError, match="bus source"):
         call(project, store, "declare_machine", name="!!!", title="!!!", kind="programmatic", description="x", reason=WHY)
 
@@ -244,6 +244,19 @@ def test_loose_ends_include_a_target_with_no_series(project, store):
     assert "absent:tests_passing" in keys
 
 
+def test_a_round_whose_model_cannot_be_read_says_it_skipped_the_absent_check(project, store, monkeypatch):
+    say(store, "Features", 1)
+    call(project, store, "declare_stock", name="Features", reason=WHY)
+
+    def unreadable(project):
+        raise OSError("the model store is locked")
+    monkeypatch.setattr(design_passes, "_absent", unreadable)
+    got = design_passes.run(project, store, [])
+    assert got["skipped"] == {"absent": "the saved model versions could not be read (OSError: the model store is locked)"}
+    assert "Not checked this round: absent (the saved model versions could not be read" in design_passes.reason(got, "x")
+    assert call(project, store, "read_design")["refinement"]["skipped"] == got["skipped"]     # what read_design shows
+
+
 def test_an_expected_flow_and_a_labelled_stock_that_are_present_are_no_loose_end(project, store):
     for _ in range(3):
         model_with(project, {"a": ("tests_passing", {"suite": "e2e", "instrument": "x"}), "b": ("tests_run", {})},
@@ -272,8 +285,8 @@ def test_refine_machine_edits_the_lists_and_only_text_fields_by_set_field(projec
 
 
 def test_the_improvers_role_has_the_tools_its_uses_need_and_reads_its_events_each_run(project, store):
-    out = improver(project, store, spec={**SPEC, "uses": ["the ticket queue, read only", "the model"],
-                                         "steps": ["1. Read gate.landed", "2) Publish work.improvement_proposed"]})
+    out = improver(project, store, uses=["the ticket queue, read only", "the model"],
+                   steps=["1. Read gate.landed", "2) Publish work.improvement_proposed"])
     files = state_machines.files(layer(project)["machines"]["feature_count_improver"])
     import json
     role = json.loads(files["role.json"])
@@ -288,7 +301,7 @@ def test_the_improvers_role_has_the_tools_its_uses_need_and_reads_its_events_eac
     from orchestra_agents.org import AgentDef
     assert {"session.settled", "task.reported"} <= set(listens_for(AgentDef.from_dict(agent), "tasks"))
     assert not any("could act on nothing" in line for line in out["said"])
-    out = improver(project, store, name="other_one", spec={**SPEC, "uses": ["the coffee machine"]})
+    out = improver(project, store, name="other_one", uses=["the coffee machine"])
     assert any("could act on nothing for 'the coffee machine'" in line for line in out["said"])
 
 

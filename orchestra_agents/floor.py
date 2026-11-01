@@ -1,8 +1,7 @@
 """The Workflows floor's names, its claim rule and its withdrawal rule, and how an agent's exit tool
-maps to an offer's outcome. The names and rules are copied by hand from orchestra-workflows'
-``orchestra_workflows/contract.py`` (nothing is imported from it; tests/unit/test_floor.py checks
-the copy, name by name and on a shared table of event sequences). The contract is described once,
-in SPEC §3.1, which points at orchestra-workflows' ``docs/machine-contract.md``."""
+maps to an offer's outcome. The source is orchestra-workflows' ``docs/machine-contract.md``, copied
+here by hand (nothing is imported from that plugin); tests/unit/test_floor.py checks the copy
+against the plugin's ``contract.py``, name by name and on a shared table of event sequences."""
 
 from __future__ import annotations
 
@@ -37,8 +36,8 @@ def winner(evs: list[dict], offer: str) -> str | None:
     return None
 
 
-def stops(ev: dict, offer: str, instance: str) -> bool:
-    """An ``offer.withdrawn`` that names this offer (every sender names it; ``instance`` says nothing more)."""
+def stops(ev: dict, offer: str) -> bool:
+    """An ``offer.withdrawn`` that names this offer (every sender names it; its ``instance`` says nothing more)."""
     return ev.get("type") == WITHDRAWN and ev.get("offer") == offer
 
 

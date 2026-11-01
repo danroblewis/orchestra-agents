@@ -49,10 +49,23 @@ def plugin(orchestra_project) -> Plugin:
     """The plugin for the repository Orchestra serves (its entry point, in pyproject.toml)."""
     project = Project.of(orchestra_project)
     project.ensure_dirs()
-    return Plugin("agents", [Page("/agents", "Agents", STATIC / "agents.html")], STATIC, router(project),
+    return Plugin("agents", pages=[Page("/agents", "Agents", STATIC / "agents.html")], static=STATIC, router=router(project),
                   scripts=["attention.js", "machine-cards.js", "ticket-sessions.js"], stylesheets=["agents.css"],
                   machines=declared(project), processes=processes(project), collectors=collectors(project),
                   guide=GUIDE, check=check)
+
+
+def supervisor_model(project: Project) -> str | None:
+    """The model the Supervisor runs on, as the host chooses it (``host.model_of``): its spec's when
+    the harness takes that name, else ``[agents] model``."""
+    from .harness import get_harness
+    from .machine_spec import load
+    try:
+        spec = load(project, "supervisor")
+    except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
+        spec = None
+    wanted = spec.model if spec is not None else None
+    return (get_harness(project.config.harness).model_for(wanted) if wanted else None) or project.config.model
 
 
 GUIDE = Path(__file__).with_name("guide.md")     # how to configure the agents, for the Supervisor (orchestra.guides)
@@ -143,6 +156,7 @@ def router(project) -> APIRouter:
         cfg = project.config
         return {"ok": True, "now": time.time(), "serves": cfg.serves, "event_help": EVENT_HELP,
                 "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note,
+                "supervisor_model": supervisor_model(project),
                 "roles": read_org(project, store, "list_roles", {})["roles"],
                 "agents": read_org(project, store, "list_agents", {})["agents"],
                 "teams": read_org(project, store, "list_teams", {})["teams"]}

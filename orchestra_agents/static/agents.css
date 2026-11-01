@@ -21,6 +21,8 @@ details.started { margin:10px 0 } details.started summary { cursor:pointer; font
 .chip .dot { width:7px; height:7px; border-radius:50%; background:#5b6473; margin:0 }
 .chip.working { color:#bfdbfe; border-color:#1d4ed8 } .chip.working .dot { background:#3b82f6; animation:pulse 1.4s infinite }
 .chip.resident { color:#bbf7d0; border-color:#166534 } .chip.resident .dot { background:#22c55e }
+.chip .chip-tag { font-weight:500; font-size:10px; opacity:.75; border-left:1px solid currentColor; padding-left:6px }
+details.fold { display:inline } details.fold summary { display:inline; cursor:pointer; text-decoration:underline dotted }
 .chip.down { color:#fecaca; border-color:#7f1d1d } .chip.down .dot { background:#ef4444 }
 @keyframes pulse { 50% { opacity:.3 } }
 .awork { background:var(--panel2); border:1px solid var(--border); border-left:4px solid var(--c); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer }

@@ -13,7 +13,7 @@ pytest_plugins = ["design_fixtures"]
 def machine(project, store):
     say(store, "a Postgres cluster the team runs", 1)
     call(project, store, "declare_machine", name="postgres", kind="programmatic", description="The team's Postgres cluster",
-         managed="external", mode="continuous", spec={"source": "bot.postgres"}, reason=WHY)
+         managed="external", mode="continuous", source="bot.postgres", reason=WHY)
 
 
 def test_an_instruments_series_are_proposed_as_measuring_a_declared_machine_and_revised(project, store):

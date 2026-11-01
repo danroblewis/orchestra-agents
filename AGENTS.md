@@ -40,7 +40,7 @@ broken without updating the spec and saying so in the commit.
    is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
    W7; that plugin's SPEC §10) import its validated writer, loader and record API; and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
-   templates and settings).
+   templates and settings, and its `machine.toml` reader).
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
@@ -67,7 +67,9 @@ broken without updating the spec and saying so in the commit.
    `CLAUDE_BINARY` so a test can stand a fake in; and in the three opt-in live tests under
    `tests/live/`, outside the default test paths, each skipped unless its variable is set:
    `test_design_live.py` (`ORCHESTRA_LIVE_DESIGN=1`), `test_integrate_live.py` and
-   `test_modeling_live.py` (`ORCHESTRA_LIVE_HAIKU=1`), on Haiku only. The dummy harness is the exception: it is a
+   `test_modeling_live.py` (`ORCHESTRA_LIVE_HAIKU=1`), on Haiku only. The design test's free
+   rehearsal on the fake Claude (`ORCHESTRA_LIVE_DESIGN=rehearse`) also runs in the default paths,
+   as `tests/e2e/test_design_rehearsal_e2e.py`. The dummy harness is the exception: it is a
    product feature with no product behind it, so it has no fake; the e2e tests run on it as it
    ships, with a script for each fake's knob. The Supervisor runs on its machine spec's model,
 Sonnet by default (D20), where the harness takes the name; the other agents on `[agents] model`. A test of anything around the agents (another goal's

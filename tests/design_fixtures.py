@@ -41,7 +41,6 @@ def core_endpoint(project):
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    intended_api._cache.clear()
     monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
     monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
@@ -65,6 +64,25 @@ def store(project):
     s.set_agent_state("supervisor", metrics_listed={"at": 1.0, "session": None})
     return s
 
+
+
+@pytest.fixture
+def make_host(project):
+    """``make_host(store)``: an agent host on conftest's fake harness (its residents' sessions are
+    fakes in this process), every one closed at teardown."""
+    from conftest import FakeHarness
+
+    from orchestra_agents.host import AgentHost
+    built = []
+
+    def make(store):
+        host = AgentHost(project, store, store.events)
+        host.harness = FakeHarness()
+        built.append(host)
+        return host
+    yield make
+    for host in built:
+        host.residents.close_all()
 
 
 def say(store, message: str, n: int = 1) -> None:

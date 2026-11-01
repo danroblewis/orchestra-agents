@@ -223,10 +223,11 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
 
 PLANNERS = set(PLANNER_ROLES)
+# they read the setup (observe.py, restart.py)
 SYSTEM_COMMANDS = frozenset({"restart_machine", "check_setup", "read_config", "list_processes", "read_machine_log",
                              "list_metrics", "get_model", "read_instrument", "try_collector", *source_tools.COMMANDS,
                              *balance_tools.COMMANDS})
-PLANNING = frozenset({"create_ticket", "create_milestone", "update_milestone", "close_milestone"})   # the Coordinator's          # they read the setup (observe.py, restart.py)
+PLANNING = frozenset({"create_ticket", "create_milestone", "update_milestone", "close_milestone"})   # the Coordinator's
 
 
 def may_change_tickets(project: Project, role: str, command: str = "") -> bool:

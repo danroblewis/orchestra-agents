@@ -23,6 +23,7 @@ task system's instrument."""
 
 import math
 import os
+import re
 import stat
 import subprocess
 import time
@@ -196,7 +197,9 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     lines = chat(web, "What is going on?")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error")
     assert any(ln["type"] == "tool_start" and ln.get("name") == "project_status" for ln in lines)
-    assert any(ln["type"] == "assistant_end" and ln["text"].startswith("I read the project's status") for ln in lines)
+    said = [ln["text"] for ln in lines if ln["type"] == "assistant_end"]
+    assert any(re.search(r": 4 of its 4 tickets are done\. I am the demo's scripted Supervisor", t) for t in said), said
+    assert not any("(above)" in t or t.lstrip().startswith("{") for t in said), said
 
     # no model ran, and nothing tried the network; the guard was in the agents' own processes
     assert not (logs / "products.log").exists(), (logs / "products.log").read_text()

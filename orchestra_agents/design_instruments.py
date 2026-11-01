@@ -25,9 +25,7 @@ recording only on the chosen option); ``keep_instrument`` takes ``draft`` and ``
 entry, records it kept, and marks the option chosen again (retried on the host's tick if that write
 fails, ``retry_chosen``);
 ``expire`` (the host's tick) keeps one the owner's expect mark backs and removes an unkept one's
-entry and script. The points it wrote stay in the store. An Orchestra without the flag records it
-as an ordinary instrument, which discovery reads at once, so it is not removed on a timer (that
-would take a stock out of the model): it is kept pending the owner's word. A simulated
+entry and script. The points it wrote stay in the store. A simulated
 instrument's entry carries ``simulated = true`` and never ``draft``, so discovery reads it like any
 other; it is still removed at its expiry unless kept, and once a real option of the same element
 records, the simulated one is removed. Discarding a declared element removes its unkept drafts and
@@ -48,7 +46,7 @@ from orchestra.overlay import OVERLAY
 from . import handoff, instruments, intended_api
 from .config import Project
 from .config_change import change
-from .design import MACHINE, OWNER, answer, apply, page_line
+from .design import MACHINE, OWNER, answer, apply
 from .design_clearance import NEEDS_APPROVAL, UNTIL, company_named, far
 from .design_dynamics import no_secret, options_of, resolve
 from .secret_shapes import secret_in
@@ -104,7 +102,7 @@ def _set_option(project: Project, store: AgentStore, part: str, eid: str, key: s
             o.update(fields)
     was = m.get("chosen")
     now = key if chosen else (None if chosen is False and was == key else was)
-    return apply(project, store, [{"op": "record_measurement", "part": part, "id": eid, "options": m["options"], "chosen": now}],
+    return apply(project, [{"op": "record_measurement", "part": part, "id": eid, "options": m["options"], "chosen": now}],
                  prov)
 
 
@@ -138,7 +136,7 @@ def _first_points(project: Project, name: str) -> list:
     return [[round(t, 1), v] for t, v in pts[:5]]
 
 
-def _what_runs(project: Project, store: AgentStore, part: str, eid: str, key: str, option: dict, a: dict) -> tuple[str, str, str, str]:
+def _what_runs(project: Project, key: str, option: dict, a: dict) -> tuple[str, str, str, str]:
     """(kind, script, command, url) for the option: only what it proposed; refused otherwise."""
     if option.get("kind") == "existing_series":
         raise StoreError(f"option {key} is a series already recorded: nothing is added for it (discovery relates it on its own)")
@@ -153,6 +151,9 @@ def _what_runs(project: Project, store: AgentStore, part: str, eid: str, key: st
                              f"proposed, not {given!r} (propose_measurements again to change it)")
     url, command = mine.get("url") or "", mine.get("command") or ""
     kind = "scrape" if url else "collect"
+    if kind == "scrape" and script.strip():
+        raise StoreError(f"option {key} proposed the URL {url}: a [[scrape]] reads only that URL, so it takes no script; "
+                         "nothing was written (leave script out, or propose_measurements for a script)")
     if kind == "collect" and bool(script.strip()) == bool(command):
         raise StoreError("a [[collect]] instrument takes a script (written to the state directory) or the command its option "
                          "proposed, not both")
@@ -193,7 +194,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         raise StoreError(f"every: {e}") from None
     if taken := _taken(project, store, name):
         raise StoreError(f"{taken} already has the name {name}: choose another name; nothing was run or written")
-    kind, script, command, url = _what_runs(project, store, part, eid, key, option, a)
+    kind, script, command, url = _what_runs(project, key, option, a)
     path = None
     if script:
         trial = project.state_dir / "trials" / f"{name}.sh"
@@ -221,7 +222,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     if simulated:
         entry["simulated"] = True
     flagged = not simulated                                 # a simulated series is read like any other (§2.2)
-    until = now + project.config.draft_expiry_s if flagged or simulated else None
+    until = now + project.config.draft_expiry_s
     if flagged:
         entry.update(draft=True, expires=datetime.fromtimestamp(until, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
     try:
@@ -249,14 +250,13 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     where = f"written by the Supervisor · {path}" if path else f"the command {command or url}"
     hours = round(project.config.draft_expiry_s / 3600)
     lines: list[str | None] = [
-        (f"instrument {name} records {eid} (option {key}) every {every}; " + (
-            f"the Supervisor removes it in {hours} h unless the owner keeps it (keep_instrument)" if until else
-            "it stays until the owner keeps it (keep_instrument) or says to remove it"))]
+        (f"instrument {name} records {eid} (option {key}) every {every}; the Supervisor removes it in {hours} h unless "
+         "the owner keeps it (keep_instrument)")]
     try:
         # chosen at once: the Dynamics page draws a draft as recording only on the chosen option (the keep keeps it chosen)
         result = _set_option(project, store, part, eid, key, prov, chosen=True, instrument=name, first_points=first,
                              provenance=f"{where} · entry in the owner's overlay · recording · "
-                                        + ("draft until kept" if flagged else "simulated" if simulated else "pending the owner's word"))
+                                        + ("draft until kept" if flagged else "simulated"))
     except StoreError as e:                          # the instrument records: say so, and what is missing
         result = {"changes": []}
         lines.append(f"its option {key} was not updated in the declared layer ({unapplied(e)}): read_design shows the "
@@ -266,8 +266,8 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
               f"script: {path}" if path else f"{'url' if url else 'command'}: {url or command}",
               ("first points: " + ", ".join(f"{v:g} at {_when(t)}" for t, v in first[-3:]) if first else "no point yet: "
                + ("its first round has not ended" if waited else "no `orchestra run` runs this project now")),
-              page_line(project, "the Dynamics page shows it in the element's drawer: recording · draft, the sparkline, the "
-                                 "script and its entry")]
+              ("the Dynamics page shows it in the element's drawer: recording · draft, the sparkline, the "
+               "script and its entry")]
     if replaced:
         lines.append(f"removed the simulated placeholder{'' if len(replaced) == 1 else 's'} {', '.join(replaced)}")
     return answer(project, result, lines, instrument=name, script=str(path) if path else None, first_points=first,
@@ -376,7 +376,7 @@ def keep_instrument(project: Project, store: AgentStore, a: dict, prov: dict) ->
     eid = rec["element"].partition(":")[2]
     if again := rewrite_readers(project, store, eid):
         said.append(f"the records of {', '.join(again)}, which read {eid}, are written again with its series")
-    return answer(project, done, [*said, page_line(project, "the Dynamics page shows the option \"chosen\"")], instrument=name)
+    return answer(project, done, [*said, "the Dynamics page shows the option \"chosen\""], instrument=name)
 
 
 def retry_chosen(project: Project, store: AgentStore) -> list[str]:

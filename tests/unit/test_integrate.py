@@ -13,16 +13,13 @@ from orchestra_agents.store import StoreError
 
 pytest_plugins = ["design_fixtures"]
 
+REAL_RUN_TEST = integrate_kits.run_test                    # before the autouse fixture stands a passing one in
 ASK = "Connect our Jira so I can see issue transitions and open counts, project OPS at https://jira.acme.test"
 YES = "Yes, you may read Jira, metadata only, with a read-only token in JIRA_TOKEN"
 
 
 @pytest.fixture(autouse=True)
 def passing(monkeypatch):
-    # whether the Workflows plugin is importable is pinned, never read from the environment: without
-    # it a poller is a [[machines]] entry; test_with_the_workflows_plugin_it_is_the_floors_every_item
-    # sets it present and expects the floor's every item
-    monkeypatch.setattr(integrate_kits, "workflows_installed", lambda: False)
     monkeypatch.setattr(integrate_kits, "run_test", lambda target, name, **_: {
         "ran": True, "passed": True, "summary": "3 passed in 0.5s", "command": f"python -m pytest {target}/test_{name}.py -q"})
 
@@ -142,6 +139,29 @@ def test_a_failed_test_declares_and_plans_nothing(project, store, monkeypatch):
              quote="Yes, you may read Jira", reason=WHY)
 
 
+def test_without_pytest_the_test_is_not_run_and_that_is_no_failure(project, store, monkeypatch):
+    import importlib.util
+    monkeypatch.setattr(integrate_kits, "run_test", REAL_RUN_TEST)
+    find = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: None if n == "pytest" else find(n, *a))
+    got = connect(project, store)
+    assert got["integrated"] is False and got["test"]["ran"] is False
+    assert design_integrate.integrations(store)["jira_poller"]["state"] == "test not run"
+    said = " ".join(got["said"])
+    assert "the test is not failing, it could not run. pytest is not installed in Orchestra's Python" in said
+    assert "uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main'" in said
+    assert "hand_to_coordinator" not in said and "jira" not in layer(project)["machines"]
+    say(store, YES, 2)
+    with pytest.raises(StoreError, match="test not run: only an integration whose test passed is approved"):
+        call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN", base_url="https://jira.acme.test",
+             settings={"jql": "project = OPS"}, quote="Yes, you may read Jira", reason=WHY)
+    monkeypatch.setattr(importlib.util, "find_spec", find)                     # pytest installed: the same call again
+    monkeypatch.setattr(integrate_kits, "run_test", lambda target, name, **_: {
+        "ran": True, "passed": True, "summary": "3 passed", "command": "pytest"})
+    got = connect(project, store)
+    assert got["integration"] == "jira_poller" and design_integrate.integrations(store)["jira_poller"]["state"] == "needs approval"
+
+
 def test_a_prometheus_store_is_a_source_written_only_on_approval(project, store):
     say(store, "Connect Chronosphere so I can see request rates by service")
     got = call(project, store, "integrate_system", system="chronosphere", wants="request rates by service",
@@ -158,20 +178,30 @@ def test_a_prometheus_store_is_a_source_written_only_on_approval(project, store)
     assert src["url"] == "https://acme-corp.chronosphere.io/data/metrics"
 
 
-def test_with_the_workflows_plugin_it_is_the_floors_every_item(project, store, monkeypatch):
-    monkeypatch.setattr(integrate_kits, "workflows_installed", lambda: True)
+def test_a_poller_is_a_kept_process_and_never_a_machine_file(project, store):
     got = connect(project, store)
-    assert got["planned"][0].startswith("[workflows.every.jira_poller] every 5m")
+    assert got["planned"][0] == "[[machines]] jira_poller, restart always"
     say(store, YES, 2)
     call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
          quote="Yes, you may read Jira", reason=WHY)
     o = overlay(project)
-    assert o["workflows"]["every"]["jira_poller"] == {"every": "5m", "role": "jira_poller", "brief": "poll Jira once"}
-    assert "machines" not in o and o["collect"][0]["name"] == "jira_poller"
-    import json
-    body = json.loads((project.orchestra.state_dir / "machines" / "jira_poller" / "machine.json").read_text())
-    assert body["kind"] == "programmatic" and body["spec"]["command"].endswith("--once")
-    assert body["spec"]["exit"] == {"0": "landed", "1": "error", "2": "blocked"}   # 2: the kits' runner refused
+    assert [e["name"] for e in o["machines"]] == ["jira_poller"] and o["collect"][0]["name"] == "jira_poller"
+    assert "workflows" not in o
+    assert not (project.orchestra.state_dir / "machines" / "jira_poller" / "machine.json").exists()
+
+
+def test_what_fill_and_clear_write_is_read_by_the_pollers_own_reader(project, store):
+    from orchestra_bridges.kits.machinefile import read
+    connect(project, store)
+    target = project.orchestra.state_dir / "machines" / "jira_poller"
+    assert read(target / "machine.toml").extra["jql"] == "project = OPS"           # what fill wrote
+    integrate_kits.clear(target, "JIRA_TOKEN", "metadata only", "https://jira.acme.test")
+    m = read(target / "machine.toml")
+    assert (m.clearance, m.token_env, m.data_class, m.base_url) == ("approved", "JIRA_TOKEN", "metadata only", "https://jira.acme.test")
+    before = (target / "machine.toml").read_text()
+    with pytest.raises(StoreError, match="the poller's own reader refuses the change .*put back as it was"):
+        integrate_kits.fill(target, {"per_minute": "lots"}, None)
+    assert (target / "machine.toml").read_text() == before
 
 
 def test_integrating_is_the_supervisors_alone(project, store):
@@ -239,6 +269,26 @@ def test_a_failure_after_the_scaffold_leaves_nothing_behind(project, store, monk
         connect(project, store)
     assert not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
     assert "jira_poller" not in design_integrate.integrations(store)
+
+
+def test_a_failure_after_the_declaration_names_what_stayed(project, store, monkeypatch):
+    def broken(*a, **k):
+        raise StoreError("the stock was refused")
+    monkeypatch.setattr(design_integrate, "_stock", broken)
+    with pytest.raises(StoreError) as e:
+        connect(project, store)
+    said = str(e.value)
+    assert said.startswith("the stock was refused. Applied before it in this call, and kept in the declared layer: machine jira")
+    assert "heard as bot.jira" in said and "The poller jira_poller was not kept" in said
+    ids = [c["change"] for c in layer_changes(project)]
+    assert ids and all(i in said for i in ids)                                    # every change that stayed, by id
+    assert layer(project)["machines"]["jira"]["aliases"] == ["bot.jira"]
+    assert not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
+    assert "jira_poller" not in design_integrate.integrations(store)
+
+
+def layer_changes(project) -> list[dict]:
+    return [c for e in project.orchestra.intended.journal() for c in e["changes"]]
 
 
 def test_the_scope_the_template_guesses_is_asked_for(project, store):

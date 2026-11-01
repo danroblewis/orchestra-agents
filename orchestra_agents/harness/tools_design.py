@@ -74,8 +74,6 @@ SPEC_FIELDS = {
     "role": S("Programmatic, ad hoc, answering a workflow's offers: the role whose offers it answers"),
     "source": S("Managed external: the relayed actor whose events it is (bot.jira), never the bridge"),
 }
-SPEC = {"type": "object", "description": "Older form, kept for one release: the same fields nested. Give them at the top level",
-        "properties": SPEC_FIELDS}
 
 INT = {"type": "integer"}
 INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own settings, from the owner's words (only what they "
@@ -197,7 +195,7 @@ DESIGN_TOOLS: list[ToolDef] = [
                                                      "known by its events"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
              "receives": A(RECEIVES_D), "emits": A(EMITS_D),
-             "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS, "spec": SPEC,
+             "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS,
              "guesses": A("The fields you guessed, whole or one item: engagement (mode, at, tz), receives[0], ..."), "quote": QUOTE, "reason": REASON},
             ("name", "kind", "description", "reason")),
     ToolDef("refine_machine", "design",

@@ -127,3 +127,41 @@ def test_the_guides_worked_example_is_a_definition_the_plugin_accepts(tmp_path, 
     definition = json.loads(re.sub(r"\s+", " ", raw))
     from orchestra_workflows.define.check import problems
     assert problems(project.orchestra, definition) == []
+
+
+def test_explain_item_reads_the_real_record(tmp_path, monkeypatch):
+    """An item's log written by the real plugin's recorder from facts on the bus, explained by the
+    Supervisor's tool: its steps' facts, its index row's position (``at``) and the fact not counted
+    (a finish from someone who does not hold the offer)."""
+    from orchestra.events import Events as CoreEvents
+    from orchestra_workflows.run import recorder_of
+
+    from orchestra_agents import tooling
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    project = agents_project(repo)
+    define.write(project.orchestra, DEFINITION, root="state")
+    bus = CoreEvents.for_project(project.orchestra)
+
+    def fact(type_, source, **data):
+        return bus.publish(type_, data, source=source, subject="I-1")["id"]
+    fact("item.requested", "coordinator", workflow="write_review", brief="write it, then review it")
+    offer = "I-1.write.00000001"
+    fact("offer.made", "coordinator/dispatch", offer=offer, role="worker", step="write", workflow="write_review")
+    fact("offer.claimed", "worker/1", offer=offer)
+    stray = fact("offer.finished", "worker/9", offer=offer, outcome="ready")         # not the holder: not counted
+    fact("offer.finished", "worker/1", offer=offer, outcome="ready")
+    recorder_of(project.orchestra).tick()
+    store = AgentStore(project)
+    got = tooling.handle(project, store, "explain_item", {"item": "I-1"}, role="supervisor")
+    assert got["ok"] and got["item"] == "I-1" and got["summary"]["open"] is True
+    assert got["positions"]["write_review"]["step"] == "review"
+    assert [n["fact"] for n in got["not_counted"]] == [stray] and got["not_counted"][0]["workflow"] == "write_review"
+    assert [f["type"] for f in got["last_facts"]][:2] == ["item.requested", "offer.made"] and got["facts"] == 5
+    assert got["requested"]["workflow"] == "write_review"
+    last = tooling.handle(project, store, "explain_item", {"item": "I-1", "last": 2}, role="supervisor")["last_facts"]
+    assert [f["id"] for f in last] == [f["id"] for f in got["last_facts"][-2:]]           # trimmed to the newest
+    with pytest.raises(Exception, match="holds no item 'I-2'"):
+        tooling.handle(project, store, "explain_item", {"item": "I-2"}, role="supervisor")

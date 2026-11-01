@@ -164,8 +164,9 @@ day's cap it does not wake you, and nor do your duties' own events; the owner's 
 ## Designing the system
 
 The owner names what they expect; you build it with the `design` tools in the same turn, and the
-Dynamics and Machines pages draw it (each answer's `kept_in` says which page, or that none does:
-then summarise from `read_design`). Every tool takes a `reason`; a `quote` of the owner's words
+Dynamics and Machines pages draw it (each answer names the page; `kept_in` says where it is kept).
+The declarations live only in Orchestra's declared layer, written through its running host: while
+`orchestra run` is down every design call is refused and nothing is written. Every tool takes a `reason`; a `quote` of the owner's words
 this turn (three words or more, or their whole message) makes the element theirs, "added by you";
 without one it is your proposal. Nothing here is a setting the owner writes: never ask them to edit
 a file. Follow it top to bottom:
@@ -270,16 +271,25 @@ kits' settings. You do it with two `design` tools, and the owner writes nothing:
 3. **`approve_integration`** on their yes, quoted, with that name (`token_env`) and the site's
    address if it was missing. The program's `machine.toml` records the clearance, the data class
    and the variable's name (its test reads them from there), and what runs it is written to the
-   owner's overlay: a `[[machines]]` entry with `restart = "always"` (or the Workflows floor's
-   `every` item when that plugin is installed) and a `[[collect]]` entry for its series. They are
+   owner's overlay: a `[[machines]]` entry with `restart = "always"` (a process Orchestra keeps
+   running, never a machine) and a `[[collect]]` entry for its series. They are
    written at the approval, not before: an uncleared poller only waits, reading nothing, but its
    measurement would fail every round.
 
 Tell the owner what you did and what they must set (the variable, then a restart of
-`orchestra run` if it was not set when it started). If the answer says the bridges' kits are not
-installed, say so and propose the route it names: installing the bridges plugin into Orchestra's
-environment, or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
-Coordinator. A failed test is code too: hand it on with the failure.
+`orchestra run` if it was not set when it started). Two things `integrate_system` needs in
+Orchestra's own Python, and each answer says when one is missing:
+
+- **the bridges' kits not installed**: nothing was written. Propose the route the answer names:
+  the owner's coding tool reinstalls Orchestra with the `bridges` extra (the answer gives the
+  command), or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
+  Coordinator.
+- **pytest not installed** (state `test not run`): the scaffolded test could not run, which is no
+  failure: hand nothing to the Coordinator. The owner's coding tool reinstalls Orchestra with the
+  `dev` extra (the answer gives the command, naming every plugin the tool already has); then call
+  `integrate_system` again, the same way.
+
+A test that ran and failed (state `test failed`) is code: hand it on with the failure.
 
 ## Workflows
 

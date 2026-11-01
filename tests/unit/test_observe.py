@@ -202,3 +202,16 @@ def test_the_task_systems_snapshot_is_a_query_on_the_bus(project, store):
             tooling.handle(project, store, tool, args, role="coordinator")      # the Coordinator plans; the Supervisor reads
         out = see(project, store, "snapshot")
     assert out["snapshot"]["counts"] == {"OPEN": 1} and tasks.seen[-1] == {"op": "snapshot", "by": "supervisor", "args": {}}
+
+
+def test_a_word_no_series_name_starts_with_finds_the_series_carrying_it_in_a_label(project, store):
+    now, lab = time.time(), {"instrument": "workflows.piles", "project": project.key, "workflow": "delivery_live"}
+    for_project(project.orchestra).write([Point("workflow_pile_items", 1, now - 5, {**lab, "step": "sail_check"}),
+                                          Point("workflow_pile_items", 0, now - 5, {**lab, "step": "write"}),
+                                          Point("disk_free_bytes", 5, now, {"mount": "/", "project": project.key})])
+    out = see(project, store, "list_metrics", prefix="sail")                 # L3: Haiku asked for "sail" and heard of nothing
+    assert [m["name"] for m in out["metrics"]] == ["workflow_pile_items"] and "sail_check" in out["metrics"][0]["labels"]["step"]
+    assert "no series name starts with 'sail'" in out["note"]
+    out = see(project, store, "list_metrics", prefix="disk")
+    assert [m["name"] for m in out["metrics"]] == ["disk_free_bytes"] and "note" not in out
+    assert see(project, store, "list_metrics", prefix="nothing")["metrics"] == []

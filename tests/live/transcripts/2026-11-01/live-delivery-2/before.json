@@ -1,0 +1,36 @@
+{
+ "tickets": [
+  "SCRUM-10",
+  "SCRUM-11"
+ ],
+ "prs": {
+  "SCRUM-10": 7,
+  "SCRUM-11": 6
+ },
+ "sail_results": [
+  "SCRUM-10",
+  "SCRUM-11"
+ ],
+ "types": [
+  "attention.needed",
+  "github.checks.completed",
+  "github.pr.labeled",
+  "github.pr.merged",
+  "github.pr.opened",
+  "github.pr.reviewed",
+  "github.pr.unlabeled",
+  "jira.issue.assigned",
+  "jira.issue.created",
+  "jira.issue.transitioned",
+  "offer.claimed",
+  "offer.finished",
+  "offer.made",
+  "orchestra.host.started",
+  "orchestra.intent.changed",
+  "orchestra.machine.started",
+  "orchestra.process.started",
+  "pagerduty.incident.acknowledged",
+  "pagerduty.incident.triggered",
+  "sail.check.completed"
+ ]
+}

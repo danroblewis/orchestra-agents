@@ -20,8 +20,8 @@ tools' terms, each message sent once and judged as it was answered (on the decla
    words, its receives real event types on the bus (a ``github.pr.*`` and a ``sail.check.*``),
    scheduled at 09:00, and confirmed with the owner's expectation ("SAILED per day ×1.2"), so a
    prediction is published as the Supervisor's;
-3. the owner asks what needs them, what is stuck and why: the answer names the run's open ticket
-   keys and a pull request number of the run, and none that is not the run's.
+3. the owner asks what needs them, what is stuck and why: the answer names every open item of the
+   run (its ticket keys) and a pull request number of the run, and none that is not the run's.
 
     ORCHESTRA_LIVE_DESIGN=1 uv run --no-sync python -m pytest -q -s tests/live/test_design_live_delivery.py
     #   ORCHESTRA_WORKFLOWS=~/orchestra-workflows  the plugin's checkout (its examples/delivery_live)
@@ -136,10 +136,23 @@ class Run:
                 return evs
             evs += page
 
+    def items(self) -> list[str]:
+        """The items this run's floor worked: its own tickets and any earlier test ticket the Jira
+        poller's first read relayed as assigned (an earlier run's, Done already: the floor starts it
+        again, a gap of the example's)."""
+        seen = [e.get("subject") for e in self.bus() if e.get("type") == "offer.made" and e.get("subject")]
+        return list(dict.fromkeys([*self.tickets, *seen]))
+
+    def ended(self) -> set[str]:
+        """The items whose close_ticket step closed the ticket."""
+        return {e.get("subject") for e in self.bus() if e.get("type") == "offer.finished"
+                and (e.get("data") or {}).get("outcome") == "closed"}
+
     def ours(self, kind: str) -> list[dict]:
-        """This run's events of ``kind``: about its own tickets (the GitHub poller's first read relays
-        the repository's earlier pull requests too, an earlier run's tickets)."""
-        return [e for e in self.bus() if e.get("type") == kind and e.get("subject") in self.tickets]
+        """This run's events of ``kind``, about its items (the GitHub poller's first read relays the
+        repository's earlier pull requests too, of tickets this run never worked)."""
+        items = set(self.items())
+        return [e for e in self.bus() if e.get("type") == kind and e.get("subject") in items]
 
     def prs(self) -> dict[str, int]:
         """Each of the run's tickets' pull request, as github.pr.opened says it."""
@@ -220,12 +233,12 @@ def check_nudger(web: Web, run: Run, before: set[str]) -> tuple[bool, str, dict]
 
 
 def check_answer(text: str, run: Run) -> tuple[bool, str, dict]:
-    prs, done = run.prs(), run.merged()
-    open_keys = [k for k in run.tickets if k not in done]
+    prs, done, items = run.prs(), run.ended(), run.items()
+    open_keys = [k for k in items if k not in done]
     named_keys, named_prs = set(KEY.findall(text)), {int(n) for n in PR.findall(text)}
-    ev = {"tickets": run.tickets, "prs": prs, "merged": sorted(done), "open": open_keys, "named_keys": sorted(named_keys),
-          "named_prs": sorted(named_prs)}
-    if invented := sorted(named_keys - set(run.tickets)):
+    ev = {"tickets": run.tickets, "items": items, "prs": prs, "merged": sorted(run.merged()), "ended": sorted(done),
+          "open": open_keys, "named_keys": sorted(named_keys), "named_prs": sorted(named_prs)}
+    if invented := sorted(named_keys - set(items)):
         return False, f"names tickets that are not the run's: {invented}", ev
     if invented := sorted(named_prs - set(prs.values())):
         return False, f"names pull requests that are not the run's: {invented}", ev
@@ -346,7 +359,8 @@ def test_the_owner_designs_on_the_live_delivery_example(tmp_path, monkeypatch):
         snapshot("api-dynamics-model", web.get("/api/dynamics/model"))
         snapshot("api-machines", web.get("/api/machines"))
         snapshot("api-predictions", web.get("/api/dynamics/predictions"))
-        snapshot("after", {"tickets": run.tickets, "prs": run.prs(), "merged": sorted(run.merged())})
+        snapshot("after", {"tickets": run.tickets, "items": run.items(), "prs": run.prs(), "merged": sorted(run.merged()),
+                           "ended": sorted(run.ended())})
     finally:
         try:
             os.killpg(proc.pid, signal.SIGTERM)                           # the launcher stops the host, the web and the fakes

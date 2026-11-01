@@ -313,17 +313,34 @@ not installed: tell the owner, and write nothing.
 - **The words** (the plugin's vocabulary, and nothing beyond it): an **item** is one thing that
   moves (a ticket, a pull request). A workflow is its **steps** in order, and each step says
   **who** does it: a **role** (any machine announcing it: an AI agent or a program, `worker`,
-  `reviewer`), a **program** the plugin runs per item, an **outside** system (GitHub, Jira: a wait,
-  nothing is offered), or the **outbox** (a write as the owner, after their approval). **Needs** are
-  resources claimed first (a `worktree`). **Done when** is what ends the step: for a role or a
-  program, its turn finishing (leave `done_when` out); otherwise an event about the item (or one of
-  its children), or a gauge above or below a value for a while. **Outcomes** map each result to the
-  next step (or `null`: the end); a move back is **rework**, offered to whoever did that step.
-  **Guards** are limits (`within` a time, at most `rounds` entries); past one, the planner gets
-  **attention**, or the item moves to a named step. **Starts** says what makes an item: a request,
-  an event type, or the clock (`every`). An item waits in a step's **piles**
-  (`<step>.waiting`, `<step>.held`), each wait with its reason (no offer taken, a resource, a
-  dependency, awaiting an outside event).
+  `reviewer`), offered to it; a **program** the plugin runs per item, told its workflow, step and
+  the item's fields (`ORCHESTRA_WORKFLOW`, `ORCHESTRA_STEP`, `ORCHESTRA_FIELDS`); an **outside**
+  system (GitHub, Jira: a wait, nothing is offered, only that system's events count); a **person**
+  (`person: owner`: a wait only the owner's own act moves; a machine may prepare it, never do it;
+  never offered); or the **outbox** (`outbox: owner`: an act in another system as the owner, a
+  label, a comment, a ticket closed, a message). An outbox step carries a **draft** (the outbox's
+  `kind`, the `target`, the `content`, the `fields`, each a value, an item field, `{"item": "id"}`
+  or a setting); the floor hands it to the Outbox plugin and never performs it, the item waits
+  "awaiting the owner's approval", and the step ends `sent`, `rejected` or `failed` on the
+  outbox's result. There is no text template: a role step writes the text into an item field
+  first (the ping into `nudge`), and the outbox step drafts from it. A fan-in or an `after` step
+  has no who. **Needs** are resources claimed first (a `worktree`). **Done when** is what ends the
+  step: for a role or a program, its turn finishing (leave `done_when` out; the outbox's too);
+  otherwise an event about the item (or one of its children), with `data` fields and a `count`
+  (events: one reviewer approving twice is 2; add `distinct: "source"` to count people, "two
+  distinct reviewers"); a gauge above or below a value for a while; a fan-in over the children
+  (`all`: the parent following its slowest child is this); or `{"after": "5m"}`, a pause before
+  a retry (never a machine that sleeps). **Outcomes** map each result to the next step (or
+  `null`: the end); a move back is **rework**, offered to whoever did that step; an outcome the map
+  does not name leaves the item at the step and tells the planner. **Guards** are limits (`within`
+  a time, at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
+  a named step. **Starts** says what makes an item: a request, an event type (with `data` it starts
+  only when the event's fields match: `{"event": "jira.issue.assigned", "data": {"assignee":
+  {"setting": "owner"}}}`, only the owner's tickets), or the clock (`every`). **Depends** holds a
+  step until another item is at a step (the relation is `item.related depends_on`, from the
+  machine that knows it). An item waits in a step's **piles** (`<step>.waiting`, `<step>.held`),
+  each wait with its reason (no offer taken, a resource, a dependency, awaiting an outside event,
+  a person or the owner's approval).
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
   so (quote them). The repository's is not committed by you: hand it to the Coordinator to land

@@ -5,8 +5,8 @@ discovers. Everything runs as the dummy demo runs it (``demo/run.py --dummy``: a
 ``orchestra run`` and ``orchestra web``, the task system, scripted agents, no model, no network),
 with two additions so the test need not wait for hours: the host rediscovers every 20 s, and a
 small queue is measured beside the tickets (a ``[[collect]]`` script outside the repository: jobs
-arrive at the rate in ``rate.txt`` and a tenth of the queue is done each second), so the model has
-a stock from the first minute. The scripted change doubles the queue's arrival rate.
+arrive at the rate in ``rate.txt``, and each is done with a chance of a tenth a second),
+so the model has a stock from the first minute. The scripted change doubles the queue's arrival rate.
 
 It checks that:
 - the host records the era and announces it (``orchestra.era.started``, caused by the change);
@@ -29,20 +29,20 @@ from test_dummy_demo_e2e import GUARD, KEYS
 from demo.run import Web, make_project, plan, start, stop, wait_for, wait_until, web_token
 
 QUEUE = '''#!/usr/bin/env python3
-"""A queue: jobs arrive at the rate in rate.txt (per second); a tenth of the queue is done each second."""
-import json, math, pathlib, time
+"""A queue: jobs arrive at the rate in rate.txt (per second), and each job in the queue is done
+with a chance of a tenth each second. The level wanders around rate / 0.1 for as long as it runs:
+a queue done by arithmetic alone settles within a minute on a level that never moves again (as
+many in as out every collection), and a stock that never moves is nothing discovery can see."""
+import json, math, pathlib, random, time
 here = pathlib.Path(__file__).parent
 state = here / "queue.json"
 now = time.time()
-s = json.loads(state.read_text()) if state.exists() else {"t": now, "arrived": 0.0, "done": 0, "carry": 0.0}
+s = json.loads(state.read_text()) if state.exists() else {"t": now, "arrived": 0.0, "done": 0}
 dt = max(0.0, now - s["t"])
 rate = float((here / "rate.txt").read_text())
 s["arrived"] += rate * dt
 q = math.floor(s["arrived"]) - s["done"]
-s["carry"] += 0.1 * q * dt
-d = min(q, math.floor(s["carry"]))
-s["carry"] -= d
-s["done"] += d
+s["done"] += sum(random.random() < 1 - math.exp(-0.1 * dt) for _ in range(q))
 s["t"] = now
 state.write_text(json.dumps(s))
 print("# TYPE queue_jobs gauge")

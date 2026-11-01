@@ -94,6 +94,12 @@ TOOLS: list[ToolDef] = [
              "summary": S("Short summary of the review"),
              "feedback": S("Required when REJECTED: concrete problems, with file and line where possible")},
             ("verdict", "summary")),
+    ToolDef("report_outcome", "report_outcome",
+            "Report the outcome of the Workflows offer you were handed. Call exactly once when you are finished. "
+            "The outcome is one the offer lists (any, when it lists none); `blocked` means you cannot do it, "
+            "with the reason in summary.",
+            {"outcome": S("The outcome, as the offer names it, or blocked"),
+             "summary": S("What you did, in a few sentences; when blocked, what you need")}, ("outcome", "summary")),
     # tickets
     ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, capacity, pipeline state."),
     ToolDef("list_milestones", "tickets", "List all milestones with id, name, status, and ticket counts."),
@@ -232,8 +238,9 @@ TOOLS: list[ToolDef] = [
     # observe: the whole system, read only (the Supervisor looks before it concludes)
     ToolDef("check_setup", "observe",
             "Whether the system can do what is asked: which machines fill the worker and reviewer roles (AI agents, programs), "
-            "the kind of work (tasks or code), the gate's tests, the capacity limit, what Orchestra runs and how each "
-            "collector's last round went. Call it first when a ticket blocks or keeps being rejected, or a request is not met."),
+            "the kind of work (tasks or code), the gate's tests, the capacity limit, what Orchestra runs, how each "
+            "collector's last round went, and what each installed plugin's check says against the configuration (a missing "
+            "tool, a dirty worktree, a bad setting). Call it first when a ticket blocks or keeps being rejected, or a request is not met."),
     ToolDef("read_config", "observe", "The project's orchestra.toml as it is, whether it can be changed now, and its recent commits; "
             "whether the owner has a private overlay, and each key it sets (secret values left out)."),
     ToolDef("list_processes", "observe",

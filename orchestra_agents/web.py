@@ -31,6 +31,7 @@ from .attention import unread
 from .config import ConfigError, Project
 from .control import bearer as control_bearer
 from .events import Events
+from .floor_roles import served
 from .harness import read_transcript
 from .listening import listens_for
 from .org import EVENT_HELP, effective_tools
@@ -102,7 +103,9 @@ def declared(project) -> list[Declared]:
     declared here), each with what it listens for (listening.py), as it announces itself. The host
     that runs them is no machine and is not declared."""
     work, roles, teams = project.config.work, all_roles(project), all_teams(project)
-    return [Declared(a.name, "agent", mode_of(a), listens_for(a, work, effective_tools(a, roles, teams)))
+    floor = set(served(project).values())
+    return [Declared(a.name, "agent", mode_of(a),
+                     listens_for(a, work, effective_tools(a, roles, teams), floor=a.name in floor))
             for a in all_agents(project).values()]
 
 

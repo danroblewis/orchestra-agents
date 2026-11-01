@@ -67,6 +67,24 @@ def check_args(command: str, args: dict[str, Any]) -> None:
             + f". It takes: {expected or 'no arguments'}.")
 
 
+def report_outcome(store: AgentStore, a: dict, role: str, offer: str) -> dict:
+    """A floor offer's exit tool (floor.py): the outcome is checked against the offer's own list,
+    which the host keeps on the turn's session record (floor_runner.py)."""
+    outcome, summary = str(a.get("outcome") or "").strip(), str(a.get("summary") or "").strip()
+    rec = next((x for x in store.sessions() if offer and x.get("offer") == offer and x.get("kind") == role), None) or {}
+    allowed = [str(o) for o in rec.get("offer_outcomes") or []]
+    if not rec:
+        raise StoreError("report_outcome answers a Workflows offer, and this session holds none")
+    if not outcome:
+        raise StoreError("outcome is required")
+    if allowed and outcome not in (*allowed, "blocked"):
+        raise StoreError(f"outcome must be one of {', '.join(allowed)} or blocked")
+    if outcome == "blocked" and not summary:
+        raise StoreError("blocked requires a summary saying why")
+    store.set_report(offer, {"outcome": outcome, "summary": summary})
+    return {"ok": True, "message": "Outcome recorded. You may stop now."}
+
+
 def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
     """One tool call, first checked against the caller's role and its tool groups (access.py:
     an unknown or missing role, or a tool outside the role's groups, is refused). A call that
@@ -104,6 +122,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         store.set_report(ticket_env, {"verdict": verdict, "summary": a.get("summary", ""),
                                       "feedback": a.get("feedback")})
         return {"ok": True, "message": "Verdict recorded. You may stop now."}
+
+    if command == "report_outcome":
+        return report_outcome(store, a, role, ticket_env)
 
     if command == "get_project_context":
         return {"ok": True, "context": prompting.read_context(project)}

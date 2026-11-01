@@ -16,6 +16,14 @@ whose name is no agent is ignored. What it adds to that agent (``apply``):
 - ``ledger.md``: why each duty exists: who asked, when, the commit (``duties.py`` appends);
 - ``proposals/``: what its review rounds proposed about itself (a split, ``split_proposal.py``).
 
+A spec with a ``role`` (``role = "triager"`` in ``machine.toml``) is a confirmed Universal Machine
+on the Workflows floor (machine-design.md §2.4): its agent answers the floor's offers for that role
+(floor_roles.py, floor_runner.py).
+
+A spec lives in ``.orchestra/machines/<name>/`` or in the state directory's ``machines/<name>/``
+(machine-design.md §2.1: where a confirmed Universal Machine's spec goes by default); the host
+reads both, and the repository's wins when both have the name.
+
 A **built-in duty** (``builtin = true``) names a part of the plugin's own prompt
 (``prompts/supervisor.md`` and ``operator.md``): its text ships with the plugin and changes with
 it, so it is listed here and never copied, edited or removed. The Supervisor's **fixed core**
@@ -85,6 +93,7 @@ class MachineSpec:
     publishes: list[dict] = field(default_factory=list)
     emits: list[str] = field(default_factory=list)            # the only types its emit_event may raise (a designed machine's)
     files: dict[str, str] = field(default_factory=dict)       # this machine's files, relative to its directory
+    role: str | None = None                                   # the Workflows floor role whose offers it answers
     root: str = ROOT                                          # where its directory is: the repository's, or the state directory's
 
     @property
@@ -127,35 +136,50 @@ def parse(name: str, files: dict[str, str]) -> MachineSpec:
     return MachineSpec(name=raw.get("name") or name, description=str(raw.get("description") or ""),
                        engagement=str(raw.get("engagement") or "continuous"), model=raw.get("model") or None,
                        created_by=str(raw.get("created_by") or ""), review_every=review.get("every") or None, duties=duties,
-                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)],
-                       emits=[str(x) for x in raw.get("emits") or []], files=dict(files))
+                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)], emits=[str(x) for x in raw.get("emits") or []],
+                       files=dict(files), role=str(raw["role"]) if isinstance(raw.get("role"), str) and NAME.match(raw["role"]) else None)
+
+
+def state_root(project: Project):
+    """The state directory's machine specs (machine-design.md §2.1)."""
+    return project.state_dir / "machines"
+
+
+def _state_files(project: Project) -> dict[str, dict[str, str]]:
+    base, by = state_root(project), {}
+    if not base.is_dir():
+        return {}
+    for p in sorted(base.rglob("*")):
+        rel = p.relative_to(base).parts
+        if p.is_file() and len(rel) > 1 and NAME.match(rel[0]):
+            try:
+                by.setdefault(rel[0], {})["/".join(rel[1:])] = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+    return by
 
 
 def load_all(project: Project) -> dict[str, MachineSpec]:
-    """Every spec in the project, by machine name: the repository's (``.orchestra/machines/``) and
-    the confirmed designed machines' in the state directory (``state_machines``); the repository's
-    wins on a name both have. A spec that does not parse is left out (the agent runs as its record
-    says; ``lint`` says why)."""
-    from . import state_machines
+    """Every spec in the project, by machine name: the repository's, and the state directory's
+    whose name the repository has not. A spec that does not parse is left out (the agent runs as
+    its record says; ``lint`` says why)."""
     by: dict[str, dict[str, str]] = {}
     for path, text in read_files(project).items():
         rest = path[len(ROOT) + 1:]
         name, _, inner = rest.partition("/")
         if NAME.match(name) and inner:
             by.setdefault(name, {})[inner] = text
+    roots = dict.fromkeys(by, ROOT)
+    for name, files in _state_files(project).items():
+        if "machine.toml" not in by.get(name, {}):
+            by[name], roots[name] = files, str(state_root(project))
     out = {}
-    for name, files in state_machines.spec_files(project).items():
-        if NAME.match(name) and name not in by:
-            try:
-                out[name] = parse(name, files)
-                out[name].root = str(state_machines.root(project))
-            except SpecError:
-                continue
     for name, files in by.items():
         if "machine.toml" not in files:
             continue
         try:
             out[name] = parse(name, files)
+            out[name].root = roots[name]
         except SpecError:
             continue
     return out
@@ -185,7 +209,7 @@ def render(spec: MachineSpec) -> str:
              "# written again from its declaration when the owner confirms a change; read by orchestra-agents, never by Orchestra."])
     lines = [*head,
              f"name = {_s(spec.name)}"]
-    for k in ("description", "engagement", "model", "created_by"):
+    for k in ("description", "engagement", "model", "created_by", "role"):
         v = getattr(spec, k)
         if v:
             lines.append(f"{k} = {_s(v)}")

@@ -6,8 +6,12 @@ answer in this turn says so.
 
 - `list_guides`, `read_guide`: how Orchestra and each installed plugin are configured.
 - `check_setup`: which machines fill the worker and reviewer roles (AI agents or programs), the
-  kind of work (tasks or code), the gate's tests, the capacity limit, what Orchestra runs, and how
-  each collector's last round went. Start here.
+  kind of work (tasks or code), the gate's tests, the capacity limit, what Orchestra runs, how
+  each collector's last round went, and what each installed plugin's check says against the
+  configuration (`plugin_checks`: per plugin, in its own words; a `problem` is a setting or the
+  environment that plugin needs fixed, such as a tool not on PATH or a dirty worktree; an `error`
+  means its check failed, which is the plugin's bug, not the setup's). Start here; when the human
+  asks you to check the setup, report every finding with the plugin's name.
 - `read_config`: the project's `orchestra.toml` and its recent commits, and what the owner's
   private overlay sets.
 - `list_processes`: the programs Orchestra keeps running (state, restarts, last exit code, log)

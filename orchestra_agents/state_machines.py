@@ -17,7 +17,7 @@ agents run it from:
   a missed run does, or woken by its receives).
 
 ``roles.all_roles``, ``org_store.all_agents``, ``prompting.role_prompt`` and
-``machine_spec.load_all`` read them beside the repository's ``.orchestra/`` (the repository's wins
+``machine_spec.load_all`` (its one loader, ``state_root``) read them beside the repository's ``.orchestra/`` (the repository's wins
 on a name both have). A confirmed change to it writes them again; retiring it (``discard`` on a
 declared machine, which retracts the declaration) or switching it to Programmatic removes the
 directory (``remove``). Nothing here commits."""
@@ -40,10 +40,12 @@ USES = ((re.compile(r"\bticket", re.IGNORECASE), "tickets"), (re.compile(r"\bmod
         (re.compile(r"\bevents?\b|\bbus\b|coordinator|queue of work", re.IGNORECASE), "events"))
 READ_ONLY = re.compile(r"read[- ]only|only read", re.IGNORECASE)
 NUMBERED = re.compile(r"^\s*\d+\s*[.)]\s*")
+OFFER_MADE = "offer.made"                                   # floor.MADE
 
 
 def root(project: Project) -> Path:
-    return project.state_dir / "machines"
+    from .machine_spec import state_root
+    return state_root(project)
 
 
 def groups_for(uses: list[str]) -> tuple[list[str], list[str]]:
@@ -85,12 +87,14 @@ def files(m: dict, reads: dict[str, str] | None = None) -> dict[str, str]:
     from .roles import RoleDef
     e = m.get("engagement") or {}
     mode = MODES.get(e.get("mode"), "ad_hoc")
-    spec = MachineSpec(name=m["id"], description=m.get("description") or "", engagement=mode, model=DEFAULT_MODEL,
-                       created_by="supervisor", emits=list(m.get("emits") or []), root=STATE_ROOT)
     s = m.get("spec") or {}
+    receives = list(m.get("receives") or [])
+    # the Workflows floor role whose offers it claims (machine-design §2.4): the spec's, else its own
+    role_name = s.get("role") if isinstance(s.get("role"), str) and s.get("role") else (m["id"] if OFFER_MADE in receives else None)
+    spec = MachineSpec(name=m["id"], description=m.get("description") or "", engagement=mode, model=DEFAULT_MODEL,
+                       created_by="supervisor", emits=list(m.get("emits") or []), role=role_name, root=STATE_ROOT)
     uses = list(s.get("uses") or [])
     groups, _ = groups_for(uses)
-    receives = list(m.get("receives") or [])
     role = [f"# {m.get('title') or m['id']}", "", m.get("description") or "", "", "## Never", ""]
     role += [f"- {x}" for x in s.get("invariants") or []]
     if "tickets" in groups and any(READ_ONLY.search(u) for u in uses if re.search(r"ticket", u, re.IGNORECASE)):
@@ -165,17 +169,3 @@ def prompt(project: Project, name: str) -> str:
     p = root(project) / name / "role.md"
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
-
-def spec_files(project: Project) -> dict[str, dict[str, str]]:
-    """Each confirmed machine's spec files (``machine.toml``, ``role.md``), by name."""
-    out = {}
-    for d in _dirs(project):
-        got = {}
-        for rel in ("machine.toml", "role.md"):
-            try:
-                got[rel] = (d / rel).read_text(encoding="utf-8")
-            except OSError:
-                continue
-        if "machine.toml" in got:
-            out[d.name] = got
-    return out

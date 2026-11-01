@@ -218,6 +218,47 @@ other entry of a removed type is dropped (`org.GONE`). A new agent naming a remo
 refused. A retired `:DONE` becomes `gate.landed` only, so in tasks mode such an agent should be
 given `review.approved` as well.
 
+### 3.1 Meeting the Workflows floor (`floor.py`, `floor_roles.py`, `floor_runner.py`, `offer_turn.py`)
+
+A project may have the task system, the Workflows plugin, or both; one host answers both. The
+floor's names and claim rule are orchestra-workflows' machine contract
+(`docs/machine-contract.md`, its `orchestra_workflows/contract.py`), copied by hand into
+`floor.py` as `protocol.py` copies the task system's (nothing is imported from it;
+`tests/unit/test_floor.py` checks the copy when the plugin is installed).
+
+**Who serves which role** (`floor_roles.py`). A confirmed Universal Machine (machine-design.md
+§2.4) is a machine spec with `role = "<floor role>"` in its `machine.toml`, in
+`.orchestra/machines/<name>/` or in the state directory's `machines/<name>/` (the repository's
+wins when both hold the name), whose name is a custom agent (confirm creates its role and agent;
+a spec whose name is no agent is ignored, as every spec is). That agent answers the role's offers;
+when two specs name one role, the first by name does. The built-in worker and reviewer answer the
+floor roles of their names when `[agents] serves` lists them and no spec takes the role.
+
+**A turn** (`floor_runner.py`). For each `offer.made` with a role served here, the host takes a
+slot of the agent (`triage/1`, `worker/1`) for the session `<agent>-<item>` (one turn per item's
+session at a time; an offer addressed `to` an instance is taken only as that instance, when it is
+the agent's and free), announces the instance (`orchestra.machine.started` with `roles`: the
+floor accepts a claim for a role not named after the machine by it) and claims
+(`offer.claimed`, the offer as causationid, the item as subject). It reads the bus back from where
+it read the offer to its claim: the first claim after the offer and before any withdrawal holds it
+(`floor.winner`); a loser starts no session and says nothing more. The holder runs the agent's
+turn (`offer_turn.run_turn`, shared with the task system's runner) with the brief, in the handed
+`worktree` resource's directory, or, without one, in the repository read only; it says
+`offer.alive` with what the agent is saying now at least every `heartbeat_s`
+(`offer_turn.heartbeat`); and it finishes (`offer.finished`) with the outcome the agent's exit tool
+reported (`floor.outcome_of`): `report_outcome` (granted to a confirmed machine's agent, checked
+against the offer's `outcomes`, which the host keeps on the session's record) names it; the
+worker's `report_ticket` is `ready` or `blocked`, the reviewer's `report_review` `approved` or
+`rejected`. **The BLOCKED rule**: a turn that ends without an outcome after its one nudge, or with
+one the offer does not list, finishes `blocked` with why. An `offer.withdrawn` naming the offer,
+or its holder with no other offer, kills the turn (the transcript shows "released by the
+Workflows floor") and nothing more is said for it. When the host stops mid-turn nothing is
+finished: the floor takes the offer back when its lease runs out and offers it again.
+
+Not yet: passing an item on directly (the contract's pass-on, `offer.made` with `ends`) and
+`facts` on a finish; a worker on the floor finishes `ready` and the workflow's next step is the
+floor's to offer.
+
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
 `orchestra agents run` is one process per project, and no machine: the runtime the configured
@@ -227,7 +268,9 @@ starts it: the plugin declares it in `Plugin.processes` (`web.processes`) whethe
 their Supervisor sets the project up), so `orchestra run` keeps it running in the interpreter
 Orchestra runs in, as the process `agents.host`; `[agents] enabled = false` declares none. It is started with `--wait`: while another host holds the project, or the control port is
 taken, it waits for that to clear instead of exiting, so a host restarted while the previous one
-still shuts down takes over afterwards. Its shutdown closes the running turns together, waits up
+still shuts down takes over afterwards; and it watches the `orchestra run` that started it (every
+2 s, `parent.py`), stopping as on SIGTERM when that process is gone (killed before it could stop
+its processes), so no host outlives its launcher. Its shutdown closes the running turns together, waits up
 to `SHUTDOWN_REPORTS_S` (10 s) for their reports, then closes the resident sessions together, each
 close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace it declares
 (`web.STOP_GRACE_S`), so Orchestra's launcher never kills it mid-way. It:
@@ -248,6 +291,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   | the Supervisor | `ticket.created` | how it remembers which tickets were its own (`by` = supervisor) |
   | the Supervisor, the Coordinator | `work.planned`, `work.requested` (their `wake_on`) | the hand-off of the human's requirements and its plan (section 3) |
   | a worker, a reviewer | `task.assigned`, `review.requested` or `changes.requested`, `task.released` | its role's `wake_on`: the offers it answers (runner.py) |
+  | an agent that serves a Workflows floor role (section 3.1) | `offer.made`, `offer.withdrawn` | the floor's offers it answers and their withdrawals (floor_runner.py) |
 
   What wakes an agent without an event on the bus is not listed (a human's message, another
   agent's brief or message, a crash loop: `builtins.Role.triggers`), and neither is what the host
@@ -426,6 +470,27 @@ its token, `tooling.handle`), and the token reaches the command only through the
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
 command, and the dummy harness in-process; the setting changes neither.
+**No push, no pull-request writes** (`push_guard.py`; the owner, 2026-10-31: using Orchestra at work
+"won't try to push things to master"). Every session runs with the owner's git and gh
+credentials and its harness's permission checks off, so the host gives each session whose role is
+not in `[agents] allow_push` (default none) a block in its environment, which every harness passes
+on to the commands the agent runs (`SessionSpec.env`): a git configuration
+(`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, appended after the host's own) with
+`url."orchestra-no-push::".pushInsteadOf` set to the empty prefix, which turns every push URL of
+every remote, and one given on the command line, into a transport whose helper
+(`git-remote-orchestra-no-push`, first on the session's PATH) only refuses; and `git` and `gh` first
+on that PATH, written into `<state>/no-push/`, naming the real ones: `git` refuses `push` and
+`send-pack` (a remote with an explicit `pushurl` is not rewritten, git's rule) and passes the rest;
+`gh` passes the reads (`pr view`/`list`/`diff`/`checks`/`status`, `issue view`/`list`, `repo view`,
+`run`, `search`, `api` with no method and no fields) and refuses every other command. Each refusal
+says what to do instead: commit on the branch and report; the merge gate or the owner pushes, opens
+and merges. Fetching, committing and merging locally are untouched. The Supervisor's session is
+exempt (`push_guard.EXEMPT`), as it was before the block, until the owner decides otherwise: its git
+writes are its tools' local commits (AGENTS.md rule 2), and what it sends as the owner, a push
+among them, goes through the outbox, in the outbox's process. It stops a mistake, not an agent set
+on pushing (the limit below). The roles are matched by the session's `ORCHESTRA_ROLE` (a built-in
+role, or a custom agent's name); a change applies to sessions opened after it.
+
 Sessions of the Supervisor and the Coordinator are **read-only** (`builtins.Role.read_only`,
 `SessionSpec.read_only`): they read, search and run commands in the checkout, and their harness
 withholds its file-editing tools (Claude Code: `--disallowedTools Edit,Write,NotebookEdit`; Pi:
@@ -524,7 +589,8 @@ no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
 `provider`, `thinking`, `tools_via` (`mcp`, `bash` or `auto`, the default: section 6) (`model` is the default: a machine spec's own `model` wins for its agent
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
-reviewer), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
+reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
+section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
 rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
@@ -546,31 +612,23 @@ file lock and written only by `store.py`; `sessions/` (the harnesses' session re
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its
 harness keeps it and records the path on the archived run); `logs/` (the host's log and, under `agents/`, each
 session's stderr and the prompt it was started with); `PROJECT.md`, the project context the
-Supervisor maintains; and, from the design tools (section 10, "Designing the system"):
-`instruments/<name>.sh` (the measurement scripts the Supervisor writes), `drafts/<name>/` (a drafted
-machine's implementation, not official), `machines/<name>/` (a confirmed Universal Machine's
-`machine.toml`, `role.md` (which names each stock or effect it reads as the series it reads: its
-link, else its instrument's series, rewritten on a link or a keep), `role.json` and `agent.json`, read by `machine_spec.load_all`,
-`roles.all_roles`, `org_store.all_agents` and the role's prompt beside `.orchestra/`, the
-repository's winning on a name; nothing is committed, `state_machines.py`), `trials/` (a script's
-trial round) and `intended/` (`d0001.json` …, `journal.jsonl`, `requests.jsonl`: the stand-in for
-Orchestra's declared layer, used only while the installed Orchestra has none, `intended_api.py`;
-the requests it notes as Orchestra's web server notes them). **Carried over once**
-(`intended_carry.py`): on the first call to Orchestra's own layer, a stand-in journal is replayed
-into it call by call with each call's provenance (less `via` and `at`, which the store sets), under
-one file lock (`intended.carry.lock`), the last call replayed recorded (`intended/carried.json`) so
-a replay that stopped resumes there; then `intended/` is renamed `intended.replayed.<time>`. When
-Orchestra's layer already holds declarations that did not come from the replay, every design call
-is refused until the owner says which to keep, and the Supervisor's `carry_over` (on their quoted
-words) finishes the replay or abandons it (`intended.abandoned.<time>`). Whether Orchestra keeps
-the layer is asked of its endpoint (`GET /intended`), or, with no endpoint answering, of the
-documented `project.intended`. Orchestra's layer is written only through its host's events endpoint
-(`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with it installed
-and its host down a design call is refused. The Supervisor's agent state also keeps the turn its tools record in their provenance (`turn`),
-its draft instruments (`drafts`), what each measurement option would run (`measure_targets`), the
-request ids already answered (`requests_answered`), the changes its confirmed machines' first turns
-announce and the predictions published about them (`machine_starts`) and the refinement pass's
-proposal (`refinement`); the records two processes write are updated under the runtime lock. `[agents]` adds `design_passes` (default 3) and `draft_expiry` (default 24h). The
+Supervisor maintains; `machines/<name>/`, a confirmed Universal Machine's spec when it is not in the
+repository (machine-design.md §2.1): its `machine.toml` (with `emits`, and `role` when it answers
+the Workflows floor's offers), `role.md` (which names each stock or effect it reads as the series
+it reads: its link, else its instrument's series, rewritten on a link or a keep), `role.json` and
+`agent.json`, written by the Supervisor's confirm (`state_machines.py`), never committed, and read
+by `machine_spec.load_all` (the one spec loader), `roles.all_roles`, `org_store.all_agents` and the
+role's prompt beside `.orchestra/`, the repository's winning on a name; and, from the design tools
+(section 10, "Designing the system"): `instruments/<name>.sh` (the measurement scripts the
+Supervisor writes), `drafts/<name>/` (a drafted machine's implementation, not official) and
+`trials/` (a script's trial round). The declarations are Orchestra's declared layer
+(`orchestra.sd.intended`), reached only through `intended_api.py` and written only through its
+host's endpoint (`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with
+the host down a design call is refused. The Supervisor's agent state also keeps the turn its tools
+record in their provenance (`turn`), its draft instruments (`drafts`), the changes its confirmed
+machines' first turns announce and the predictions published about them (`machine_starts`) and the
+refinement pass's proposal (`refinement`); the records two processes write are updated under the
+runtime lock. `[agents]` adds `design_passes` (default 3) and `draft_expiry` (default 24h). The
 organisation's custom records are in the repository under `.orchestra/`.
 
 ## 8. The web plugin (`web.py`, `org_views.py`, `static/`)
@@ -693,7 +751,9 @@ no credential's value is shown).
 
 **Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
-launcher runs; each collector's last round), `read_config` (orchestra.toml, whether it can be
+launcher runs; each collector's last round; what each installed plugin's `Plugin.check` says against
+the merged configuration, in its own words, a check that raises reported as `its check failed: <error>`
+without stopping the others, `plugin_findings.py`), `read_config` (orchestra.toml, whether it can be
 changed now, its recent commits; whether the owner has a private overlay and each key it sets,
 secret values left out), `list_processes` (Orchestra's runtime record and the declared
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a

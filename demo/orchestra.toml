@@ -30,7 +30,7 @@ every = "5m"
 # are installed in first, so start `orchestra run` the same way (from that environment) by hand.
 [[machines]]
 name = "shell_worker"
-# instance "shell" (source worker/shell): the agents' host names its AI workers worker/1, worker/2,
+# instance "shell" (source worker/shell): the agents' host names its AI workers worker/1, worker/2, …,
 # and two machines sharing a source would both hold one assignment
 command = "python -m tasking.machines.shell_worker shell --only-commands"   # takes only tickets whose description gives `sh` blocks
 

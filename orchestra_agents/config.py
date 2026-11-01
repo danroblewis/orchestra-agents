@@ -65,6 +65,7 @@ class Config:
     thinking: str | None = None
     tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto (harness/bash_tools.py)
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
+    allow_push: list[str] = field(default_factory=list)   # roles whose sessions may push and write pull requests (push_guard.py)
     coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
     turn_timeout: float = 0.0           # hard cap per turn; 0 = none
     silence_timeout: float = 1200.0     # end a turn after this long with nothing from the harness
@@ -103,6 +104,10 @@ class Config:
         if via not in TOOLS_VIA:
             raise ConfigError(f"[agents] tools_via is {via!r}; it is one of {', '.join(TOOLS_VIA)}: mcp, Orchestra's MCP server; "
                               "bash, a command the session runs from its shell; auto, the MCP server until it is found blocked")
+        allow = a.get("allow_push", [])
+        if not isinstance(allow, list) or not all(isinstance(r, str) and r for r in allow):
+            raise ConfigError(f"[agents] allow_push is {allow!r}; it is a list of role names, like [\"worker\"] "
+                              "(the roles whose sessions may push and write pull requests; default none)")
         harness, model, note = (a["harness"].replace("-", "_"), a.get("model") or None, None) if a.get("harness") else default_harness()
         if a.get("harness") is None and a.get("model"):
             model = a["model"]
@@ -110,7 +115,7 @@ class Config:
             harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
             dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
             model=model, thinking=a.get("thinking"), tools_via=via,
-            serves=serves, coordinator_every=every,
+            serves=serves, allow_push=allow, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             compact_tokens=int(a.get("compact_tokens", 100_000)),

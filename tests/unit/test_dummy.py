@@ -36,6 +36,32 @@ def test_the_built_in_rules_make_a_team():
     assert setup.steps[0]["tool"] == "list_guides" and "cannot read your repository" in setup.reply
 
 
+def test_without_the_task_system_a_chat_is_not_handed_to_a_ticket_only_coordinator():
+    s = load(None)
+    msg = "[Orchestra: ...]\n\n[The human's message]\nAdd a page"
+    alone = s.pick(Turn(role="supervisor", prompt=msg, tasking=False))
+    assert alone.steps == ()                                                          # nothing handed on, nothing changed
+    assert "changed nothing" in alone.reply and "tasking plugin" in alone.reply and "request_work" in alone.reply
+    assert "I will tell you the plan" not in alone.reply
+    assert s.pick(Turn(role="supervisor", prompt=msg, tasking=True)).steps[0]["tool"] == "hand_to_coordinator"
+    duty = s.pick(Turn(role="supervisor", prompt="[The human's message]\nfrom now on, be brief", tasking=False))
+    assert duty.steps[0]["tool"] == "add_duty"                                        # a duty needs no tickets
+
+
+def test_installed_tasking_reads_the_plugins_entry_points(monkeypatch):
+    from orchestra_agents import installed
+
+    class EP:
+        def __init__(self, name):
+            self.name = name
+    monkeypatch.setattr(installed, "entry_points", lambda group: [EP("agents"), EP("workflows")])
+    assert installed.tasking() is False
+    monkeypatch.setattr(installed, "entry_points", lambda group: [EP("tasks")])
+    assert installed.tasking() is True
+    with pytest.raises(ScriptError, match="tasking is true or false"):
+        parse('[[rule]]\nrole = "*"\ntasking = "no"\n')
+
+
 def test_a_rule_s_prompt_groups_fill_its_steps():
     from orchestra_agents.harness.dummy_script import fill_match
     [rule] = parse('[[rule]]\nrole = "*"\nprompt = "id=(?P<id>\\\\w+)"\nsteps = [{ say = "got {match.id}" }]\n')

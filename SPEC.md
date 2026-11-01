@@ -548,15 +548,16 @@ script says only what differs, and `harness = "dummy"` alone is a working team: 
 `work/<ticket>.md` in a code ticket's worktree (`RESULT.md` in a task's folder), commits it and
 reports READY_FOR_REVIEW; a reviewer approves; the Supervisor hands a chat message to the
 Coordinator (`hand_to_coordinator`), which makes a milestone and a ticket from it and reports the plan
-(`report_plan`), and the Supervisor tells the human the plan; on the first run the Supervisor says it
+(`report_plan`), and the Supervisor tells the human the plan (without the tasking plugin, which keeps
+the tickets, it hands nothing on and says it changed nothing and why); on the first run the Supervisor says it
 cannot read the repository and how to get one that can; any other turn replies "Nothing to do." or
 that it is scripted. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
 script when it exists. A rule's conditions:
 `role` (required; a role's or custom agent's name, or `"*"`), `ticket` (a glob on the ticket id),
 `prompt` (a regular expression searched in the turn's prompt; its named groups are
 `{match.<group>}` in the rule's steps and reply), `turn` (the session's nth turn,
-counted from its transcript, or a list of them) and `checkout` (whether the working directory is a
-git checkout). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
+counted from its transcript, or a list of them), `checkout` (whether the working directory is a
+git checkout) and `tasking` (whether the tasking plugin is installed, `installed.tasking`). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
 `append`), `run` (a shell command in the working directory; its output and status are the
 result, and the script goes on), `commit` (everything, with this message; a commit even when
 nothing changed), `tool` (an agents' tool, with `args`; a refusal is the result, and the script

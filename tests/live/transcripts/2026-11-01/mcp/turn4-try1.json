@@ -1,0 +1,54 @@
+{
+ "turn": 4,
+ "try": 1,
+ "model": "sonnet",
+ "seconds": 34,
+ "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+ "text": "I changed Notes Improver to what you described. I'd change one part before you confirm it, because as drafted it would cost about $125 a day.\n\n- **Wakes on:** `gate.landed` (a ticket is DONE), `changes.requested` (a reviewer rejected a ticket) and `gate.rejected` (the merge gate failed a branch).\n- **What it does:** for a rejection or gate failure, it reads the ticket and the feedback and works out the cause. It then sends the Coordinator a `work.requested` idea, but only when a cause repeats or can be removed. It never schedules, edits or cancels tickets itself.\n- **Mode:** it is now continuous instead of daily. The changes are c8.0 to c8.9, and the machine is still unconfirmed.\n\n**The cost problem:** landings are very frequent right now, 29 of these events in the last 10 minutes. Waking on every one would be about 4,171 turns a day, roughly **$125 a day**.\n\n**My recommendation:** wake it only on `changes.requested` and `gate.rejected`, which are the cases that need explaining. It would still read the DONE tickets from the event stream when it wakes, so it can compare them with the failures. That keeps your \"watch DONE\" intent at a small fraction of the cost. Do you want me to make that change?\n\n**Still open:**\n- **Duplicate machine:** Notes Files Improver, the daily draft, now duplicates this one's job. I'd discard it once you've chosen.\n- **Event name:** nothing has been rejected or failed the gate yet, so I haven't seen `changes.requested` or `gate.rejected` published. I took the names from the installed Orchestra code.",
+ "error": null,
+ "timed_out": false,
+ "tools": [
+  "ToolSearch",
+  "read_events",
+  "Bash",
+  "Bash",
+  "Bash",
+  "refine_machine"
+ ],
+ "ok": true,
+ "why": "",
+ "state": {
+  "before": [],
+  "receives": [
+   "gate.landed",
+   "changes.requested",
+   "gate.rejected"
+  ],
+  "dropped": [],
+  "removed_in_journal": [],
+  "gone_on_the_map": [],
+  "pending": [],
+  "latest": {
+   "change": "c8.9",
+   "at": 1793526898.973055,
+   "quotes": [
+    "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work."
+   ],
+   "added": {},
+   "removed": {},
+   "before": {
+    "description": "Once a day, looks at how many notes files were added over the recent days and tries one change to raise that rate, by handing a concrete requirement to the Coordinator."
+   }
+  }
+ },
+ "cost_so_far": {
+  "usd": 1.3202,
+  "invocations": 6,
+  "usage": {
+   "input_tokens": 60,
+   "cache_creation_input_tokens": 111752,
+   "cache_read_input_tokens": 1144823,
+   "output_tokens": 12567
+  }
+ }
+}

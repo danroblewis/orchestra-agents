@@ -1,0 +1,2993 @@
+{
+ "ok": true,
+ "model": {
+  "id": "system",
+  "name": "The system",
+  "description": "Discovered by SD Lab's kalman_lna from the stocks' levels, with Orchestra's counters attached to its flows.",
+  "time_unit": "minute",
+  "stocks": [
+   {
+    "id": "agents_working_supervisor",
+    "name": "agents working (supervisor)",
+    "unit": "items",
+    "series": {
+     "name": "agents_working",
+     "labels": {
+      "role": "supervisor",
+      "machine": "supervisor",
+      "project": "demo-8ac87a4c",
+      "instrument": "agents.turns"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 30.213,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 120,
+     "identification": {
+      "units": 120,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.5993,
+      "halves": [
+       [],
+       [
+        "+agent_turns_started_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}",
+        "-agent_turns_finished_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.0,
+      "level": "very low",
+      "weakest": "persistence",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.9975,
+       "persistence": 0.0
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 120,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.4057,
+       "level": "low",
+       "error": 1.4647,
+       "hold_error": 1.5621,
+       "beats_hold": true,
+       "growth": 0.23196182283405764,
+       "z": 2.176,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": [
+        "run forward from part-way through the window, it misses the measured level by 1.5\u00d7 the level's spread"
+       ]
+      },
+      "persistence": 0.0,
+      "persistence_of": 4
+     },
+     "written_by": "agents.turns",
+     "accumulator": false,
+     "balance": [
+      {
+       "series": "agent_turns_started_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}",
+       "sign": 1
+      },
+      {
+       "series": "agent_turns_finished_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}",
+       "sign": -1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793527698.449829
+    }
+   },
+   {
+    "id": "tasks_tickets_OPEN",
+    "name": "tasks tickets (OPEN)",
+    "unit": "items",
+    "series": {
+     "name": "tasks_tickets",
+     "labels": {
+      "state": "OPEN",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 10.071,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 118,
+     "identification": {
+      "units": 118,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.375,
+      "halves": [
+       [
+        "-tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}",
+        "+tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}"
+       ],
+       [
+        "+tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}",
+        "-tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.5,
+      "level": "medium",
+      "weakest": "persistence",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.9973,
+       "persistence": 0.5
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 118,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.4333,
+       "level": "low",
+       "error": 1.3076,
+       "hold_error": 1.2184,
+       "beats_hold": false,
+       "growth": 0.13587358425937238,
+       "z": 3.528,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": [
+        "run forward from part-way through the window, it misses the measured level by 1.3\u00d7 the level's spread",
+        "holding the level does better (1.22 against 1.31 of the spread)"
+       ]
+      },
+      "persistence": 0.5,
+      "persistence_of": 4
+     },
+     "written_by": "tasks.tickets",
+     "accumulator": false,
+     "balance": [
+      {
+       "series": "tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}",
+       "sign": 1
+      },
+      {
+       "series": "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}",
+       "sign": -1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793527698.449366
+    }
+   },
+   {
+    "id": "repo_commits",
+    "name": "repo commits",
+    "unit": "items",
+    "series": {
+     "name": "repo_commits",
+     "labels": {
+      "project": "demo-8ac87a4c",
+      "instrument": "repo_stats"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 15.122,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 120,
+     "identification": {
+      "units": 39,
+      "held_out_r2": 0.9391,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.7468,
+      "halves": [
+       [
+        "+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}",
+        "+orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}"
+       ],
+       [
+        "+orchestra_events_total{source=\"worker\",type=\"task.accepted\"}",
+        "+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.75,
+      "level": "medium",
+      "weakest": "persistence",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.8577,
+       "persistence": 0.75
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": 0.9391025641025641,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 39,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.8056,
+       "level": "high",
+       "error": 0.2413,
+       "hold_error": 0.8568,
+       "beats_hold": true,
+       "growth": 1.7144025196017736,
+       "z": 1.575,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": []
+      },
+      "persistence": 0.75,
+      "persistence_of": 4
+     },
+     "written_by": "repo_stats",
+     "accumulator": true,
+     "balance": [
+      {
+       "series": "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}",
+       "sign": 1
+      },
+      {
+       "series": "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}",
+       "sign": 1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793527698.449056
+    }
+   },
+   {
+    "id": "repo_files",
+    "name": "repo files",
+    "unit": "items",
+    "series": {
+     "name": "repo_files",
+     "labels": {
+      "project": "demo-8ac87a4c",
+      "instrument": "repo_stats"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 15.122,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 120,
+     "identification": {
+      "units": 39,
+      "held_out_r2": 0.7564,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": false,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.7468,
+      "halves": [
+       [
+        "+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}"
+       ],
+       [
+        "+orchestra_events_total{source=\"worker\",type=\"task.accepted\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.75,
+      "level": "medium",
+      "weakest": "persistence",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.8577,
+       "persistence": 0.75
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": 0.7564102564102564,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 39,
+      "stable": false,
+      "why": [],
+      "behaviour": {
+       "score": 0.704,
+       "level": "medium",
+       "error": 0.4204,
+       "hold_error": 0.8568,
+       "beats_hold": true,
+       "growth": 1.4935260277889044,
+       "z": 1.249,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": []
+      },
+      "persistence": 0.75,
+      "persistence_of": 4
+     },
+     "written_by": "repo_stats",
+     "accumulator": true,
+     "balance": [
+      {
+       "series": "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}",
+       "sign": 1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793527698.449056
+    }
+   },
+   {
+    "id": "tasks_tickets_DONE",
+    "name": "tasks tickets (DONE)",
+    "unit": "items",
+    "series": {
+     "name": "tasks_tickets",
+     "labels": {
+      "state": "DONE",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.145,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 118,
+     "identification": {
+      "units": 118,
+      "held_out_r2": 0.8127,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.4381,
+      "halves": [
+       [
+        "+tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}"
+       ],
+       [
+        "+tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.5,
+      "level": "medium",
+      "weakest": "persistence",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.9973,
+       "persistence": 0.5
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": 0.8126984126984127,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 118,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.9611,
+       "level": "high",
+       "error": 0.0405,
+       "hold_error": 0.807,
+       "beats_hold": true,
+       "growth": 0.14424810415711498,
+       "z": 3.414,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": []
+      },
+      "persistence": 0.5,
+      "persistence_of": 4
+     },
+     "written_by": "tasks.tickets",
+     "accumulator": true,
+     "balance": [
+      {
+       "series": "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}",
+       "sign": 1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793527698.449366
+    }
+   },
+   {
+    "id": "test_report_files_read",
+    "name": "test report files (read)",
+    "unit": "items",
+    "series": {
+     "name": "test_report_files",
+     "labels": {
+      "state": "read",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tests"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.14,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 0.0,
+     "exact_steps": 0.9167,
+     "steps": 720,
+     "balance_steps": 120,
+     "trust": {
+      "kind": "passage",
+      "score": 0.5,
+      "level": "medium",
+      "weakest": "persistence",
+      "components": {
+       "matched": 0.9,
+       "in_step": 1.0,
+       "units": 0.7654,
+       "persistence": 0.5
+      },
+      "units": 29,
+      "matched_share": 0.9,
+      "why": [
+       "a state each item leaves within a step: judged on its raw points, not on a balance of its changes"
+      ],
+      "behaviour": {
+       "score": 0.3352,
+       "level": "low",
+       "error": 1.9831,
+       "hold_error": 0.0,
+       "beats_hold": false,
+       "growth": 2.6145150296843886,
+       "z": 1.003,
+       "horizon": 5.013,
+       "pairs": 120,
+       "why": [
+        "run forward from part-way through the window, it misses the measured level by 2.0\u00d7 the level's spread",
+        "holding the level does better (0.00 against 1.98 of the spread)"
+       ]
+      },
+      "persistence": 0.5,
+      "persistence_of": 4
+     },
+     "written_by": "tasks.tests",
+     "accumulator": false,
+     "balance": [
+      {
+       "series": "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}",
+       "sign": 1
+      },
+      {
+       "series": "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}",
+       "sign": -1
+      }
+     ],
+     "held_minutes": 0.0,
+     "passing": {
+      "ins": [
+       "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}"
+      ],
+      "outs": [
+       "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}"
+      ],
+      "out_of_step_steps": 0,
+      "moved_steps": 29,
+      "rises_at_ins": [
+       9,
+       10
+      ],
+      "falls_at_outs": [
+       0,
+       0
+      ],
+      "note": "a state each item leaves within a step, so the grid sees it empty: its level, measured, rose at the ins' events and fell at the outs'"
+     },
+     "live_from": 1793527698.449597
+    }
+   }
+  ],
+  "flows": [
+   {
+    "id": "unmeasured:outside>test_report_files_read",
+    "name": "outside \u2192 test report files read (unmeasured)",
+    "counter": null,
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "value": 0.9999
+      },
+      "origin": "discovered",
+      "method": "sdlab:kalman_lna",
+      "window": [
+       1793527698.449829,
+       1793528298.449829
+      ],
+      "era": null,
+      "quality": {
+       "events": 0,
+       "steps": 30.0,
+       "per_step": 0.3333
+      },
+      "inputs": [],
+      "spec": {
+       "form": "constant",
+       "value": 0.9999
+      },
+      "sources": [],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no counter measures it"
+     }
+    },
+    "from": null,
+    "to": "test_report_files_read",
+    "machines": [],
+    "association": "no machine associated yet: no counter measures it",
+    "machine": null,
+    "current": {
+     "form": "constant",
+     "params": {
+      "value": 0.9999
+     },
+     "origin": "discovered",
+     "method": "sdlab:kalman_lna",
+     "window": [
+      1793527698.449829,
+      1793528298.449829
+     ],
+     "era": null,
+     "quality": {
+      "events": 0,
+      "steps": 30.0,
+      "per_step": 0.3333
+     },
+     "inputs": [],
+     "spec": {
+      "form": "constant",
+      "value": 0.9999
+     },
+     "sources": [],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_tickets_created_total_planner",
+    "name": "tasks tickets created (planner)",
+    "counter": {
+     "name": "tasks_tickets_created_total",
+     "labels": {
+      "by": "planner",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.144,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.892527
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 1.802,
+       "aic": -1.604,
+       "dispersion": 0.002,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_linear_tasks_tickets_OPEN": -3.63,
+       "aic_linear_input:tests_confirmed_gate": 0.38,
+       "aic_linear_test_report_files_read": 0.39,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k_test_report_files_read": 0.358183,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_tasks_tickets_OPEN": "its rate is below zero from level 1 of tasks_tickets_OPEN, which the stock held only long enough for 1.9 events at this flow's mean rate: too few to have seen that nothing flows there",
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "driver": {
+      "tried": 6,
+      "price": 5.58,
+      "chosen": null
+     },
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": null,
+    "to": "tasks_tickets_OPEN",
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.892527
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 1.802,
+      "aic": -1.604,
+      "dispersion": 0.002,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_linear_tasks_tickets_OPEN": -3.63,
+      "aic_linear_input:tests_confirmed_gate": 0.38,
+      "aic_linear_test_report_files_read": 0.39,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k_test_report_files_read": 0.358183,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_tasks_tickets_OPEN": "its rate is below zero from level 1 of tasks_tickets_OPEN, which the stock held only long enough for 1.9 events at this flow's mean rate: too few to have seen that nothing flows there",
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "agent_turns_started_total_supervisor",
+    "name": "agent turns started (supervisor)",
+    "counter": {
+     "name": "agent_turns_started_total",
+     "labels": {
+      "machine": "supervisor",
+      "role": "supervisor",
+      "project": "demo-8ac87a4c",
+      "instrument": "agents.turns"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 5.036,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 0.698196
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 7.0,
+       "loglik": -9.515,
+       "aic": 21.03,
+       "dispersion": 0.445,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "driver": {
+      "tried": 0,
+      "price": 2.0,
+      "chosen": null
+     },
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "supervisor",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "request.done",
+         "source": "supervisor"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.1429,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 7.0,
+         "events": 7.0
+        },
+        "steps": 720,
+        "why": "supervisor's request.done events match its increments event by event: 100% of its 7 increments pair with one of the 7 events within a step, 14% by chance"
+       }
+      ]
+     }
+    },
+    "from": null,
+    "to": "agents_working_supervisor",
+    "machines": [
+     {
+      "machine": "supervisor",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "request.done",
+       "source": "supervisor"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.1429,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 7.0,
+       "events": 7.0
+      },
+      "steps": 720,
+      "why": "supervisor's request.done events match its increments event by event: 100% of its 7 increments pair with one of the 7 events within a step, 14% by chance"
+     }
+    ],
+    "association": null,
+    "machine": "supervisor",
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 0.698196
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 7.0,
+      "loglik": -9.515,
+      "aic": 21.03,
+      "dispersion": 0.445,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "agent_turns_finished_total_supervisor",
+    "name": "agent turns finished (supervisor)",
+    "counter": {
+     "name": "agent_turns_finished_total",
+     "labels": {
+      "machine": "supervisor",
+      "role": "supervisor",
+      "project": "demo-8ac87a4c",
+      "instrument": "agents.turns"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 5.036,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "proportional",
+      "params": {
+       "k": 3.495691
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 6.0,
+       "loglik": 1.509,
+       "aic": -1.018,
+       "dispersion": 0.501,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_constant": 20.16,
+       "proportional_k": 3.495691,
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [
+       "agents_working_supervisor"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "driver": {
+      "tried": 0,
+      "price": 2.0,
+      "chosen": null
+     },
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "supervisor",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "agent.said",
+         "source": "supervisor"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.1,
+        "lag_steps": 0,
+        "counts": {
+         "flow": 6.0,
+         "events": 6.0
+        },
+        "steps": 720,
+        "why": "supervisor's agent.said events match its increments event by event: 100% of its 6 increments pair with one of the 6 events within a step, 10% by chance"
+       }
+      ]
+     }
+    },
+    "from": "agents_working_supervisor",
+    "to": null,
+    "machines": [
+     {
+      "machine": "supervisor",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "agent.said",
+       "source": "supervisor"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.1,
+      "lag_steps": 0,
+      "counts": {
+       "flow": 6.0,
+       "events": 6.0
+      },
+      "steps": 720,
+      "why": "supervisor's agent.said events match its increments event by event: 100% of its 6 increments pair with one of the 6 events within a step, 10% by chance"
+     }
+    ],
+    "association": null,
+    "machine": "supervisor",
+    "current": {
+     "form": "proportional",
+     "params": {
+      "k": 3.495691
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 6.0,
+      "loglik": 1.509,
+      "aic": -1.018,
+      "dispersion": 0.501,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_constant": 20.16,
+      "proportional_k": 3.495691,
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [
+      "agents_working_supervisor"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_ticket_transitions_total_merge_gate_MERGING_DONE",
+    "name": "tasks ticket transitions (merge_gate, MERGING, DONE)",
+    "counter": {
+     "name": "tasks_ticket_transitions_total",
+     "labels": {
+      "by": "merge_gate",
+      "from": "MERGING",
+      "to": "DONE",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.144,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.892527
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 1.802,
+       "aic": -1.604,
+       "dispersion": 0.007,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_linear_input:tests_confirmed_gate": 0.38,
+       "aic_linear_test_report_files_read": 0.39,
+       "aic_proportional_test_report_files_read": null,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k_test_report_files_read": 0.358183,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flows": [
+      "[email]"
+     ],
+     "driver": {
+      "tried": 5,
+      "price": 5.22,
+      "chosen": null
+     },
+     "not_drivers": {
+      "tasks_tickets_OPEN": "its balance has tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}, which counts the same events as this flow"
+     },
+     "same_as": [
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "merge_gate",
+        "from": "APPROVED",
+        "to": "MERGING",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "IN_REVIEW",
+        "to": "APPROVED",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "READY_FOR_REVIEW",
+        "to": "IN_REVIEW",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "worker",
+        "from": "IN_PROGRESS",
+        "to": "READY_FOR_REVIEW",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": null,
+    "to": "tasks_tickets_DONE",
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.892527
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 1.802,
+      "aic": -1.604,
+      "dispersion": 0.007,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_linear_input:tests_confirmed_gate": 0.38,
+      "aic_linear_test_report_files_read": 0.39,
+      "aic_proportional_test_report_files_read": null,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k_test_report_files_read": 0.358183,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "[email]",
+    "name": "tasks ticket transitions (merge_gate, MERGING, DONE)",
+    "counter": {
+     "name": "tasks_ticket_transitions_total",
+     "labels": {
+      "by": "merge_gate",
+      "from": "MERGING",
+      "to": "DONE",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.144,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.892527
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 1.802,
+       "aic": -1.604,
+       "dispersion": 0.007,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_linear_input:tests_confirmed_gate": 0.38,
+       "aic_linear_test_report_files_read": 0.39,
+       "aic_proportional_test_report_files_read": null,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k_test_report_files_read": 0.358183,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flow_of": "tasks_ticket_transitions_total_merge_gate_MERGING_DONE",
+     "note": "the same events as tasks_ticket_transitions_total_merge_gate_MERGING_DONE, which also move a stock tasks.tests measures: one event, two materials",
+     "through": [
+      "test_report_files_read"
+     ],
+     "driver": {
+      "tried": 5,
+      "price": 5.22,
+      "chosen": null
+     },
+     "not_drivers": {
+      "tasks_tickets_OPEN": "its balance has tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}, which counts the same events as this flow"
+     },
+     "same_as": [
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "merge_gate",
+        "from": "APPROVED",
+        "to": "MERGING",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "IN_REVIEW",
+        "to": "APPROVED",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "READY_FOR_REVIEW",
+        "to": "IN_REVIEW",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "worker",
+        "from": "IN_PROGRESS",
+        "to": "READY_FOR_REVIEW",
+        "project": "demo-8ac87a4c",
+        "instrument": "tasks.tickets"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": "test_report_files_read",
+    "to": null,
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.892527
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 1.802,
+      "aic": -1.604,
+      "dispersion": 0.007,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_linear_input:tests_confirmed_gate": 0.38,
+      "aic_linear_test_report_files_read": 0.39,
+      "aic_proportional_test_report_files_read": null,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k_test_report_files_read": 0.358183,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "orchestra_events_total_merge_gate_gate_landed",
+    "name": "orchestra events (merge_gate, gate.landed)",
+    "counter": {
+     "name": "orchestra_events_total",
+     "labels": {
+      "project": "demo-8ac87a4c",
+      "type": "gate.landed",
+      "source": "merge_gate"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": null,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "linear",
+      "params": {
+       "c": 2.245875,
+       "k": 9.661761
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.656,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 7.808,
+       "aic": -11.617,
+       "dispersion": 0.128,
+       "steps": 120.0,
+       "live_minutes": 10.02,
+       "aic_constant": -1.62,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_proportional_tasks_tickets_OPEN": null,
+       "aic_linear_input:tests_confirmed_gate": 0.36,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k_tasks_tickets_OPEN": 43.165732,
+       "proportional_k_test_report_files_read": 0.358183,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [
+       "tasks_tickets_OPEN"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "conflicts": [
+      {
+       "end": "dst",
+       "kept": "repo_files",
+       "others": [
+        {
+         "stock": "repo_commits",
+         "share": 0.8864
+        }
+       ]
+      }
+     ],
+     "driver": {
+      "tried": 7,
+      "price": 5.89,
+      "chosen": "tasks_tickets_OPEN",
+      "beat_price": 1,
+      "form": "linear",
+      "dispersion": 1.0,
+      "gain": 9.99,
+      "over_trend": 11.95,
+      "shifted": {
+       "+1.25 min": {
+        "in_place": 6.27,
+        "moved": 1.98
+       },
+       "+2.51 min": {
+        "in_place": 5.33,
+        "moved": 2.05
+       },
+       "-1.25 min": {
+        "in_place": 5.94,
+        "moved": 2.07
+       },
+       "-2.51 min": {
+        "in_place": 6.21,
+        "moved": 1.68
+       }
+      }
+     },
+     "not_drivers": {
+      "repo_commits": "its balance has this flow's counter"
+     },
+     "same_as": [
+      {
+       "name": "orchestra_events_total",
+       "labels": {
+        "project": "demo-8ac87a4c",
+        "type": "gate.started",
+        "source": "merge_gate"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "merge_gate",
+        "origin": "inferred",
+        "by": "its own events",
+        "confidence": 1.0,
+        "events": {
+         "type": "gate.landed",
+         "source": "merge_gate"
+        },
+        "why": "its counter counts merge_gate's own events of type gate.landed"
+       }
+      ]
+     }
+    },
+    "from": null,
+    "to": "repo_files",
+    "machines": [
+     {
+      "machine": "merge_gate",
+      "origin": "inferred",
+      "by": "its own events",
+      "confidence": 1.0,
+      "events": {
+       "type": "gate.landed",
+       "source": "merge_gate"
+      },
+      "why": "its counter counts merge_gate's own events of type gate.landed"
+     }
+    ],
+    "association": null,
+    "machine": "merge_gate",
+    "current": {
+     "form": "linear",
+     "params": {
+      "c": 2.245875,
+      "k": 9.661761
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.656,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 7.808,
+      "aic": -11.617,
+      "dispersion": 0.128,
+      "steps": 120.0,
+      "live_minutes": 10.02,
+      "aic_constant": -1.62,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_proportional_tasks_tickets_OPEN": null,
+      "aic_linear_input:tests_confirmed_gate": 0.36,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k_tasks_tickets_OPEN": 43.165732,
+      "proportional_k_test_report_files_read": 0.358183,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.8): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [
+      "tasks_tickets_OPEN"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "orchestra_events_total_reviewer_task_accepted",
+    "name": "orchestra events (reviewer, task.accepted)",
+    "counter": null,
+    "equations": [
+     {
+      "form": "linear",
+      "params": {
+       "c": 2.138382,
+       "k": 9.769245
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.516,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 7.018,
+       "aic": -10.037,
+       "dispersion": 0.153,
+       "steps": 120.0,
+       "live_minutes": 10.02,
+       "aic_constant": 0.48,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_proportional_tasks_tickets_OPEN": null,
+       "aic_linear_input:tests_confirmed_gate": 1.99,
+       "proportional_k_agents_working_supervisor": 16.313223,
+       "proportional_k_tasks_tickets_OPEN": 41.677259,
+       "proportional_k_test_report_files_read": 0.345832,
+       "proportional_k_input:tests_confirmed_gate": 3.140187,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.0): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.1 against 0.9): it follows what drives the flow, it does not drive it",
+        "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.1 against 0.9): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.0): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [
+       "tasks_tickets_OPEN"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-8ac87a4c",
+       "type": "task.accepted",
+       "source": "reviewer/program"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "evidence": {
+     "driver": {
+      "tried": 7,
+      "price": 5.89,
+      "chosen": "tasks_tickets_OPEN",
+      "beat_price": 1,
+      "form": "linear",
+      "dispersion": 1.0,
+      "gain": 10.52,
+      "over_trend": 12.25,
+      "shifted": {
+       "+1.25 min": {
+        "in_place": 6.59,
+        "moved": 1.9
+       },
+       "+2.51 min": {
+        "in_place": 5.65,
+        "moved": 1.95
+       },
+       "-1.25 min": {
+        "in_place": 5.94,
+        "moved": 2.07
+       },
+       "-2.51 min": {
+        "in_place": 6.21,
+        "moved": 1.68
+       }
+      }
+     },
+     "same_as": [
+      {
+       "name": "orchestra_events_total",
+       "labels": {
+        "project": "demo-8ac87a4c",
+        "source": "reviewer",
+        "type": "review.approved"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "reviewer",
+        "origin": "inferred",
+        "by": "its own events",
+        "confidence": 1.0,
+        "events": {
+         "type": "task.accepted",
+         "source": "reviewer"
+        },
+        "why": "its counter counts reviewer's own events of type task.accepted"
+       }
+      ]
+     }
+    },
+    "from": null,
+    "to": "repo_commits",
+    "machines": [
+     {
+      "machine": "reviewer",
+      "origin": "inferred",
+      "by": "its own events",
+      "confidence": 1.0,
+      "events": {
+       "type": "task.accepted",
+       "source": "reviewer"
+      },
+      "why": "its counter counts reviewer's own events of type task.accepted"
+     }
+    ],
+    "association": null,
+    "machine": "reviewer",
+    "current": {
+     "form": "linear",
+     "params": {
+      "c": 2.138382,
+      "k": 9.769245
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.516,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 7.018,
+      "aic": -10.037,
+      "dispersion": 0.153,
+      "steps": 120.0,
+      "live_minutes": 10.02,
+      "aic_constant": 0.48,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_proportional_tasks_tickets_OPEN": null,
+      "aic_linear_input:tests_confirmed_gate": 1.99,
+      "proportional_k_agents_working_supervisor": 16.313223,
+      "proportional_k_tasks_tickets_OPEN": 41.677259,
+      "proportional_k_test_report_files_read": 0.345832,
+      "proportional_k_input:tests_confirmed_gate": 3.140187,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.0): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.1 against 0.9): it follows what drives the flow, it does not drive it",
+       "proportional_test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.1 against 0.9): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.0 against 1.0): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [
+      "tasks_tickets_OPEN"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+    "name": "tasks ticket transitions (worker, OPEN, IN_PROGRESS)",
+    "counter": {
+     "name": "tasks_ticket_transitions_total",
+     "labels": {
+      "by": "worker",
+      "from": "OPEN",
+      "to": "IN_PROGRESS",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.144,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "linear",
+      "params": {
+       "c": 2.245033,
+       "k": 9.662665
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 7.801,
+       "aic": -11.601,
+       "dispersion": 0.165,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_constant": -1.6,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_proportional": null,
+       "aic_linear_input:tests_confirmed_gate": 0.38,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k": 43.165732,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "its rate rises with test_report_files_read, which its own events fill: higher after a burst of them, so the form reads the flow's effect as its cause",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [
+       "tasks_tickets_OPEN"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flows": [
+      "[email]"
+     ],
+     "driver": {
+      "tried": 4,
+      "price": 4.77,
+      "chosen": null,
+      "beat_price": 0
+     },
+     "not_drivers": {
+      "tasks_tickets_DONE": "its balance has tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}, which counts the same events as this flow"
+     },
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": "tasks_tickets_OPEN",
+    "to": null,
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "linear",
+     "params": {
+      "c": 2.245033,
+      "k": 9.662665
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 7.801,
+      "aic": -11.601,
+      "dispersion": 0.165,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_constant": -1.6,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_proportional": null,
+      "aic_linear_input:tests_confirmed_gate": 0.38,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k": 43.165732,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "its rate rises with test_report_files_read, which its own events fill: higher after a burst of them, so the form reads the flow's effect as its cause",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [
+      "tasks_tickets_OPEN"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "[email]",
+    "name": "tasks ticket transitions (worker, OPEN, IN_PROGRESS)",
+    "counter": {
+     "name": "tasks_ticket_transitions_total",
+     "labels": {
+      "by": "worker",
+      "from": "OPEN",
+      "to": "IN_PROGRESS",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.144,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "linear",
+      "params": {
+       "c": 2.245033,
+       "k": 9.662665
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793527698.449829,
+       1793528300.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 29.0,
+       "loglik": 7.801,
+       "aic": -11.601,
+       "dispersion": 0.165,
+       "steps": 120.0,
+       "live_minutes": 10.03,
+       "aic_constant": -1.6,
+       "aic_proportional_agents_working_supervisor": null,
+       "aic_proportional": null,
+       "aic_linear_input:tests_confirmed_gate": 0.38,
+       "proportional_k_agents_working_supervisor": 16.895838,
+       "proportional_k": 43.165732,
+       "proportional_k_input:tests_confirmed_gate": 3.252336,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+        "linear_test_report_files_read": "its rate rises with test_report_files_read, which its own events fill: higher after a burst of them, so the form reads the flow's effect as its cause",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+       },
+       "no_flow_from_levels": 1.0
+      },
+      "inputs": [
+       "tasks_tickets_OPEN"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flow_of": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+     "note": "the same events as tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS, which also move a stock tasks.tests measures: one event, two materials",
+     "through": [
+      "test_report_files_read"
+     ],
+     "driver": {
+      "tried": 4,
+      "price": 4.77,
+      "chosen": null,
+      "beat_price": 0
+     },
+     "not_drivers": {
+      "tasks_tickets_DONE": "its balance has tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}, which counts the same events as this flow"
+     },
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": null,
+    "to": "test_report_files_read",
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "linear",
+     "params": {
+      "c": 2.245033,
+      "k": 9.662665
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793527698.449829,
+      1793528300.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 29.0,
+      "loglik": 7.801,
+      "aic": -11.601,
+      "dispersion": 0.165,
+      "steps": 120.0,
+      "live_minutes": 10.03,
+      "aic_constant": -1.6,
+      "aic_proportional_agents_working_supervisor": null,
+      "aic_proportional": null,
+      "aic_linear_input:tests_confirmed_gate": 0.38,
+      "proportional_k_agents_working_supervisor": 16.895838,
+      "proportional_k": 43.165732,
+      "proportional_k_input:tests_confirmed_gate": 3.252336,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it",
+       "linear_test_report_files_read": "its rate rises with test_report_files_read, which its own events fill: higher after a burst of them, so the form reads the flow's effect as its cause",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 5.2 against 1.8): it follows what drives the flow, it does not drive it"
+      },
+      "no_flow_from_levels": 1.0
+     },
+     "inputs": [
+      "tasks_tickets_OPEN"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   }
+  ],
+  "machines": [
+   {
+    "id": "merge_gate",
+    "name": "merge_gate",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): its own events.",
+    "attributed": [
+     "orchestra_events_total_merge_gate_gate_landed"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-8ac87a4c",
+       "type": "gate.landed",
+       "source": "merge_gate"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "reviewer",
+    "name": "reviewer",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): its own events.",
+    "attributed": [
+     "orchestra_events_total_reviewer_task_accepted"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-8ac87a4c",
+       "source": "reviewer",
+       "type": "task.accepted"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "supervisor",
+    "name": "supervisor",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): events on the bus.",
+    "attributed": [
+     "agent_turns_started_total_supervisor",
+     "agent_turns_finished_total_supervisor"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-8ac87a4c",
+       "type": "agent.said",
+       "source": "supervisor"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     },
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-8ac87a4c",
+       "type": "request.done",
+       "source": "supervisor"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   }
+  ],
+  "eras": [],
+  "era": null,
+  "discovery": {
+   "summed": {
+    "orchestra_events_total{source=\"coordinator\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": "summed over 1 instance"
+   },
+   "start": 1793524700.0,
+   "end": 1793528300.0,
+   "fit_start": 1793527698.449829,
+   "live_minutes": 10.03,
+   "gaps": [],
+   "step": 5.0,
+   "sampled": 68,
+   "series": 67,
+   "inputs": {
+    "tests_confirmed_gate": {
+     "name": "tests_confirmed",
+     "labels": {
+      "kind": "gate",
+      "project": "demo-8ac87a4c",
+      "instrument": "tasks.tests"
+     },
+     "resolution_s": 5.036934852600098,
+     "read": "hold",
+     "source": "own"
+    }
+   },
+   "held": {},
+   "resolution": {
+    "agent_spend_dollars_total{instrument=\"agents.turns\",machine=\"supervisor\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "agent_turns_finished_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "agent_turns_started_total{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "agents_working{instrument=\"agents.turns\",machine=\"coordinator\",role=\"coordinator\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "agents_working{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}": {
+     "resolution_s": 30.213,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"coordinator\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"merge_gate\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.host.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.intent.changed\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.process.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"milestone.created\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"milestone.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"request.done\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"task.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"ticket.created\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"agent.said\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"instruments.changed\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"request.done\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"session.settled\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"session.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"supervisor\",type=\"task.query_requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "repo_commits{instrument=\"repo_stats\"}": {
+     "resolution_s": 15.122,
+     "read": "hold"
+    },
+    "repo_files{instrument=\"repo_stats\"}": {
+     "resolution_s": 15.122,
+     "read": "hold"
+    },
+    "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"APPROVED\",instrument=\"tasks.tickets\",to=\"MERGING\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"IN_REVIEW\",instrument=\"tasks.tickets\",to=\"APPROVED\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"READY_FOR_REVIEW\",instrument=\"tasks.tickets\",to=\"IN_REVIEW\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"IN_PROGRESS\",instrument=\"tasks.tickets\",to=\"READY_FOR_REVIEW\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"APPROVED\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"BLOCKED\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"CANCELLED\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"DONE\"}": {
+     "resolution_s": 20.145,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_EXTERNAL_REVIEW\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_PROGRESS\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_REVIEW\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"MERGING\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"OPEN\"}": {
+     "resolution_s": 10.071,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"PREPARING\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"READY_FOR_REVIEW\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"REJECTED\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}": {
+     "resolution_s": 20.144,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"error\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"failed\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"passed\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"skipped\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "test_report_files{instrument=\"tasks.tests\",state=\"read\"}": {
+     "resolution_s": 20.14,
+     "read": "hold"
+    },
+    "test_report_files{instrument=\"tasks.tests\",state=\"unreadable\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests_added_total{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests_confirmed{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests_duration_seconds{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests_flaky{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "tests_removed_total{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.037,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"reviewer\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"worker\",type=\"orchestra.machine.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    }
+   },
+   "stocks": 6,
+   "flows": 9,
+   "min_r2": 0.9,
+   "by_construction": [],
+   "refused": {},
+   "left_out": {
+    "agent_spend_dollars_total{instrument=\"agents.turns\",machine=\"supervisor\"}": "a counter of only 0.138158 events: fewer than 5, too few to carry a balance; it completed none",
+    "agents_working{instrument=\"agents.turns\",machine=\"coordinator\",role=\"coordinator\"}": "a level that did not change in the window while it was live",
+    "notes_files{draft=\"true\",instrument=\"notes_files.count\"}": "draft: recorded for an option being tried, left out of discovery",
+    "orchestra_events_total{source=\"coordinator\",type=\"orchestra.machine.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}": "the same as orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"} (counts the same events)",
+    "orchestra_events_total{source=\"merge_gate\",type=\"orchestra.machine.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.host.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.intent.changed\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.machine.started\"}": "the same as orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.host.started\"} (counts the same events)",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.process.started\"}": "a counter of only 4 events: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"planner\",type=\"milestone.created\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"planner\",type=\"milestone.requested\"}": "the same as orchestra_events_total{source=\"planner\",type=\"milestone.created\"} (counts the same events)",
+    "orchestra_events_total{source=\"planner\",type=\"request.done\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"planner\",type=\"task.requested\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"planner\",type=\"ticket.created\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"reviewer\",type=\"orchestra.machine.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": "the same as orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"} (counts the same events)",
+    "orchestra_events_total{source=\"supervisor\",type=\"agent.said\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"supervisor\",type=\"instruments.changed\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"supervisor\",type=\"orchestra.machine.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"supervisor\",type=\"request.done\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"supervisor\",type=\"session.settled\"}": "the same as orchestra_events_total{source=\"supervisor\",type=\"agent.said\"} (counts the same events)",
+    "orchestra_events_total{source=\"supervisor\",type=\"session.started\"}": "the same as orchestra_events_total{source=\"supervisor\",type=\"request.done\"} (counts the same events)",
+    "orchestra_events_total{source=\"supervisor\",type=\"task.query_requested\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"worker\",type=\"orchestra.machine.started\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": "the same as orchestra_events_total{source=\"worker\",type=\"task.accepted\"} (counts the same events)",
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": "a counter no stock's balance needed",
+    "orchestra_host_up{machine=\"orchestra-host\"}": "Orchestra's own (the host's and the Core page's plumbing), not a measure of the system",
+    "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}": "a counter no stock's balance needed",
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"APPROVED\",instrument=\"tasks.tickets\",to=\"MERGING\"}": "the same as tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"IN_REVIEW\",instrument=\"tasks.tickets\",to=\"APPROVED\"}": "the same as tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"READY_FOR_REVIEW\",instrument=\"tasks.tickets\",to=\"IN_REVIEW\"}": "the same as tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"IN_PROGRESS\",instrument=\"tasks.tickets\",to=\"READY_FOR_REVIEW\"}": "the same as tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"} (counts the same events)",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"APPROVED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"BLOCKED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"CANCELLED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_EXTERNAL_REVIEW\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_PROGRESS\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_REVIEW\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"MERGING\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"PREPARING\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"READY_FOR_REVIEW\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"REJECTED\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"error\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"failed\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"passed\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"skipped\"}": "a level that did not change in the window while it was live",
+    "test_report_files{instrument=\"tasks.tests\",state=\"unreadable\"}": "a level that did not change in the window while it was live",
+    "tests_added_total{instrument=\"tasks.tests\",kind=\"gate\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "tests_confirmed{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that changed in only 1 step: fewer than 5, too few to tell a balance from coincidence",
+    "tests_duration_seconds{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live",
+    "tests_flaky{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live",
+    "tests_removed_total{instrument=\"tasks.tests\",kind=\"gate\"}": "a counter that did not move in the window",
+    "tests{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live"
+   },
+   "strategy": "kalman_lna",
+   "sd_flows": 1,
+   "options": {},
+   "steps": 30,
+   "known": [
+    "test_report_files_read"
+   ],
+   "dropped": [],
+   "chosen": "forward, changing inflows, trust receivers",
+   "method": "identify",
+   "sdlab_explains": "residual",
+   "unexplained": {},
+   "hidden": [],
+   "groups": 1,
+   "handed": [
+    "test_report_files_read"
+   ],
+   "sdlab_step": 20.0,
+   "deadline_s": 240.0,
+   "compute_ms": 1157,
+   "behaviour": {
+    "from": 1793527698.449829,
+    "fractions": [
+     0.5,
+     0.6667,
+     0.8333
+    ],
+    "stocks": 6
+   },
+   "window_s": 3600.0,
+   "step_s": 5.0,
+   "looked_at": 68
+  },
+  "stored": true,
+  "version": 3,
+  "current": 3,
+  "versions": [
+   {
+    "version": 1,
+    "saved_at": 1793528003.422596,
+    "note": "discovered: the structure changed (kalman_lna)",
+    "era": null,
+    "stocks": 3,
+    "flows": 3,
+    "fitted": 3,
+    "machines": 3
+   },
+   {
+    "version": 2,
+    "saved_at": 1793528184.0123389,
+    "note": "discovered on request: the structure changed (kalman_lna)",
+    "era": null,
+    "stocks": 5,
+    "flows": 8,
+    "fitted": 8,
+    "machines": 5
+   },
+   {
+    "version": 3,
+    "saved_at": 1793528304.7597492,
+    "note": "discovered: the structure changed (kalman_lna)",
+    "era": null,
+    "stocks": 6,
+    "flows": 10,
+    "fitted": 10,
+    "machines": 3
+   }
+  ],
+  "live": true,
+  "as_of": 1793528303.407142,
+  "eras_recorded": [],
+  "current_era": null,
+  "predictions": [],
+  "levels": {
+   "agents_working_supervisor": {
+    "t": 1793528312.828541,
+    "v": 1.0
+   },
+   "tasks_tickets_OPEN": {
+    "t": 1793528312.828181,
+    "v": 0.0
+   },
+   "repo_commits": {
+    "t": 1793528302.743857,
+    "v": 60.0
+   },
+   "repo_files": {
+    "t": 1793528302.743857,
+    "v": 38.0
+   },
+   "tasks_tickets_DONE": {
+    "t": 1793528312.828181,
+    "v": 30.0
+   },
+   "test_report_files_read": {
+    "t": 1793528312.828387,
+    "v": 10.0
+   }
+  },
+  "levels_error": null,
+  "intended": {
+   "version": 8,
+   "shown": 3,
+   "live": true,
+   "since": 2,
+   "since_saved_at": 1793528184.0123389,
+   "expected": [
+    {
+     "part": "stock",
+     "id": "notes_files",
+     "key": null,
+     "name": "Notes Files",
+     "description": "Notes files (notes/note-NNN.txt) in the repository",
+     "declared": true,
+     "present": false,
+     "measured": false,
+     "near": null,
+     "note": "Create a Notes Files stock.",
+     "unit": "files",
+     "linked": null,
+     "found_id": null,
+     "simulated": false,
+     "target": null,
+     "candidates": [],
+     "measure": {
+      "options": [
+       {
+        "key": "a",
+        "title": "Count tracked notes files in the repository",
+        "kind": "script",
+        "how": "A one-line shell command in the repository root counts files git tracks under notes/*.txt and prints notes_files as a level.",
+        "cost": "One git ls-files per minute; reads only the index.",
+        "caveat": "Counts committed files only, so a note written but not yet committed does not count until it lands on the branch the checkout is on.",
+        "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+        "simulated": false,
+        "instrument": "notes_files.count",
+        "commit": null,
+        "first_points": [
+         [
+          1793528205.1,
+          24.0
+         ]
+        ],
+        "provenance": "written by the Supervisor \u00b7 /private/var/folders/4m/4qkl0zz93lqcwqdcs5nhttnw0000gn/T/pytest-of-daniellewis/pytest-7257/test_the_owner_designs_notes_f0/home/demo-8ac87a4c/agents/instruments/notes_files.count.sh \u00b7 entry in the owner's overlay \u00b7 recording \u00b7 draft until kept"
+       }
+      ],
+      "chosen": null,
+      "change": "c3.0"
+     },
+     "provenance": {
+      "source": "supervisor",
+      "author": "owner",
+      "turn": "sessions/supervisor/1",
+      "message": "I want a feedback loop where once per day an agent runs and tries to improve how many notes files get added per day. I think we need to start tracking notes files. Create a Notes Files stock.",
+      "quote": "Create a Notes Files stock.",
+      "reason": "The owner wants to track how many notes files the project holds, as the level the daily improvement loop tries to raise.",
+      "via": "plugin",
+      "at": 1793528199.307862
+     },
+     "state": "declared",
+     "guessed": [],
+     "change": "c1.0",
+     "pending": [],
+     "why": "expected \u00b7 not in v3 \u00b7 not measured"
+    }
+   ],
+   "marks": {
+    "stocks": {
+     "agents_working_supervisor": [
+      "new"
+     ],
+     "tasks_tickets_OPEN": [
+      "new"
+     ],
+     "test_report_files_read": [
+      "new"
+     ]
+    },
+    "flows": {
+     "agent_turns_finished_total_supervisor": [
+      "new"
+     ],
+     "agent_turns_started_total_supervisor": [
+      "new"
+     ],
+     "tasks_ticket_transitions_total_merge_gate_MERGING_DONE": [
+      "new"
+     ],
+     "tasks_tickets_created_total_planner": [
+      "new"
+     ],
+     "unmeasured:outside>test_report_files_read": [
+      "new"
+     ],
+     "[email]": [
+      "new"
+     ],
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS": [
+      "new"
+     ],
+     "[email]": [
+      "new"
+     ]
+    }
+   },
+   "removed": {
+    "stocks": [],
+    "flows": []
+   },
+   "changes": [
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "agents_working{role=\"supervisor\"}",
+     "id": "agents_working_supervisor",
+     "status": "new",
+     "since": 3,
+     "why": "new in v3",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "tasks_tickets{state=\"OPEN\"}",
+     "id": "tasks_tickets_OPEN",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "test_report_files{state=\"read\"}",
+     "id": "test_report_files_read",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "agents_working{role=\"supervisor\"} -> outside by agent_turns_finished_total{role=\"supervisor\"}",
+     "id": "agent_turns_finished_total_supervisor",
+     "status": "new",
+     "since": 3,
+     "why": "new in v3",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> agents_working{role=\"supervisor\"} by agent_turns_started_total{role=\"supervisor\"}",
+     "id": "agent_turns_started_total_supervisor",
+     "status": "new",
+     "since": 3,
+     "why": "new in v3",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"DONE\"} by tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",to=\"DONE\"}",
+     "id": "tasks_ticket_transitions_total_merge_gate_MERGING_DONE",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"OPEN\"} by tasks_tickets_created_total{by=\"planner\"}",
+     "id": "tasks_tickets_created_total_planner",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> test_report_files{state=\"read\"}",
+     "id": "unmeasured:outside>test_report_files_read",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> test_report_files{state=\"read\"} by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "[email]",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "tasks_tickets{state=\"OPEN\"} -> outside by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "test_report_files{state=\"read\"} -> outside by tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",to=\"DONE\"}",
+     "id": "[email]",
+     "status": "suggestion",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "o",
+     "part": "stock",
+     "id": "notes_files",
+     "key": null,
+     "why": "expected \u00b7 not in v3 \u00b7 not measured",
+     "candidates": []
+    }
+   ],
+   "came_and_went": [],
+   "ignored": [],
+   "settled": 0,
+   "unsettled": 11,
+   "stabilised": false,
+   "suggestions": [
+    {
+     "part": "stock",
+     "key": "agents_working{role=\"supervisor\"}",
+     "id": "agents_working_supervisor",
+     "since": 3
+    },
+    {
+     "part": "stock",
+     "key": "tasks_tickets{state=\"OPEN\"}",
+     "id": "tasks_tickets_OPEN",
+     "since": 2
+    },
+    {
+     "part": "stock",
+     "key": "test_report_files{state=\"read\"}",
+     "id": "test_report_files_read",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "agents_working{role=\"supervisor\"} -> outside by agent_turns_finished_total{role=\"supervisor\"}",
+     "id": "agent_turns_finished_total_supervisor",
+     "since": 3
+    },
+    {
+     "part": "flow",
+     "key": "outside -> agents_working{role=\"supervisor\"} by agent_turns_started_total{role=\"supervisor\"}",
+     "id": "agent_turns_started_total_supervisor",
+     "since": 3
+    },
+    {
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"DONE\"} by tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",to=\"DONE\"}",
+     "id": "tasks_ticket_transitions_total_merge_gate_MERGING_DONE",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"OPEN\"} by tasks_tickets_created_total{by=\"planner\"}",
+     "id": "tasks_tickets_created_total_planner",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "outside -> test_report_files{state=\"read\"}",
+     "id": "unmeasured:outside>test_report_files_read",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "outside -> test_report_files{state=\"read\"} by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "[email]",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "tasks_tickets{state=\"OPEN\"} -> outside by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "test_report_files{state=\"read\"} -> outside by tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",to=\"DONE\"}",
+     "id": "[email]",
+     "since": 2
+    }
+   ],
+   "targets": [],
+   "predicted": [],
+   "missing": []
+  }
+ }
+}

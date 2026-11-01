@@ -1,0 +1,13 @@
+{
+ "ok": true,
+ "running": false,
+ "result": {
+  "at": 1793557444.633397,
+  "stocks": 4,
+  "flows": 4,
+  "version": null,
+  "strategy": "kalman_lna",
+  "compute_ms": null
+ },
+ "error": null
+}

@@ -42,6 +42,7 @@ It costs money and needs a logged-in ``claude``, so it runs only when asked:
     #   ORCHESTRA_LIVE_TOOLS_VIA=bash      only one way of calling the tools (default: mcp,bash)
     #   ORCHESTRA_LIVE_MODEL=sonnet        the Supervisor on another model (default haiku)
     #   ORCHESTRA_LIVE_CAP_USD=10          stop past this spend (default 10, the goal's cap)
+    #   ORCHESTRA_LIVE_RUN=haiku-L2        the transcripts' directory (default <tools_via>-<model>-once; <date>/<name> too)
     ORCHESTRA_LIVE_DESIGN=rehearse ...     the same run with the fake Claude, scripted: free
 
 Claude Code's stream for every session (a wrapper tees it) and the Claude Code transcripts of the
@@ -347,7 +348,8 @@ def rehearsal(turn: int, model: dict) -> list[dict]:
                 {"label": "files git tracks", "kind": "existing_series", "series": "repo_files", "how": "repo_stats",
                  "cost": "nothing new"},
                 {"label": "notes files git tracks", "kind": "script", "how": "git ls-files notes", "cost": "under a second"}]}},
-            {"tool": "link", "args": {"declared": "notes_files", "discovered": files, "reason": why}}],
+            {"tool": "link", "args": {"declared": "notes_files", "discovered": files, "reason": why,
+                                      "caveat": "it counts every tracked file, not only notes files"}}],
         3: [{"tool": "declare_machine", "args": {
             "name": "Notes Improver", "kind": "universal", "description": "Improves how many notes files are added a day",
             "mode": "continuous", "receives": ["gate.landed"], "emits": ["work.requested"],
@@ -368,12 +370,20 @@ def rehearsal(turn: int, model: dict) -> list[dict]:
 
 # ---- keeping what happened ----
 
+# An email address only: a local part, @, a dotted domain (no underscores) ending in a real top-level
+# domain (a common generic one or a two-letter country's), not followed by more of a name. A flow id
+# made per machine (`test_report_files_read@orchestra.instruments.test_reports`, `x@bot.jira`) is not one.
+TLDS = "com|net|org|io|dev|ai|app|co|edu|gov|mil|int|info|biz|me|xyz|cloud|tech|email|mail|online|site|[a-z]{2}"
+EMAIL = re.compile(r"(?<![\w.%+-])[A-Za-z0-9._%+-]+@(?!example\.invalid\b)(?:[A-Za-z0-9-]+\.)+(?:" + TLDS + r")(?![\w.-]*\w)",
+                   re.IGNORECASE)
+
+
 def redact(text: str, secrets: list[str]) -> str:
     for s in sorted({s for s in secrets if len(s) >= 12}, key=len, reverse=True):
         text = text.replace(s, "[redacted]")
     text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{12,}", r"\1[redacted]", text)
     text = re.sub(r"(#token=)[^\s\"']+", r"\1[redacted]", text)
-    text = re.sub(r"[A-Za-z0-9._%+-]+@(?!example\.invalid)[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[email]", text)   # the account's
+    text = EMAIL.sub("[email]", text)                                       # the account's
     return re.sub(r"sk-ant-[A-Za-z0-9_-]+", "[redacted]", text)
 
 
@@ -496,8 +506,9 @@ def test_the_owner_designs_notes_files_and_the_notes_improver_live(via, tmp_path
                    "turns": [{k: e[k] for k in ("turn", "model", "seconds", "ok", "why", "tools", "text", "error")}
                              for e in log]}
         snapshot("summary", summary)
-        run = f"{via}-{model}-once"
-        dest = None if REHEARSE else HERE / "transcripts" / datetime.now(UTC).strftime("%Y-%m-%d") / run
+        run = os.environ.get("ORCHESTRA_LIVE_RUN") or f"{via}-{model}-once"     # the transcripts' directory
+        dated = run if "/" in run else f"{datetime.now(UTC):%Y-%m-%d}/{run}"     # a run named with its date keeps it
+        dest = None if REHEARSE else HERE / "transcripts" / dated
         kept = keep(target, live_dir, state_dir, secrets, dest)
         print(f"\nCOST ${spent['usd']:.4f} over {spent['invocations']} Claude Code turns; usage {spent['usage']}\n"
               f"KEPT {live_dir}" + (f" and {len(kept)} files in {dest}" if dest else ""), flush=True)

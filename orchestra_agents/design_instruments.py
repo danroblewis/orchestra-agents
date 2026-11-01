@@ -60,6 +60,10 @@ MAX_LINES = 100
 FIRST_ROUND_S = 120
 NO_DRAFT = ("this Orchestra cannot mark it draft: it records as an ordinary instrument (discovery reads it now) and is not "
             "removed on a timer; keep or remove it on the owner's word")
+EXISTING_FIRST = ("not added: {eid} has an existing series among its options, {opts}. A series already in the store is the "
+                  "first answer even when it counts more than the owner means (a superset) or stands for it (a proxy): link "
+                  "it (link, with its caveat) and offer it to the owner with what it gets wrong. A new instrument is for "
+                  "when the owner rejects that series: add one then, quoting their words. Nothing was run or written")
 SIMULATED = "simulated = true, not draft: discovery reads its series like any other, and the Supervisor removes it unless kept"
 
 
@@ -191,7 +195,10 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     option = next((o for o in options_of(project, part, eid)["options"] if o["key"] == key), None)
     if option is None:
         raise StoreError(f"{eid} has no option {key!r}: propose_measurements first, then add the one you pick")
-    name = (a.get("name") or "").strip()
+    series = [o for o in options_of(project, part, eid)["options"] if o["kind"] == "existing_series" and o.get("series")]
+    if series and option["kind"] != "existing_series" and prov.get("author") != OWNER:
+        raise StoreError(EXISTING_FIRST.format(eid=eid, opts=", ".join(f"{o['key']} ({o['series']})" for o in series)))
+    name =(a.get("name") or "").strip()
     if not NAME.match(name):
         raise StoreError("the instrument's name is letters, digits, '.', '_' and '-' (features.acceptance)")
     try:

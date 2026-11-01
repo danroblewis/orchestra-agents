@@ -1,0 +1,57 @@
+{
+ "turn": 1,
+ "model": "haiku",
+ "seconds": 48,
+ "message": "I want to see how many pull requests are waiting on SAIL at any moment. Create a stock called PRs Waiting for SAIL.",
+ "text": "I declared the stock **PRs Waiting for SAIL** (`prs_waiting_for_sail`), added by you from your message. It has no measurement yet, so it shows as a ghost on the Dynamics page, in the Expected group, marked \"no series yet\".\n\n**How I'd measure it:** nothing in the store records this today (`list_metrics` returned no series). The events do show the state, though: a `github.pr.labeled` event with label `SAIL` means a PR is waiting, and `SAILED` or `github.pr.merged` means it has left. I recorded two options, both marked \"needs approval\" because they read outside the store:\n\n- **a (preferred):** count open PRs labelled `SAIL` (and not `SAILED`) in `danroblewis/orchestra-live-delivery` on GitHub, once per round. Caveat: a PR whose label was removed without a `SAILED` label stays counted until the next round.\n- **b:** derive the count from the local event stream. It reads only local events, but it is only right while every label change reaches the bus.\n\nNothing will record until you approve one of these. Option a needs a GitHub token, which I would name by its environment variable only. Tell me which option you want, and I'll set it up.",
+ "error": null,
+ "timed_out": false,
+ "tools": [
+  "ToolSearch",
+  "declare_stock",
+  "list_metrics",
+  "list_metrics",
+  "read_events",
+  "propose_measurements"
+ ],
+ "ok": false,
+ "why": "no option names the existing workflow_pile_items series",
+ "state": {
+  "stock": {
+   "id": "prs_waiting_for_sail",
+   "name": "PRs Waiting for SAIL",
+   "state": "declared",
+   "found_as": null,
+   "linked": null
+  },
+  "chosen": null,
+  "options": [
+   {
+    "key": "a",
+    "kind": "source",
+    "title": "Open PRs labelled SAIL on GitHub",
+    "series": null,
+    "instrument": null,
+    "first_points": []
+   },
+   {
+    "key": "b",
+    "kind": "script",
+    "title": "Count SAIL labels minus SAILED and merges from the event stream",
+    "series": null,
+    "instrument": null,
+    "first_points": []
+   }
+  ]
+ },
+ "cost_so_far": {
+  "usd": 0.0131,
+  "invocations": 1,
+  "usage": {
+   "input_tokens": 10,
+   "cache_creation_input_tokens": 50436,
+   "cache_read_input_tokens": 171667,
+   "output_tokens": 2545
+  }
+ }
+}

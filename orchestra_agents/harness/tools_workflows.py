@@ -132,6 +132,12 @@ WORKFLOW_TOOLS: list[ToolDef] = [
     ToolDef("list_workflows", "workflows",
             "The project's workflows as the plugin loads them: each with where it is defined, its planner, starts and "
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),
+    ToolDef("list_items", "workflows",
+            "The open items of every workflow, as the Items page lists them, oldest first: each with its step and pile, "
+            "why it waits and on whom (its wait: reason, by, until), its holder, how long it has been there (age_s), how "
+            "often it was reworked, and its fields (a ticket's key, a pull request's number); then the recently closed, "
+            "with their outcome. What to read first when the owner asks what is stuck or what needs them.",
+            {"workflow": S("Only this workflow's items (leave out: every workflow)")}),
     ToolDef("explain_item", "workflows",
             "Why an item is where it is: its summary, each field with the fact that set it, its position in each workflow "
             "(step, pile, wait reason), the facts not counted toward a step and why, and its last facts.",

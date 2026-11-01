@@ -1,0 +1,56 @@
+{
+ "turn": 1,
+ "model": "haiku",
+ "seconds": 46,
+ "message": "I want to see how many pull requests are waiting on SAIL at any moment. Create a stock called PRs Waiting for SAIL.",
+ "text": "I declared the stock **PRs Waiting for SAIL** (`prs_waiting_for_sail`), added by you from your message. It is recorded but not yet placed in the model.\n\n**What measures it:** the store already records the count of items in the `delivery_live` workflow's SAIL-check waiting pile, as `workflow_pile_items{workflow=\"delivery_live\",pile=\"sail_check.waiting\"}`. It is updated every few seconds, so it is a live level. Nothing new is recorded or run.\n\n**Two things to decide:**\n- **Is the SAIL check the right point?** I picked the SAIL-check pile because it is the point where a PR is actually at SAIL. The `sail.waiting` pile (the step before the check) is the alternative. Tell me if you mean the whole SAIL stage and I'll switch the measurement to that.\n- **Are the items pull requests?** The series counts workflow items in that pile. I have assumed they are pull requests; if the pile can hold other items, the count will be too high.\n\n**Still open:** the model has not been discovered yet (it needs `orchestra run`), so the stock is a ghost on the Dynamics page with \"no series yet\" until a discovery finds it. Once one does, I'll link the stock to the series.",
+ "error": null,
+ "timed_out": false,
+ "tools": [
+  "ToolSearch",
+  "declare_stock",
+  "list_metrics",
+  "read_model",
+  "propose_measurements"
+ ],
+ "ok": true,
+ "why": "",
+ "state": {
+  "stock": {
+   "id": "prs_waiting_for_sail",
+   "name": "PRs Waiting for SAIL",
+   "state": "declared",
+   "found_as": null,
+   "linked": null
+  },
+  "chosen": "a",
+  "options": [
+   {
+    "key": "a",
+    "kind": "existing_series",
+    "title": "Items waiting at the SAIL check",
+    "series": "workflow_pile_items{workflow=\"delivery_live\",pile=\"sail_check.waiting\"}",
+    "instrument": null,
+    "first_points": []
+   },
+   {
+    "key": "b",
+    "kind": "existing_series",
+    "title": "Items waiting at the SAIL step",
+    "series": "workflow_pile_items{workflow=\"delivery_live\",pile=\"sail.waiting\"}",
+    "instrument": null,
+    "first_points": []
+   }
+  ]
+ },
+ "cost_so_far": {
+  "usd": 0.0121,
+  "invocations": 1,
+  "usage": {
+   "input_tokens": 10,
+   "cache_creation_input_tokens": 45783,
+   "cache_read_input_tokens": 169581,
+   "output_tokens": 2438
+  }
+ }
+}

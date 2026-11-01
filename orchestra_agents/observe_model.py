@@ -16,12 +16,19 @@ LABEL_VALUES = 8          # values shown per label
 
 
 def list_metrics(project: Project, a: dict) -> dict:
-    """Every series name in the project's store (or those starting with ``prefix``): how many
-    series, their labels, when each was last written, and how many points in the last hour."""
+    """Every series name in the project's store (or those starting with ``prefix``; when none does,
+    those carrying the word in their name or a label value, said in ``note``: L3's Haiku asked for
+    "sail" and heard of nothing, while ``workflow_pile_items{step="sail_check"}`` counted it): how
+    many series, their labels, when each was last written, and how many points in the last hour."""
     prefix, now = a.get("prefix") or "", time.time()
-    store = for_project(project.orchestra)
+    store, by_label = for_project(project.orchestra), False
     try:
         dump = store.dump(prefix, {"project": project.key})
+        if prefix and not dump:                 # a word the series carry in a label (step="sail_check"), not their name
+            word = prefix.lower()
+            dump = [(n, ls, pts) for n, ls, pts in store.dump("", {"project": project.key})
+                    if word in n.lower() or any(word in str(v).lower() for k, v in ls.items() if k != "project")]
+            by_label = bool(dump)
         backend = getattr(store, "name", "")
     finally:
         store.close()
@@ -39,7 +46,11 @@ def list_metrics(project: Project, a: dict) -> dict:
              "last_written_s_ago": round(now - d["last"]) if d["last"] else None, "points_last_hour": d["last_hour"],
              **({"note": "Orchestra's own: discovery leaves it out"} if n.startswith("orchestra_") else {})}
             for n, d in sorted(names.items())]
-    return {"ok": True, "store": backend or project.orchestra.config.metrics_url or "file", "names": len(rows), "metrics": rows}
+    out = {"ok": True, "store": backend or project.orchestra.config.metrics_url or "file", "names": len(rows), "metrics": rows}
+    if by_label:
+        out["note"] = (f"no series name starts with {prefix!r}; these carry it in their name or a label value: name the one "
+                       "you mean with its labels (series{label=\"value\"})")
+    return out
 
 
 def _ref(r: dict | None) -> str | None:

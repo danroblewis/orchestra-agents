@@ -1,0 +1,16 @@
+{
+ "tickets": [
+  "SCRUM-8",
+  "SCRUM-9"
+ ],
+ "prs": {
+  "SCRUM-7": 3,
+  "SCRUM-5": 2,
+  "SCRUM-6": 1
+ },
+ "merged": [
+  "SCRUM-5",
+  "SCRUM-6",
+  "SCRUM-7"
+ ]
+}

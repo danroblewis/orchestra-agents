@@ -1,0 +1,22 @@
+{
+ "ok": true,
+ "predictions": [
+  {
+   "id": "04ca49e844304c069e16374a37b63db0",
+   "source": "supervisor",
+   "made_at": 1793563351.031,
+   "subject": "machine:review_nudger",
+   "change": "611a442de7c74e3cba7c9cdf809c7279",
+   "expect": [
+    {
+     "kind": "factor",
+     "flow": "sail.check.completed",
+     "factor": 1.2
+    }
+   ],
+   "horizon_s": 604800.0,
+   "status": "waiting",
+   "era": null
+  }
+ ]
+}

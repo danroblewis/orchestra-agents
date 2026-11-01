@@ -1,0 +1,575 @@
+{
+ "ok": true,
+ "version": 7,
+ "at": 1793563351.033605,
+ "layer": {
+  "stocks": {
+   "prs_waiting_for_sail": {
+    "id": "prs_waiting_for_sail",
+    "part": "stock",
+    "name": "PRs Waiting for SAIL",
+    "description": "Pull requests waiting on SAIL (the sail check) at any moment.",
+    "unit": "pull requests",
+    "near": null,
+    "note": "Create a stock called PRs Waiting for SAIL.",
+    "found_as": null,
+    "measure": {
+     "options": [
+      {
+       "key": "a",
+       "title": "Items waiting at the SAIL check",
+       "kind": "existing_series",
+       "how": "Items in the delivery_live workflow's sail_check waiting pile, read from the piles instrument each round (a level, so it is a stock)",
+       "cost": "Already recorded; nothing added",
+       "caveat": "Counts workflow items in that pile, which are taken to be the pull requests; it does not separate pull requests from other items if the pile holds any.",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "series": "workflow_pile_items{workflow=\"delivery_live\",pile=\"sail_check.waiting\"}"
+      },
+      {
+       "key": "b",
+       "title": "Items waiting at the SAIL step",
+       "kind": "existing_series",
+       "how": "Items in the delivery_live workflow's sail waiting pile, the step before the SAIL check",
+       "cost": "Already recorded; nothing added",
+       "caveat": "A different step from the SAIL check: it counts items queued for SAIL, not those already at the check. Use it if the owner means the whole SAIL stage.",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "series": "workflow_pile_items{workflow=\"delivery_live\",pile=\"sail.waiting\"}"
+      }
+     ],
+     "chosen": "a",
+     "change": "c3.0"
+    },
+    "target": null,
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/1",
+     "message": "I want to see how many pull requests are waiting on SAIL at any moment. Create a stock called PRs Waiting for SAIL.",
+     "quote": "Create a stock called PRs Waiting for SAIL.",
+     "reason": "The owner wants to see how many pull requests are waiting on SAIL at any moment.",
+     "via": "plugin",
+     "at": 1793563321.270844
+    },
+    "change": "c2.0",
+    "guessed": [],
+    "pending": []
+   }
+  },
+  "effects": {},
+  "flows": {},
+  "machines": {
+   "supervisor": {
+    "title": "supervisor",
+    "description": "Named by workflow delivery_live: plans delivery_live: its dispatch offers the steps, and it is told when a guard passes.",
+    "tags": [
+     "planner",
+     "delivery_live"
+    ],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "ad hoc"
+    },
+    "receives": [
+     "jira.issue.assigned",
+     "github.checks.completed",
+     "github.pr.reviewed",
+     "offer.finished",
+     "github.pr.labeled",
+     "attention.needed"
+    ],
+    "emits": [
+     "offer.made",
+     "offer.withdrawn",
+     "attention.needed"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live: offers its steps to worker, sail_label, sail_triage, close_ticket; told when a guard passes at open_pr, ci, review, sail, sail_check"
+     ]
+    },
+    "id": "supervisor",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.0",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": null
+   },
+   "worker": {
+    "title": "worker",
+    "description": "Named by workflow delivery_live: fills the role worker.",
+    "tags": [
+     "role",
+     "delivery_live"
+    ],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "ad hoc"
+    },
+    "receives": [
+     "offer.made",
+     "offer.withdrawn"
+    ],
+    "emits": [
+     "offer.finished"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live \u00b7 write: role worker; done when its turn finishes; ready \u2192 open_pr"
+     ]
+    },
+    "id": "worker",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.1",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": null
+   },
+   "github": {
+    "title": "github",
+    "description": "Named by workflow delivery_live: the outside system github, known by the actors its bridge relays.",
+    "tags": [
+     "outside system",
+     "delivery_live"
+    ],
+    "kind": "programmatic",
+    "managed": "external",
+    "engagement": {
+     "mode": "continuous"
+    },
+    "receives": [
+     "offer.finished",
+     "github.pr.opened",
+     "github.pr.synchronize",
+     "github.checks.completed",
+     "github.pr.labeled"
+    ],
+    "emits": [
+     "github.pr.opened",
+     "github.pr.synchronize",
+     "github.checks.completed",
+     "github.pr.reviewed",
+     "github.pr.labeled"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live \u00b7 open_pr: outside github; done when github.pr.opened; done \u2192 ci; on github.pr.synchronize \u2192 ci; guard within 1200 s, then attention",
+      "delivery_live \u00b7 ci: outside github; done when github.checks.completed with head_sha = the item's commit; success \u2192 review, failure \u2192 write; guard within 1800 s, then attention",
+      "delivery_live \u00b7 review: outside github; done when github.pr.reviewed with state = setting review_state; done \u2192 sail; on github.pr.reviewed with state = \"changes_requested\" \u2192 write; guard within 1800 s, then attention",
+      "delivery_live \u00b7 sail_check: outside github; done when github.pr.labeled with label = \"SAILED\"; done \u2192 close_ticket; on github.pr.labeled with label = \"REJECTED\" \u2192 triage; guard at most 3 rounds, then attention"
+     ],
+     "source": "bot.github, bot.github.<login> and person.github.<login> (relayed by its bridge)"
+    },
+    "id": "github",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.2",
+    "guessed": [],
+    "pending": [],
+    "aliases": [
+     "bot.github"
+    ],
+    "expected_effect": null,
+    "latest": null
+   },
+   "sail_label": {
+    "title": "sail_label",
+    "description": "Named by workflow delivery_live: the program sail_label.",
+    "tags": [
+     "program",
+     "delivery_live"
+    ],
+    "kind": "programmatic",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "ad hoc"
+    },
+    "receives": [
+     "offer.made",
+     "offer.withdrawn"
+    ],
+    "emits": [
+     "github.pr.labeled"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live \u00b7 sail: program sail_label; done when github.pr.labeled with label = setting label; done \u2192 sail_check; guard within 1200 s, then attention"
+     ]
+    },
+    "id": "sail_label",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.4",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": null
+   },
+   "sail_triage": {
+    "title": "sail_triage",
+    "description": "Named by workflow delivery_live: the program sail_triage.",
+    "tags": [
+     "program",
+     "delivery_live"
+    ],
+    "kind": "programmatic",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "ad hoc"
+    },
+    "receives": [
+     "offer.made",
+     "offer.withdrawn"
+    ],
+    "emits": [
+     "offer.finished"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live \u00b7 triage: program sail_triage; done when its turn finishes; company_wide \u2192 sail, local \u2192 write"
+     ]
+    },
+    "id": "sail_triage",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.5",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": null
+   },
+   "close_ticket": {
+    "title": "close_ticket",
+    "description": "Named by workflow delivery_live: the program close_ticket.",
+    "tags": [
+     "program",
+     "delivery_live"
+    ],
+    "kind": "programmatic",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "ad hoc"
+    },
+    "receives": [
+     "offer.made",
+     "offer.withdrawn"
+    ],
+    "emits": [
+     "offer.finished"
+    ],
+    "reads": [],
+    "spec": {
+     "steps": [
+      "delivery_live \u00b7 close_ticket: program close_ticket; done when its turn finishes; closed \u2192 the end"
+     ]
+    },
+    "id": "close_ticket",
+    "state": "proposed",
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.6",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": null,
+    "latest": null
+   },
+   "review_nudger": {
+    "title": "Review Nudger",
+    "description": "Reminds the reviewer when a pull request has waited too long for its review or for SAIL.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "09:00"
+    },
+    "receives": [
+     "github.pr.opened",
+     "github.pr.reviewed",
+     "github.pr.merged",
+     "sail.check.completed"
+    ],
+    "emits": [],
+    "reads": [
+     "prs_waiting_for_sail"
+    ],
+    "spec": {
+     "invariants": [
+      "Never changes code or merges anything; it only reminds the reviewer and proposes work.",
+      "Reminds only for a pull request that has waited longer than the wait threshold for its review or for SAIL.",
+      "Reads the events it listens for at each run; it never acts on a pull request that is already merged."
+     ],
+     "steps": [
+      "1. At 09:00 each day, read github.pr.opened, github.pr.reviewed and github.pr.merged to know which pull requests are open and when each started waiting for review.",
+      "2. Read sail.check.completed to know when each pull request entered or left the SAIL check.",
+      "3. For each open pull request waiting longer than the threshold for review or SAIL, remind its reviewer.",
+      "4. Read the level of prs_waiting_for_sail as the count of pull requests waiting on SAIL."
+     ]
+    },
+    "id": "review_nudger",
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer. It should listen for the GitHub pull request events and the SAIL check results on the bus. Make it a scheduled task for 9am every day. Then confirm it. I expect SAILED per day \u00d71.2.",
+     "quote": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer.",
+     "reason": "The owner wants pull requests that wait too long for review or SAIL to get a reminder to the reviewer.",
+     "via": "plugin",
+     "at": 1793563347.362499
+    },
+    "change": "c4.0",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": {
+     "edits": [
+      {
+       "flow": "sail.check.completed",
+       "factor": 1.2
+      }
+     ],
+     "horizon_s": 604800.0,
+     "prediction": "04ca49e844304c069e16374a37b63db0",
+     "change": "c5.0"
+    },
+    "latest": null,
+    "confirmed": {
+     "by": "owner",
+     "change": "c6.0"
+    }
+   }
+  },
+  "events": {
+   "jira.issue.assigned": {
+    "type": "jira.issue.assigned",
+    "description": "starts delivery_live",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.7"
+   },
+   "github.checks.completed": {
+    "type": "github.checks.completed",
+    "description": "ends delivery_live \u00b7 ci",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.11"
+   },
+   "github.pr.reviewed": {
+    "type": "github.pr.reviewed",
+    "description": "ends delivery_live \u00b7 review; moves delivery_live \u00b7 review to write",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.12"
+   },
+   "offer.finished": {
+    "type": "offer.finished",
+    "description": "a holder's turn at a step ends, with its outcome; ends delivery_live \u00b7 write; ends delivery_live \u00b7 triage; ends delivery_live \u00b7 close_ticket",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.8"
+   },
+   "github.pr.labeled": {
+    "type": "github.pr.labeled",
+    "description": "ends delivery_live \u00b7 sail; ends delivery_live \u00b7 sail_check; moves delivery_live \u00b7 sail_check to triage",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.13"
+   },
+   "attention.needed": {
+    "type": "attention.needed",
+    "description": "a guard passed: the planner is told, and the item moves on when the guard says where; a guard of delivery_live passed",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.14"
+   },
+   "offer.made": {
+    "type": "offer.made",
+    "description": "the planner's dispatch offers a step of an item to a role; offers delivery_live's steps",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.15"
+   },
+   "offer.withdrawn": {
+    "type": "offer.withdrawn",
+    "description": "an offer taken back (unclaimed, returned, or the item closed); takes back delivery_live's offers",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.16"
+   },
+   "github.pr.opened": {
+    "type": "github.pr.opened",
+    "description": "ends delivery_live \u00b7 open_pr",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.9"
+   },
+   "github.pr.synchronize": {
+    "type": "github.pr.synchronize",
+    "description": "moves delivery_live \u00b7 open_pr to ci",
+    "implicit": false,
+    "provenance": {
+     "source": "workflow delivery_live",
+     "author": "workflows",
+     "reason": "the definition of workflow delivery_live, as the Machines page draws it: who acts at each step and which events move the item on",
+     "via": "plugin",
+     "at": 1793562047.287255
+    },
+    "change": "c1.10"
+   },
+   "github.pr.merged": {
+    "type": "github.pr.merged",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer. It should listen for the GitHub pull request events and the SAIL check results on the bus. Make it a scheduled task for 9am every day. Then confirm it. I expect SAILED per day \u00d71.2.",
+     "quote": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer.",
+     "reason": "The owner wants pull requests that wait too long for review or SAIL to get a reminder to the reviewer.",
+     "via": "plugin",
+     "at": 1793563347.362499
+    },
+    "change": "c4.0"
+   },
+   "sail.check.completed": {
+    "type": "sail.check.completed",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer. It should listen for the GitHub pull request events and the SAIL check results on the bus. Make it a scheduled task for 9am every day. Then confirm it. I expect SAILED per day \u00d71.2.",
+     "quote": "Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it reminds the reviewer.",
+     "reason": "The owner wants pull requests that wait too long for review or SAIL to get a reminder to the reviewer.",
+     "via": "plugin",
+     "at": 1793563347.362499
+    },
+    "change": "c4.0"
+   }
+  },
+  "attachments": {},
+  "targets": {},
+  "marks": {
+   "expected": {},
+   "ignored": {}
+  }
+ }
+}

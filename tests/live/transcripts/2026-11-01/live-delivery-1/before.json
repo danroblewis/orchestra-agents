@@ -1,0 +1,25 @@
+{
+ "tickets": [
+  "SCRUM-8",
+  "SCRUM-9"
+ ],
+ "prs": {
+  "SCRUM-7": 3,
+  "SCRUM-5": 2,
+  "SCRUM-6": 1
+ },
+ "types": [
+  "github.pr.labeled",
+  "github.pr.merged",
+  "github.pr.opened",
+  "github.pr.reviewed",
+  "github.pr.unlabeled",
+  "orchestra.host.started",
+  "orchestra.intent.changed",
+  "orchestra.machine.started",
+  "orchestra.process.started",
+  "pagerduty.incident.acknowledged",
+  "pagerduty.incident.triggered",
+  "sail.check.completed"
+ ]
+}

@@ -107,8 +107,21 @@ function timeline(agents, now) {
   const pick = [2, 8, 24].map((h) => `<option value="${h * 3600}" ${h * 3600 === HORIZON ? "selected" : ""}>next ${h}h</option>`).join("");
   return `<div class="tl">${html}<div class="axis"><span>scheduled wake-ups · <select onchange="setHorizon(this.value)">${pick}</select></span><div class="marks">${marks}</div><span></span></div></div>`;
 }
+// What starts a built-in worker or reviewer: a ticket the task system assigns (the tasking plugin),
+// an offer from a workflow's step (the Workflows floor), or, with neither installed, nothing.
+function perOffer(long) {
+  const p = (ORG && ORG.plugins) || {}, ways = [];
+  if (p.tasking) ways.push(long ? "per ticket when the task system assigns one, in that ticket's workspace" : "when the task system assigns a ticket to this role");
+  if (p.workflows) ways.push(long ? "per item when a workflow's step offers its role" : "when a workflow's step offers an item to this role");
+  if (!ways.length) return "never here: it is started for the tasking plugin's tickets (orchestra-tasking) or a workflow's offers (orchestra-workflows), and neither is installed";
+  return (long ? "started " : "") + ways.join(", or ") + (p.tasking ? "" : " (no tickets: the tasking plugin is not installed)");
+}
+function teamNote(t) {
+  if (!(t.builtin && t.name === "engineering") || !ORG || (ORG.plugins || {}).tasking) return "";
+  return `<div class="muted">This built-in team needs the tasking plugin (orchestra-tasking), which is not installed: the Coordinator plans into tickets, so nothing is handed to it here${(ORG.plugins || {}).workflows ? "; its workers and reviewers still answer workflows' offers" : ""}.</div>`;
+}
 function schedule(a) {
-  if (a.kind === "ad_hoc" && a.builtin) return "started per ticket when the task system assigns one, in that ticket's workspace";
+  if (a.kind === "ad_hoc" && a.builtin) return perOffer(true);
   const parts = [];
   if (a.kind === "ad_hoc") parts.push("fresh session when its lead briefs it");
   if (a.every) parts.push(`every ${esc(a.every)}`);
@@ -152,7 +165,7 @@ function toolGroups(byGroup) {
 }
 function nextWake(a, now) {
   if (a.paused) return "paused: wake-ups are queued until resumed";
-  if (a.kind === "ad_hoc") return a.builtin ? "when the task system assigns a ticket to this role" : "when its lead calls run_agent with a brief";
+  if (a.kind === "ad_hoc") return a.builtin ? perOffer(false) : "when its lead calls run_agent with a brief";
   const parts = [];
   if (a.name === "supervisor") parts.push("when you send a message, and on escalations");
   const up = upcoming(a, now);
@@ -196,7 +209,7 @@ function teamCard(t, byName, now, sub) {
   return `<div class="team ${sub ? "sub" : ""}"><div class="head"><h3><a href="#" onclick="openTeam('${t.name}');return false">${esc(t.name)}</a></h3>
       ${t.builtin ? '<span class="tag">built-in</span>' : `<span class="tag">${t.tracked ? "space tracked" : "space untracked"}</span>`}
       <span style="margin-left:auto;display:flex;gap:6px"><button class="ctl" onclick="openTeam('${t.name}')">team</button></span></div>
-    <div class="desc">${esc(t.description || "")}</div>
+    <div class="desc">${esc(t.description || "")}</div>${teamNote(t)}
     <div class="meta">${access ? "access: " + access : "access: only what its agents' roles carry"} · space <code>${esc(t.space)}</code>${extra ? " · " + extra : ""}</div>
     ${agents}${subs}</div>`;
 }

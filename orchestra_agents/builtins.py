@@ -35,7 +35,7 @@ Tool groups:
   model        read the system dynamics model, series, eras, observability, predictions and their
                verdicts; the modeling guide (modeling.py)
   predict      state a fix's expected effect (predict_fix) as the prediction of one's own change, and
-               announce it (the groups experiments and replay were removed on 2026-11-01)
+               announce it
   patch        repair a bug: a patch in a scratch worktree landed through the gate, a project-local override
                of an installed plugin, an upstream issue drafted in the outbox (the Supervisor only)
   report_ticket / report_review   the worker's and the reviewer's exit tools

@@ -5,19 +5,21 @@
 const AGENTS_API = "/api/plugins/agents";
 
 // Agent prose and human input are markdown: marked renders it, DOMPurify sanitizes it, highlight.js
-// colours the code blocks. They come from cdnjs, each loaded once by whichever page loads this
-// file; until they arrive md() shows the plain text. `agentsLibs` settles when they have loaded or failed.
+// colours the code blocks. They are vendored here (static/vendor, README.md there: the pinned
+// releases, unchanged), never fetched from a CDN, so the page works behind a proxy that blocks
+// one; each is loaded once by whichever page loads this file; until they arrive md() shows the
+// plain text. `agentsLibs` settles when they have loaded or failed.
 function agentsLoad(src) {
   return new Promise((ok, bad) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
 }
-const AGENTS_CDN = "https://cdnjs.cloudflare.com/ajax/libs";
-if (!document.querySelector(`link[href^="${AGENTS_CDN}/highlight.js/"]`)) {
-  const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${AGENTS_CDN}/highlight.js/11.9.0/styles/github-dark.min.css`; document.head.appendChild(l);
+const AGENTS_VENDOR = "/plugins/agents/static/vendor";
+if (!document.querySelector(`link[href^="${AGENTS_VENDOR}/github-dark"]`)) {
+  const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${AGENTS_VENDOR}/github-dark.min.css`; document.head.appendChild(l);
 }
 const agentsLibs = Promise.all([
-  window.marked || agentsLoad(`${AGENTS_CDN}/marked/12.0.2/marked.min.js`).catch(() => {}),
-  window.DOMPurify || agentsLoad(`${AGENTS_CDN}/dompurify/3.1.6/purify.min.js`).catch(() => {}),
-  window.hljs || agentsLoad(`${AGENTS_CDN}/highlight.js/11.9.0/highlight.min.js`).catch(() => {}),
+  window.marked || agentsLoad(`${AGENTS_VENDOR}/marked.min.js`).catch(() => {}),
+  window.DOMPurify || agentsLoad(`${AGENTS_VENDOR}/purify.min.js`).catch(() => {}),
+  window.hljs || agentsLoad(`${AGENTS_VENDOR}/highlight.min.js`).catch(() => {}),
 ]);
 
 function md(text) {

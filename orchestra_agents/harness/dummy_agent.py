@@ -20,6 +20,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .. import installed
 from . import dummy_script
 from .dummy_script import Rule, ScriptError, Turn
 
@@ -165,7 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     transcript, cwd = Path(argv[0]), Path.cwd()
     prompt = sys.stdin.read()
     t = Turn(role=os.environ.get("ORCHESTRA_ROLE", ""), ticket=os.environ.get("ORCHESTRA_TICKET", ""), prompt=prompt,
-             turn=turns_so_far(transcript) + 1, checkout=(cwd / ".git").exists(), instance=os.environ.get("ORCHESTRA_SOURCE", ""))
+             turn=turns_so_far(transcript) + 1, checkout=(cwd / ".git").exists(), instance=os.environ.get("ORCHESTRA_SOURCE", ""),
+             tasking=installed.tasking())
     agent = Agent(transcript, cwd)
     emit({"type": "turn_start", "pid": os.getpid()})
     agent.record("user", prompt)

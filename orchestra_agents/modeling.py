@@ -15,10 +15,8 @@ Who may do what (the groups are checked before any of this runs, ``access.author
   change. Only the agent that made a prediction announces its change (``announce_change`` here,
   or the ``change`` of a Supervisor's setup tool, ``claim_change``).
 
-The experiments (a draft copy of the model edited and run forward, replayed or inverted, and
-committed as a prediction) were removed on 2026-11-01 (the owner); the Supervisor's design tools
-(``declare_expected_effect``, ``confirm``: ``design_confirm.py``) and ``predict_fix`` make the
-predictions now.
+The Supervisor's design tools (``declare_expected_effect``, ``confirm``: ``design_confirm.py``)
+and ``predict_fix`` make the predictions.
 
 Nothing here changes a machine, the model or a metric: a prediction is judged later; the one
 thing published is the change's announcement (``system.changed``), as the agent that makes the

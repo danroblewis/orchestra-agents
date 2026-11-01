@@ -97,7 +97,7 @@ def test_the_supervisors_request_is_the_owners_with_their_words(project, store, 
                parent="EPIC-1", fields={"priority": 2})
     item = out["item"]
     assert out["ok"] and item.startswith("write_review-") and out["source"] == "owner" and out["fields"] == ["priority"]
-    assert f"/items/{item}" in out["shown"] and "explain_item" in out["shown"]
+    assert f"/items#item={item}" in out["shown"] and "explain_item" in out["shown"]
     req, fact = published(store, end)
     assert req["source"] == "owner" and req["subject"] == item
     assert {k: req[k] for k in ("workflow", "brief", "parent", "via")} == {

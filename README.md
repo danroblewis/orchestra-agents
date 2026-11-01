@@ -182,8 +182,9 @@ scripted floor on the bus (a host process on the dummy harness), and the workflo
 matching rule of the file `[agents] dummy_script` names (TOML), then the built-in rules, so the
 setting alone is a working team (a worker commits a token file and reports ready, a reviewer
 approves, the Supervisor hands a chat message to the Coordinator, which plans it into a milestone and
-a ticket). A rule matches on the role, the ticket, a
-pattern in the prompt and the turn's number, and its steps write files, run commands, commit,
+a ticket). Without the tasking plugin there are no tickets: the Supervisor hands nothing on and
+says it changed nothing and why. A rule matches on the role, the ticket, a
+pattern in the prompt, the turn's number and whether tasking is installed, and its steps write files, run commands, commit,
 call the agents' tools, wait or fail:
 
     [[rule]]

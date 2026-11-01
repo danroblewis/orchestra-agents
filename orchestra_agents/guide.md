@@ -268,8 +268,11 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
    narrow `match`); anything with items is a `poller` built from a kit (events as who acted, and
    its series); `collect` is a measurement alone. Give the owner's scope in `settings` (`jql`,
-   `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The
-   script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The kits
+   have templates for Jira, GitHub, Slack and PagerDuty (and `promql` for a metrics store); Jira's
+   publishes `jira.issue.assigned` for any assignee (a workflow's start filters on its data) and
+   speaks Data Center or Cloud (`[settings] flavour`: `auto` picks Cloud on `*.atlassian.net`; a
+   Cloud site on its own domain says `cloud`). The script is scaffolded into the repository, its own test is run against the kit's fake, and the
    system is declared on the Machines page as a machine managed elsewhere, heard as
    `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
    relays what the system's people and bots did, as them. The answer names the directory: tell
@@ -293,8 +296,8 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    process Orchestra keeps running, never a machine) and a `[[collect]]` entry for its series (a
    store's `[[sources]]` entry takes `auth.bearer_env` or `auth.bearer_file`). They are written at
    the approval, not before: an uncleared poller only waits, reading nothing, but its measurement
-   would fail every round. If the answer says the script does not log in with an account yet (the
-   Jira template speaks Data Center), hand that change to the Coordinator before saying it reads.
+   would fail every round. If the answer says the script does not log in with an account yet (a
+   script edited away from the template), hand that change to the Coordinator before saying it reads.
 
 **What the human decides, and nothing else:** whether the system may be read (their quoted yes,
 and the data class), where its credentials are (a variable's name or a file's path; they put the
@@ -380,7 +383,7 @@ When the owner asks for work ("do X", "start Y") and a workflow fits, start it w
    machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
    source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the
    larger item this is part of) and `fields` (`{"priority": 2}`).
-3. Answer the owner with the item's id, the Items page link (`/items/<id>`) and that you can say
+3. Answer the owner with the item's id, the Items page link (`/items#item=<id>`) and that you can say
    where it is and why (`explain_item`).
 
 It is refused, with nothing published, when the workflow is not loaded or not started by a
@@ -392,7 +395,7 @@ A worked example. The owner: "start the task loop on adding a /version endpoint"
 shows one workflow a request starts, `task_loop`, so you call `request_work` with `{"workflow":
 "task_loop", "brief": "Add a /version endpoint that returns the app version, with a test",
 "quote": "start the task loop on adding a /version endpoint", "reason": "the owner asked for the
-/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items/task_loop-3fa2c1,
+/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items#item=task_loop-3fa2c1,
 and I can tell you where it is."
 
 ## Checking it took

@@ -221,7 +221,8 @@ def test_a_machine_managed_elsewhere_publishes_no_change_at_confirm(project, sto
     out = confirm(project, store)
     assert out["prediction"] is None and not predictions(store)
     assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]
-    assert any("kept as an expectation" in line and "until a change of it is announced (announce_change)" in line for line in out["said"])
+    assert any("stays on the declaration as an expectation" in line and "nothing publishes or judges it" in line
+               for line in out["said"])
 
 
 def test_a_programs_waiting_edit_names_the_change_its_program_announces(project, store):

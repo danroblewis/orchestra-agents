@@ -172,6 +172,12 @@ and `demo/dummy.toml` as a worked example.
     uv run python -m pytest -q         # about four minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
 
+The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`) need the
+Workflows plugin, `orchestra-workflows`, which is an optional dependency named in no extra and no
+lock: installed beside the agents, the tools use it; without it they say it is not installed. Their
+unit tests use a fake plugin; `tests/e2e/test_workflows_e2e.py` runs on the real one and is skipped
+without it (`uv pip install -e ~/orchestra-workflows` after `uv sync`, which removes it).
+
 The design tools' tests run on Orchestra's own declared layer (`orchestra.sd.intended`), served
 in process through its host's events endpoint; `uv.lock` names the Orchestra commit they ran on.
 

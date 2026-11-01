@@ -27,12 +27,18 @@ broken without updating the spec and saying so in the commit.
    (since 2026-11-01, proposal 4, `machine-design.md` §2.1: at work the base branch is protected):
    a confirmed Universal Machine's spec and its role and agent records are written to the state
    directory (`machines/<name>/`, `state_machines.py`), never to `.orchestra/`, and read beside it. (`restart_machine` takes one entry out in the
-   overlay and puts the overlay back byte for byte; it commits nothing.)
+   overlay and puts the overlay back byte for byte; it commits nothing.) A workflow definition
+   (`declare_workflow`, 2026-11-01) goes to the state directory; one the owner asks for in the
+   repository is written to `.orchestra/workflows/<name>/` and left uncommitted, for the
+   Coordinator to land through a ticket.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
    The Workflows floor's names are its machine contract, copied by hand into `floor.py` the same
-   way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin.
+   way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin for
+   that contract. The one exception (2026-11-01, W7; that plugin's SPEC §10): the Supervisor's
+   workflow tools (`workflow_tools.py`) import its validated writer, loader and record API lazily,
+   as an optional dependency, and say the plugin is not installed when it is not.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the

@@ -21,7 +21,7 @@ import time
 from . import spec_git
 from .machine_spec import MachineSpec
 
-PRIVILEGED = ("setup", "roles", "patch")
+PRIVILEGED = ("setup", "roles", "patch", "workflows")
 READING = ("observe", "model", "predict", "events", "guides")      # shared by every duty: no coupling
 WEEK = 7 * 86_400.0
 

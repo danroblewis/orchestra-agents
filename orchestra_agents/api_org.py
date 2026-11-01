@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from . import prompting
+from . import prompting, state_machines
 from .config import Project
 from .machine_spec import load as load_spec
 from .org import (
@@ -54,6 +54,32 @@ def _restart_with_new_prompt(store: AgentStore, ag: AgentDef) -> None:
         store.set_agent_state(ag.name, restart_requested=True)
 
 
+def _root(project: Project, store: AgentStore, a: dict[str, Any]) -> str:
+    """Where a role or agent record named ``a["name"]`` is written: ``"state"`` for a confirmed
+    designed machine (its records are in the state directory, never committed: machine-design.md
+    §2.1), unless the owner chose the repository (``root = "repository"`` with their quote), and
+    ``"repo"`` for any other name. A drafted, unconfirmed machine's are refused: confirm writes them."""
+    from .design import quote_in, turn_of
+    name = str(a.get("name") or "")
+    if state_machines.drafted(project, name):
+        raise StoreError(f"{name} is a drafted machine the owner has not confirmed: nothing of it runs before, and confirm "
+                         "writes its role and agent records itself (in the state directory); no create_role or create_agent")
+    if not state_machines.confirmed(project, name):
+        return "repo"
+    if (a.get("root") or "").strip() != "repository":
+        return "state"
+    quote = (a.get("quote") or "").strip()
+    if not quote or not quote_in(quote, turn_of(store).get("message") or ""):
+        raise StoreError(f"{name} is a confirmed designed machine, kept in the state directory: its records go in the "
+                         "repository's .orchestra/ only when the owner asks for that; quote their words this turn, or leave "
+                         "root out")
+    return "repo"
+
+
+STATE_NOTE = ("kept in the state directory at {d}; nothing committed (a confirmed designed machine's records live there, and "
+              "a confirmed change to its declaration writes them again from it)")
+
+
 READS = frozenset({"list_roles", "get_role", "list_agents", "get_agent", "list_teams", "get_team"})
 
 
@@ -95,25 +121,32 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         return {"ok": True, "role": {**r.to_dict(), "builtin": r.builtin},
                 "agents": [ag.name for ag in all_agents(project).values() if r.name in ag.roles], **role_definition(project, r)}
     if command in ("create_role", "update_role"):
+        where = _root(project, store, a)
         if command == "update_role":
-            r = rs.get(a["name"])
+            kept = state_machines.role(project, a["name"])     # a confirmed designed machine's, else None
+            in_state = kept is not None and (where == "state" or not rs.has(a["name"]))
+            r = kept if in_state else rs.get(a["name"])
             for k in ("description", "tools"):
                 if k in a and a[k] is not None:
                     setattr(r, k, a[k])
-            prompt = a.get("prompt") if a.get("prompt") else rs.prompt(a["name"])
+            prompt = a.get("prompt") or (state_machines.prompt(project, a["name"]) if in_state else rs.prompt(a["name"]))
         else:
             r = RoleDef(name=a["name"], description=a.get("description", ""), tools=list(a.get("tools") or ["tickets", "escalate"]),
                         created_by=author)
             prompt = a.get("prompt") or ""
             if len(prompt.strip()) < 40:
                 raise StoreError("prompt is required: the job description, in a few paragraphs")
-        rs.save(r, prompt)
+        if where == "state":
+            note = STATE_NOTE.format(d=state_machines.save_role(project, r, prompt))
+        else:
+            rs.save(r, prompt)
+            note = rs.last_commit_note
         store.events.emit("role.changed" if command == "update_role" else "role.created", role=r.name, by=author)
         for ag in all_agents(project).values():
             if r.name in ag.roles and not ag.builtin and command == "update_role":
                 store.add_wakeup(ag.name, f"your role {r.name} was updated; re-read your responsibilities")
                 _restart_with_new_prompt(store, ag)
-        return {"ok": True, "role": r.to_dict(), "storage": rs.last_commit_note}
+        return {"ok": True, "role": r.to_dict(), "storage": note}
     if command == "delete_role":
         users = [ag.name for ag in all_agents(project).values() if a["name"] in ag.roles and not ag.builtin]
         if users:
@@ -131,6 +164,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
             raise StoreError(f"no agent {a['name']!r}")
         return {"ok": True, **agent_definition(project, store, ag)}
     if command in ("create_agent", "update_agent"):
+        where = _root(project, store, a)
         existing = all_agents(project)
         if command == "update_agent":
             ag = existing.get(a["name"])
@@ -140,7 +174,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
                 if k in a and a[k] is not None:
                     setattr(ag, k, a[k] or None if k in ("every", "at", "team") else a[k])
         else:
-            if a["name"] in existing:
+            if a["name"] in existing and where != "state":     # in the state directory: replaces what confirm wrote
                 raise StoreError(f"agent {a['name']!r} exists; use update_agent")
             ag = AgentDef(name=a["name"], roles=list(a.get("roles") or []), team=a.get("team") or None,
                           kind=a.get("kind") or "continuous", session=a.get("session") or "resident",
@@ -150,13 +184,17 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         missing = [r for r in ag.roles if r not in roles]
         if missing:
             raise StoreError(f"unknown roles {missing}; create them first with create_role")
-        os_.save_agent(ag, custom_event_types(all_teams(project)))
+        if where == "state":
+            note = STATE_NOTE.format(d=state_machines.save_agent(project, ag, custom_event_types(all_teams(project))))
+        else:
+            os_.save_agent(ag, custom_event_types(all_teams(project)))
+            note = os_.last_commit_note
         store.set_agent_state(ag.name, deleted=False)
         store.events.emit("agent.changed" if command == "update_agent" else "agent.created", agent=ag.name, by=author)
         if ag.kind != "ad_hoc":
             store.add_wakeup(ag.name, "you were just created; introduce yourself in one line and check the project state"
                              if command == "create_agent" else "your definition was updated; re-read your responsibilities")
-        out = {"ok": True, "agent": ag.to_dict(), "storage": os_.last_commit_note}
+        out = {"ok": True, "agent": ag.to_dict(), "storage": note}
         teams = all_teams(project)
         if ag.team and ag.team not in teams:
             out["warning"] = (f"WARN: team {ag.team!r} does not exist. Create it next with create_team (lead or members "

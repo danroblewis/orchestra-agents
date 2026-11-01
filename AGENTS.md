@@ -27,12 +27,18 @@ broken without updating the spec and saying so in the commit.
    (since 2026-11-01, proposal 4, `machine-design.md` §2.1: at work the base branch is protected):
    a confirmed Universal Machine's spec and its role and agent records are written to the state
    directory (`machines/<name>/`, `state_machines.py`), never to `.orchestra/`, and read beside it. (`restart_machine` takes one entry out in the
-   overlay and puts the overlay back byte for byte; it commits nothing.)
+   overlay and puts the overlay back byte for byte; it commits nothing.) A workflow definition
+   (`declare_workflow`, 2026-11-01) goes to the state directory; one the owner asks for in the
+   repository is written to `.orchestra/workflows/<name>/` and left uncommitted, for the
+   Coordinator to land through a ticket.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
    The Workflows floor's names are its machine contract, copied by hand into `floor.py` the same
-   way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin.
+   way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin for
+   that contract. The one exception (2026-11-01, W7; that plugin's SPEC §10): the Supervisor's
+   workflow tools (`workflow_tools.py`) import its validated writer, loader and record API lazily,
+   as an optional dependency, and say the plugin is not installed when it is not.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
@@ -86,7 +92,12 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     measurement script of at most 100 lines is configuration the Supervisor writes, to the state
     directory (`instruments/<name>.sh`, `add_instrument`), with its entry in the owner's overlay, as
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
-    One the owner wants in the repository still goes through the Coordinator. So the Supervisor
+    One the owner wants in the repository still goes through the Coordinator. A poller scaffolded
+    from the bridges plugin's kit (`integrate_system`, since 2026-11-01, task I3) is the kit's code,
+    not the Supervisor's: written to Orchestra's state directory (`machines/<name>/`), never
+    committed, the Supervisor changes only its `machine.toml` (the owner's settings; on the owner's
+    quoted yes, `approve_integration`, the clearance and the token variable's name, which it renames
+    in the scaffolded test too) and the overlay entries that run it. So the Supervisor
     writes code of its own in exactly two cases: that measurement script, and a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,

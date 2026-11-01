@@ -36,6 +36,7 @@ from . import (
     source_tools,
     transcripts,
     upstream,
+    workflow_tools,
 )
 from .api_org import ORG_COMMANDS, handle_org
 from .config import Project
@@ -151,6 +152,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handle_org(project, store, command, a, author, role)
     if command in DESIGN_COMMANDS:
         return design.handle(project, store, command, a, role)
+    if command in workflow_tools.COMMANDS:
+        return workflow_tools.handle(project, store, command, a, role)
 
     if command in SETUP_COMMANDS or command in SYSTEM_COMMANDS:
         project.reload_config()               # the configuration as it is now: an earlier call may have changed it

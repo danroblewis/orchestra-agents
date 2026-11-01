@@ -460,6 +460,7 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "orchestra", extra = ["sd"] },
+    { name = "orchestra-bridges" },
     { name = "orchestra-tasking" },
     { name = "pytest" },
     { name = "ruff" },
@@ -471,12 +472,21 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "orchestra", specifier = ">=1.0.0a1,<1.0.0rc0" },
     { name = "orchestra", extras = ["sd"], marker = "extra == 'dev'" },
+    { name = "orchestra-bridges", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-bridges" },
     { name = "orchestra-tasking", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-tasking" },
     { name = "psutil" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "orchestra-bridges"
+version = "0.1.0"
+source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#d5eec78cb7a7adef4fda15d886f91861adb10c97" }
+dependencies = [
+    { name = "orchestra", extra = ["sd"] },
+]
 
 [[package]]
 name = "orchestra-tasking"

@@ -914,6 +914,39 @@ observed rate of what wakes it, and at least what discovery needs to see an era)
 `discard`, and `read_design` (group `observe`: the layer's summary plus each machine's fields and
 each event type's declared and heard publishers and listeners).
 
+**Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
+I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
+the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
+Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone, and `bridge`, the
+bridges' own reader). For `poller` and `collect` it scaffolds the bridges plugin's kit
+(`orchestra_bridges.kits.scaffold`, a dev dependency here, imported only in `integrate_kits`) into
+Orchestra's state directory (`<state>/machines/<name>/`, the kit's `--root state`), runs the
+program's own test against the kit's fake in a child Python with every credential-looking variable
+left out of its environment, and only then fills the owner's words and settings into its
+`machine.toml` (the fake serves the template's world; a `token`, `token_env` or clearance in the
+settings is refused). A poller's system is declared as a machine managed elsewhere (`managed:
+external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
+Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
+when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
+plans nothing. Without the kits nothing is written, and the answer says so and names
+INTEGRATING.md's routes (the bridges plugin installed, or the one-file poller of its §5.2, which is
+code and goes to the Coordinator). `source` and `bridge` write nothing either: the `[[sources]]`
+entry or the `[bridges.<system>]` section is planned. The answer carries `ask_owner`: the owner's
+approval and the NAME of the environment variable for the token, put to them in the chat.
+`approve_integration` takes a verified quote of the owner (refused otherwise), the variable's name
+(`^[A-Z_][A-Z0-9_]{1,63}$`, never a value), the data class (`metadata only` by default) and the
+site's address when the template's placeholder is still there; it writes `clearance = "approved"`,
+`data_class` and `token_env` into `machine.toml` (renaming the template's variable in the
+scaffolded test to match, and running it again), then the plan to the owner's overlay through
+`config_change`: a `[[machines]]` entry with `restart = "always"` (or, with the Workflows plugin
+installed, `workflows.every.<name>` and the `machine.json` it runs the program from) and a
+`[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
+bridge's section, each announced (`instruments.changed` or `config.changed`). **Nothing runs before
+the approval** (a deviation from the task's wording, which schedules at `integrate_system`): an
+uncleared kit program exits at once, so `orchestra run` would restart it until it gave up. Each
+integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,
+`integrations`, in `runtime.json`.
+
 **Publishing a draft prediction.** An edit names keys (or declared ids, read through their
 `found_as`); the judge reads the era's ids, so each `stock`, `from` and `to` is resolved to the
 current model's id when it is published (`intended_api.resolve`, over the newest saved version
@@ -962,6 +995,28 @@ emits is "not heard on the bus yet", and when a machine heard on the bus publish
 already it is named as the expected publisher, never a new one proposed), each later one (at most `design_passes`) follows the
 neighbours the one before proposed to redraft, and it stops when one finds nothing new; it wakes
 the Supervisor once with one batched proposal; it proposes, never declares.
+
+**Workflows** (tool group `workflows`, the Supervisor's; `workflow_tools.py`,
+`harness/tools_workflows.py`; orchestra-workflows' SPEC §7.1, §8, §10). The owner describes a
+workflow (an item's steps, who does each, when each is done, its outcomes and guards); the
+Supervisor writes it with `declare_workflow`, the only way a definition is written from here. The
+Workflows plugin is an **optional dependency**, imported lazily in that one module for its
+validated writer (`define.check`, `define.write`), its loader (`define.load`) and its record's
+read API (`record.api.Record`): the one exception to rule 3's "nothing is imported from that
+plugin". Without the plugin each tool says it is not installed. `declare_workflow` takes the
+definition in §7.1's shape (its schema spells out each key), a `reason` and an optional `quote`
+(verified as the design tools verify one); the plugin's checks run first and any refusing problem
+refuses the call, every problem said, nothing written; otherwise it is written to the state
+directory (`~/.orchestrator/<key>/workflows/<name>/workflow.json`, the default) or, only with the
+owner's quoted words, to the repository's `.orchestra/workflows/<name>/workflow.json`, **left
+uncommitted**: the answer says so and the Supervisor hands it to the Coordinator to land through a
+ticket and a pull request (rule 2). The answer carries the path, the plugin's notes (what the
+project still lacks for it, shadowing) and where it shows (the plugin's Workflows, Items and Piles
+pages); the ledger keeps the line. `list_workflows` reads the loaded definitions back (where each
+is defined, its planner, starts, each step's who, needs and outcomes, the loader's problems and
+notes); `explain_item` gives an item's summary, its fields with the facts that set them, its
+position per workflow, the facts not counted and its last facts. The guide's "Workflows" section
+is the Supervisor's reference.
 
 ## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

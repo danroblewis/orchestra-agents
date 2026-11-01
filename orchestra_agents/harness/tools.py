@@ -78,6 +78,11 @@ EDIT_OPS = ("Each edit is an object with an op: add_flow {id, from, to, equation
             "modeling_guide describes.")
 
 
+# create_role, update_role, create_agent, update_agent on a confirmed designed machine (api_org._root)
+DESIGNED_ROOT = {"root": S("Only for a confirmed designed machine, and only when the owner asked: 'repository' writes it "
+                           "under .orchestra/; by default it is kept in the state directory, never committed"),
+                 "quote": S("The owner's words this turn that chose the repository (with root)")}
+
 TOOLS: list[ToolDef] = [
     ToolDef("report_ticket", "report_ticket",
             "Report the outcome of your work on this ticket. Call exactly once when you are finished. "
@@ -192,10 +197,11 @@ TOOLS: list[ToolDef] = [
             "what it never does, how it reports). No schedule, no team: those belong to agents and teams.",
             {"name": S("lowercase_with_underscores"), "description": S("One line: what this kind of agent is good at"),
              "prompt": S("The job description in markdown, under sixty lines"),
-             "tools": A("Tool groups the role needs: tickets, planning, guides, context, pipeline, capacity, escalate, events, model, experiments, replay, predict")},
+             "tools": A("Tool groups the role needs: tickets, planning, guides, context, pipeline, capacity, escalate, events, model, experiments, replay, predict"),
+             **DESIGNED_ROOT},
             ("name", "description", "prompt")),
     ToolDef("update_role", "roles", "Change a custom role's description, tools, or prompt.",
-            {"name": S("Role name"), "description": S(""), "prompt": S("New full prompt"), "tools": A()}, ("name",)),
+            {"name": S("Role name"), "description": S(""), "prompt": S("New full prompt"), "tools": A(), **DESIGNED_ROOT}, ("name",)),
     ToolDef("delete_role", "roles", "Delete a custom role no agent uses.", {"name": S("Role name")}, ("name",)),
     ToolDef("create_agent", "roles",
             "Create an agent: an instance of one or more roles in a team. kind is continuous (a process that is always "
@@ -205,11 +211,11 @@ TOOLS: list[ToolDef] = [
             {"name": S("lowercase_with_underscores"), "roles": A("Role names, at least one"), "team": S("Team name, or empty for none"),
              "kind": S("continuous | scheduled | ad_hoc"), "session": S("resident | ephemeral"),
              "wake_on": A("Event types, optionally filtered: 'gate.landed', 'task.reported:BLOCKED', 'task.attention_needed:coordinator'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
-             "description": S("One line: what this agent is for")},
+             "description": S("One line: what this agent is for"), **DESIGNED_ROOT},
             ("name", "roles", "kind")),
     ToolDef("update_agent", "roles", "Change a custom agent's roles, team, kind, schedule, or session policy.",
             {"name": S("Agent name"), "roles": A(), "team": S(""), "kind": S(""), "session": S(""), "wake_on": A(),
-             "every": S(""), "at": S(""), "description": S("")}, ("name",)),
+             "every": S(""), "at": S(""), "description": S(""), **DESIGNED_ROOT}, ("name",)),
     ToolDef("delete_agent", "roles", "Delete a custom agent; its sessions are archived.", {"name": S("Agent name")}, ("name",)),
     ToolDef("pause_agent", "roles", "Pause an agent: wake-ups queue until resumed.", {"name": S("Agent name")}, ("name",)),
     ToolDef("resume_agent", "roles", "Resume a paused agent.", {"name": S("Agent name")}, ("name",)),
@@ -560,8 +566,9 @@ TOOLS: list[ToolDef] = [
 ]
 
 from .tools_design import DESIGN_TOOLS
+from .tools_workflows import WORKFLOW_TOOLS
 
-TOOLS += DESIGN_TOOLS
+TOOLS += DESIGN_TOOLS + WORKFLOW_TOOLS
 BY_NAME = {t.name: t for t in TOOLS}
 
 

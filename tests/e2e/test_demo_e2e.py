@@ -91,6 +91,15 @@ def reported_by(web: Web) -> dict[str, list[str]]:
     return out
 
 
+def ai_worker(source: str) -> bool:
+    """An AI worker instance of the agents' host: ``worker/<n>``. How many there are is not
+    ``[tasks] workers``: a worker keeps its slot while its work is out for review (SPEC §3), so a
+    ticket offered meanwhile takes the next one, ``worker/3`` and on, while a slow reviewer holds
+    the first two."""
+    role, _, n = source.partition("/")
+    return role == "worker" and n.isdigit() and int(n) >= 1
+
+
 def git(target: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=target, capture_output=True, text=True, check=True).stdout
 
@@ -126,7 +135,7 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     for tid in ids:
         workers, reviewers = by[tid][:-1], by[tid][-1:]
         assert len(workers) == 1 and reviewers[0].startswith("reviewer/"), (tid, by[tid])
-        assert workers[0] in ("worker/1", "worker/2", "worker/shell"), (tid, by[tid])           # the AI workers, the program
+        assert ai_worker(workers[0]) or workers[0] == "worker/shell", (tid, by[tid])           # the AI workers, the program
         assert workers[0] != "worker/shell" or tid in ("DEMO-1", "DEMO-2"), (tid, by[tid])
     assert [e["source"] for e in all_events(web) if e["type"] == "task.requested"] == ["planner"] * len(ids)
     one = web.get(f"{TASKS}/tickets/DEMO-1")

@@ -86,9 +86,27 @@ def test_a_stall_found_wakes_it_once_and_the_cap_stops_its_initiative(host):
     host.events.publish("orchestra.machine.quiet", {"machine": "baker", "instance": "baker/1", "last_seen": time.time() - 600,
                                                     "usual_gap": 60}, source=HOST, subject="baker")
     host.project.config.review_usd_per_day = 1.0
-    budget.record(host.store, 1.25, initiative=True)
+    budget.record(host.store, 1.25, initiative=True, t=t0 + 5403)               # spent on the day the round runs, whatever the clock
     got = host.review.tick(t0 + 5403)
     assert got["woke"] is False and "review_usd_per_day" in got["skipped"] and wakeups(host) == []
+
+
+def test_the_cap_is_the_days_and_a_new_day_starts_it_again(host, monkeypatch):
+    """What the initiative spent counts on the day it was spent: a round that runs just after
+    midnight is not stopped by yesterday's spending, whatever the wall clock reads."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    try:
+        before = time.mktime((2026, 11, 1, 23, 59, 0, 0, 0, -1))
+        after = before + 120                                                  # 00:01 the next day
+        host.project.config.review_usd_per_day = 1.0
+        budget.record(host.store, 1.25, initiative=True, t=before)
+        assert "review_usd_per_day" in (budget.over(host.store, host.cfg, before) or "")
+        assert budget.over(host.store, host.cfg, after) is None
+        assert budget.spent(host.store, after) == {}
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 def test_a_stalled_stock_on_the_bus_wakes_it_through_keep_flow_within_the_cap(host):

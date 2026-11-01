@@ -32,7 +32,10 @@ turn, so nothing the Supervisor writes here can remove its guardrails.
 
 Orchestra reads none of this (its rule 2: the Machines page reads what is observed). The files
 are read through ``spec_git.read_files``: the working tree, or the side branch while a change
-committed there is not merged yet."""
+committed there is not merged yet. A machine the owner designed with the Supervisor and confirmed
+has its spec in the state directory instead (``state_machines``, machine-design.md §2.1), with an
+``emits`` list, the only types its ``emit_event`` may raise; the repository's spec wins on a name
+both have."""
 
 from __future__ import annotations
 
@@ -88,6 +91,7 @@ class MachineSpec:
     review_every: str | None = None
     duties: list[Duty] = field(default_factory=list)
     publishes: list[dict] = field(default_factory=list)
+    emits: list[str] = field(default_factory=list)            # the only types its emit_event may raise (a designed machine's)
     files: dict[str, str] = field(default_factory=dict)       # this machine's files, relative to its directory
     role: str | None = None                                   # the Workflows floor role whose offers it answers
     root: str = ROOT                                          # where its directory is: the repository's, or the state directory's
@@ -132,8 +136,8 @@ def parse(name: str, files: dict[str, str]) -> MachineSpec:
     return MachineSpec(name=raw.get("name") or name, description=str(raw.get("description") or ""),
                        engagement=str(raw.get("engagement") or "continuous"), model=raw.get("model") or None,
                        created_by=str(raw.get("created_by") or ""), review_every=review.get("every") or None, duties=duties,
-                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)], files=dict(files),
-                       role=str(raw["role"]) if isinstance(raw.get("role"), str) and NAME.match(raw["role"]) else None)
+                       publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)], emits=[str(x) for x in raw.get("emits") or []],
+                       files=dict(files), role=str(raw["role"]) if isinstance(raw.get("role"), str) and NAME.match(raw["role"]) else None)
 
 
 def state_root(project: Project):
@@ -199,13 +203,18 @@ def _s(v: str) -> str:
 
 def render(spec: MachineSpec) -> str:
     """``machine.toml`` for a spec (the duty tools rewrite it whole)."""
-    lines = [f"# The machine `{spec.name}`: its contract. Edited by its own duty tools (each change a commit with its",
-             "# reason) or by hand; read by orchestra-agents, never by Orchestra.",
+    head = ([f"# The machine `{spec.name}`: its contract. Edited by its own duty tools (each change a commit with its",
+             "# reason) or by hand; read by orchestra-agents, never by Orchestra."] if spec.root == ROOT else
+            [f"# The machine `{spec.name}`: its contract, the Supervisor's, kept in the state directory and never committed;",
+             "# written again from its declaration when the owner confirms a change; read by orchestra-agents, never by Orchestra."])
+    lines = [*head,
              f"name = {_s(spec.name)}"]
     for k in ("description", "engagement", "model", "created_by", "role"):
         v = getattr(spec, k)
         if v:
             lines.append(f"{k} = {_s(v)}")
+    if spec.emits:
+        lines.append(f"emits = [{', '.join(_s(x) for x in spec.emits)}]")
     if spec.review_every:
         lines += ["", "[review]", f"every = {_s(spec.review_every)}"]
     for d in spec.duties:
@@ -223,7 +232,14 @@ def render(spec: MachineSpec) -> str:
 
 
 def prompt_part(spec: MachineSpec) -> str:
-    """What the spec adds to the agent's system prompt: its loop and its duties, in full."""
+    """What the spec adds to the agent's system prompt: its loop and its duties, in full. A designed
+    machine's spec in the state directory is the Supervisor's (``state_machines``): it says so, and
+    has no duty tools and no second copy of its role (its role prompt is that ``role.md``)."""
+    if spec.root != ROOT:
+        return (f"## Your machine spec (`{spec.dir}/`)\n\n"
+                "The Supervisor wrote it from the declaration the owner confirmed. It is kept in the state directory and "
+                "never committed; it changes only when the owner confirms a change to the declaration, and then it is "
+                "written again whole. You have no tools to change it.\n")
     parts = [(f"## Your machine spec (`{spec.dir}/`)\n\n"
               "This part of your prompt is the project's: your own loop and standing duties, which you change with "
               "`add_duty`, `edit_duty` and `remove_duty` (each change a commit with its reason) and undo with "

@@ -2,9 +2,12 @@
 // app.js), inside Orchestra's machine-card frame:
 // - a resident agent (the Supervisor, the Coordinator) is a row: its letter in its role's colour,
 //   what it last said, and its session chip (resident, working, waiting);
-// - workers and reviewers are the tickets they were assigned: a card per ticket an instance is on,
-//   in the ticket's state colour, with its id, title, re-engagement badge and state, and a lane
-//   with what the agent is saying now.
+// - workers and reviewers (and any agent filling a role the task system serves) are the tickets
+//   they were assigned: a card per ticket an instance is on, in the ticket's state colour, with its
+//   id, title, re-engagement badge and state, and a lane with what the agent is saying now;
+// - any other agent that runs per wake-up or on a schedule (a machine designed with the Supervisor)
+//   is a row: its last run, how it ended, and its next run.
+// A declared machine's title (Orchestra's intent) is shown beside its id.
 // The agents' host is no machine (it never announces itself or publishes as itself), so it has no
 // card; whether it is up is on the Agents page and on each agent's session chip.
 // A click opens the agent's transcript (the ticket id opens the ticket, when a task system with a
@@ -27,8 +30,11 @@
   const sessionsOf = (m) => (D ? D.sessions.filter((s) => s.role === roleOf(m)) : []);
   // what is known of the agent beyond its sessions, for its status (agents.js agentStatus)
   const agentOf = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? { ...a, host_alive: D.host.alive } : { host_alive: D ? D.host.alive : undefined }; };
-  // a per-ticket role's machine shows the tickets it is on, even when a program fills the role beside the agents (its mode is then mixed)
-  const perTicket = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? !a.resident : m.mode === "ad hoc"; };
+  // a task system role's machine shows the tickets it is on, even when a program fills the role beside the agents (its mode is then mixed)
+  const TASK_ROLES = new Set(["worker", "reviewer"]);
+  const servesTickets = (a, role) => TASK_ROLES.has(role) || ((a && a.roles) || []).some((r) => ((D && D.serves) || []).includes(r));
+  const perTicket = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? !a.resident && servesTickets(a, roleOf(m)) : m.mode === "ad hoc" && TASK_ROLES.has(roleOf(m)); };
+  const titled = (m) => `${e_(m.id)}${m.intent && m.intent.title ? ` <span class="muted">· ${e_(m.intent.title)}</span>` : ""}`;
   const chip = (s, m) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000, m ? agentOf(m) : undefined) : "");
   const more = (m, compact) => (compact ? "" : `<div class="tkc-more" onclick="event.stopPropagation();Orchestra.machineCards.openDefault('${e_(m.id)}')">machine details</div>`);
 
@@ -53,7 +59,18 @@
     // with nothing said yet the status line already names the next wake-up
     const text = m.unseen ? "declared, not run yet" : say ? [say, next].filter(Boolean).join(" · ") : typeof agentStatus === "function" ? agentStatus(s, D.now, a).title : "";
     return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_(agentOf(m).description || role)}">
-        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${e_(m.id)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
+        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${titled(m)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
+  }
+
+  // an agent that runs per wake-up or on a schedule, outside the task system: its last run and its next
+  function runsCard(m, compact) {
+    const a = agentOf(m), run = a.last_run, live = sessionsOf(m).find((s) => s.status === "running");
+    const when = a.at ? `daily at ${a.at}${a.tz ? " " + a.tz : ""}` : a.every ? `every ${a.every}` : "when woken";
+    const last = live ? "running now" : run && run.at ? `last run ${ago(D.now - run.at)} ago (${run.status || "?"})${run.said ? ": " + run.said : ""}` : "not run yet";
+    const next = a.next_scheduled_at && a.next_scheduled_at > D.now ? `next run in ${ago(a.next_scheduled_at - D.now)}` : "";
+    const text = m.unseen ? `declared, not run yet · ${when}` : [last, next || when].filter(Boolean).join(" · ");
+    return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:#c4b5fd" title="${e_(a.description || roleOf(m))}">
+        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${titled(m)}</div><div class="say">${e_(text)}</div>${live ? chip(live, m) : ""}</div>${more(m, compact)}`;
   }
 
   function ticketsCard(m, compact) {
@@ -99,7 +116,9 @@
     },
     card(m, { compact } = {}) {
       if (kindOf(m) !== "agent") return null;
-      return perTicket(m) ? ticketsCard(m, compact) : residentCard(m, compact);
+      if (perTicket(m)) return ticketsCard(m, compact);
+      const a = D && D.agents.find((x) => x.name === roleOf(m));
+      return a && !a.resident ? runsCard(m, compact) : residentCard(m, compact);
     },
     open(m) {
       if (kindOf(m) !== "agent" || m.unseen) return false;

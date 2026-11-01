@@ -19,7 +19,7 @@ from .config import Project
 
 TOOL_GROUPS = ("tickets", "planning", "handoff", "guides", "context", "pipeline", "capacity", "escalate", "events", "roles", "team", "observe", "flows", "model", "experiments",
                "replay", "predict")
-# (`setup`, changing orchestra.toml, is the Supervisor's alone: no custom role or team is granted it)
+# (`setup`, changing orchestra.toml, and `design`, the declared layer, are the Supervisor's alone: no custom role or team is granted them)
 _NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
 
@@ -138,11 +138,16 @@ def commit_orchestra_files(project: Project, message: str) -> str:
 
 
 def all_roles(project: Project) -> dict[str, RoleDef]:
-    """Built-in roles plus the project's custom roles, by name."""
+    """Built-in roles plus the project's custom roles, by name: the confirmed designed machines'
+    in the state directory (``state_machines``), then the repository's, which win on a name."""
+    from . import state_machines
     out: dict[str, RoleDef] = {}
     for b in BUILTIN.values():
         out[b.name] = RoleDef(name=b.name, description=b.description, tools=list(b.tools), created_by=None, created_at=None,
                               updated_at=None, builtin=True)
+    for r in state_machines.roles(project):
+        if r.name not in out:
+            out[r.name] = r
     for r in RepoRoleStore(project).list():
         out[r.name] = r
     return out

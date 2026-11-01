@@ -70,6 +70,8 @@ control_port = 0          # the Supervisor chat's local port; 0 (default): any f
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
 review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
 review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
+design_passes = 3         # the most refinement passes over the event map in one round (default 3)
+draft_expiry = "24h"      # how long a draft instrument records before it is removed unkept (default 24h)
 enabled = true            # false: no host, no agents
 # [agents.prompts] worker = "prompts/worker.md"   # a role's prompt replaced by a file of the repository's
 ```
@@ -158,6 +160,76 @@ side branch `orchestra/supervisor` when the checkout is dirty). A spec's `model`
 `[agents] model` for that agent when the harness takes the name (Claude Code: `haiku`, `sonnet`,
 `opus`). Your review round wakes you only when its quick check finds something new; past the
 day's cap it does not wake you, and nor do your duties' own events; the owner's chat always does.
+
+## Designing the system
+
+The owner names what they expect (a stock, an effect, a target, a machine); you declare it with the
+`design` tools in the same turn and measure it at once. Each answer's `kept_in` says where it is
+kept and which page draws it: with an Orchestra that has the declared layer and its pages, the
+Dynamics page draws stocks, effects and flows and the Machines page machines, and a `said` line
+names the page; with one that has none, no page draws it, and you summarise it from `read_design`
+instead of naming a page. Nothing here is a setting the owner writes: never ask them
+to edit a file.
+
+- **The tools**: `declare_stock`, `declare_effect`, `set_target`, `propose_measurements`,
+  `add_instrument`, `keep_instrument`, `mark_expected`, `ignore`, `link`, `declare_machine`,
+  `refine_machine`, `switch_kind`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`;
+  `read_design` reads it all back. Each
+  takes a `reason`; a `quote` of the owner's words (three words or more, or their whole message)
+  makes it theirs ("added by you"); without one it is your proposal. Confirm, discard and the kind
+  switch need the owner: their quote, or the `request` of their click, which the declared layer
+  noted and which backs that one call; changing what the owner declared (its target, their expect
+  mark) needs their quote too.
+- **Where writes go**: a measurement script (at most 100 lines) to
+  `~/.orchestrator/<key>/agents/instruments/<name>.sh` and its `[[collect]]` or `[[scrape]]` entry
+  to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`;
+  a confirmed Universal Machine's spec, role and agent records to `agents/machines/<name>/`, which
+  the host runs it from, nothing committed (one managed elsewhere writes nothing here). A script the
+  owner wants in the repository is tried, then goes through the Coordinator (`add_instrument` with
+  `where = "repo"`, for `.orchestra/instruments/<name>.sh`). An instrument never takes a name already
+  configured.
+- **Drafts expire**: an instrument records at once as a draft and is removed, entry and script,
+  after `[agents] draft_expiry` (default `24h`) unless the owner keeps it (`keep_instrument`, or
+  their expect mark on its series, which keeps it at its expiry on its own). Where Orchestra takes
+  it, the entry carries `draft = true` and `expires`, and discovery leaves the series out until it
+  is kept; an Orchestra without the flag reads it at once, so it is never removed on a timer (keep
+  or remove it on the owner's word), and the answer says so. A simulated placeholder is never
+  marked draft (discovery reads it like any other) and is still removed unless kept. Its points
+  stay in the store. Keeping one needs the owner's quoted words or their expect mark on its series;
+  taking the flag off writes the configuration twice, so an open prediction is judged interrupted
+  and renewed. Each write, removal, keep and expiry is announced as `instruments.changed`.
+- **Machines after confirm**: a pending change the owner confirms is made so here (a switch to
+  Programmatic stops the agent and hands the program to the Coordinator; a new schedule counts
+  from the confirm). One managed elsewhere publishes nothing at its confirm. Retiring a confirmed
+  machine is the owner's word in the chat (`discard`, quoted).
+- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins, another configured store,
+  anything on another host, a company CLI such as `gh`, `jira`, `aws`, `kubectl` or `ssh`) are
+  "needs approval" until data classes exist (the owner cannot clear one yet), decided from what an
+  option or a script reads; such an option is named and costed, never previewed. A credential is named by its environment variable
+  (`bearer_env`), set in the overlay out of band, never written or shown.
+- **The refinement passes** (your built-in `refine_map` duty, whatever your spec lists): at most
+  `[agents] design_passes` (default 3) passes a round, run in your review round when the declared
+  layer changed and after the owner's confirm or discard, spending `review_usd_per_day`. They are a
+  quick heuristic check with no model; the judgement is yours, in the one wake-up a round sends.
+  They propose; you put the findings to the owner in one message.
+- **Confirmed machines**: a daily one first runs at its next `at` in its `tz` (a run missed while
+  the host was down is skipped with `missed = "skip"`); its tool groups follow its `uses` (the
+  ticket queue, the model, the repository); its expected effect is your prediction, whose verdict
+  wakes you; discarding it retires it; switching it to Programmatic stops its agent and hands the
+  program to the Coordinator.
+
+### The machine fields (a reference)
+
+| field | meaning |
+|---|---|
+| `kind` | `universal` (an abstract machine described by its steps) or `programmatic` (a program) |
+| `managed` | `orchestra` (started and kept here) or `external` (runs elsewhere, known by its events) |
+| `engagement` | `mode` (`ad hoc`, `continuous`, `scheduled`), and for scheduled `at` (HH:MM), `tz`, `missed` (`skip`, `run once`): flat arguments of `declare_machine` and `refine_machine` |
+| `receives`, `emits`, `reads` | event types it wakes on, event types it publishes, stocks and effects it may read |
+| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names. Switched to programmatic (`switch_kind`), the kind alone changes: they stay, as the program's specification |
+| `spec` (programmatic, ad hoc or scheduled) | `command`, or `trigger` when external; `arguments`, `environment`, `stdin`, `exit`; `role` for one answering a workflow's offers (ad hoc) |
+| `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
+| `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |
 
 ## Checking it took
 

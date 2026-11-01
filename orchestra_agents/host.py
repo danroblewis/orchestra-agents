@@ -29,7 +29,10 @@ from orchestra.tokens import owner_only
 from . import (
     access,
     budget,
+    design_confirm,
+    design_instruments,
     handoff,
+    intended_api,
     parent,
     promises,
     prompting,
@@ -38,11 +41,11 @@ from . import (
     tooling,
 )
 from .builtins import ROLES as BUILTIN_ROLES
-from .clock import due_at, parse_interval
+from .clock import daily, next_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer, token_file
-from .events import GAVE_UP, Events
+from .events import GAVE_UP, INTENT_REQUESTED, Events
 from .facts import SupervisorFacts
 from .fillers import Fillers
 from .first_run import FirstRun
@@ -110,6 +113,7 @@ class AgentHost:
         self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
+        self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
         self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
         self.landings = Landings(store)                # the human's tickets, followed until they are done
         self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s))
@@ -176,6 +180,7 @@ class AgentHost:
             self.first_run.offer()
         except Exception as e:  # noqa: BLE001 - the host runs whether or not the setup could be offered
             log(f"first run: {e!r}")
+        self.wake_open_requests()
         try:
             while not self.stop.is_set():
                 try:
@@ -229,6 +234,7 @@ class AgentHost:
         self._schedule_wakeups(states)
         self._wake_on_events()
         self.verdicts.tick()
+        self._expire_drafts()
         try:
             self.review.tick()
         except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
@@ -428,18 +434,19 @@ class AgentHost:
 
     def _announce(self, source: str, role: str, model: str | None = None) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
-        mode and what it listens for): an AI agent, on which harness and model, engaged how. A
-        resident agent is continuous (its session is always up; a schedule is one of its wake
-        rules), a per-ticket or ephemeral one ad hoc. Once per source in the host's lifetime
-        (``reviewer/1`` is one machine instance however many tickets it reviews), again only when
-        the harness or the model changed."""
+        mode and what it listens for): an AI agent, on which harness and model, engaged how. One
+        run on an interval or at a daily time is scheduled; any other resident one is continuous
+        (its session is always up); a per-ticket or other ephemeral one is ad hoc. Once per source
+        in the host's lifetime (``reviewer/1`` is one machine instance however many tickets it
+        reviews), again only when the harness or the model changed."""
         model = model if model is not None else self.cfg.model
         key = (source, self.harness.name, model)
         if key in self._announced:
             return
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        mode = "continuous" if agent is not None and agent.resident else "ad hoc"
+        mode = ("scheduled" if agent is not None and (agent.kind == "scheduled" or agent.every or agent.at) else
+                "continuous" if agent is not None and agent.resident else "ad hoc")
         floor = [r for r, a in served(self.project).items() if a == role]     # the Workflows floor roles it answers (floor_roles.py)
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
                                                           "kind": "agent", "role": role, **({"roles": floor} if floor else {}),
@@ -469,6 +476,8 @@ class AgentHost:
             if landed := self.landings.see(ev, self.cfg):
                 self.store.add_wakeup("supervisor", landed)
             self.verdicts.see(ev)
+            if ev.get("type") == INTENT_REQUESTED and str(ev.get("source") or "").split("/")[0] != "owner":
+                continue                                    # only the owner's click is a request (design_confirm.wake_reason)
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
@@ -481,10 +490,33 @@ class AgentHost:
                 self.store.add_wakeup(name, self._wake_reason(ev))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
 
+    def wake_open_requests(self) -> int:
+        """At start: one Supervisor wake-up for each of the owner's page requests the declared layer
+        still holds open (made while the host was down, so no event woke it), worded as a live one
+        would be; how many. Nothing is read while the layer holds no machine."""
+        try:
+            with intended_api.one_call():
+                lay = intended_api.layer(self.project)
+                held = lay.read()["layer"]
+                if not (held.get("machines") or held.get("attachments")):
+                    return 0
+                rows = lay.open_requests()
+        except Exception as e:  # noqa: BLE001 - the host runs; a click made meanwhile waits for the next start
+            log(f"open requests: not read at start: {e!r}")
+            return 0
+        for rid, r in rows.items():
+            ev = {"type": INTENT_REQUESTED, "source": "owner", "id": rid, "control": r.get("control"),
+                  "change": r.get("change"), "subject": f"{r.get('part')}:{r.get('id')}", "from": r.get("from")}
+            if said := design_confirm.wake_reason(ev, self.project):
+                self.store.add_wakeup("supervisor", said)
+        if rows:
+            log(f"supervisor: woken for {len(rows)} open request(s) the owner made while the host was down")
+        return len(rows)
+
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
-        if said := handoff.wake_reason(ev):
+        if said := handoff.wake_reason(ev) or design_confirm.wake_reason(ev, self.project):
             return said
         if ev["type"] == GAVE_UP:
             name = ev.get("name")
@@ -510,9 +542,17 @@ class AgentHost:
                     self.store.add_wakeup(name, f"scheduled check-in (every {agent.every})")
                 if st.get("next_scheduled_at") != last + secs:
                     self.store.set_agent_state(name, next_scheduled_at=last + secs)
-            if agent.at and due_at(agent.at, st.get("last_at_fire"), now_t):
-                self.store.set_agent_state(name, last_at_fire=now_t)
-                self.store.add_wakeup(name, f"scheduled daily session ({agent.at})")
+            if agent.at:
+                if (what := daily(agent.at, st.get("last_at_fire"), now_t, agent.tz, agent.missed)) is not None:
+                    self.store.set_agent_state(name, last_at_fire=now_t)
+                    if what == "fire":
+                        self.store.add_wakeup(name, f"scheduled daily session ({agent.at}{' ' + agent.tz if agent.tz else ''})")
+                    else:
+                        log(f"{name}: its {agent.at} run was missed while the host was down, and is skipped (missed = skip)")
+                    st = {**st, "last_at_fire": now_t}
+                nxt = next_at(agent.at, st.get("last_at_fire"), now_t, agent.tz)
+                if st.get("next_scheduled_at") != nxt:
+                    self.store.set_agent_state(name, next_scheduled_at=nxt)
 
     def _spawn(self, table: dict, key: str, fn, *args) -> None:
         th = threading.Thread(target=fn, args=args, daemon=True, name=key)
@@ -620,6 +660,7 @@ class AgentHost:
         snap = tooling.snapshot(self.store, "supervisor")
         prefix = prompting.supervisor_context(snap, new, self.project, self.store, roles=self.fillers.lines(self.cfg.serves))
         facts, began = self.facts.before(snap, message)
+        self._turn_began(message)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -635,6 +676,33 @@ class AgentHost:
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])
         return {"text": res.text, "error": res.error, "timed_out": res.timed_out}
+
+    def _turn_began(self, message: str | None) -> None:
+        """The Supervisor's turn as its design tools record it in their provenance: its id, and the
+        owner's message that began it (None for a wake-up: then no quote can be the owner's)."""
+        n = int((self.store.agent_state("supervisor").get("turn") or {}).get("n") or 0) + 1
+        self.store.set_agent_state("supervisor", turn={"n": n, "id": f"sessions/supervisor/{n}", "message": message,
+                                                       "at": time.time()})
+
+    def _expire_drafts(self) -> None:
+        """Once a minute: draft instruments the owner did not keep, past their expiry, removed
+        (design_instruments.py); and a confirmed machine's expected edits that waited for a series
+        published once it is linked (design_confirm.publish_waiting); a kept instrument whose option
+        could not be marked chosen, marked again (design_instruments.retry_chosen). Skipped for
+        ``intended_api.BACKOFF_S`` after an endpoint timeout, so the tick never stalls on it."""
+        if time.time() - self._drafts_at < 60 or intended_api.backing_off():
+            return                                      # after an endpoint timeout, wake-ups keep running meanwhile
+        self._drafts_at = time.time()
+        try:
+            with intended_api.one_call():
+                if gone := design_instruments.expire(self.project, self.store, log=log):
+                    log(f"draft instruments expired unkept: {', '.join(gone)}")
+                for said in design_confirm.publish_waiting(self.project, self.store):
+                    log(said)
+                for said in design_instruments.retry_chosen(self.project, self.store):
+                    log(said)
+        except Exception as e:  # noqa: BLE001 - tried again in a minute
+            log(f"design: {e!r}")
 
     def _honest(self, proc: AgentSession, text: str, on_event) -> TurnResult:
         """A Supervisor turn whose reply is for the human. A reply that claims an action the turn
@@ -699,10 +767,13 @@ class AgentHost:
                 proc = self._session_for(agent, sid)
                 self.residents.procs[target] = proc
         self.store.set_agent_state(target, last_woken=time.time(), turn_depth=self._pending_depth.pop(target, 0))
+        if target != "supervisor" and (change := design_confirm.announce_start(self.store, target)):
+            log(f"{sid}: its first turn as a confirmed machine: system.changed {change}, the change its prediction is about")
         log(f"{sid}: waking ({len(reasons)} reason(s))")
         self._session_running(sid, target, proc)
         task = prompting.wake_task(target, reasons, snap, self.fillers.lines(self.cfg.serves))
         if target == "supervisor":
+            self._turn_began(None)
             facts, began = self.facts.before(snap)
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)

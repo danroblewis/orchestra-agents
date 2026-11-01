@@ -156,3 +156,11 @@ role = "supervisor"
 prompt = "(?i)\\[The human's message\\]\\n.*(going on|status)"
 steps = [{ tool = "project_status" }]
 reply = "I read the project's status with my tool (above). I am the demo's scripted Supervisor: I answer questions about the project this way, and hand any other request to the Coordinator."
+
+# The owner's click on a page's confirm or discard (orchestra.intent.requested from owner) wakes the
+# Supervisor, which does what was asked with the request's id, as a real Supervisor does.
+[[rule]]
+role = "supervisor"
+prompt = 'event orchestra\.intent\.requested request=(?P<request>[0-9a-f]+): the owner clicked (?P<control>confirm|discard) on (?P<element>\S+?)(?: \(change (?P<change>[^)]+)\))? on the'
+steps = [{ tool = "{match.control}", args = { element = "{match.element}", change = "{match.change}", request = "{match.request}", reason = "The owner clicked {match.control} on {match.element} on the page." } }]
+reply = "Done: {match.control} on {match.element}, as you asked on the page (request {match.request}). (I am the demo's scripted Supervisor.)"

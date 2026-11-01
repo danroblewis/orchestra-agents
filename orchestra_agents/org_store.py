@@ -140,9 +140,12 @@ def all_agents(project: Project) -> dict[str, AgentDef]:
     machine fills is not an agent here; the Coordinator on the project's schedule, if it sets
     one) and the project's own agents, by name. A role record is never an agent: it runs only
     through an agent that names it."""
+    from . import state_machines
     out = {n: a for n, a in built_in_agents().items() if a.resident or n in project.config.serves}
     if project.config.coordinator_every:
         out["coordinator"].every, out["coordinator"].kind = project.config.coordinator_every, "scheduled"
+    # a confirmed designed machine's record is in the state directory (state_machines); the repository's wins on a name
+    out.update({a.name: a for a in state_machines.agents(project) if a.name not in out})
     out.update({a.name: a for a in RepoOrgStore(project).list_agents()})
     # A team's record is authoritative for who is in it: an agent it names as lead or member
     # belongs to it even when the agent's own record says nothing, or says something older.

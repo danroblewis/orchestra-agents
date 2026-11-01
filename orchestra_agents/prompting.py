@@ -55,6 +55,9 @@ def role_prompt(project: Project, role: str) -> str:
         text = path.read_text(encoding="utf-8")
     else:
         text = RepoRoleStore(project).prompt(role)
+        if not text.strip():                        # a confirmed designed machine's, in the state directory
+            from . import state_machines
+            text = state_machines.prompt(project, role)
         if not text.strip():
             text = f"You are good at being the {role}. Act on the wake-up you receive using your tools, then summarize."
     return _fill(project, text)
@@ -79,9 +82,11 @@ def machines_doc() -> str:
 
 def _fill(project: Project, text: str) -> str:
     """Placeholders: ``{operator}`` (the Supervisor's part shared by both kinds of work: seeing the
-    system and fixing its setup, prompts/operator.md), then the project's settings."""
+    system and fixing its setup, prompts/operator.md, then designing it, prompts/design.md, with its
+    built-in refine_map duty, prompts/duties/refine_map.md), then the project's settings."""
     if "{operator}" in text:
-        text = text.replace("{operator}", (PROMPTS_DIR / "operator.md").read_text(encoding="utf-8").strip())
+        text = text.replace("{operator}", "\n\n".join((PROMPTS_DIR / f).read_text(encoding="utf-8").strip()
+                                                       for f in ("operator.md", "design.md", "duties/refine_map.md")))
     return (text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
             .replace("{machines_doc}", machines_doc()))
 

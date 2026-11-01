@@ -19,7 +19,10 @@ from .store import AgentStore
 
 def role_definition(project: Project, role: RoleDef) -> dict:
     """What makes a role that role: its prompt, where it comes from, the tools behind its groups."""
-    source = str(prompting.prompt_path(project, role.name) if role.builtin else project.repo_root / ".orchestra" / "roles" / f"{role.name}.md")
+    from . import state_machines
+    repo = project.repo_root / ".orchestra" / "roles" / f"{role.name}.md"
+    designed = state_machines.root(project) / role.name / "role.md"
+    source = str(prompting.prompt_path(project, role.name) if role.builtin else designed if designed.exists() and not repo.exists() else repo)
     return {"prompt": prompting.role_prompt(project, role.name), "prompt_source": source,
             "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
 
@@ -113,9 +116,13 @@ def agents_status(project: Project, store: AgentStore) -> dict:
     agents = []
     for a in all_agents(project).values():
         st = rt["agent_state"].get(a.name) or {}
+        last = None if a.resident or a.builtin else next(iter(agent_runs(store, a)), None)
         agents.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team,
                        "session_id": a.session_id, "resident": a.resident, "paused": bool(st.get("paused")),
-                       "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at")})
+                       "last_woken": st.get("last_woken"), "next_scheduled_at": st.get("next_scheduled_at"),
+                       "engaged": a.kind, "every": a.every, "at": a.at, "tz": a.tz, "roles": list(a.roles), "builtin": a.builtin,
+                       "last_run": {"at": last.get("settled_at") or last.get("started_at"), "status": last.get("status"),
+                                    "said": (last.get("last_text") or "")[-160:]} if last else None})
     residents = {a["session_id"] for a in agents if a["resident"]}
     sessions = []
     for x in rt["sessions"].values():

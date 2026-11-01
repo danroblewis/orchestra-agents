@@ -104,9 +104,15 @@ def declared(project) -> list[Declared]:
     that runs them is no machine and is not declared."""
     work, roles, teams = project.config.work, all_roles(project), all_teams(project)
     floor = set(served(project).values())
-    return [Declared(a.name, "agent", "continuous" if a.resident else "ad hoc",
+    return [Declared(a.name, "agent", mode_of(a),
                      listens_for(a, work, effective_tools(a, roles, teams), floor=a.name in floor))
             for a in all_agents(project).values()]
+
+
+def mode_of(a) -> str:
+    """How an agent is engaged, as the Machines page says it: continuous (resident), scheduled (at a
+    time of day, or every interval), or ad hoc."""
+    return "continuous" if a.resident else "scheduled" if a.at or a.every else "ad hoc"
 
 
 def current(project: Project) -> Project:

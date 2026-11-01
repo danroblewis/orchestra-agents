@@ -27,7 +27,7 @@ from pathlib import Path
 from orchestra.config import ConfigError
 
 from .builtins import ROLES as BUILTIN_ROLES
-from .clock import now, parse_interval
+from .clock import now, parse_interval, zone
 from .config import Project
 from .protocol import (
     ACCEPTED,
@@ -64,7 +64,8 @@ JUDGED = "orchestra.prediction.judged"     # Orchestra's: a prediction's verdict
 # Orchestra's statements about the model and the bus, domain-free (its sd/announce.py, sd/stall.py, quiet.py)
 STALLED, RESUMED, QUIET = "orchestra.model.stalled", "orchestra.model.resumed", "orchestra.machine.quiet"
 DIVERGED, RETURNED, GAVE_UP_TYPE = "orchestra.model.diverged", "orchestra.model.returned", "orchestra.process.gave_up"
-ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP_TYPE)
+INTENT_REQUESTED = "orchestra.intent.requested"   # the owner's click on a page's request control (source owner)
+ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP_TYPE, INTENT_REQUESTED)
 # Other plugins' events an agent is asked to wake on (the outbox's SPEC §7.2: the Supervisor wakes on a rate limit it cannot resolve)
 OUTBOX_STUCK = "outbox.rate_limit.unresolvable"
 PLUGIN_EVENT_TYPES = (OUTBOX_STUCK,)
@@ -112,6 +113,7 @@ EVENT_HELP = {
     RESUMED: "a stalled stock or flow moves again", QUIET: "a machine that kept a rhythm has gone silent (filter with :<machine>)",
     DIVERGED: "a stock left the band the model predicted", RETURNED: "a diverged stock is back in its band",
     GAVE_UP_TYPE: "Orchestra's launcher gave up restarting a program",
+    INTENT_REQUESTED: "the owner clicks confirm, discard or the kind switch on a page: a request the Supervisor applies",
     OUTBOX_STUCK: "the outbox cannot resolve a rate limit on a draft the owner approved",
     JUDGED: "Orchestra judges a prediction (filter with the verdict: :passed, :no effect, :side effect, ...); the agent that "
             "committed it is woken without asking",
@@ -183,6 +185,9 @@ class AgentDef:
     wake_on: list[str] = field(default_factory=list)
     every: str | None = None
     at: str | None = None
+    tz: str | None = None                 # the zone `at` is in (the host's own when None)
+    missed: str | None = None             # a daily run missed while the host was down: skip, or run once (the default)
+    reads_events: list[str] = field(default_factory=list)   # what it reads each run without being woken by it (a scheduled one)
     description: str = ""
     created_by: str = "supervisor"
     created_at: str = field(default_factory=now)
@@ -225,6 +230,15 @@ class AgentDef:
                 raise OrgError(f"every: {e}")
         if self.at is not None and not re.fullmatch(r"\d{2}:\d{2}", self.at):
             raise OrgError("at must be HH:MM")
+        if self.tz is not None or self.missed is not None:
+            if self.at is None:
+                raise OrgError("tz and missed go with a daily `at`")
+            try:
+                zone(self.tz)
+            except ConfigError as e:
+                raise OrgError(str(e)) from None
+            if self.missed not in (None, "skip", "run once"):
+                raise OrgError("missed is skip or run once")
         if self.kind == "ad_hoc" and (self.every or self.at):
             raise OrgError("an ad_hoc agent runs when briefed or on a wake_on event; it has no `every` or `at`")
         if self.kind == "ad_hoc" and self.session != "ephemeral":
@@ -239,6 +253,9 @@ class AgentDef:
         d = asdict(self)
         for k in ("builtin", "triggers", "emits"):
             d.pop(k, None)
+        for k in ("tz", "missed", "reads_events"):         # written only when set
+            if not d.get(k):
+                d.pop(k, None)
         return d
 
     @classmethod

@@ -6,7 +6,7 @@ refuse a change that adds one (``config_change.change``), and ``read_config`` hi
 before the text reaches a session. What counts is a shape, not a proof: a URL with a user and a
 password in it (``https://admin:hunter2@host``), a query parameter named for a secret (``?token=``,
 ``&api_key=``), a value given after ``--token``, ``--password``, ``--secret`` or ``--api-key``, a
-``Bearer`` header, and the shapes of common tokens (GitHub's ``ghp_``/``gho_``/``github_pat_``,
+``Bearer`` header or any other ``Authorization:`` header's value, and the shapes of common tokens (GitHub's ``ghp_``/``gho_``/``github_pat_``,
 Slack's ``xoxb-``, AWS's ``AKIA``, ``sk-`` API keys). A value read from the environment
 (``--token $GITHUB_TOKEN``) is not one: that is how a secret should be passed."""
 
@@ -21,6 +21,8 @@ SHAPES: list[tuple[str, re.Pattern]] = [
     ("a secret in a URL's query", re.compile(rf"([?&]{_NAMED}=)(?!\$)[^&\s#'\"]+", re.IGNORECASE)),
     ("a value after a secret's option", re.compile(r"(--(?:token|password|passwd|secret|api-key|api_key|apikey)(?:=|\s+))(?![$-])[^\s'\"]+", re.IGNORECASE)),
     ("a bearer token", re.compile(r"(\bBearer\s+)(?!\$)[A-Za-z0-9._~+/=-]{8,}")),
+    ("an Authorization header's value", re.compile(r"(\bAuthorization:\s*(?:(?:Bearer|Basic|token)\s+)?)(?!(?:Bearer|Basic|token)\b)(?![$\s'\"])[A-Za-z0-9._~+/=-]{6,}",
+                                                     re.IGNORECASE)),
     ("a GitHub token", re.compile(r"()\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
     ("a Slack token", re.compile(r"()\bxox[bpasr]-[A-Za-z0-9-]{10,}")),
     ("an AWS access key", re.compile(r"()\bAKIA[0-9A-Z]{16}\b")),

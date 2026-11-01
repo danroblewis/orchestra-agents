@@ -9,11 +9,14 @@ import threading
 import tomllib
 from pathlib import Path
 
+import pytest
 from orchestra.config import init_project as init_orchestra
 
 from orchestra_agents.config import Project, load_project
 from orchestra_agents.harness.base import AgentSession, Harness, SessionSpec, TurnResult
 from orchestra_agents.harness.pi import PiHarness
+
+pytest.register_assert_rewrite("design_fixtures")          # the design tools' fixtures, a plugin of their tests
 
 
 def agents_project(repo: Path | str, *, harness: str = "pi", model: str = "", provider: str = "",

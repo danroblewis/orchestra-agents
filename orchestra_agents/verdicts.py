@@ -25,7 +25,9 @@ VERDICT_TOOLS = ("model",)
 def reason(ev: dict, rec: dict) -> str:
     v = ev.get("verdict") or "?"
     where = f"ticket {rec['ticket']}, " if rec.get("ticket") else ""
-    return (f"event {JUDGED}: your prediction {rec.get('id')} ({where}experiment {rec.get('experiment')}) of change "
+    what = f"{rec['subject']}, {rec.get('note') or 'a designed machine'}" if rec.get("subject") and not rec.get("experiment") \
+        else f"{where}experiment {rec.get('experiment')}"
+    return (f"event {JUDGED}: your prediction {rec.get('id')} ({what}) of change "
             f"{rec.get('change')} was judged: {v} ({VERDICTS.get(v, 'see the numbers')}). read_predictions with id "
             f"{rec.get('id')} gives the numbers it was judged by.")
 
@@ -38,6 +40,15 @@ class Verdicts:
     def see(self, ev: dict) -> None:
         """A verdict on a prediction an agent here committed: wake that agent."""
         if ev.get("type") != JUDGED:
+            return
+        from .design_confirm import renew
+        try:                                        # a designed machine's prediction an era interrupted: renewed
+            if said := renew(self.host.project, self.host.store, ev):
+                self.host.store.add_wakeup("supervisor", said)
+                return
+        except Exception as e:  # noqa: BLE001 - the verdict is still seen; the renewal is said to have failed
+            self.host.store.add_wakeup("supervisor", f"event {JUDGED}: a designed machine's prediction was interrupted and "
+                                                     f"could not be renewed: {e}")
             return
         found = self.host.store.find_prediction(ev.get("correlationid"))
         if found is None or found[1].get("judged"):

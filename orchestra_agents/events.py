@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 HOST = "agents"     # the host's name in its log and the plugin's name: never an event's source
 GAVE_UP = "orchestra.process.gave_up"   # Orchestra's launcher stopped restarting a process (data: name, code, failures)
+INTENT_REQUESTED = "orchestra.intent.requested"   # the owner's click on a page's request control (Orchestra's, source owner)
 WORK_REQUESTED, WORK_PLANNED = "work.requested", "work.planned"   # the Supervisor's hand-off and the Coordinator's plan (handoff.py)
 
 

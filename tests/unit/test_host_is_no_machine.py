@@ -89,7 +89,7 @@ def test_each_subscription_is_announced_by_the_agent_that_reacts(project, tmp_pa
     # the Supervisor: its wake-ups, the answers to its own requests, its tickets' ends (tasks mode:
     # an approval ends a ticket), ticket.created, by which it remembers its own, and the verdicts
     # on its predictions
-    assert said["supervisor"] == ["gate.landed", "orchestra.prediction.judged", "orchestra.process.gave_up", "request.done",
+    assert said["supervisor"] == ["gate.landed", "orchestra.intent.requested", "orchestra.prediction.judged", "orchestra.process.gave_up", "request.done",
                                   "request.refused", "review.approved", "task.attention_needed", "ticket.created", "work.planned"]
     assert said["coordinator"] == ["request.done", "request.refused", "task.attention_needed", "work.requested"]
     # a per-ticket role asks nothing; a worker hears its predictions' verdicts and its ticket's end

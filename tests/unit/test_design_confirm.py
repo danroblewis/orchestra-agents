@@ -426,3 +426,12 @@ def test_a_confirmed_daily_machine_is_announced_scheduled_and_listed_by_agents_s
     cmd_status(Args())
     out = capsys.readouterr().out
     assert "feature_count_improver" in out and "daily at 00:00 America/Los_Angeles" in out
+
+
+def test_the_published_prediction_is_one_orchestras_record_reads_as_valid(project, store):
+    """Orchestra keeps the prediction as it reads it from the bus: published through the agents'
+    flattening Events, its record had no data and said "invalid" (the live test, A3)."""
+    from orchestra.sd.predictions import Predictions
+    out = confirmed(project, store)
+    rec = Predictions(project.orchestra, "supervisor").get(out["prediction"])
+    assert rec and rec["status"] != "invalid" and rec["change"] == out["change"], rec

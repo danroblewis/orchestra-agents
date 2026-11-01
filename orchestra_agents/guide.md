@@ -380,7 +380,7 @@ When the owner asks for work ("do X", "start Y") and a workflow fits, start it w
    machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
    source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the
    larger item this is part of) and `fields` (`{"priority": 2}`).
-3. Answer the owner with the item's id, the Items page link (`/items/<id>`) and that you can say
+3. Answer the owner with the item's id, the Items page link (`/items#item=<id>`) and that you can say
    where it is and why (`explain_item`).
 
 It is refused, with nothing published, when the workflow is not loaded or not started by a
@@ -392,7 +392,7 @@ A worked example. The owner: "start the task loop on adding a /version endpoint"
 shows one workflow a request starts, `task_loop`, so you call `request_work` with `{"workflow":
 "task_loop", "brief": "Add a /version endpoint that returns the app version, with a test",
 "quote": "start the task loop on adding a /version endpoint", "reason": "the owner asked for the
-/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items/task_loop-3fa2c1,
+/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items#item=task_loop-3fa2c1,
 and I can tell you where it is."
 
 ## Checking it took

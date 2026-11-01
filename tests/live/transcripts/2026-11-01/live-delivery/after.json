@@ -1,0 +1,23 @@
+{
+ "tickets": [
+  "SCRUM-12",
+  "SCRUM-13"
+ ],
+ "items": [
+  "SCRUM-12",
+  "SCRUM-13",
+  "SCRUM-11",
+  "SCRUM-10"
+ ],
+ "prs": {
+  "SCRUM-10": 9,
+  "SCRUM-11": 8,
+  "SCRUM-12": 11,
+  "SCRUM-13": 10
+ },
+ "merged": [
+  "SCRUM-10",
+  "SCRUM-11"
+ ],
+ "ended": []
+}

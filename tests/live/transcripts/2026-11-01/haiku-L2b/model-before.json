@@ -1,0 +1,2122 @@
+{
+ "ok": true,
+ "model": {
+  "id": "system",
+  "name": "The system",
+  "description": "Discovered from the metrics store: stocks are levels that counters balance, with those counters as flows fitted by Poisson maximum likelihood, and levels no counters balance whose net flow the other series explain, fitted by least squares.",
+  "time_unit": "minute",
+  "stocks": [
+   {
+    "id": "tasks_tickets_OPEN",
+    "name": "tasks tickets (OPEN)",
+    "unit": "items",
+    "series": {
+     "name": "tasks_tickets",
+     "labels": {
+      "state": "OPEN",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 10.066,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 92,
+     "identification": {
+      "units": 92,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.3,
+      "halves": [
+       [],
+       [
+        "+tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}",
+        "-tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.9899,
+      "level": "high",
+      "weakest": "units",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.9899
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": null,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 92,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.4262,
+       "level": "low",
+       "error": 1.3461,
+       "hold_error": 1.5437,
+       "beats_hold": true,
+       "growth": 0.22231062906383472,
+       "z": 2.939,
+       "horizon": 4.031,
+       "pairs": 96,
+       "why": [
+        "run forward from part-way through the window, it misses the measured level by 1.3\u00d7 the level's spread"
+       ]
+      },
+      "persistence": 0.0,
+      "persistence_of": 2
+     },
+     "written_by": "tasks.tickets",
+     "accumulator": false,
+     "balance": [
+      {
+       "series": "tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}",
+       "sign": 1
+      },
+      {
+       "series": "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}",
+       "sign": -1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793558071.320312
+    }
+   },
+   {
+    "id": "repo_files",
+    "name": "repo files",
+    "unit": "items",
+    "series": {
+     "name": "repo_files",
+     "labels": {
+      "project": "demo-2afa30e9",
+      "instrument": "repo_stats"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 15.123,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 95,
+     "identification": {
+      "units": 31,
+      "held_out_r2": -1.3864,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": false,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.6869,
+      "halves": [
+       [
+        "+orchestra_events_total{source=\"planner\",type=\"request.done\"}"
+       ],
+       [
+        "+tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.7878,
+      "level": "medium",
+      "weakest": "units",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.7878
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": -1.3863636363636367,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 31,
+      "stable": false,
+      "why": [],
+      "behaviour": {
+       "score": 0.9441,
+       "level": "high",
+       "error": 0.0592,
+       "hold_error": 0.794,
+       "beats_hold": true,
+       "growth": 0.2113874590731145,
+       "z": 2.853,
+       "horizon": 4.031,
+       "pairs": 96,
+       "why": []
+      },
+      "persistence": 0.0,
+      "persistence_of": 2
+     },
+     "written_by": "repo_stats",
+     "accumulator": true,
+     "balance": [
+      {
+       "series": "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}",
+       "sign": 1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793558071.320095
+    }
+   },
+   {
+    "id": "tasks_tickets_DONE",
+    "name": "tasks tickets (DONE)",
+    "unit": "items",
+    "series": {
+     "name": "tasks_tickets",
+     "labels": {
+      "state": "DONE",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.148,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 93,
+     "identification": {
+      "units": 93,
+      "held_out_r2": 1.0,
+      "halves_r2": 1.0,
+      "exact_moved": 1.0,
+      "stable": true,
+      "cum_residual_ratio": 0.0,
+      "misses_rho": null,
+      "cum_residual_steady": 0.0,
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "null_r2_max": 0.9405,
+      "halves": [
+       [
+        "+tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}"
+       ],
+       [
+        "+tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}"
+       ]
+      ]
+     },
+     "trust": {
+      "kind": "conservation",
+      "score": 0.9904,
+      "level": "high",
+      "weakest": "units",
+      "components": {
+       "null": 1.0,
+       "held_out": 1.0,
+       "level": 1.0,
+       "units": 0.9904
+      },
+      "p_null": 0.1,
+      "null_shifts": 9,
+      "held_out_r2": 1.0,
+      "halves_r2": 1.0,
+      "exact_share": 1.0,
+      "exact_moved": 1.0,
+      "cum_residual_ratio": 0.0,
+      "units": 93,
+      "stable": true,
+      "why": [],
+      "behaviour": {
+       "score": 0.9114,
+       "level": "high",
+       "error": 0.0972,
+       "hold_error": 0.8241,
+       "beats_hold": true,
+       "growth": 0.3485287805098123,
+       "z": 1.974,
+       "horizon": 4.031,
+       "pairs": 96,
+       "why": []
+      },
+      "persistence": 0.5,
+      "persistence_of": 2
+     },
+     "written_by": "tasks.tickets",
+     "accumulator": true,
+     "balance": [
+      {
+       "series": "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}",
+       "sign": 1
+      }
+     ],
+     "held_minutes": 0.0,
+     "live_from": 1793558071.320312
+    }
+   },
+   {
+    "id": "tasks_tickets_READY_FOR_REVIEW",
+    "name": "tasks tickets (READY_FOR_REVIEW)",
+    "unit": "items",
+    "series": {
+     "name": "tasks_tickets",
+     "labels": {
+      "state": "READY_FOR_REVIEW",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 125.963,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "evidence": {
+     "balance_r2": 1.0,
+     "exact_steps": 1.0,
+     "steps": 720,
+     "balance_steps": 96,
+     "trust": {
+      "kind": "passage",
+      "score": 0.6988,
+      "level": "medium",
+      "weakest": "units",
+      "components": {
+       "matched": 1.0,
+       "in_step": 1.0,
+       "units": 0.6988
+      },
+      "units": 24,
+      "matched_share": 1.0,
+      "why": [
+       "a state each item leaves within a step: judged on its raw points, not on a balance of its changes"
+      ],
+      "behaviour": {
+       "score": 0.2916,
+       "level": "low",
+       "error": 2.4296,
+       "hold_error": 1.0104,
+       "beats_hold": false,
+       "growth": 0.12781957293401347,
+       "z": 2.79,
+       "horizon": 4.031,
+       "pairs": 96,
+       "why": [
+        "run forward from part-way through the window, it misses the measured level by 2.4\u00d7 the level's spread",
+        "holding the level does better (1.01 against 2.43 of the spread)"
+       ]
+      },
+      "persistence": 0.0,
+      "persistence_of": 2
+     },
+     "written_by": "tasks.tickets",
+     "accumulator": false,
+     "balance": [
+      {
+       "series": "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}",
+       "sign": 1
+      },
+      {
+       "series": "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}",
+       "sign": -1
+      }
+     ],
+     "held_minutes": 0.0,
+     "passing": {
+      "ins": [
+       "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}"
+      ],
+      "outs": [
+       "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}"
+      ],
+      "out_of_step_steps": 0,
+      "moved_steps": 24,
+      "rises_at_ins": [
+       1,
+       1
+      ],
+      "falls_at_outs": [
+       1,
+       1
+      ],
+      "note": "a state each item leaves within a step, so the grid sees it empty: its level, measured, rose at the ins' events and fell at the outs'"
+     },
+     "live_from": 1793558071.320312
+    }
+   }
+  ],
+  "flows": [
+   {
+    "id": "tasks_gate_runs_total_landed",
+    "name": "tasks gate runs (landed)",
+    "counter": {
+     "name": "tasks_gate_runs_total",
+     "labels": {
+      "status": "landed",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.147,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.853128
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793558071.320312,
+       1793558555.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 23.0,
+       "loglik": 1.114,
+       "aic": -0.227,
+       "dispersion": 0.003,
+       "steps": 96.0,
+       "live_minutes": 8.06,
+       "aic_proportional": null,
+       "aic_linear_input:tests_confirmed_gate": 1.75,
+       "aic_linear_input:repo_commits": 1.76,
+       "aic_linear_input:test_report_files_read": 1.76,
+       "proportional_k": 270.551637,
+       "proportional_k_input:repo_commits": 0.120657,
+       "proportional_k_input:test_report_files_read": 0.378082,
+       "proportional_k_input:tests_confirmed_gate": 3.325301,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+       }
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flows": [
+      "tasks_gate_runs_total_landed@repo_stats"
+     ],
+     "through": [
+      "tasks_tickets_READY_FOR_REVIEW"
+     ],
+     "driver": {
+      "tried": 6,
+      "price": 5.58,
+      "chosen": null
+     },
+     "not_drivers": {
+      "tasks_tickets_OPEN": "its balance has tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}, which counts a part of this flow's events and leads them"
+     },
+     "same_as": [
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "merge_gate",
+        "from": "MERGING",
+        "to": "DONE",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "merge_gate",
+        "from": "APPROVED",
+        "to": "MERGING",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "IN_REVIEW",
+        "to": "APPROVED",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      },
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "reviewer",
+        "from": "READY_FOR_REVIEW",
+        "to": "IN_REVIEW",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "coordinator",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "task.assigned",
+         "source": "coordinator"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4087,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "coordinator's task.assigned events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 41% by chance"
+       },
+       {
+        "machine": "planner",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "task.requested",
+         "source": "planner"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "planner's task.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 40% by chance"
+       },
+       {
+        "machine": "reviewer",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "review.approved",
+         "source": "reviewer"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4957,
+        "lag_steps": 0,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "reviewer's review.approved events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 50% by chance"
+       },
+       {
+        "machine": "worker",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "review.requested",
+         "source": "worker"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4435,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "worker's review.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 44% by chance"
+       }
+      ]
+     }
+    },
+    "from": "tasks_tickets_READY_FOR_REVIEW",
+    "to": "tasks_tickets_DONE",
+    "machines": [
+     {
+      "machine": "coordinator",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "task.assigned",
+       "source": "coordinator"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4087,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "coordinator's task.assigned events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 41% by chance"
+     },
+     {
+      "machine": "planner",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "task.requested",
+       "source": "planner"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "planner's task.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 40% by chance"
+     },
+     {
+      "machine": "reviewer",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "review.approved",
+       "source": "reviewer"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4957,
+      "lag_steps": 0,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "reviewer's review.approved events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 50% by chance"
+     },
+     {
+      "machine": "worker",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "review.requested",
+       "source": "worker"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4435,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "worker's review.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 44% by chance"
+     }
+    ],
+    "association": null,
+    "machine": "coordinator",
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.853128
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793558071.320312,
+      1793558555.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 23.0,
+      "loglik": 1.114,
+      "aic": -0.227,
+      "dispersion": 0.003,
+      "steps": 96.0,
+      "live_minutes": 8.06,
+      "aic_proportional": null,
+      "aic_linear_input:tests_confirmed_gate": 1.75,
+      "aic_linear_input:repo_commits": 1.76,
+      "aic_linear_input:test_report_files_read": 1.76,
+      "proportional_k": 270.551637,
+      "proportional_k_input:repo_commits": 0.120657,
+      "proportional_k_input:test_report_files_read": 0.378082,
+      "proportional_k_input:tests_confirmed_gate": 3.325301,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+      }
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_gate_runs_total_landed@repo_stats",
+    "name": "tasks gate runs (landed)",
+    "counter": {
+     "name": "orchestra_events_total",
+     "labels": {
+      "project": "demo-2afa30e9",
+      "type": "gate.started",
+      "source": "merge_gate"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": null,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.853128
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793558071.320312,
+       1793558555.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 23.0,
+       "loglik": 1.114,
+       "aic": -0.227,
+       "dispersion": 0.003,
+       "steps": 96.0,
+       "live_minutes": 8.06,
+       "aic_proportional": null,
+       "aic_linear_input:tests_confirmed_gate": 1.75,
+       "aic_linear_input:repo_commits": 1.76,
+       "aic_linear_input:test_report_files_read": 1.76,
+       "proportional_k": 270.551637,
+       "proportional_k_input:repo_commits": 0.120657,
+       "proportional_k_input:test_report_files_read": 0.378082,
+       "proportional_k_input:tests_confirmed_gate": 3.325301,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+       }
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "co_flow_of": "tasks_gate_runs_total_landed",
+     "note": "the same events as tasks_gate_runs_total_landed, which also move a stock repo_stats measures: one event, two materials; counted by repo_stats itself (orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"})",
+     "driver": {
+      "tried": 6,
+      "price": 5.58,
+      "chosen": null
+     },
+     "not_drivers": {
+      "tasks_tickets_OPEN": "its balance has tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}, which counts a part of this flow's events and leads them"
+     },
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "merge_gate",
+        "origin": "inferred",
+        "by": "its own events",
+        "confidence": 1.0,
+        "events": {
+         "type": "gate.started",
+         "source": "merge_gate"
+        },
+        "why": "its counter counts merge_gate's own events of type gate.started"
+       }
+      ]
+     }
+    },
+    "from": null,
+    "to": "repo_files",
+    "machines": [
+     {
+      "machine": "merge_gate",
+      "origin": "inferred",
+      "by": "its own events",
+      "confidence": 1.0,
+      "events": {
+       "type": "gate.started",
+       "source": "merge_gate"
+      },
+      "why": "its counter counts merge_gate's own events of type gate.started"
+     }
+    ],
+    "association": null,
+    "machine": "merge_gate",
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.853128
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793558071.320312,
+      1793558555.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 23.0,
+      "loglik": 1.114,
+      "aic": -0.227,
+      "dispersion": 0.003,
+      "steps": 96.0,
+      "live_minutes": 8.06,
+      "aic_proportional": null,
+      "aic_linear_input:tests_confirmed_gate": 1.75,
+      "aic_linear_input:repo_commits": 1.76,
+      "aic_linear_input:test_report_files_read": 1.76,
+      "proportional_k": 270.551637,
+      "proportional_k_input:repo_commits": 0.120657,
+      "proportional_k_input:test_report_files_read": 0.378082,
+      "proportional_k_input:tests_confirmed_gate": 3.325301,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+      }
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_tickets_created_total_planner",
+    "name": "tasks tickets created (planner)",
+    "counter": {
+     "name": "tasks_tickets_created_total",
+     "labels": {
+      "by": "planner",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.142,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "constant",
+      "params": {
+       "c": 2.853128
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793558071.320312,
+       1793558555.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 23.0,
+       "loglik": 1.114,
+       "aic": -0.227,
+       "dispersion": 0.0,
+       "steps": 96.0,
+       "live_minutes": 8.06,
+       "aic_linear_tasks_tickets_OPEN": -3.82,
+       "aic_linear_input:tests_confirmed_gate": 1.75,
+       "aic_linear_input:repo_commits": 1.76,
+       "aic_linear_input:test_report_files_read": 1.76,
+       "proportional_k_input:repo_commits": 0.120657,
+       "proportional_k_input:test_report_files_read": 0.378082,
+       "proportional_k_input:tests_confirmed_gate": 3.325301,
+       "rejected": {
+        "linear_tasks_tickets_OPEN": "its rate is below zero from level 1 of tasks_tickets_OPEN, which the stock held only long enough for 2.6 events at this flow's mean rate: too few to have seen that nothing flows there",
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+       }
+      },
+      "inputs": [],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "driver": {
+      "tried": 7,
+      "price": 5.89,
+      "chosen": null
+     },
+     "machines": {
+      "hypotheses": [],
+      "why": "no machine associated yet: no machine's events on the bus match its counter"
+     }
+    },
+    "from": null,
+    "to": "tasks_tickets_OPEN",
+    "machines": [],
+    "association": "no machine associated yet: no machine's events on the bus match its counter",
+    "machine": null,
+    "current": {
+     "form": "constant",
+     "params": {
+      "c": 2.853128
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793558071.320312,
+      1793558555.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 23.0,
+      "loglik": 1.114,
+      "aic": -0.227,
+      "dispersion": 0.0,
+      "steps": 96.0,
+      "live_minutes": 8.06,
+      "aic_linear_tasks_tickets_OPEN": -3.82,
+      "aic_linear_input:tests_confirmed_gate": 1.75,
+      "aic_linear_input:repo_commits": 1.76,
+      "aic_linear_input:test_report_files_read": 1.76,
+      "proportional_k_input:repo_commits": 0.120657,
+      "proportional_k_input:test_report_files_read": 0.378082,
+      "proportional_k_input:tests_confirmed_gate": 3.325301,
+      "rejected": {
+       "linear_tasks_tickets_OPEN": "its rate is below zero from level 1 of tasks_tickets_OPEN, which the stock held only long enough for 2.6 events at this flow's mean rate: too few to have seen that nothing flows there",
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+      }
+     },
+     "inputs": [],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   },
+   {
+    "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+    "name": "tasks ticket transitions (worker, OPEN, IN_PROGRESS)",
+    "counter": {
+     "name": "tasks_ticket_transitions_total",
+     "labels": {
+      "by": "worker",
+      "from": "OPEN",
+      "to": "IN_PROGRESS",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tickets"
+     },
+     "source": "own",
+     "query": null,
+     "kind": null,
+     "origin": null,
+     "resolution_s": 20.147,
+     "unit": null,
+     "traffic": null,
+     "read": "hold"
+    },
+    "equations": [
+     {
+      "form": "linear",
+      "params": {
+       "c": 1.681142,
+       "k": 10.233183
+      },
+      "origin": "fitted",
+      "method": "poisson-mle",
+      "window": [
+       1793558071.320312,
+       1793558555.0
+      ],
+      "era": null,
+      "quality": {
+       "events": 23.0,
+       "loglik": 10.489,
+       "aic": -16.978,
+       "dispersion": 0.2,
+       "steps": 96.0,
+       "live_minutes": 8.06,
+       "aic_constant": -0.23,
+       "aic_proportional": null,
+       "aic_linear_input:tests_confirmed_gate": 1.75,
+       "aic_linear_input:repo_commits": 1.76,
+       "proportional_k": 24.911925,
+       "proportional_k_input:repo_commits": 0.120657,
+       "proportional_k_input:test_report_files_read": 0.378082,
+       "proportional_k_input:tests_confirmed_gate": 3.325301,
+       "rejected": {
+        "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+        "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+       }
+      },
+      "inputs": [
+       "tasks_tickets_OPEN"
+      ],
+      "spec": {},
+      "sources": [
+       "own"
+      ],
+      "prior": {}
+     }
+    ],
+    "measured_by": [],
+    "evidence": {
+     "through": [
+      "tasks_tickets_READY_FOR_REVIEW"
+     ],
+     "driver": {
+      "tried": 6,
+      "price": 5.58,
+      "chosen": null,
+      "beat_price": 0
+     },
+     "same_as": [
+      {
+       "name": "tasks_ticket_transitions_total",
+       "labels": {
+        "by": "worker",
+        "from": "IN_PROGRESS",
+        "to": "READY_FOR_REVIEW",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      }
+     ],
+     "machines": {
+      "hypotheses": [
+       {
+        "machine": "coordinator",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "task.assigned",
+         "source": "coordinator"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4174,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "coordinator's task.assigned events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 42% by chance"
+       },
+       {
+        "machine": "planner",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "task.requested",
+         "source": "planner"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4087,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "planner's task.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 41% by chance"
+       },
+       {
+        "machine": "worker",
+        "origin": "inferred",
+        "by": "events on the bus",
+        "events": {
+         "type": "review.requested",
+         "source": "worker"
+        },
+        "confidence": 1.0,
+        "test": "event by event",
+        "paired": {
+         "flow": 1.0,
+         "events": 1.0
+        },
+        "chance": 0.4522,
+        "lag_steps": -1,
+        "counts": {
+         "flow": 23.0,
+         "events": 23.0
+        },
+        "steps": 720,
+        "why": "worker's review.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 45% by chance"
+       }
+      ]
+     }
+    },
+    "from": "tasks_tickets_OPEN",
+    "to": "tasks_tickets_READY_FOR_REVIEW",
+    "machines": [
+     {
+      "machine": "coordinator",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "task.assigned",
+       "source": "coordinator"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4174,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "coordinator's task.assigned events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 42% by chance"
+     },
+     {
+      "machine": "planner",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "task.requested",
+       "source": "planner"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4087,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "planner's task.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 41% by chance"
+     },
+     {
+      "machine": "worker",
+      "origin": "inferred",
+      "by": "events on the bus",
+      "events": {
+       "type": "review.requested",
+       "source": "worker"
+      },
+      "confidence": 1.0,
+      "test": "event by event",
+      "paired": {
+       "flow": 1.0,
+       "events": 1.0
+      },
+      "chance": 0.4522,
+      "lag_steps": -1,
+      "counts": {
+       "flow": 23.0,
+       "events": 23.0
+      },
+      "steps": 720,
+      "why": "worker's review.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 45% by chance"
+     }
+    ],
+    "association": null,
+    "machine": "coordinator",
+    "current": {
+     "form": "linear",
+     "params": {
+      "c": 1.681142,
+      "k": 10.233183
+     },
+     "origin": "fitted",
+     "method": "poisson-mle",
+     "window": [
+      1793558071.320312,
+      1793558555.0
+     ],
+     "era": null,
+     "quality": {
+      "events": 23.0,
+      "loglik": 10.489,
+      "aic": -16.978,
+      "dispersion": 0.2,
+      "steps": 96.0,
+      "live_minutes": 8.06,
+      "aic_constant": -0.23,
+      "aic_proportional": null,
+      "aic_linear_input:tests_confirmed_gate": 1.75,
+      "aic_linear_input:repo_commits": 1.76,
+      "proportional_k": 24.911925,
+      "proportional_k_input:repo_commits": 0.120657,
+      "proportional_k_input:test_report_files_read": 0.378082,
+      "proportional_k_input:tests_confirmed_gate": 3.325301,
+      "rejected": {
+       "linear_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "linear_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:repo_commits": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.7 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:test_report_files_read": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 3.6 against 1.1): it follows what drives the flow, it does not drive it",
+       "proportional_input:tests_confirmed_gate": "the level a minute after each event explains the flow better than the level at the time (log-likelihood 4.6 against 1.1): it follows what drives the flow, it does not drive it"
+      }
+     },
+     "inputs": [
+      "tasks_tickets_OPEN"
+     ],
+     "spec": {},
+     "sources": [
+      "own"
+     ],
+     "prior": {}
+    }
+   }
+  ],
+  "machines": [
+   {
+    "id": "coordinator",
+    "name": "coordinator",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): events on the bus.",
+    "attributed": [
+     "tasks_gate_runs_total_landed",
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-2afa30e9",
+       "source": "coordinator",
+       "type": "task.assigned"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "merge_gate",
+    "name": "merge_gate",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): its own events.",
+    "attributed": [
+     "tasks_gate_runs_total_landed@repo_stats"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-2afa30e9",
+       "type": "gate.started",
+       "source": "merge_gate"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "planner",
+    "name": "planner",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): events on the bus.",
+    "attributed": [
+     "tasks_gate_runs_total_landed",
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-2afa30e9",
+       "type": "task.requested",
+       "source": "planner"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "reviewer",
+    "name": "reviewer",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): events on the bus.",
+    "attributed": [
+     "tasks_gate_runs_total_landed"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-2afa30e9",
+       "source": "reviewer",
+       "type": "review.approved"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   },
+   {
+    "id": "worker",
+    "name": "worker",
+    "kind": "machine",
+    "description": "Seen on the bus. Associated with these flows as hypotheses (sd.attribute): events on the bus.",
+    "attributed": [
+     "tasks_gate_runs_total_landed",
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS"
+    ],
+    "observed_by": [
+     {
+      "name": "orchestra_events_total",
+      "labels": {
+       "project": "demo-2afa30e9",
+       "source": "worker",
+       "type": "review.requested"
+      },
+      "source": "own",
+      "query": null,
+      "kind": null,
+      "origin": null,
+      "resolution_s": null,
+      "unit": null,
+      "traffic": null,
+      "read": "hold"
+     }
+    ],
+    "bootstrap": false
+   }
+  ],
+  "eras": [],
+  "era": null,
+  "discovery": {
+   "summed": {
+    "orchestra_events_total{source=\"coordinator\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"orchestra.machine.started\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": "summed over 1 instance",
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": "summed over 1 instance"
+   },
+   "start": 1793554955.0,
+   "end": 1793558555.0,
+   "fit_start": 1793558071.320312,
+   "live_minutes": 8.06,
+   "gaps": [],
+   "step": 5.0,
+   "sampled": 58,
+   "series": 48,
+   "inputs": {
+    "repo_commits": {
+     "name": "repo_commits",
+     "labels": {
+      "project": "demo-2afa30e9",
+      "instrument": "repo_stats"
+     },
+     "resolution_s": 15.123227834701538,
+     "read": "hold",
+     "source": "own"
+    },
+    "test_report_files_read": {
+     "name": "test_report_files",
+     "labels": {
+      "state": "read",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tests"
+     },
+     "resolution_s": 20.14859640598297,
+     "read": "hold",
+     "source": "own"
+    },
+    "tests_confirmed_gate": {
+     "name": "tests_confirmed",
+     "labels": {
+      "kind": "gate",
+      "project": "demo-2afa30e9",
+      "instrument": "tasks.tests"
+     },
+     "resolution_s": 5.0361409187316895,
+     "read": "hold",
+     "source": "own"
+    }
+   },
+   "held": {},
+   "resolution": {
+    "agents_working{instrument=\"agents.turns\",machine=\"coordinator\",role=\"coordinator\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "agents_working{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"milestone.created\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"milestone.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"request.done\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"task.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"planner\",type=\"ticket.created\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "repo_commits{instrument=\"repo_stats\"}": {
+     "resolution_s": 15.123,
+     "read": "hold"
+    },
+    "repo_files{instrument=\"repo_stats\"}": {
+     "resolution_s": 15.123,
+     "read": "hold"
+    },
+    "tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"APPROVED\",instrument=\"tasks.tickets\",to=\"MERGING\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"IN_REVIEW\",instrument=\"tasks.tickets\",to=\"APPROVED\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"READY_FOR_REVIEW\",instrument=\"tasks.tickets\",to=\"IN_REVIEW\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"IN_PROGRESS\",instrument=\"tasks.tickets\",to=\"READY_FOR_REVIEW\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"}": {
+     "resolution_s": 20.147,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"APPROVED\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"BLOCKED\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"CANCELLED\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"DONE\"}": {
+     "resolution_s": 20.148,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_EXTERNAL_REVIEW\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_PROGRESS\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_REVIEW\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"MERGING\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"OPEN\"}": {
+     "resolution_s": 10.066,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"PREPARING\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"READY_FOR_REVIEW\"}": {
+     "resolution_s": 125.963,
+     "read": "hold"
+    },
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"REJECTED\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}": {
+     "resolution_s": 20.142,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"error\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"failed\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"passed\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"skipped\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "test_report_files{instrument=\"tasks.tests\",state=\"read\"}": {
+     "resolution_s": 20.149,
+     "read": "hold"
+    },
+    "test_report_files{instrument=\"tasks.tests\",state=\"unreadable\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests_added_total{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests_confirmed{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests_duration_seconds{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests_flaky{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "tests_removed_total{instrument=\"tasks.tests\",kind=\"gate\"}": {
+     "resolution_s": 5.036,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    },
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": {
+     "resolution_s": null,
+     "read": "hold"
+    }
+   },
+   "stocks": 4,
+   "flows": 4,
+   "min_r2": 0.9,
+   "by_construction": [],
+   "refused": {
+    "repo_commits{instrument=\"repo_stats\"}": {
+     "terms": [
+      {
+       "series": "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}",
+       "sign": 1
+      },
+      {
+       "series": "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}",
+       "sign": 1
+      }
+     ],
+     "r2": 0.9217,
+     "exact": 0.9355,
+     "why": "no counter of its balance was chosen again on both halves of the window: coincidences of the whole window",
+     "units": 31,
+     "held_out_r2": -0.6193,
+     "halves_r2": null,
+     "exact_moved": 0.0,
+     "stable": false,
+     "cum_residual_ratio": null,
+     "misses_rho": null,
+     "cum_residual_steady": null,
+     "p_null": 0.1,
+     "null_shifts": 9,
+     "null_r2_max": 0.5694,
+     "halves": [
+      [
+       "+orchestra_events_total{source=\"planner\",type=\"request.done\"}",
+       "+orchestra_events_total{source=\"worker\",type=\"task.accepted\"}"
+      ],
+      [
+       "+tasks_tickets_created_total{by=\"planner\",instrument=\"tasks.tickets\"}",
+       "+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}"
+      ]
+     ],
+     "dropped": [
+      "+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}",
+      "+orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}"
+     ]
+    }
+   },
+   "left_out": {
+    "agents_working{instrument=\"agents.turns\",machine=\"coordinator\",role=\"coordinator\"}": "a level that did not change in the window while it was live",
+    "agents_working{instrument=\"agents.turns\",machine=\"supervisor\",role=\"supervisor\"}": "a level that did not change in the window while it was live",
+    "orchestra_events_total{source=\"coordinator\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"coordinator\",type=\"task.assigned\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"merge_gate\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.host.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"orchestra-host\",type=\"orchestra.process.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"planner\",type=\"milestone.created\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "orchestra_events_total{source=\"planner\",type=\"milestone.requested\"}": "the same as orchestra_events_total{source=\"planner\",type=\"milestone.created\"} (counts the same events)",
+    "orchestra_events_total{source=\"planner\",type=\"request.done\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"planner\",type=\"task.requested\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"planner\",type=\"ticket.created\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"reviewer\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"reviewer\",type=\"review.approved\"}": "the same as orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"} (counts the same events)",
+    "orchestra_events_total{source=\"reviewer\",type=\"task.accepted\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"supervisor\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"worker\",type=\"orchestra.machine.started\"}": "Orchestra's own events (an orchestra.* type, or published by the host): what Orchestra did, not the system's work, so never a flow",
+    "orchestra_events_total{source=\"worker\",type=\"review.requested\"}": "a counter no stock's balance needed",
+    "orchestra_events_total{source=\"worker\",type=\"task.accepted\"}": "a counter no stock's balance needed",
+    "orchestra_host_up{machine=\"orchestra-host\"}": "Orchestra's own (the host's and the Core page's plumbing), not a measure of the system",
+    "repo_commits{instrument=\"repo_stats\"}": "no counters balance it on evidence that holds (+orchestra_events_total{source=\"merge_gate\",type=\"gate.landed\"} +orchestra_events_total{source=\"merge_gate\",type=\"gate.started\"} fits at R\u00b2 0.92, but no counter of its balance was chosen again on both halves of the window: coincidences of the whole window), and no other series explains its changes better than a constant (of 13 forms tried): an input, not a stock",
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"APPROVED\",instrument=\"tasks.tickets\",to=\"MERGING\"}": "the same as tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"merge_gate\",from=\"MERGING\",instrument=\"tasks.tickets\",to=\"DONE\"}": "the same as tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"IN_REVIEW\",instrument=\"tasks.tickets\",to=\"APPROVED\"}": "the same as tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"reviewer\",from=\"READY_FOR_REVIEW\",instrument=\"tasks.tickets\",to=\"IN_REVIEW\"}": "the same as tasks_gate_runs_total{instrument=\"tasks.tickets\",status=\"landed\"} (counts the same events)",
+    "tasks_ticket_transitions_total{by=\"worker\",from=\"IN_PROGRESS\",instrument=\"tasks.tickets\",to=\"READY_FOR_REVIEW\"}": "the same as tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",instrument=\"tasks.tickets\",to=\"IN_PROGRESS\"} (counts the same events)",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"APPROVED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"BLOCKED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"CANCELLED\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_EXTERNAL_REVIEW\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_PROGRESS\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"IN_REVIEW\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"MERGING\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"PREPARING\"}": "a level that did not change in the window while it was live",
+    "tasks_tickets{instrument=\"tasks.tickets\",state=\"REJECTED\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"error\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"failed\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"passed\"}": "a level that did not change in the window while it was live",
+    "test_outcomes{instrument=\"tasks.tests\",kind=\"gate\",outcome=\"skipped\"}": "a level that did not change in the window while it was live",
+    "test_report_files{instrument=\"tasks.tests\",state=\"read\"}": "no counters balance it (best R\u00b2 -0.12), and it changed in only 10 of its 24 stretches of 20 s, too few to fit a net flow: an input",
+    "test_report_files{instrument=\"tasks.tests\",state=\"unreadable\"}": "a level that did not change in the window while it was live",
+    "tests_added_total{instrument=\"tasks.tests\",kind=\"gate\"}": "a counter of only 1 event: fewer than 5, too few to carry a balance; it completed none",
+    "tests_confirmed{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that changed in only 1 step: fewer than 5, too few to tell a balance from coincidence",
+    "tests_duration_seconds{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live",
+    "tests_flaky{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live",
+    "tests_removed_total{instrument=\"tasks.tests\",kind=\"gate\"}": "a counter that did not move in the window",
+    "tests{instrument=\"tasks.tests\",kind=\"gate\"}": "a level that did not change in the window while it was live"
+   },
+   "strategy": "kalman_lna",
+   "sdlab": "not run: the counters balance every stock exactly, so nothing is left to explain",
+   "behaviour": {
+    "from": 1793558071.320312,
+    "fractions": [
+     0.5,
+     0.6667,
+     0.8333
+    ],
+    "stocks": 4
+   },
+   "window_s": 3600.0,
+   "step_s": 5.0,
+   "looked_at": 58
+  },
+  "stored": true,
+  "version": 2,
+  "current": 2,
+  "versions": [
+   {
+    "version": 1,
+    "saved_at": 1793558376.3478668,
+    "note": "discovered: the structure changed (kalman_lna)",
+    "era": null,
+    "stocks": 1,
+    "flows": 1,
+    "fitted": 1,
+    "machines": 5
+   },
+   {
+    "version": 2,
+    "saved_at": 1793558557.279812,
+    "note": "discovered on request: the structure changed (kalman_lna)",
+    "era": null,
+    "stocks": 4,
+    "flows": 4,
+    "fitted": 4,
+    "machines": 5
+   }
+  ],
+  "live": true,
+  "as_of": 1793558557.186548,
+  "eras_recorded": [],
+  "current_era": null,
+  "predictions": [],
+  "levels": {
+   "tasks_tickets_DONE": {
+    "t": 1793558549.8518531,
+    "v": 23.0
+   }
+  },
+  "levels_error": null,
+  "intended": {
+   "version": 0,
+   "shown": 2,
+   "live": true,
+   "since": 1,
+   "since_saved_at": 1793558376.3478668,
+   "expected": [],
+   "marks": {
+    "stocks": {
+     "repo_files": [
+      "new"
+     ],
+     "tasks_tickets_OPEN": [
+      "new"
+     ],
+     "tasks_tickets_READY_FOR_REVIEW": [
+      "new"
+     ]
+    },
+    "flows": {
+     "tasks_gate_runs_total_landed@repo_stats": [
+      "new"
+     ],
+     "tasks_tickets_created_total_planner": [
+      "new"
+     ],
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS": [
+      "new"
+     ],
+     "tasks_gate_runs_total_landed": [
+      "new"
+     ]
+    }
+   },
+   "removed": {
+    "stocks": [],
+    "flows": [
+     {
+      "key": "outside -> tasks_tickets{state=\"DONE\"} by tasks_gate_runs_total{status=\"landed\"}",
+      "id": "tasks_gate_runs_total_landed",
+      "from": null,
+      "to": "tasks_tickets_DONE",
+      "rate": "2.77 /min",
+      "machines": [
+       {
+        "machine": "coordinator",
+        "confidence": 1.0
+       },
+       {
+        "machine": "merge_gate",
+        "confidence": 1.0
+       },
+       {
+        "machine": "planner",
+        "confidence": 1.0
+       },
+       {
+        "machine": "reviewer",
+        "confidence": 1.0
+       },
+       {
+        "machine": "worker",
+        "confidence": 1.0
+       }
+      ],
+      "in": 1,
+      "origin": "fitted",
+      "name": "tasks gate runs (landed)",
+      "counter": {
+       "name": "tasks_gate_runs_total",
+       "labels": {
+        "status": "landed",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      },
+      "measured_by": [],
+      "from_name": null,
+      "to_name": "tasks tickets (DONE)",
+      "from_series": null,
+      "to_series": {
+       "name": "tasks_tickets",
+       "labels": {
+        "state": "DONE",
+        "project": "demo-2afa30e9",
+        "instrument": "tasks.tickets"
+       }
+      }
+     }
+    ]
+   },
+   "changes": [
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "repo_files",
+     "id": "repo_files",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "tasks_tickets{state=\"OPEN\"}",
+     "id": "tasks_tickets_OPEN",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "stock",
+     "key": "tasks_tickets{state=\"READY_FOR_REVIEW\"}",
+     "id": "tasks_tickets_READY_FOR_REVIEW",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> repo_files by orchestra_events_total{type=\"gate.started\"}",
+     "id": "tasks_gate_runs_total_landed@repo_stats",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"OPEN\"} by tasks_tickets_created_total{by=\"planner\"}",
+     "id": "tasks_tickets_created_total_planner",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "tasks_tickets{state=\"OPEN\"} -> tasks_tickets{state=\"READY_FOR_REVIEW\"} by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "+",
+     "part": "flow",
+     "key": "tasks_tickets{state=\"READY_FOR_REVIEW\"} -> tasks_tickets{state=\"DONE\"} by tasks_gate_runs_total{status=\"landed\"}",
+     "id": "tasks_gate_runs_total_landed",
+     "status": "new",
+     "since": 2,
+     "why": "new in v2",
+     "controls": [
+      "expect",
+      "ignore"
+     ]
+    },
+    {
+     "sign": "-",
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"DONE\"} by tasks_gate_runs_total{status=\"landed\"}",
+     "id": "tasks_gate_runs_total_landed",
+     "in": 1
+    }
+   ],
+   "came_and_went": [],
+   "ignored": [],
+   "settled": 0,
+   "unsettled": 7,
+   "stabilised": false,
+   "suggestions": [
+    {
+     "part": "stock",
+     "key": "repo_files",
+     "id": "repo_files",
+     "since": 2
+    },
+    {
+     "part": "stock",
+     "key": "tasks_tickets{state=\"OPEN\"}",
+     "id": "tasks_tickets_OPEN",
+     "since": 2
+    },
+    {
+     "part": "stock",
+     "key": "tasks_tickets{state=\"READY_FOR_REVIEW\"}",
+     "id": "tasks_tickets_READY_FOR_REVIEW",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "outside -> repo_files by orchestra_events_total{type=\"gate.started\"}",
+     "id": "tasks_gate_runs_total_landed@repo_stats",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "outside -> tasks_tickets{state=\"OPEN\"} by tasks_tickets_created_total{by=\"planner\"}",
+     "id": "tasks_tickets_created_total_planner",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "tasks_tickets{state=\"OPEN\"} -> tasks_tickets{state=\"READY_FOR_REVIEW\"} by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}",
+     "id": "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS",
+     "since": 2
+    },
+    {
+     "part": "flow",
+     "key": "tasks_tickets{state=\"READY_FOR_REVIEW\"} -> tasks_tickets{state=\"DONE\"} by tasks_gate_runs_total{status=\"landed\"}",
+     "id": "tasks_gate_runs_total_landed",
+     "since": 2
+    }
+   ],
+   "targets": [],
+   "predicted": [],
+   "keys": {
+    "stocks": {
+     "tasks_tickets_OPEN": "tasks_tickets{state=\"OPEN\"}",
+     "repo_files": "repo_files",
+     "tasks_tickets_DONE": "tasks_tickets{state=\"DONE\"}",
+     "tasks_tickets_READY_FOR_REVIEW": "tasks_tickets{state=\"READY_FOR_REVIEW\"}"
+    },
+    "flows": {
+     "tasks_gate_runs_total_landed": "tasks_tickets{state=\"READY_FOR_REVIEW\"} -> tasks_tickets{state=\"DONE\"} by tasks_gate_runs_total{status=\"landed\"}",
+     "tasks_gate_runs_total_landed@repo_stats": "outside -> repo_files by orchestra_events_total{type=\"gate.started\"}",
+     "tasks_tickets_created_total_planner": "outside -> tasks_tickets{state=\"OPEN\"} by tasks_tickets_created_total{by=\"planner\"}",
+     "tasks_ticket_transitions_total_worker_OPEN_IN_PROGRESS": "tasks_tickets{state=\"OPEN\"} -> tasks_tickets{state=\"READY_FOR_REVIEW\"} by tasks_ticket_transitions_total{by=\"worker\",from=\"OPEN\",to=\"IN_PROGRESS\"}"
+    }
+   },
+   "missing": []
+  }
+ }
+}

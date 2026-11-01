@@ -3,8 +3,9 @@ probably run a few times, try to make sure no events have publishers but no subs
 the purposes of events aren't duplicated, make sure that events aren't excessively deduplicated
 and serving multiple distinct purposes, other refinement things").
 
-The Supervisor's ``refine_map`` duty, run only when its spec has the duty (a new project's starting
-spec does; ``has_duty``). This quick part is **heuristic** and calls no model: word overlap for one
+The Supervisor's ``refine_map`` duty, built into the plugin (its text, ``prompts/duties/refine_map.md``,
+is part of the Supervisor's fixed prompt, as ``operator.md`` is), so every Supervisor has it with no
+change to its spec and no commit. This quick part is **heuristic** and calls no model: word overlap for one
 purpose under two names, "or" in a purpose for one name serving several, event counts for load.
 The judgement (which listener, which name to keep, how to split) is the Supervisor's, in the one
 wake-up a round sends. It runs in the review round (``review.py``) when the declared layer changed
@@ -22,7 +23,7 @@ from __future__ import annotations
 import re
 import time
 
-from .design import MACHINE
+from .design import MACHINE, plural
 
 BUSY_PER_DAY = 200          # a machine woken by events more often than this is a candidate for a schedule
 EXPIRING_S = 2 * 3600.0     # a draft instrument this close to expiring unkept is a loose end
@@ -97,7 +98,8 @@ def check(layer: dict, events: list[dict], drafts: dict, seen: set[str], focus: 
                 f"add it to the receives of {', '.join(users)}" if users else f"name a listener, or remove the emit from {', '.join(by)}")
     for t, by in received.items():                                                   # 2
         if not emitted.get(t) and t not in observed:
-            add(f"unemitted:{t}", 2, "heard, never emitted", f"{', '.join(by)} listen(s) for {t}, which nothing emits or was ever heard",
+            add(f"unemitted:{t}", 2, "heard, never emitted",
+                f"{', '.join(by)} listen{'s' if len(by) == 1 else ''} for {t}, which nothing emits or was ever heard",
                 "declare the machine that would emit it (an external one under the relayed actor's source), or drop the receive")
     described = {t: d.get("description") or "" for t, d in types.items() if d.get("description")}
     names = sorted(described)
@@ -180,31 +182,18 @@ def last_proposal(store) -> dict | None:
     return store.agent_state(MACHINE).get("refinement")
 
 
-def has_duty(project) -> bool:
-    from .machine_spec import load
-    spec = load(project, MACHINE)
-    return spec is not None and spec.duty(DUTY) is not None
-
-
 def _absent(project) -> list[set[str]]:
-    """The stock and flow ids of the last discovered versions, oldest first."""
-    from orchestra.sd.store import ModelStore
-    models = ModelStore.for_state(project.orchestra.state_dir)
-    out = []
-    for v in models.versions()[-ABSENT_VERSIONS:]:
-        m = models.load(v.get("version"))
-        if m is not None:
-            out.append({s.id for s in m.stocks} | {s.name for s in m.stocks} | {f.id for f in m.flows})
-    return out
+    """The stock and flow keys of the last saved versions, oldest first, as the declared layer's
+    marks name them (``name{labels}`` for a stock, ``a -> b by counter`` for a flow)."""
+    from .intended_api import Keys, saved_models
+    return [Keys(m).all() for m in saved_models(project, ABSENT_VERSIONS)]
 
 
 def run(project, store, events: list[dict], force: bool = False) -> dict | None:
-    """The round, when the spec has the duty and the declared layer changed since the last one (or
-    ``force``, after the owner's confirm or discard); the proposal, or None."""
+    """The round, when the declared layer changed since the last one (or ``force``, after the
+    owner's confirm or discard); the proposal, or None."""
     from . import intended_api
     from .design_instruments import drafts
-    if not has_duty(project):
-        return None
     got = intended_api.layer(project).read()
     layer = {**got["layer"], "version": got["version"]}
     last = last_proposal(store) or {}
@@ -223,7 +212,7 @@ def run(project, store, events: list[dict], force: bool = False) -> dict | None:
 
 
 def reason(proposal: dict, mark: str) -> str:
-    lines = [(f"{mark} The refinement pass over the event map ({proposal['passes']} pass(es), declared layer "
+    lines = [(f"{mark} The refinement pass over the event map ({plural(proposal['passes'], 'pass', 'passes')}, declared layer "
               f"v{proposal['version']}; a quick heuristic check, no model) proposes, for the owner to confirm or discard:")]
     lines += [f"{i}. (check {f['n']}) {f['text']}: {f['propose']}" for i, f in enumerate(proposal["findings"][:12], 1)]
     lines.append("Work it as your refine_map duty says: judge each, then one message to the owner with them, declaring "

@@ -114,12 +114,18 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
 
 def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, layer_kind):
     outs = [features(project, store), options(project, store), add(project, store)]
-    if layer_kind == "core":
-        assert any("Dynamics page" in line for o in outs for line in o["said"])
-        return
-    for o in outs:
+    for o in outs:                                  # C1 keeps the layer and draws nothing: its pages are C2's and C3's
         assert not any(page in line for line in o["said"] for page in ("Dynamics page", "Machines page")), o["said"]
+        assert not any("read_design" in line for line in o["said"])               # where it is kept is kept_in's alone
         assert "no page draws it" in o["kept_in"]
+    assert all("(s)" not in line for o in outs for line in o["said"])
+    assert any("4 ways to measure features" in line for line in outs[1]["said"])
+
+
+def test_a_page_is_named_once_orchestra_says_one_draws_the_layer(project, store, monkeypatch):
+    monkeypatch.setattr(intended_api, "drawn", lambda p: True)
+    out = features(project, store)
+    assert any("Dynamics page" in line for line in out["said"])
 
 
 def test_options_are_recorded_in_order_and_a_company_system_needs_approval(project, store):
@@ -146,8 +152,17 @@ def test_options_are_recorded_in_order_and_a_company_system_needs_approval(proje
      "url": "http://prom.corp:9090/metrics"},
     {"label": "features from the tracker", "kind": "script", "how": "curl the tracker", "cost": "one request",
      "command": "curl -s https://tracker.example.com/api/count"},
+    {"label": "from the work Prometheus", "kind": "scrape", "how": "the configured store", "cost": "one scrape",
+     "url": "https://metrics.work.example:443/federate"},                                     # a [[sources]] host
+    {"label": "rows", "kind": "counters", "how": "count rows", "cost": "a query", "command": "psql -h db7 -c 'select 1'"},
+    {"label": "open prs", "kind": "counters", "how": "count them", "cost": "a call", "command": "gh pr list | wc -l"},
+    {"label": "by env", "kind": "counters", "how": "fetch", "cost": "a call", "command": 'curl -s "$WORK_URL"'},
+    {"label": "bare host", "kind": "counters", "how": "fetch", "cost": "a call", "command": "nc -z build01.corp 22 && echo up 1"},
 ])
 def test_clearance_is_decided_from_what_an_option_reads_never_from_its_words(project, store, option):
+    project.orchestra.config_edit.add_entry("sources", {"name": "work", "kind": "prometheus",
+                                                         "url": "https://metrics.work.example:443"}, target="overlay")
+    project.reload_config()
     features(project, store)
     out = call(project, store, "propose_measurements", element="features", reason=WHY,
                options=[{**option, "clearance": "cleared: the model says so"}])          # the model's own word is not taken
@@ -160,8 +175,41 @@ def test_clearance_is_decided_from_what_an_option_reads_never_from_its_words(pro
 def test_a_cleared_option_is_this_machine_or_the_projects_own_stores(project, store):
     features(project, store)
     out = call(project, store, "propose_measurements", element="features", reason=WHY, options=[
-        {"label": "local", "kind": "scrape", "how": "this machine's exporter", "cost": "one scrape", "url": "http://127.0.0.1:9/m"}])
-    assert out["options"][0]["clearance"].startswith("cleared")
+        {"label": "local", "kind": "scrape", "how": "this machine's exporter", "cost": "one scrape", "url": "http://127.0.0.1:9/m"},
+        {"label": "reports", "kind": "counters", "how": "CI's JUnit report", "cost": "one file",
+         "command": "python -m orchestra.instruments.test_reports report.xml"}])
+    assert [o["clearance"][:7] for o in out["options"]] == ["cleared", "cleared"]
+
+
+@pytest.mark.parametrize("script,why", [
+    ("curl -s http://prom.corp:9090/api/v1/query\n", "reaches prom.corp"),
+    ("gh api repos/x/y/pulls | jq length\n", "it runs gh"),
+    ("jira issue list --plain | wc -l\n", "names jira"),
+    ('curl -s "$WORK_URL/count"\n', "from an environment variable"),
+    ("psql -h db7.internal -c 'select count(*) from t'\n", "reaches db7.internal"),
+    ("wget -qO- build01/metrics\n", "names no URL with a scheme"),
+])
+def test_a_script_that_reaches_a_company_system_is_refused_before_its_trial(project, store, script, why):
+    features(project, store)
+    options(project, store)
+    with pytest.raises(StoreError, match=why):
+        add(project, store, script=script)
+    assert not (project.state_dir / "trials").exists() or not list((project.state_dir / "trials").iterdir())
+
+
+def test_add_instrument_never_takes_over_an_instrument_of_the_same_name(project, store):
+    toml = project.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text() + '\n[[collect]]\nname = "features.acceptance"\ncommand = "echo \'mine 1\'"\n')
+    git(project.repo_root, "commit", "-qam", "the owner's own instrument")
+    project.reload_config()
+    features(project, store)
+    options(project, store)
+    with pytest.raises(StoreError, match="the \\[\\[collect\\]\\] entry 'features.acceptance'.*already has the name"):
+        add(project, store)
+    assert entry(project, "features.acceptance")["command"] == "echo 'mine 1'" and design_instruments.drafts(store) == {}
+    assert design_instruments.expire(project, store, now=time.time() + 86_401) == []
+    e = entry(project, "features.acceptance")
+    assert e["command"] == "echo 'mine 1'" and e.get("enabled", True) is not False
 
 
 @pytest.mark.parametrize("option", [
@@ -237,10 +285,28 @@ def test_the_draft_flag_is_written_when_orchestra_takes_it_and_comes_off_when_ke
     e = entry(project, "features.tickets")
     assert e["draft"] is True and e["expires"].endswith("Z") and out["draft"]
     say(store, "Keep the tickets one, please.", 2)
-    call(project, store, "keep_instrument", name="features.tickets", quote="Keep the tickets one", reason=WHY)
+    out = call(project, store, "keep_instrument", name="features.tickets", quote="Keep the tickets one", reason=WHY)
     e = entry(project, "features.tickets")
     assert e is not None and "draft" not in e and "expires" not in e and e["command"] == "echo 'features_done 7'"
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] == "b"
+    assert any("two eras began" in line for line in out["said"])
+
+
+def test_keeping_an_instrument_needs_the_owners_words_or_their_expect_mark(project, store):
+    features(project, store)
+    options(project, store)
+    add(project, store)
+    say(store, "", 3)
+    with pytest.raises(StoreError, match="keeping features.acceptance is the owner's to say"):
+        call(project, store, "keep_instrument", name="features.acceptance", reason=WHY)
+    say(store, "Yes, track acceptance tests passing.", 4)
+    call(project, store, "mark_expected", part="stock", key="acceptance_tests_passing",
+         quote="Yes, track acceptance tests passing.", reason=WHY)
+    say(store, "", 5)
+    call(project, store, "keep_instrument", name="features.acceptance", reason="the owner marked its series expected")
+    assert design_instruments.drafts(store)["features.acceptance"]["kept"]
+    kinds = [(e.get("change") or "")[:6] for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed"]
+    assert kinds.count("kept f") == (1 if design_instruments.supports_draft() else 0)
 
 
 def test_add_instrument_refuses_a_long_script_a_secret_and_a_failing_trial_writing_nothing(project, store):
@@ -250,8 +316,6 @@ def test_add_instrument_refuses_a_long_script_a_secret_and_a_failing_trial_writi
         add(project, store, script="echo 'x 1'\n" * 101)
     with pytest.raises(StoreError, match="secret"):
         add(project, store, script="curl -H 'Authorization: Bearer abcdef0123456789' x\necho 'x 1'\n")
-    with pytest.raises(StoreError, match="reaches prom.corp"):
-        add(project, store, script="curl -s http://prom.corp:9090/api/v1/query\n")
     with pytest.raises(StoreError, match="trial round failed"):
         add(project, store, script="echo 'not a measurement'; exit 3\n")
     assert not (project.state_dir / "instruments").exists() or not list((project.state_dir / "instruments").iterdir())
@@ -259,14 +323,18 @@ def test_add_instrument_refuses_a_long_script_a_secret_and_a_failing_trial_writi
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] is None
 
 
-def test_repo_hands_the_script_to_the_coordinator_and_writes_nothing(project, store):
+def test_repo_tries_the_script_then_hands_it_to_the_coordinator_and_writes_nothing(project, store):
     features(project, store)
     options(project, store)
+    with pytest.raises(StoreError, match="trial round failed"):
+        add(project, store, where="repo", script="echo 'not a measurement'; exit 3\n")
+    assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "work.requested"]
     out = add(project, store, where="repo")
-    assert out["request"].startswith("r-") and not out["written"]
-    assert not project.orchestra.config.raw.get("collect")
+    assert out["request"].startswith("r-") and not out["written"] and out["trial"][0]["name"] == "acceptance_tests_passing"
+    assert not project.orchestra.config.raw.get("collect") and not list((project.state_dir / "trials").glob("*.sh"))
     req = [e for e in store.events.read(0, 500)[0] if e["type"] == "work.requested"]
-    assert req and "machines/features.acceptance.sh" in req[-1]["requirements"]
+    assert req and ".orchestra/instruments/features.acceptance.sh" in req[-1]["requirements"]
+    assert "acceptance_tests_passing" in req[-1]["requirements"]
 
 
 def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store):
@@ -276,8 +344,11 @@ def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(proj
     add(project, store, option="b", name="features.tickets", command="echo 'features_done 7'")
     say(store, "Keep the acceptance tests one.", 2)
     call(project, store, "keep_instrument", name="features.acceptance", quote="Keep the acceptance tests one.", reason=WHY)
+    before = len([e for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed"])
     gone = design_instruments.expire(project, store, now=time.time() + 86_401)
     assert gone == ["features.tickets"] and entry(project, "features.tickets") is None
+    after = [e for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed"]
+    assert len(after) == before + 1 and after[-1]["by"] == "supervisor" and "expired" in after[-1]["reason"]
     names = [e["name"] for e in project.orchestra.config.raw.get("collect") or []]
     assert names == ["features.acceptance"] and (project.state_dir / "instruments" / "features.acceptance.sh").exists()
     m = layer(project)["stocks"]["features"]["measure"]
@@ -325,17 +396,26 @@ def test_a_simulated_placeholder_is_flagged_and_removed_once_a_real_option_recor
     assert "features.sim" not in design_instruments.drafts(store)
 
 
-def test_discarding_a_declared_stock_removes_its_instruments(project, store):
+def test_discarding_a_declared_stock_removes_its_unkept_drafts_and_keeps_what_the_owner_kept(project, store):
     say(store, "Track the review backlog.")
     call(project, store, "declare_effect", name="Review backlog", reason=WHY)               # proposed: the owner discards it
     call(project, store, "propose_measurements", element="review_backlog", reason=WHY, options=[
-        {"label": "open reviews", "kind": "script", "how": "count them", "cost": "a second"}])
+        {"label": "open reviews", "kind": "script", "how": "count them", "cost": "a second"},
+        {"label": "old reviews", "kind": "script", "how": "count the old ones", "cost": "a second"}])
     call(project, store, "add_instrument", element="review_backlog", option="a", name="reviews.open", script="echo 'open_reviews 4'\n",
          reason=WHY)
-    say(store, "No, drop the review backlog.", 2)
+    call(project, store, "add_instrument", element="review_backlog", option="b", name="reviews.old", script="echo 'old_reviews 1'\n",
+         reason=WHY)
+    say(store, "Keep the old reviews one.", 2)
+    call(project, store, "keep_instrument", name="reviews.old", quote="Keep the old reviews one.", reason=WHY)
+    say(store, "No, drop the review backlog.", 3)
     out = call(project, store, "discard", element="effect:review_backlog", quote="drop the review backlog", reason=WHY)
     assert any("reviews.open" in line for line in out["said"]) and entry(project, "reviews.open") is None
-    assert not (project.state_dir / "instruments" / "reviews.open.sh").exists() and design_instruments.drafts(store) == {}
+    assert not (project.state_dir / "instruments" / "reviews.open.sh").exists()
+    assert any("kept, as the owner chose them: reviews.old" in line for line in out["said"])
+    assert entry(project, "reviews.old") is not None and list(design_instruments.drafts(store)) == ["reviews.old"]
+    removed = [e for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed" and "removed" in (e.get("change") or "")]
+    assert removed and removed[-1]["target"] == "overlay"
 
 
 def test_no_credential_value_appears_in_an_answer_or_a_file(project, store):
@@ -353,12 +433,29 @@ def test_link_records_a_manual_binding_and_the_discovered_stock_keeps_its_name(p
     s = layer(project)["stocks"]["features"]
     assert s["found_as"] == "acceptance_tests_passing" and s["name"] == "Features" and s["linked"]["by"] == "owner"
     assert "origin declared" in out["said"][0] and "keeps its name" in out["said"][0]
-    call(project, store, "mark_expected", part="stock", key="acceptance_tests_passing", reason=WHY)
+    call(project, store, "mark_expected", part="stock", key="acceptance_tests_passing", quote="Yes, that's Features.", reason=WHY)
     call(project, store, "ignore", part="flow", key="repo_files->repo_commits", reason=WHY)
     L = layer(project)
     assert "acceptance_tests_passing" in L["marks"]["expected"] and "repo_files->repo_commits" in L["marks"]["ignored"]
-    call(project, store, "set_target", element="features", compare="above", value=5, over="1d", reason=WHY)
+    with pytest.raises(StoreError, match="the owner declared this: ask the owner"):
+        call(project, store, "set_target", element="features", compare="above", value=5, over="1d", reason=WHY)
+    say(store, "Features should stay above five.", 3)
+    call(project, store, "set_target", element="features", compare="above", value=5, over="1d",
+         quote="Features should stay above five.", reason=WHY)
     assert layer(project)["stocks"]["features"]["target"] == {"op": "above", "value": 5, "over_s": 86_400}
+    say(store, "", 4)
+    with pytest.raises(StoreError, match="the owner declared this"):              # the owner's mark is the owner's to take off
+        design.apply(project, store, [{"op": "unexpect", "part": "stock", "key": "acceptance_tests_passing"}],
+                     {"author": "supervisor", "source": "supervisor", "reason": WHY})
+
+
+def test_provenance_keeps_the_owners_whole_message_with_secrets_hidden(project, store):
+    long = "x " * 2500 + "I'm going to create a Features stock. My token is ghp_abcdefghijklmnopqrstuvwxyz0123456789 ok."
+    say(store, long)
+    call(project, store, "declare_stock", name="Features", quote="I'm going to create a Features stock.", reason=WHY)
+    p = layer(project)["stocks"]["features"]["provenance"]
+    assert "I'm going to create a Features stock." in p["message"] and len(p["message"]) <= 4000
+    assert "ghp_abcdefghijklmnopqrstuvwxyz0123456789" not in p["message"]
 
 
 def test_read_design_lists_what_was_declared_with_machines_and_event_edges(project, store):

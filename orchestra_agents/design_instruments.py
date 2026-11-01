@@ -5,12 +5,16 @@ step"; §2.1, where writes go).
 (``~/.orchestrator/<key>/agents/instruments/<name>.sh``) and its ``[[collect]]`` entry (or a
 ``[[scrape]]`` entry for a URL) to the owner's private overlay through ``config_edit``, as one act.
 It runs only what the option proposed (its url or command, ``design_dynamics.targets_of``), never
-an option that needs the owner's approval, and nothing that looks like a secret; the script is
-tried first exactly as Orchestra would run it (``instruments.try_collector``), and a failed trial
-or a script over 100 lines writes nothing. A script the owner wants in the repository goes through
-the Coordinator (a ticket, a review, the gate), never a commit here. Such a script is configuration
+an option that needs the owner's approval, nothing that names or reaches a company system (the
+script's own text included, ``design_dynamics.far``), and nothing that looks like a secret; it
+never takes over an instrument of the same name already configured; the script is tried first
+exactly as Orchestra would run it (``instruments.try_collector``), and a failed trial or a script
+over 100 lines writes nothing. A script the owner wants in the repository is tried the same way
+and then handed to the Coordinator (a ticket, a review, the gate), never a commit here (SPEC §10
+says how this differs from machine-design.md §2.1's pull request). Such a script is configuration
 the Supervisor writes (this package's rule 10 and SPEC §10, amended 2026-11-01 by the owner's
-proposal 4).
+proposal 4). Every write, removal and keep is announced as ``instruments.changed`` (``by`` the
+Supervisor, target the overlay, with its reason).
 
 **Drafts.** The instrument records at once as a draft: its entry carries Orchestra's ``draft =
 true`` and ``expires`` (RFC 3339) when the installed Orchestra's collector spec has them
@@ -22,7 +26,9 @@ default) unless the owner keeps it: ``keep_instrument`` takes ``draft`` and ``ex
 entry and marks the option chosen, as one act; ``expire`` (the host's tick) removes an unkept one's
 entry and script. The points it wrote stay in the store. A simulated instrument's entry carries
 ``simulated = true``; once a real option of the same element records, the simulated one is removed,
-and discarding a declared element removes its instruments."""
+and discarding a declared element removes its unkept drafts and simulated placeholders, never one
+the owner kept. Keeping one needs the owner's backing: their quoted words, or their expect mark on
+the instrument's series or on the element's linked stock."""
 
 from __future__ import annotations
 
@@ -35,16 +41,17 @@ from orchestra.config import ConfigError, parse_duration
 from orchestra.launcher import NAME
 from orchestra.overlay import OVERLAY
 
-from . import handoff, instruments
+from . import handoff, instruments, intended_api
 from .config import Project
 from .config_change import change
-from .design import MACHINE, answer, apply, page_line
+from .design import MACHINE, OWNER, answer, apply, page_line
 from .design_dynamics import (
     NEEDS_APPROVAL,
-    allowed_hosts,
+    UNTIL,
+    company_named,
+    far,
     no_secret,
     options_of,
-    reaches,
     resolve,
     targets_of,
 )
@@ -60,8 +67,12 @@ NO_DRAFT = ("this Orchestra cannot mark the instrument draft: discovery reads it
 
 def supports_draft() -> bool:
     """Whether the installed Orchestra's ``[[collect]]``/``[[scrape]]`` entries take ``draft`` and ``expires``."""
-    from orchestra.collect.spec import Collector
-    return {"draft", "expires"} <= set(getattr(Collector, "__dataclass_fields__", {}))
+    return intended_api.draft_flag_supported()
+
+
+def _announce(store: AgentStore, section: str, what: str, reason: str) -> None:
+    store.events.emit(INSTRUMENTS_CHANGED, section=section, change=what, reason=reason, commit=None, target=OVERLAY,
+                      applies="orchestra run reads it within a second", by=MACHINE)
 
 
 def scripts_dir(project: Project) -> Path:
@@ -143,7 +154,7 @@ def _what_runs(project: Project, store: AgentStore, part: str, eid: str, key: st
         raise StoreError(f"option {key} is a series already recorded: nothing is added for it (discovery relates it on its own)")
     if option.get("clearance") == NEEDS_APPROVAL:
         raise StoreError(f"option {key} reads a company system not cleared for the model (needs approval); nothing reads or "
-                         "previews it until the owner clears it")
+                         f"previews it {UNTIL}")
     mine = targets_of(store, part, eid).get(key) or {}
     script, command, url = a.get("script") or "", (a.get("command") or "").strip(), (a.get("url") or "").strip()
     for given, what in ((url, "url"), (command, "command")):
@@ -158,10 +169,20 @@ def _what_runs(project: Project, store: AgentStore, part: str, eid: str, key: st
     no_secret(command, url)
     if script:
         check_script(script)
-    if far := sorted(reaches(f"{script} {command} {url}") - allowed_hosts(project)):
-        raise StoreError(f"it reaches {', '.join(far)}, neither this machine nor one of the project's own stores: that needs "
-                         "the owner's approval first; nothing was run")
+    if named := company_named(script, command):
+        raise StoreError(f"it names {', '.join(named)}, a company system: that needs the owner's approval, {UNTIL}; nothing "
+                         "was run")
+    if why := far(project, f"{script}\n{command}\n{url}"):
+        raise StoreError(f"{'; '.join(why)}: that needs the owner's approval, {UNTIL}; nothing was run")
     return kind, script, command, url
+
+
+def _taken(project: Project, store: AgentStore, name: str) -> str | None:
+    """What already has the instrument's name: an entry in the repository or the overlay, or a draft."""
+    for section in ("collect", "scrape", "sources"):
+        if _entry(project, section, name) is not None:          # its values unshown: an owner's command may hold anything
+            return f"the [[{section}]] entry {name!r} (in orchestra.toml or the owner's overlay)"
+    return f"the draft instrument {name!r}" if name in drafts(store) else None
 
 
 def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
@@ -180,15 +201,9 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         parse_duration(every, 60.0)
     except ConfigError as e:
         raise StoreError(f"every: {e}") from None
+    if taken := _taken(project, store, name):
+        raise StoreError(f"{taken} already has the name {name}: choose another name; nothing was run or written")
     kind, script, command, url = _what_runs(project, store, part, eid, key, option, a)
-    if a.get("where") == "repo":
-        req = handoff.hand_to_coordinator(store, {"requirements": (
-            f"Add the measurement script for {eid} (option {key}) to the repository, at machines/{name}.sh, with its [[collect]] "
-            f"entry `name = \"{name}\"`, every {every}, in orchestra.toml, through a pull request the owner approves.\n\n"
-            f"The script, as the Supervisor tried it:\n\n{script or command or url}\n"), "context": prov["reason"]}, MACHINE)
-        return {"ok": True, "request": req["request"], "written": False,
-                "said": [(f"handed to the Coordinator as {req['request']}: the script lands through a ticket, a review and the "
-                          "gate; nothing was written here")]}
     path = None
     if script:
         trial = project.state_dir / "trials" / f"{name}.sh"
@@ -197,11 +212,13 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         trial.chmod(0o755)
         command = str(trial)
     tried = instruments.try_collector(project, {"command": command} if kind == "collect" else {"url": url})
+    if script and (not tried.get("works") or a.get("where") == "repo"):
+        Path(command).unlink(missing_ok=True)
     if not tried.get("works"):
-        if script:
-            Path(command).unlink(missing_ok=True)
         raise StoreError("the trial round failed, so nothing was written: " + "; ".join(
             str(tried.get(k)) for k in ("error", "bad_lines", "refused", "stderr") if tried.get(k)))
+    if a.get("where") == "repo":
+        return _to_repo(store, eid, key, name, every, script or command or url, tried, prov)
     if script:
         path = scripts_dir(project) / f"{name}.sh"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -222,10 +239,10 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         if path:
             path.unlink(missing_ok=True)
         raise
-    store.events.emit(INSTRUMENTS_CHANGED, section=section, change=done["announce"], reason=prov["reason"], commit=None,
-                      target=OVERLAY, applies="orchestra run reads it within a second and records on its interval", by=MACHINE)
+    _announce(store, section, done["announce"], prov["reason"])
     rec = {"element": f"{part}:{eid}", "option": key, "section": section, "script": str(path) if path else None,
-           "at": now, "until": until, "kept": False, "simulated": bool(entry.get("simulated")), "flagged": flagged}
+           "at": now, "until": until, "kept": False, "simulated": bool(entry.get("simulated")), "flagged": flagged,
+           "series": sorted({s_["name"] for s_ in tried.get("series") or []})}
     _update(store, lambda d: d.__setitem__(name, rec))
     replaced = []
     if not entry.get("simulated"):                  # a real option records: the placeholder goes
@@ -252,7 +269,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
              page_line(project, "the Dynamics page shows it in the element's drawer: recording · draft, the sparkline, the "
                                 "script and its entry")]
     if replaced:
-        lines.append(f"removed the simulated placeholder(s) {', '.join(replaced)}")
+        lines.append(f"removed the simulated placeholder{'' if len(replaced) == 1 else 's'} {', '.join(replaced)}")
     return answer(project, result, lines, instrument=name, script=str(path) if path else None, first_points=first,
                   trial=tried.get("series"), draft=flagged)
 
@@ -263,7 +280,8 @@ def remove(project: Project, store: AgentStore, name: str, reason: str, prov: di
     if rec is None:
         return
     if _entry(project, rec["section"], name) is not None:
-        _entry_change(project, rec["section"], None, name, reason)
+        done = _entry_change(project, rec["section"], None, name, reason)
+        _announce(store, rec["section"], done.get("announce") or f"removed {name} from [[{rec['section']}]]", reason)
     if rec.get("script"):
         Path(rec["script"]).unlink(missing_ok=True)
     part, _, eid = rec["element"].partition(":")
@@ -273,12 +291,29 @@ def remove(project: Project, store: AgentStore, name: str, reason: str, prov: di
     _update(store, lambda d: d.pop(name, None) and None)
 
 
-def remove_for(project: Project, store: AgentStore, element: str, reason: str) -> list[str]:
-    """Every instrument of a discarded element, kept or not, its entry and script; the names removed."""
-    gone = [n for n, r in drafts(store).items() if r.get("element") == element]
+def remove_for(project: Project, store: AgentStore, element: str, reason: str, prov: dict | None = None) -> tuple[list[str], list[str]]:
+    """A discarded element's unkept drafts and simulated placeholders, each entry and script
+    removed; (the names removed, the names the owner kept, left in place)."""
+    mine = {n: r for n, r in drafts(store).items() if r.get("element") == element}
+    gone = [n for n, r in mine.items() if not r.get("kept") or r.get("simulated")]
     for n in gone:
-        remove(project, store, n, reason)
-    return gone
+        remove(project, store, n, reason, prov)
+    return gone, [n for n in mine if n not in gone]
+
+
+def _backed(project: Project, rec: dict, prov: dict) -> bool:
+    """The owner's backing of a keep: their quoted words, or their expect mark on one of the
+    instrument's series or on the stock its element is linked to."""
+    if prov.get("author") == OWNER:
+        return True
+    lay = intended_api.current(project)
+    part, _, eid = rec["element"].partition(":")
+    found_as = ((lay.get(f"{part}s") or {}).get(eid) or {}).get("found_as")
+    for key, mk in ((lay.get("marks") or {}).get("expected") or {}).items():
+        if (mk.get("provenance") or {}).get("author") == OWNER and (key.split("{", 1)[0] in (rec.get("series") or [])
+                                                                   or key == found_as):
+            return True
+    return False
 
 
 def keep_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
@@ -286,6 +321,9 @@ def keep_instrument(project: Project, store: AgentStore, a: dict, prov: dict) ->
     rec = drafts(store).get(name)
     if rec is None:
         raise StoreError(f"no draft instrument {name!r}; read_design lists them")
+    if not _backed(project, rec, prov):
+        raise StoreError(f"keeping {name} is the owner's to say: quote their words, or wait for their expect mark on its series "
+                         f"({', '.join(rec.get('series') or []) or 'none read yet'}) on the Dynamics page")
     entry = _entry(project, rec["section"], name)
     if entry is None:
         raise StoreError(f"the instrument {name} has no [[{rec['section']}]] entry any more; add it again (add_instrument)")
@@ -301,13 +339,30 @@ def keep_instrument(project: Project, store: AgentStore, a: dict, prov: dict) ->
         except StoreError:
             _entry_change(project, rec["section"], entry, name, f"put back as it was: {prov['reason']}")
             raise
-        unflagged = ["draft = true and expires taken off its entry: discovery reads its series from now on"]
+        _announce(store, rec["section"], f"kept {name}: draft and expires taken off its entry", prov["reason"])
+        unflagged = ["draft = true and expires taken off its entry: discovery reads its series from now on",
+                     ("the configuration was written twice to do it (Orchestra's editor drops no field in one write), so two "
+                      "eras began; the coordinator is asked for a one-write drop")]
     part, _, eid = rec["element"].partition(":")
     done = _set_option(project, store, part, eid, rec["option"], prov, chosen=True, provenance=(
         f"written by the Supervisor · {rec['script']} · kept" if rec.get("script") else "kept"))
     _update(store, lambda d: d[name].update(kept=True, until=None, kept_at=time.time()))
     return answer(project, done, [f"instrument {name} kept: it no longer expires, and option {rec['option']} is chosen", *unflagged,
                                   page_line(project, "the Dynamics page shows the option \"chosen\"")], instrument=name)
+
+
+def _to_repo(store: AgentStore, eid: str, key: str, name: str, every: str, text: str, tried: dict, prov: dict) -> dict:
+    """A script that worked, handed to the Coordinator for the repository (where = repo)."""
+    first = ", ".join(f"{x['name']} {x.get('value')}" for x in tried.get("series") or [])
+    req = handoff.hand_to_coordinator(store, {"requirements": (
+        f"Add the measurement script for {eid} (option {key}) to the repository at .orchestra/instruments/{name}.sh, with its "
+        f"[[collect]] entry `name = \"{name}\"`, `command` that script, every {every}, in orchestra.toml, through a ticket, a "
+        f"review and the gate.\n\nThe script, as the Supervisor tried it (its trial round read {first or 'nothing'}):\n\n{text}\n"),
+        "context": prov["reason"]}, MACHINE)
+    return {"ok": True, "request": req["request"], "written": False, "trial": tried.get("series"),
+            "said": [(f"tried it (its round read {first or 'nothing'}), then handed it to the Coordinator as {req['request']}: "
+                      f"it lands at .orchestra/instruments/{name}.sh through a ticket, a review and the gate; nothing was "
+                      "written here")]}
 
 
 def expire(project: Project, store: AgentStore, now: float | None = None, log=lambda _: None) -> list[str]:

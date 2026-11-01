@@ -7,13 +7,14 @@ import time
 from datetime import UTC, datetime
 
 import pytest
-from design_fixtures import WHY, call, changes, layer, say
+from design_fixtures import WHY, call, changes, layer, model_with, say
 
 from orchestra_agents import (
     design_machines,
     design_passes,
     intended_api,
     prompting,
+    state_machines,
     supervisor_spec,
 )
 from orchestra_agents.harness.tools_design import DESIGN_TOOLS
@@ -51,7 +52,7 @@ def test_a_title_becomes_a_valid_name_and_every_field_is_recorded_with_its_guess
     assert m["engagement"] == {"mode": "scheduled", "at": "09:00", "tz": "America/Los_Angeles", "missed": "skip"}
     assert m["receives"] == ["session.settled", "task.reported"] and m["emits"] == ["work.improvement_proposed"]
     assert m["spec"] == SPEC and m["guessed"] == ["engagement", "receives[0]", "receives[1]"]
-    assert any("turn(s) a day" in line and "it never runs" in line for line in out["said"])        # the cost line
+    assert any("about 1 turn a day on the pi harness" in line and "it never runs" in line for line in out["said"])  # the cost
     assert any("no listener yet for work.improvement_proposed" in line for line in out["said"])
 
 
@@ -70,7 +71,7 @@ def test_a_universal_declaration_says_nothing_in_ai_terms(project, store):
         improver(project, store, spec={**SPEC, "steps": ["Ask haiku to think"]})
     with pytest.raises(StoreError, match="AI terms.*create_ticket"):
         improver(project, store, description="Calls create_ticket every day")
-    with pytest.raises(StoreError, match="spec has invariants, steps, uses, program; not command"):
+    with pytest.raises(StoreError, match="spec has invariants, steps, uses; not command"):
         improver(project, store, spec={**SPEC, "command": "python x.py"})
     assert layer(project)["machines"] == {}
 
@@ -132,32 +133,42 @@ def test_an_unquoted_refinement_is_a_proposal(project, store):
 
 
 def test_the_expected_effect_waits_for_a_series_and_is_a_draft_until_confirm(project, store):
+    model_with(project, {"s3": ("coordinator_queue", {})})
     say(store, "I'm going to create a Features stock.", 1)
     call(project, store, "declare_stock", name="Features", quote="create a Features stock", reason=WHY)
     improver(project, store)
-    with pytest.raises(StoreError, match="expected edit is"):
-        call(project, store, "declare_expected_effect", machine="feature_count_improver", expect=[{"stock": "features"}],
+    with pytest.raises(StoreError, match="kind rises needs stock"):
+        call(project, store, "declare_expected_effect", machine="feature_count_improver", expect=[{"kind": "rises"}],
+             horizon="3d", reason=WHY)
+    with pytest.raises(StoreError, match="kind factor needs flow and factor"):
+        call(project, store, "declare_expected_effect", machine="feature_count_improver", expect=[{"kind": "factor", "flow": "x"}],
              horizon="3d", reason=WHY)
     out = call(project, store, "declare_expected_effect", machine="feature_count_improver", horizon="1d", reason=WHY, expect=[
-        {"flow": "tasks_done_rate", "factor": 1.2}, {"flow": "gate_rejected_rate", "factor": 0.8},
-        {"to": "coordinator_queue", "appears": True}, {"stock": "features", "rises": True},
-        {"to": "features", "appears": True}])
-    assert any("raised to 3 days" in line for line in out["said"]) and any("waits for a series" in line for line in out["said"])
+        {"kind": "factor", "flow": "tasks_done_rate", "factor": 1.2}, {"kind": "factor", "flow": "gate_rejected_rate", "factor": 0.8},
+        {"kind": "appears", "to": "coordinator_queue"}, {"kind": "rises", "stock": "features"},
+        {"kind": "appears", "to": "features"}])
+    assert any("raised to 3 days" in line for line in out["said"])
+    assert any("Features is not linked to a discovered stock yet: published once you say which one it is (link)" in line
+               for line in out["said"])
     eff = layer(project)["machines"]["feature_count_improver"]["expected_effect"]
     assert eff["horizon_s"] == 3 * 86_400 and len(eff["edits"]) == 5
-    assert [design_machines.publishable(layer(project), e) is not None for e in eff["edits"]] == [True, True, True, False, False]
+    got = [design_machines.publishable(project, layer(project), "feature_count_improver", e) for e in eff["edits"]]
+    assert [p is not None for p, _ in got] == [True, True, True, False, False]
+    assert got[2][0] == {"from": None, "to": "s3", "appears": True} and got[3][1] == "waits for a series"
     made = [e for e in store.events.read(0, 500)[0] if e["type"] == "orchestra.prediction.made"]
     assert made == []                                                  # a draft: nothing published before confirm
 
 
-def test_a_linked_end_is_published_as_the_series_it_was_linked_to(project, store):
+def test_a_linked_end_is_published_as_the_id_of_the_stock_it_was_linked_to(project, store):
+    model_with(project, {"s1": ("acceptance_tests_passing", {"instrument": "features.acceptance", "suite": "acceptance"})})
     say(store, "I'm going to create a Features stock.", 1)
     call(project, store, "declare_stock", name="Features", quote="create a Features stock", reason=WHY)
     edit = {"from": None, "to": "features", "appears": True}
-    assert design_machines.publishable(layer(project), edit) is None
+    assert design_machines.publishable(project, layer(project), "m", edit) == (None, "waits for a series")
     say(store, "Yes, that's Features.", 2)
-    call(project, store, "link", declared="features", discovered="acceptance_tests_passing", quote="Yes, that's Features.", reason=WHY)
-    assert design_machines.publishable(layer(project), edit) == {"from": None, "to": "acceptance_tests_passing", "appears": True}
+    call(project, store, "link", declared="features", discovered='acceptance_tests_passing{suite="acceptance"}',
+         quote="Yes, that's Features.", reason=WHY)
+    assert design_machines.publishable(project, layer(project), "m", edit)[0] == {"from": None, "to": "s1", "appears": True}
 
 
 def test_the_horizon_is_three_runs_by_the_schedule_or_by_the_rate_of_what_wakes_it(project, store):
@@ -194,10 +205,9 @@ def test_a_refinement_round_proposes_its_findings_once_and_declares_nothing(proj
     assert r["passes"] == 1                                            # no neighbour to follow: one pass
     assert design_passes.round_of(L, busy + heard, {}, passes=3, already={f["key"] for f in r["findings"]}, now=now)["findings"] == []
     assert intended_api.layer(project).read()["version"] == L["version"]      # it declared nothing
-    assert design_passes.run(project, store, busy + heard) is None     # this project's spec has no refine_map duty
-    supervisor_spec.ensure(project)
-    store.set_agent_state("supervisor", turn={})
-    first = design_passes.run(project, store, busy + heard)
+    supervisor_spec.ensure(project)                                     # a spec of its own, with no refine_map in it
+    assert supervisor_spec.load(project, "supervisor").duty("refine_map") is None
+    first = design_passes.run(project, store, busy + heard)            # built in: it runs all the same
     assert len(first["findings"]) == 4 and design_passes.run(project, store, busy + heard) is None   # unchanged map: no round
     assert "propose" in design_passes.reason(first, "[Review round]") and "heuristic" in design_passes.reason(first, "x")
 
@@ -231,10 +241,71 @@ def test_loose_ends_include_a_target_with_no_series(project, store):
     assert "absent:tests_passing" in keys
 
 
+def test_an_expected_flow_and_a_labelled_stock_that_are_present_are_no_loose_end(project, store):
+    for _ in range(3):
+        model_with(project, {"a": ("tests_passing", {"suite": "e2e", "instrument": "x"}), "b": ("tests_run", {})},
+                   flows=[("f", "b", "a")])
+    absent = design_passes._absent(project)
+    expected = {"marks": {"expected": {'tests_passing{suite="e2e"}': {}, 'tests_run -> tests_passing{suite="e2e"}': {}},
+                          "ignored": {}}}
+    assert 'tests_run -> tests_passing{suite="e2e"}' in absent[-1]
+    keys = {f["key"] for f in design_passes.round_of(expected, [], {}, 3, absent=absent)["findings"]}
+    assert not {k for k in keys if k.startswith("absent:")}
+
+
+def test_refine_machine_edits_the_lists_and_only_text_fields_by_set_field(project, store):
+    improver(project, store)
+    say(store, TURN4, 4)
+    q = "watch the ticket queue for DONE and REJECTED tickets"
+    call(project, store, "refine_machine", name="feature_count_improver", quote=q, reason=WHY,
+         add_uses=["the ticket queue, read only"], remove_uses=["the coordinator's queue"], add_tags=["tickets"],
+         remove_tags=["feedback loop"], set_field="title", value="Feature Improver")
+    m = layer(project)["machines"]["feature_count_improver"]
+    assert m["spec"]["uses"] == ["the ticket queue, read only"] and m["tags"] == ["features", "tickets"]
+    assert m["title"] == "Feature Improver"
+    for field in ("managed", "tags", "spec.steps"):
+        with pytest.raises(StoreError, match="set_field sets a text field"):
+            call(project, store, "refine_machine", name="feature_count_improver", quote=q, reason=WHY, set_field=field, value="x")
+
+
+def test_the_improvers_role_has_the_tools_its_uses_need_and_reads_its_events_each_run(project, store):
+    out = improver(project, store, spec={**SPEC, "uses": ["the ticket queue, read only", "the model"],
+                                         "steps": ["1. Read gate.landed", "2) Publish work.improvement_proposed"]})
+    files = state_machines.files(layer(project)["machines"]["feature_count_improver"])
+    import json
+    role = json.loads(files["role.json"])
+    assert role["tools"] == ["events", "escalate", "tickets", "model"]
+    text = files["role.md"]
+    assert "1. Read gate.landed\n2. Publish work.improvement_proposed" in text
+    assert "Each run, read these events since your last run (read_events): session.settled, task.reported." in text
+    assert "change a ticket: you read the ticket queue only" in text
+    agent = json.loads(files["agent.json"])
+    assert agent["wake_on"] == [] and agent["reads_events"] == ["session.settled", "task.reported"]
+    from orchestra_agents.listening import listens_for
+    from orchestra_agents.org import AgentDef
+    assert {"session.settled", "task.reported"} <= set(listens_for(AgentDef.from_dict(agent), "tasks"))
+    assert not any("could act on nothing" in line for line in out["said"])
+    out = improver(project, store, name="other_one", spec={**SPEC, "uses": ["the coffee machine"]})
+    assert any("could act on nothing for 'the coffee machine'" in line for line in out["said"])
+
+
+def test_a_state_directory_machines_prompt_is_the_supervisors_and_has_no_duty_tools(project, store):
+    from orchestra_agents.machine_spec import load, prompt_part, render
+    improver(project, store)
+    say(store, "Confirm it.", 6)
+    call(project, store, "confirm", element="machine:feature_count_improver", quote="Confirm it.", reason=WHY)
+    spec = load(project, "feature_count_improver")
+    part = prompt_part(spec)
+    assert "kept in the state directory and never committed" in part and "add_duty" not in part
+    assert "How you work a wake-up" not in part
+    assert "never committed" in render(spec) and "Edited by its own duty tools" not in render(spec)
+
+
 def test_the_supervisors_prompt_says_never_to_ask_the_owner_to_edit_a_file(project):
     from orchestra_agents.org import built_in_agents
     text = prompting.agent_prompt(project, built_in_agents()["supervisor"])
     assert "never ask the owner to edit a file" in text.lower() and "## Designing the system" in text
+    assert "Your built-in duty `refine_map`" in text                  # every Supervisor's, whatever its spec says
 
 
 def test_every_design_schema_is_typed_all_the_way_down():

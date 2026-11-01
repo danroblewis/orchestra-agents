@@ -105,4 +105,4 @@ def test_the_supervisor_grows_a_duty_by_chat_keeps_the_flow_and_reviews_on_sched
     wait(lambda: [e for e in said(events, before) if e["summary"].startswith("Review round: noted")], "the review round's turn")
     rec = store.agent_state("supervisor")["review"]
     assert rec["woke"] and any("machine baker quiet" in f for f in rec["findings"])
-    assert store.agent_state("supervisor")["load"]["duties"] == 7
+    assert store.agent_state("supervisor")["load"]["duties"] == 6

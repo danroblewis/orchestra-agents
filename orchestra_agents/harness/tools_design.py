@@ -43,12 +43,14 @@ OPTION = {"type": "object", "properties": {
     "command": S("For a command already there (python -m orchestra.instruments.test_reports ...): add_instrument runs only this"),
 }, "required": ["label", "kind", "how", "cost"]}
 EXPECT = {"type": "object", "properties": {
-    "flow": S("A flow's id, with factor"), "factor": {"type": "number", "description": "The flow's rate times this (1.2: 20% more)"},
-    "stock": S("A stock's id (a declared one with no series yet waits for one), with below, above, rises or falls"),
-    "below": NUM, "above": NUM, "rises": B("The stock's slope goes up"), "falls": B("The stock's slope goes down"),
-    "from": S("A new flow from this stock (leave out: from outside), with to and appears"), "to": S("A new flow into this stock"),
-    "appears": B("A new flow appears from `from` to `to`"),
-}}
+    "kind": E(["factor", "below", "above", "rises", "falls", "appears"],
+              "factor: a flow's rate times factor (needs flow, factor); below/above: a stock's level (needs stock, value); "
+              "rises/falls: a stock's slope (needs stock); appears: a new flow into `to` (needs to; from, or outside)"),
+    "flow": S("For factor: the flow's id"), "factor": {"type": "number", "description": "For factor: 1.2 is 20% more"},
+    "stock": S("For below, above, rises, falls: a stock's key or a declared stock's id (one with no series waits for one)"),
+    "value": {"type": "number", "description": "For below and above: the level"},
+    "to": S("For appears: the stock the new flow goes into"), "from": S("For appears: where it comes from (leave out: outside)"),
+}, "required": ["kind"]}
 SPEC = {"type": "object", "description": "The kind's fields, in the work's terms (a Universal one names no model, prompt or tool)",
         "properties": {
             "invariants": A("universal: lines a reviewer can check (never changes code itself; it proposes work)"),
@@ -100,7 +102,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             "its [[collect]] or [[scrape]] entry goes in the owner's private overlay, one act. Refused over 100 lines, with "
             "what looks like a secret, for an option that needs approval or reaches another host, or when the trial fails "
             "(with its output); nothing is written then. It records as a draft that expires in 24 h unless the owner keeps it "
-            "(keep_instrument). where: repo hands it to the Coordinator (a ticket and a pull request) instead.",
+            "(keep_instrument). where: repo tries it, then hands it to the Coordinator for .orchestra/instruments/<name>.sh.",
             {"element": ELEMENT, "option": S("The option's key from propose_measurements (a, b, ...)"),
              "name": S("The instrument's name: letters, digits, . _ - (features.acceptance)"),
              "script": S("The script's text (sh unless it starts with #!), printing Prometheus text: name value per line"),
@@ -111,8 +113,8 @@ DESIGN_TOOLS: list[ToolDef] = [
              "wait_s": {"type": "integer", "description": "Wait up to this long (at most 120) for its first round"},
              "quote": QUOTE, "reason": REASON}, ("element", "option", "name", "reason")),
     ToolDef("keep_instrument", "design",
-            "Keep a draft instrument (on the owner's word, or after their expect click): it stops expiring, its draft flag "
-            "comes off (discovery reads it from then) and the option is chosen.",
+            "Keep a draft instrument the owner chose: quote their words, or call it after their expect click on its series. "
+            "It stops expiring, its draft flag comes off (discovery reads it from then) and the option is chosen.",
             {"name": S("The instrument's name"), "quote": QUOTE, "reason": REASON}, ("name", "reason")),
     ToolDef("mark_expected", "design",
             "Mark a discovered stock or flow expected (\"yes, track that one\"): always drawn, with the pin; a ghost when a "
@@ -146,18 +148,25 @@ DESIGN_TOOLS: list[ToolDef] = [
             "Change a declared machine while the owner talks (\"watch DONE and REJECTED tickets\", \"make it 12am every day\"): "
             "give only what changes; each change is recorded with the value it replaced, all or none. With the owner's words "
             "quoted it applies at once on an unconfirmed machine; otherwise, or on a confirmed one, it is a proposed change "
-            "the owner confirms. The Universal | Programmatic switch: set_kind, with the request of the owner's click.",
+            "the owner confirms. The Universal | Programmatic switch is switch_kind.",
             {"name": S("The machine"),
              "add_receives": A("Event types to add to what wakes it"), "remove_receives": A("Event types to take out of its receives"),
              "add_emits": A("Event types it will publish"), "remove_emits": A("Event types it will no longer publish"),
              "add_reads": A("Stocks or effects it may read"), "remove_reads": A("Stocks or effects it no longer reads"),
              "add_invariants": A("Lines a reviewer can check"), "remove_invariants": A("Invariants to drop, word for word"),
+             "add_uses": A("What it may act on, in the work's terms (the ticket queue, read only)"),
+             "remove_uses": A("Uses to drop, word for word"), "add_tags": A("Tags to add"), "remove_tags": A("Tags to drop"),
              "steps": A("The whole new numbered list of steps"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
-             "set_kind": E(["universal", "programmatic"], "Switch the kind: the Universal description is kept as the "
-                                                          "program's specification"),
-             "set_field": S("title, description, tags, managed, or spec.<field>"), "value": S("The new value of set_field"),
-             "request": REQUEST, "quote": QUOTE, "reason": REASON}, ("name", "reason")),
+             "set_field": E(["title", "description", "spec.command", "spec.trigger", "spec.arguments", "spec.environment",
+                             "spec.stdin", "spec.exit", "spec.protocol", "spec.send", "spec.receive", "spec.source", "spec.role"],
+                            "A text field to set to value (the lists have their add_ and remove_ edits)"),
+             "value": S("The new text of set_field"), "quote": QUOTE, "reason": REASON}, ("name", "reason")),
+    ToolDef("switch_kind", "design",
+            "The Universal | Programmatic switch, on the owner's click (request) or their words (quote): the kind changes "
+            "and the spec is kept (to Programmatic, the Universal description is the program's specification). On a "
+            "confirmed machine switched to Programmatic, its agent stops and the program goes to the Coordinator.",
+            {"name": S("The machine"), "request": REQUEST, "quote": QUOTE, "reason": REASON}, ("name", "reason")),
     ToolDef("declare_event", "design",
             "Declare an event type's purpose (a new type in an existing family, when no observed one has the purpose). "
             "Never one nothing would publish.",
@@ -166,8 +175,8 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("declare_expected_effect", "design",
             "A machine's expected effect, as a draft prediction: what it should change, rates where you can, judged after a "
             "horizon of at least three of its runs. Published as your prediction only when the owner confirms the machine.",
-            {"machine": S("The machine"), "expect": {"type": "array", "items": EXPECT, "description": "One object per edit: "
-                                                     "{flow, factor}, {stock, rises|falls|below|above}, {from, to, appears}"},
+            {"machine": S("The machine"), "expect": {"type": "array", "items": EXPECT, "description": "One object per edit, "
+                                                     "each with its kind and the fields that kind needs"},
              "horizon": S("3d, 7d"), "quote": QUOTE, "reason": REASON},
             ("machine", "expect", "horizon", "reason")),
     ToolDef("confirm", "design",
@@ -181,6 +190,10 @@ DESIGN_TOOLS: list[ToolDef] = [
             "stock's instruments, leave no file.",
             {"element": ELEMENT, "change": S("A pending change's id, to discard only that"), "request": REQUEST, "quote": QUOTE,
              "reason": REASON}, ("element", "reason")),
+    ToolDef("carry_over", "design",
+            "Only when a design tool says both Orchestra's declared layer and the agents' stand-in hold declarations: the "
+            "owner's answer, quoted. finish replays the stand-in's calls into Orchestra's layer; abandon archives them.",
+            {"how": E(["finish", "abandon"]), "quote": QUOTE, "reason": REASON}, ("how", "quote", "reason")),
     ToolDef("read_design", "observe",
             "The declared layer in one read: every declared and proposed element with its state, link and guessed fields; "
             "each machine's fields; each event type's declared publishers and listeners and who was heard publishing it or "

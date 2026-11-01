@@ -3,37 +3,55 @@
 The owner confirms; the Supervisor applies. A click on the Machines page publishes
 ``orchestra.intent.requested`` with source ``owner`` and changes nothing; it wakes the Supervisor
 (``wake_reason``; the host wakes it only for one whose source is ``owner``), which calls
-``confirm``, ``discard`` or ``refine_machine`` (``set_kind``) with the request's id, as it does for
-"confirm it" in the chat. Every confirm and discard, of any part and of a pending change, is
-backed by the owner: their quote, or their request for exactly that (``design.check_request``).
+``confirm``, ``discard`` or ``switch_kind`` with the request's id, as it does for "confirm it" in
+the chat. Every confirm and discard, of any part and of a pending change, is backed by the owner:
+their quote, or their noted request for exactly that (``design.check_request``).
 
-What confirming a Universal Machine does here, in this order: the op on the declared layer (with
-the id of the ``system.changed`` that will announce its start, chosen first); its implementation
+What confirming a machine does here depends first on who runs it. **Managed elsewhere**
+(``managed: external``), of either kind: nothing runs here and nothing is written to the state
+directory; the declaration waits to be heard or measured, and its expected effect is still
+published. **A Universal one managed here**, in this order: the op on the declared layer (with the
+id of the ``system.changed`` that will announce its start, chosen first); its implementation
 written to the state directory's ``machines/<name>/`` from the declaration, with its role and its
-agent records (``state_machines``: the host runs it from there; nothing is committed); then its
-expected effect published as the Supervisor's prediction of that change
-(``orchestra.prediction.made``, subject ``machine:<name>``) and recorded on the declaration in a
-second call. The agent's first turn publishes that ``system.changed`` (``announce_start``, from the
-host), which begins the era the prediction is judged in. An edit that waits for a series is
-published once its stock is linked (``publish_waiting``), and a prediction an era interrupts is
-renewed for the new era (``renew``). Until confirm nothing runs and nothing is published. Discard
-leaves nothing but the history."""
+agent records (``state_machines``: the host runs it from there; nothing is committed; a daily
+machine's last run is set to now unless a missed run is ``run once``, so it first runs at its next
+time); then its expected effect published as the Supervisor's prediction of that change
+(``orchestra.prediction.made``, subject ``machine:<name>``, its ends the current model's ids),
+recorded on the declaration in a second call and in the Supervisor's own predictions, so the
+verdict wakes it (``verdicts.py``). The agent's first turn publishes that ``system.changed``
+(``announce_start``, from the host), which begins the era the prediction is judged in. An edit
+that waits for a series is published once it has one (``publish_waiting``), and a prediction an
+era interrupts is renewed for what is left of its horizon (``renew``). Until confirm nothing runs
+and nothing is published.
+
+**Discard** of a proposal leaves nothing but the history. Discard of a declared element retracts
+it (the owner's request or words back it); a declared machine is then retired: its records in the
+state directory are removed, and the host stops its session."""
 
 from __future__ import annotations
 
 import shutil
 import time
 import uuid
+from datetime import datetime
 
 from . import intended_api, state_machines
+from .clock import next_at, zone
 from .config import Project
-from .design import MACHINE, REQUESTED, answer, apply, check_request, page_line
+from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, page_line, plural
 from .design_dynamics import resolve
-from .design_machines import cannot_judge, current, draft, drafts_dir, publishable
+from .design_machines import (
+    cannot_judge,
+    current,
+    draft,
+    drafts_dir,
+    min_horizon,
+    publishable,
+    waiting_line,
+)
 from .store import AgentStore, StoreError
 
 PARTS = ("stock", "effect", "flow", "machine", "attachment")
-OWNER = "owner"
 
 
 def machines_dir(project: Project):
@@ -54,6 +72,10 @@ def _element(project: Project, a: dict) -> tuple[str, str]:
     return part, eid
 
 
+def starts(store: AgentStore) -> dict:
+    return store.agent_state(MACHINE).get("machine_starts") or {}
+
+
 def _starts(store: AgentStore, fn) -> dict:
     def change_it(d):
         d = dict(d or {})
@@ -71,19 +93,33 @@ def _predict(project: Project, store: AgentStore, mid: str, edits: list[dict], h
         raise StoreError(f"Orchestra refused the expected effect as a prediction: {e}") from None
 
 
-def _ready(layer: dict, m: dict, done: list | tuple = ()) -> tuple[list[dict], list[dict]]:
-    """The expected edits publishable now (as published: linked ends read as their series) and
-    those that wait, leaving out the ones already published (``done``, as published)."""
+def _ready(project: Project, lay: dict, mid: str, m: dict, done: list | tuple = ()) -> tuple[list[tuple[dict, dict]],
+                                                                                              list[tuple[dict, str]]]:
+    """The expected edits publishable now, each (as stored, as the judge reads it), and those that
+    wait, each with why; leaving out the ones already published (``done``, as stored)."""
+    core, keys = intended_api.unpublishable(project), intended_api.Keys(intended_api.current_model(project))
     ready, waiting = [], []
     for e in (m.get("expected_effect") or {}).get("edits") or []:
-        p = publishable(layer, e)
-        if p is not None and p in done:
+        if e in done:
             continue
-        if p is None or cannot_judge(e):
-            waiting.append(e)
+        sent, why = publishable(project, lay, mid, e, keys=keys, core=core)
+        why = why or cannot_judge(e)
+        if why:
+            waiting.append((e, why))
         else:
-            ready.append(p)
+            ready.append((e, sent))
     return ready, waiting
+
+
+def _first_run(m: dict) -> str:
+    """When a confirmed machine first runs, in words."""
+    e = m.get("engagement") or {}
+    if e.get("mode") != "scheduled":
+        return f"woken by {', '.join(m.get('receives') or []) or 'nothing yet'}"
+    at, tz, now = e.get("at") or "00:00", e.get("tz"), time.time()
+    nxt = next_at(at, None if e.get("missed") == "run once" else now, now, tz)
+    day = "today" if datetime.fromtimestamp(nxt, zone(tz)).date() == datetime.fromtimestamp(now, zone(tz)).date() else "tomorrow"
+    return f"first run at {at} {tz or '(the host clock)'}, {day}"
 
 
 def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
@@ -95,8 +131,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         lines = [f"{part} {eid}: {'change ' + pending if pending else 'it'} confirmed"]
         if part == "machine":
             m = current(project, eid)
-            draft(project, m)
-            if m.get("state") == "declared" and m.get("kind") == "universal":
+            if draft(project, m) is not None and m.get("state") == "declared":
                 _restart(project, store, eid)
                 lines.append(f"its spec, role and agent records in {machines_dir(project) / eid} are written again from the "
                              "declaration (no update_role or update_agent is needed); a running session starts over with them")
@@ -105,66 +140,94 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     m = current(project, eid)
     if m.get("state") == "declared":
         raise StoreError(f"machine {eid} is confirmed already")
-    lines, extra = [f"machine {eid} confirmed", page_line(project, "the Machines page draws it solid, \"declared · not heard yet\"")], {}
-    if m.get("kind") == "universal":
-        change = uuid.uuid4().hex                        # the id of the system.changed its first turn will publish
+    here = m.get("managed") != "external"
+    runs = here and m.get("kind") == "universal"
+    if runs:
         state_machines.files(m)                          # its records check before anything is written
-        done = apply(project, store, [{"op": "confirm", "part": "machine", "id": eid}], prov)
-        m = current(project, eid)
+    change = uuid.uuid4().hex                            # the id of the system.changed its first turn will publish
+    done = apply(project, store, [{"op": "confirm", "part": "machine", "id": eid}], prov)
+    m = current(project, eid)
+    lines = [f"machine {eid} confirmed", page_line(project, "the Machines page draws it solid, \"declared · not heard yet\"")]
+    extra: dict = {"change": change}
+    if runs:
         dst = state_machines.write(project, m)
         shutil.rmtree(drafts_dir(project) / eid, ignore_errors=True)
-        _starts(store, lambda d: d.__setitem__(eid, {"change": change, "prediction": None, "published": [], "at": time.time(),
-                                                     "announced": None}))
-        ready, waiting = _ready(intended_api.current(project), m)
-        try:
-            made = _publish(project, store, eid, ready, m, change) if ready else None
-        except StoreError as e:                          # the confirm stands; the prediction is said to be missing
-            made = None
-            lines.append(f"its expected effect was not published: {e}; it is confirmed, with no prediction yet")
-        e = m.get("engagement") or {}
-        when = f"at {e.get('at')} each day" if e.get("mode") == "scheduled" else f"woken by {', '.join(m.get('receives') or [])}"
-        lines += [(f"its spec, role and agent records are at {dst} (on {state_machines.DEFAULT_MODEL}, {when}); nothing was "
-                   "committed, and the host runs it from there"),
-                  (f"prediction {made} published as the Supervisor, about change {change}: judged "
-                   f"{float(m['expected_effect']['horizon_s']) / 86_400:.3g} days after its first turn" if made else
-                   "no prediction published yet: " + ("its expected edits wait for a series" if waiting else "it has no expected effect"))]
-        if made and waiting:
-            lines.append(f"{len(waiting)} edit(s) wait for a series and are published once linked")
-        extra = {"change": change, "prediction": made, "spec": str(dst)}
+        if (m.get("engagement") or {}).get("missed") != "run once":
+            store.set_agent_state(eid, last_at_fire=time.time())
+        lines.append(f"its spec, role and agent records are at {dst}, on {state_machines.runs_on(project)}; "
+                     f"{_first_run(m)}. Nothing was committed, and the host runs it from there")
+        extra["spec"] = str(dst)
+    elif here:
+        lines.append("next: the program is a worker's to write (hand_to_coordinator) unless it exists; when it does, "
+                     "set_machine adds its [[machines]] entry, in the overlay")
     else:
-        done = apply(project, store, [{"op": "confirm", "part": "machine", "id": eid}], prov)
-        if m.get("managed") == "orchestra":
-            lines.append("next: the program is a worker's to write (hand_to_coordinator) unless it exists; when it does, "
-                         "set_machine adds its [[machines]] entry, in the overlay")
-        else:
-            lines.append("nothing runs here: the declaration waits to be heard on the bus or measured")
+        lines.append("nothing runs here: the declaration waits to be heard on the bus or measured")
+    _starts(store, lambda d: d.__setitem__(eid, {"change": change, "prediction": None, "published": [], "at": time.time(),
+                                                 "announced": None, "runs": runs, "waiting": 0}))
+    lines += _publish_at_confirm(project, store, eid, m, change, extra)
+    if not here and extra.get("prediction"):            # it runs elsewhere already: judged from its confirm
+        announce_start(store, eid, source=MACHINE)
+        lines.append(f"system.changed {change} published now: it runs elsewhere, so its prediction is judged from its confirm")
+    elif not runs and extra.get("prediction"):
+        lines.append(f"its prediction is judged once its program runs: announce_change with change {change} then")
     lines += _refinement_after(project, store, prov)
     return answer(project, done, lines, machine=eid, **extra)
 
 
-def _publish(project: Project, store: AgentStore, mid: str, edits: list[dict], m: dict, change: str) -> str | None:
-    """Publish ``edits`` as the Supervisor's prediction of ``change`` and record it on the declaration."""
-    made = _predict(project, store, mid, edits, float((m.get("expected_effect") or {}).get("horizon_s") or 0), change)
+def _publish_at_confirm(project: Project, store: AgentStore, mid: str, m: dict, change: str, extra: dict) -> list[str | None]:
+    lay = intended_api.current(project)
+    ready, waiting = _ready(project, lay, mid, m)
+    _starts(store, lambda d: d[mid].update(waiting=len(waiting)))
+    try:
+        made = _publish(project, store, mid, ready, m, change) if ready else None
+    except StoreError as e:                              # the confirm stands; the prediction is said to be missing
+        return [f"its expected effect was not published: {e}; it is confirmed, with no prediction yet"]
+    extra["prediction"] = made
+    if not made:
+        return ["no prediction published yet: " + ("; ".join(waiting_line(project, store, lay, e, w) for e, w in waiting)
+                                                   if waiting else "it has no expected effect")]
+    out = [(f"prediction {made} published as the Supervisor, about change {change}: judged "
+            f"{float(m['expected_effect']['horizon_s']) / 86_400:.3g} days after its first turn")]
+    out += [waiting_line(project, store, lay, e, w) for e, w in waiting]
+    return out
+
+
+def _publish(project: Project, store: AgentStore, mid: str, pairs: list[tuple[dict, dict]], m: dict, change: str,
+             horizon_s: float | None = None) -> str | None:
+    """Publish the edits (``pairs``: as stored, as sent) as the Supervisor's prediction of
+    ``change``, and record it on the declaration and in the Supervisor's predictions."""
+    horizon = float(horizon_s or (m.get("expected_effect") or {}).get("horizon_s") or 0)
+    made = _predict(project, store, mid, [s for _, s in pairs], horizon, change)
     pid = made.get("id")
     apply(project, store, [{"op": "record_prediction", "machine": mid, "prediction": pid}],
           {"author": MACHINE, "source": MACHINE, "reason": f"the prediction published for {mid}'s change {change}"})
-    _starts(store, lambda d: d.setdefault(mid, {}).update(prediction=pid, published=[*d[mid].get("published", []),
-                                                                                    {"prediction": pid, "change": change,
-                                                                                     "edits": edits}]))
+    by_host = (starts(store).get(mid) or {}).get("runs", True)
+    store.add_prediction(MACHINE, {"id": pid, "change": change, "experiment": None, "ticket": None, "source": MACHINE,
+                                   "subject": f"machine:{mid}", "horizon_s": horizon, "at": time.time(),
+                                   "announced": f"by {mid}'s first turn (the host)" if by_host else None,
+                                   "note": f"{mid}'s expected effect"})
+    entry = {"prediction": pid, "change": change, "edits": [e for e, _ in pairs], "sent": [s for _, s in pairs],
+             "at": time.time(), "horizon_s": horizon}
+    _starts(store, lambda d: d.setdefault(mid, {}).update(prediction=pid, published=[*d[mid].get("published", []), entry]))
     return pid
 
 
 def publish_waiting(project: Project, store: AgentStore) -> list[str]:
-    """Publish the expected edits of confirmed machines that waited for a series and now have one
-    (after a ``link``, or on the host's tick); what was said."""
-    starts = store.agent_state(MACHINE).get("machine_starts") or {}
-    layer = intended_api.current(project)
+    """Publish the expected edits of confirmed machines that waited and can be published now
+    (after a ``link``, or on the host's tick); what was said. Nothing is read while no confirmed
+    machine has an edit waiting."""
+    recs = {mid: rec for mid, rec in starts(store).items() if rec.get("waiting")}
+    if not recs:
+        return []
+    lay = intended_api.current(project)
     said = []
-    for mid, rec in starts.items():
-        m = (layer.get("machines") or {}).get(mid)
+    for mid, rec in recs.items():
+        m = (lay.get("machines") or {}).get(mid)
         if m is None or m.get("state") != "declared":
             continue
-        ready, _ = _ready(layer, m, done=[x for p in rec.get("published") or [] for x in p.get("edits") or []])
+        ready, waiting = _ready(project, lay, mid, m, done=[x for p in rec.get("published") or [] for x in p.get("edits") or []])
+        left = len(waiting)
+        _starts(store, lambda d, k=mid, n=left: d[k].update(waiting=n))
         if not ready:
             continue
         change, fresh = rec["change"], bool(rec.get("announced"))
@@ -172,7 +235,7 @@ def publish_waiting(project: Project, store: AgentStore) -> list[str]:
             change = uuid.uuid4().hex
             _starts(store, lambda d, c=change, k=mid: d[k].update(next=c))
         pid = _publish(project, store, mid, ready, m, change)
-        said.append(f"prediction {pid} published for {mid}'s waiting edit(s), about change {change}"
+        said.append(f"prediction {pid} published for {mid}'s waiting edit{'' if len(ready) == 1 else 's'}, about change {change}"
                     + (" (a fresh change, announced at its next turn: its start was announced before the series was linked)"
                        if fresh else ""))
     return said
@@ -180,32 +243,35 @@ def publish_waiting(project: Project, store: AgentStore) -> list[str]:
 
 def renew(project: Project, store: AgentStore, ev: dict) -> str | None:
     """A designed machine's prediction judged ``interrupted``: the same edits recorded again as the
-    Supervisor's prediction of the change that began the new era; what to tell the Supervisor."""
+    Supervisor's prediction of the change that began the new era, for what is left of its horizon
+    (at least what one needs); what to tell the Supervisor."""
     if ev.get("type") != "orchestra.prediction.judged" or ev.get("verdict") != "interrupted":
         return None
-    starts = store.agent_state(MACHINE).get("machine_starts") or {}
-    for mid, rec in starts.items():
+    for mid, rec in starts(store).items():
         hit = next((p for p in rec.get("published") or [] if p.get("change") == ev.get("correlationid")), None)
         if hit is None:
             continue
-        new = _era_cause(project, ev.get("interrupted_by"))
+        new = intended_api.era_cause(project, ev.get("interrupted_by"))
         if new is None:
             return (f"event orchestra.prediction.judged: {mid}'s prediction {hit['prediction']} was interrupted (era "
                     f"{ev.get('interrupted_by')}), and the change that began that era cannot be read, so it was not renewed: "
                     "say so to the owner")
-        pid = _publish(project, store, mid, hit["edits"], current(project, mid), new)
+        m = current(project, mid)
+        start = rec.get("announced") if isinstance(rec.get("announced"), float) else hit.get("at") or time.time()
+        left = start + float(hit.get("horizon_s") or 0) - time.time()
+        floor, _ = min_horizon(project, store, m)
+        horizon = max(left, floor)
+        lay = intended_api.current(project)
+        ready, waiting = _ready(project, lay, mid, {"expected_effect": {"edits": hit["edits"]}})
+        if not ready:
+            return (f"event orchestra.prediction.judged: {mid}'s prediction {hit['prediction']} was interrupted by change {new}; "
+                    "none of its edits can be published in the new era (" + "; ".join(w for _, w in waiting) + "): say so")
+        pid = _publish(project, store, mid, ready, m, new, horizon_s=horizon)
         return (f"event orchestra.prediction.judged: {mid}'s prediction {hit['prediction']} was interrupted by change {new}; "
-                f"its edits were recorded again as prediction {pid}, about that change. Tell the owner in a line if they ask.")
+                f"its edits were recorded again as prediction {pid}, about that change, for what is left of its horizon: "
+                f"{horizon / 86_400:.3g} days" + (" (raised to what one needs)" if floor > left else "")
+                + ". Tell the owner in a line if they ask.")
     return None
-
-
-def _era_cause(project: Project, era: str | None) -> str | None:
-    """The id of the event that began era ``era`` (a prediction is about that change)."""
-    if not era:
-        return None
-    from orchestra.sd.eras import recorded
-    from orchestra.sd.store import ModelStore
-    return next((e.cause for e in recorded(ModelStore.for_state(project.orchestra.state_dir)) if e.id == era), None)
 
 
 def _restart(project: Project, store: AgentStore, name: str) -> None:
@@ -217,19 +283,17 @@ def _restart(project: Project, store: AgentStore, name: str) -> None:
 
 def _refinement_after(project: Project, store: AgentStore, prov: dict) -> list[str]:
     """After the owner's confirm or discard, the refinement pass over the map as it is now (§3)."""
-    from .design_passes import DUTY, has_duty, run
+    from .design_passes import run
     if prov.get("author") != OWNER and not prov.get("request"):
         return []
-    if not has_duty(project):
-        return [f"no refinement pass runs: your spec has no {DUTY} duty"]
     try:
         got = run(project, store, store.events.read(max(0, store.events.end() - 5000), limit=5000)[0], force=True)
     except Exception as e:  # noqa: BLE001 - the confirm stands without its pass
         return [f"the refinement pass did not run: {e}"]
     if not got or not got["findings"]:
         return ["the refinement pass over the map found nothing new"]
-    return [f"the refinement pass found {len(got['findings'])} thing(s) to put to the owner (read_design, refinement): "
-            + "; ".join(f["text"] for f in got["findings"][:3])]
+    return [f"the refinement pass found {plural(len(got['findings']), 'thing')} to put to the owner (read_design, "
+            "refinement): " + "; ".join(f["text"] for f in got["findings"][:3])]
 
 
 def discard(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
@@ -237,13 +301,26 @@ def discard(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     part, eid = _element(project, a)
     pending = (a.get("change") or "").strip() or None
     check_request(project, store, prov, "discard", part, eid, pending)
-    done = apply(project, store, [{"op": "discard", "part": part, "id": eid, **({"change": pending} if pending else {})}], prov)
-    said = [f"change {pending} on {part} {eid} discarded" if pending else f"{part} {eid} discarded: kept only in the history"]
+    el = (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
+    retract = not pending and el.get("state") not in (None, "proposed")
+    op = {"op": "retract", "part": part, "id": eid} if retract else \
+        {"op": "discard", "part": part, "id": eid, **({"change": pending} if pending else {})}
+    done = apply(project, store, [op], prov)
+    said = [f"change {pending} on {part} {eid} discarded" if pending else
+            f"{part} {eid} retracted: it was declared, and is kept only in the history" if retract else
+            f"{part} {eid} discarded: kept only in the history"]
     if part == "machine" and not pending:
         shutil.rmtree(drafts_dir(project) / eid, ignore_errors=True)
-    if part in ("stock", "effect") and not pending and (gone := remove_for(project, store, f"{part}:{eid}",
-                                                                             f"{part} {eid} was discarded")):
-        said.append(f"its instruments removed, entries and scripts: {', '.join(gone)}")
+        if state_machines.remove(project, eid):
+            store.drain_wakeups(eid)
+            said.append(f"retired: its records in {machines_dir(project) / eid} are removed, and the host stops its session at "
+                        "its next look (a turn already running finishes)")
+    if part in ("stock", "effect") and not pending:
+        gone, kept = remove_for(project, store, f"{part}:{eid}", f"{part} {eid} was discarded", prov)
+        if gone:
+            said.append(f"its draft instruments removed, entries and scripts: {', '.join(gone)}")
+        if kept:
+            said.append(f"kept, as the owner chose them: {', '.join(kept)} (they still record; remove one only if the owner asks)")
     said += _refinement_after(project, store, prov)
     return answer(project, done, said)
 
@@ -260,39 +337,32 @@ def wake_reason(ev: dict, project: Project | None = None) -> str | None:
     element, rid = f"{part}:{eid}", ev.get("id")
     on = f" (change {change})" if change else ""
     if control == "switch_kind":
-        kind = None
-        if project is not None:
-            try:
-                kind = (intended_api.current(project).get("machines") or {}).get(eid, {}).get("kind")
-            except Exception:  # noqa: BLE001 - the layer cannot be read now: the Supervisor reads it
-                kind = None
-        to = {"universal": "programmatic", "programmatic": "universal"}.get(kind)
-        call = (f"refine_machine with name {eid}, set_kind {to}" if to else
-                f"refine_machine with name {eid} and set_kind the other kind (read_design gives its kind)")
         return (f"event {REQUESTED} request={rid}: the owner clicked the Universal | Programmatic switch on {element} on the "
-                f"{ev.get('from') or 'page'}. Do it now: {call}, request {rid}, and a reason; then tell the owner in a line.")
+                f"{ev.get('from') or 'page'}. Do it now: switch_kind with name {eid}, request {rid}, and a reason; then tell "
+                "the owner in a line.")
     return (f"event {REQUESTED} request={rid}: the owner clicked {control} on {element}{on} on the {ev.get('from') or 'page'}. "
             f"Do it now: {control} with element {element}" + (f", change {change}" if change else "")
             + f", request {rid}, and a reason; then tell the owner in a line.")
 
 
-def announce_start(store: AgentStore, name: str) -> str | None:
+def announce_start(store: AgentStore, name: str, source: str | None = None) -> str | None:
     """At a confirmed machine's first turn, publish the ``system.changed`` its prediction is about
-    (as the machine, with the id chosen at confirm), and at a later turn the fresh change a
-    prediction published after that is about (``publish_waiting``); the change id, or None."""
-    rec = (store.agent_state(MACHINE).get("machine_starts") or {}).get(name)
+    (as the machine, with the id chosen at confirm; ``source``: as the Supervisor, for one that runs
+    elsewhere, at its confirm), and at a later turn the fresh change a prediction published after
+    that is about (``publish_waiting``); the change id, or None."""
+    rec = starts(store).get(name)
     if not rec:
         return None
     if rec.get("announced"):
         if not (nxt := rec.get("next")):
             return None
         store.events.publish("system.changed", {"machine": name, "note": f"{name}: its waiting expected edits are judged from now",
-                                                "prediction_change": nxt}, source=name, id=nxt, subject=f"machine:{name}")
+                                                "prediction_change": nxt}, source=source or name, id=nxt, subject=f"machine:{name}")
         _starts(store, lambda d: d[name].pop("next", None))
         return nxt
     store.events.publish("system.changed", {"machine": name, "note": f"{name} starts: its first turn",
                                             "prediction_change": rec["change"]},
-                         source=name, id=rec["change"], subject=f"machine:{name}")
+                         source=source or name, id=rec["change"], subject=f"machine:{name}")
     _starts(store, lambda d: d[name].update(announced=time.time()))
     return rec["change"]
 

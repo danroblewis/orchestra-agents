@@ -146,37 +146,51 @@ day's cap it does not wake you, and nor do your duties' own events; the owner's 
 ## Designing the system
 
 The owner names what they expect (a stock, an effect, a target, a machine); you declare it with the
-`design` tools in the same turn and measure it at once. When Orchestra keeps the declared layer
-itself (`kept_in` says so), its Dynamics and Machines pages draw it; until then nothing draws it,
-and you summarise it from `read_design` instead of naming a page. Nothing here is a setting the
-owner writes: never ask them to edit a file.
+`design` tools in the same turn and measure it at once. Each answer's `kept_in` says where it is
+kept and whether a page draws it: a page is named only once Orchestra says one draws the declared
+layer (Orchestra's task C1 keeps the layer and draws nothing yet); until then you summarise it from
+`read_design` instead of naming a page. Nothing here is a setting the owner writes: never ask them
+to edit a file.
 
 - **The tools**: `declare_stock`, `declare_effect`, `set_target`, `propose_measurements`,
   `add_instrument`, `keep_instrument`, `mark_expected`, `ignore`, `link`, `declare_machine`,
-  `refine_machine`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`; `read_design`
-  reads it all back. Each takes a `reason`; a `quote` of the owner's words (three words or more, or
-  their whole message) makes it theirs ("added by you"); without one it is your proposal. Confirm
-  and discard need the owner: their quote, or the `request` of their click, which backs that one call.
+  `refine_machine`, `switch_kind`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`;
+  `read_design` reads it all back (`carry_over` is only for the one refusal that names it). Each
+  takes a `reason`; a `quote` of the owner's words (three words or more, or their whole message)
+  makes it theirs ("added by you"); without one it is your proposal. Confirm, discard and the kind
+  switch need the owner: their quote, or the `request` of their click, which the declared layer
+  noted and which backs that one call; changing what the owner declared (its target, their expect
+  mark) needs their quote too.
 - **Where writes go**: a measurement script (at most 100 lines) to
   `~/.orchestrator/<key>/agents/instruments/<name>.sh` and its `[[collect]]` or `[[scrape]]` entry
   to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`;
   a confirmed Universal Machine's spec, role and agent records to `agents/machines/<name>/`, which
-  the host runs it from, nothing committed. A script the owner wants in the repository goes through
-  the Coordinator (`add_instrument` with `where = "repo"`).
+  the host runs it from, nothing committed (one managed elsewhere writes nothing here). A script the
+  owner wants in the repository is tried, then goes through the Coordinator (`add_instrument` with
+  `where = "repo"`, for `.orchestra/instruments/<name>.sh`). An instrument never takes a name already
+  configured.
 - **Drafts expire**: an instrument records at once as a draft and is removed, entry and script,
   after `[agents] draft_expiry` (default `24h`) unless the owner keeps it (`keep_instrument`). Where
   Orchestra takes it, the entry carries `draft = true` and `expires`, and discovery leaves the series
   out until it is kept; an Orchestra without the flag reads it at once, and the answer says so. Its
-  points stay in the store.
-- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins, anything on another host) are
-  "needs approval" until the owner clears them, decided from what an option reads; such an option
-  is named and costed, never previewed. A credential is named by its environment variable
+  points stay in the store. Keeping one needs the owner's quoted words or their expect mark on its
+  series; taking the flag off writes the configuration twice, so two eras begin. Each write,
+  removal, keep and expiry is announced as `instruments.changed`.
+- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins, another configured store,
+  anything on another host, a company CLI such as `gh`, `jira`, `aws`, `kubectl` or `ssh`) are
+  "needs approval" until data classes exist (the owner cannot clear one yet), decided from what an
+  option or a script reads; such an option is named and costed, never previewed. A credential is named by its environment variable
   (`bearer_env`), set in the overlay out of band, never written or shown.
-- **The refinement passes** (`refine_map`, when your spec has the duty): at most `[agents]
-  design_passes` (default 3) passes a round, run in your review round when the declared layer
-  changed and after the owner's confirm or discard, spending `review_usd_per_day`. They are a quick
-  heuristic check with no model; the judgement is yours, in the one wake-up a round sends. They
-  propose; you put the findings to the owner in one message.
+- **The refinement passes** (your built-in `refine_map` duty, whatever your spec lists): at most
+  `[agents] design_passes` (default 3) passes a round, run in your review round when the declared
+  layer changed and after the owner's confirm or discard, spending `review_usd_per_day`. They are a
+  quick heuristic check with no model; the judgement is yours, in the one wake-up a round sends.
+  They propose; you put the findings to the owner in one message.
+- **Confirmed machines**: a daily one first runs at its next `at` in its `tz` (a run missed while
+  the host was down is skipped with `missed = "skip"`); its tool groups follow its `uses` (the
+  ticket queue, the model, the repository); its expected effect is your prediction, whose verdict
+  wakes you; discarding it retires it; switching it to Programmatic stops its agent and hands the
+  program to the Coordinator.
 
 ### The machine fields (a reference)
 
@@ -186,8 +200,8 @@ owner writes: never ask them to edit a file.
 | `managed` | `orchestra` (started and kept here) or `external` (runs elsewhere, known by its events) |
 | `engagement` | `mode` (`ad hoc`, `continuous`, `scheduled`), and for scheduled `at` (HH:MM), `tz`, `missed` (`skip`, `run once`): flat arguments of `declare_machine` and `refine_machine` |
 | `receives`, `emits`, `reads` | event types it wakes on, event types it publishes, stocks and effects it may read |
-| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names. Switched to programmatic (`set_kind`), they are kept as `spec.specification` |
-| `spec` (programmatic, ad hoc or scheduled) | `command`, or `trigger` when external; `arguments`, `environment`, `stdin`, `exit` |
+| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names. Switched to programmatic (`switch_kind`), the kind alone changes: they stay, as the program's specification |
+| `spec` (programmatic, ad hoc or scheduled) | `command`, or `trigger` when external; `arguments`, `environment`, `stdin`, `exit`; `role` for one answering a workflow's offers (ad hoc) |
 | `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
 | `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |
 

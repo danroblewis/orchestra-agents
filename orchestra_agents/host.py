@@ -38,7 +38,7 @@ from . import (
     tooling,
 )
 from .builtins import ROLES as BUILTIN_ROLES
-from .clock import due_at, parse_interval
+from .clock import daily, next_at, parse_interval
 from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer, token_file
@@ -417,18 +417,19 @@ class AgentHost:
 
     def _announce(self, source: str, role: str, model: str | None = None) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
-        mode and what it listens for): an AI agent, on which harness and model, engaged how. A
-        resident agent is continuous (its session is always up; a schedule is one of its wake
-        rules), a per-ticket or ephemeral one ad hoc. Once per source in the host's lifetime
-        (``reviewer/1`` is one machine instance however many tickets it reviews), again only when
-        the harness or the model changed."""
+        mode and what it listens for): an AI agent, on which harness and model, engaged how. One
+        run on an interval or at a daily time is scheduled; any other resident one is continuous
+        (its session is always up); a per-ticket or other ephemeral one is ad hoc. Once per source
+        in the host's lifetime (``reviewer/1`` is one machine instance however many tickets it
+        reviews), again only when the harness or the model changed."""
         model = model if model is not None else self.cfg.model
         key = (source, self.harness.name, model)
         if key in self._announced:
             return
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        mode = "continuous" if agent is not None and agent.resident else "ad hoc"
+        mode = ("scheduled" if agent is not None and (agent.kind == "scheduled" or agent.every or agent.at) else
+                "continuous" if agent is not None and agent.resident else "ad hoc")
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
                                                           "kind": "agent", "role": role,
                                                           "harness": self.harness.name, "model": model},
@@ -498,9 +499,17 @@ class AgentHost:
                     self.store.add_wakeup(name, f"scheduled check-in (every {agent.every})")
                 if st.get("next_scheduled_at") != last + secs:
                     self.store.set_agent_state(name, next_scheduled_at=last + secs)
-            if agent.at and due_at(agent.at, st.get("last_at_fire"), now_t):
-                self.store.set_agent_state(name, last_at_fire=now_t)
-                self.store.add_wakeup(name, f"scheduled daily session ({agent.at})")
+            if agent.at:
+                if (what := daily(agent.at, st.get("last_at_fire"), now_t, agent.tz, agent.missed)) is not None:
+                    self.store.set_agent_state(name, last_at_fire=now_t)
+                    if what == "fire":
+                        self.store.add_wakeup(name, f"scheduled daily session ({agent.at}{' ' + agent.tz if agent.tz else ''})")
+                    else:
+                        log(f"{name}: its {agent.at} run was missed while the host was down, and is skipped (missed = skip)")
+                    st = {**st, "last_at_fire": now_t}
+                nxt = next_at(agent.at, st.get("last_at_fire"), now_t, agent.tz)
+                if st.get("next_scheduled_at") != nxt:
+                    self.store.set_agent_state(name, next_scheduled_at=nxt)
 
     def _spawn(self, table: dict, key: str, fn, *args) -> None:
         th = threading.Thread(target=fn, args=args, daemon=True, name=key)

@@ -551,15 +551,20 @@ machine's implementation, not official), `machines/<name>/` (a confirmed Univers
 `machine.toml`, `role.md`, `role.json` and `agent.json`, read by `machine_spec.load_all`,
 `roles.all_roles`, `org_store.all_agents` and the role's prompt beside `.orchestra/`, the
 repository's winning on a name; nothing is committed, `state_machines.py`), `trials/` (a script's
-trial round) and `intended/` (`d0001.json` …, `journal.jsonl`: the stand-in for Orchestra's declared
-layer, used only while the installed Orchestra's endpoint has no `/intended`, `intended_api.py`).
-**Carried over once**: on the first call to Orchestra's own layer, a stand-in journal is replayed
-into it call by call with each call's provenance (less `via` and `at`, which the store sets) while
-Orchestra's is empty, and `intended/` is renamed `intended.replayed.<time>`; when both hold
-declarations every design call is refused until the owner says which to keep. Orchestra's layer is
-written only through its host's events endpoint (`POST /intended`, with the project's token;
-Orchestra's rule 5 as amended), so with it installed and its host down a design call is refused.
-The Supervisor's agent state also keeps the turn its tools record in their provenance (`turn`),
+trial round) and `intended/` (`d0001.json` …, `journal.jsonl`, `requests.jsonl`: the stand-in for
+Orchestra's declared layer, used only while the installed Orchestra has none, `intended_api.py`;
+the requests it notes as Orchestra's web server notes them). **Carried over once**
+(`intended_carry.py`): on the first call to Orchestra's own layer, a stand-in journal is replayed
+into it call by call with each call's provenance (less `via` and `at`, which the store sets), under
+one file lock (`intended.carry.lock`), the last call replayed recorded (`intended/carried.json`) so
+a replay that stopped resumes there; then `intended/` is renamed `intended.replayed.<time>`. When
+Orchestra's layer already holds declarations that did not come from the replay, every design call
+is refused until the owner says which to keep, and the Supervisor's `carry_over` (on their quoted
+words) finishes the replay or abandons it (`intended.abandoned.<time>`). Whether Orchestra keeps
+the layer is asked of its endpoint (`GET /intended`), or, with no endpoint answering, of the
+documented `project.intended`. Orchestra's layer is written only through its host's events endpoint
+(`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with it installed
+and its host down a design call is refused. The Supervisor's agent state also keeps the turn its tools record in their provenance (`turn`),
 its draft instruments (`drafts`), what each measurement option would run (`measure_targets`), the
 request ids already answered (`requests_answered`), the changes its confirmed machines' first turns
 announce and the predictions published about them (`machine_starts`) and the refinement pass's
@@ -747,62 +752,117 @@ does not wait to see them act (except `restart_machine`, which watches the launc
 
 **Designing the system** (tool group `design`, the Supervisor's alone, checked in the handler;
 `design.py` and `design_dynamics.py`, `design_instruments.py`, `design_machines.py`,
-`design_confirm.py`, `design_passes.py`, `state_machines.py`; `prompts/design.md`; Orchestra's
-`machine-design.md`). The owner talks; the Supervisor declares, measures, drafts and refines; the
-declared layer is reached only through `intended_api.layer`: Orchestra's (its host's `POST
-/intended`, `GET /intended`, `GET /intended/design`), whose Dynamics and Machines pages draw it, or
-else the stand-in in the state directory, which no page draws: then no answer names a page
-(`design.page_line`), and the Supervisor summarises from `read_design`. Every tool takes a
-`reason`, records provenance itself (`{author, source, turn, message, quote, reason, request}`,
-never `via` or `at`, which the store sets: the turn and the owner's message that began it, which
-the host keeps; a `quote` must be the owner's words in that message, at least three words or the
-whole message, on word boundaries, and none on a wake-up), writes only through the layer and
-`config_edit`, calls no model, and answers with the change ids. A call with a quote is the owner's
-(`author: owner`). **A request-backed call is the Supervisor's answer to the owner's request**:
-`author: supervisor` with `provenance.request` the id of the owner's `orchestra.intent.requested`,
-which must name the same control, element and pending change, and backs one call only. Every
-`confirm` and `discard` (any part, any pending change) needs the owner's quote or such a request.
+`design_confirm.py`, `design_passes.py`, `state_machines.py`, `intended_carry.py`;
+`prompts/design.md`; Orchestra's `machine-design.md`). The owner talks; the Supervisor declares,
+measures, drafts and refines; the declared layer is reached only through `intended_api.layer`:
+Orchestra's (its host's `POST /intended`, `GET /intended`, `GET /intended/design`), or else the
+stand-in in the state directory. **No answer names a page until Orchestra says one draws the
+layer** (`intended_api.drawn`: a `draws` field in `GET /intended/design`, asked of the coordinator;
+Orchestra at C1 keeps the layer and its pages draw nothing of it yet, that is C2's and C3's): until
+then `design.page_line` adds nothing, `kept_in` alone says where it is kept, and the Supervisor
+summarises from `read_design`. Every Orchestra name the tools read that Orchestra does not document
+yet (the draft flag on a collector, discovery's minimum era, an era's cause, a series' key) is read
+in `intended_api.py` alone, each with what to do when it is absent.
+
+Every tool takes a `reason`, records provenance itself (`{author, source, turn, message, quote,
+reason, request}`, never `via` or `at`, which the store sets: the turn and the owner's message
+that began it, which the host keeps, whole or, past Orchestra's 4000 characters, the part around
+the quote, with anything secret-looking hidden; a `quote` must be the owner's words in that
+message, at least three words or the whole message, on word boundaries, and none on a wake-up),
+writes only through the layer and `config_edit`, calls no model, and answers with the change ids.
+A call with a quote is the owner's (`author: owner`). **A request-backed call is the Supervisor's
+answer to the owner's request**: `author: supervisor` with `provenance.request` the id of an
+`orchestra.intent.requested` from `owner` that the layer noted (Orchestra's web server notes each
+one it publishes; `GET /intended/design` lists those unanswered; a bare event on the bus is not
+one), naming the same control, element and pending change, and backing one call only. Every
+`confirm`, `discard` and `switch_kind` needs the owner's quote or such a request; changing what the
+owner declared (a target on it, unmarking their expect mark, retracting it) needs their quote or
+their request, as Orchestra's `guard_owners` says.
+
 The tools: `declare_stock`, `declare_effect`, `set_target` (`compare`: below, above, within),
-`propose_measurements` (options in order with `cost`, `caveat`, and the `url`, `command` or `series`
-each would read, kept with the Supervisor; **clearance from facts**: a `source` option, one naming a
-company system, or one reaching any host but this machine and the project's own stores and scrape
-targets is "needs approval", never read or previewed, whatever the model says; a secret-looking url
-or command is refused; `bearer_env` names a credential's variable, never its value),
-`add_instrument` (runs only what its option proposed; refused for `existing_series`, for "needs
-approval", for a script reaching another host; a script of at most 100 lines tried as Orchestra runs
-it, written to `instruments/`, its `[[collect]]`/`[[scrape]]` entry in the overlay, one act, with
-Orchestra's `draft = true` and `expires` when its collector spec has them, else said plainly;
-`simulated = true` for a placeholder, removed once a real option records; `where = repo` hands it to
-the Coordinator), `keep_instrument` (the flag taken off the entry and the option chosen, one act; an
-unkept draft is removed after `draft_expiry` by the host's tick, each on its own), `mark_expected`,
+`propose_measurements` (options in order with `cost`, `caveat`, and the `url`, `command` or
+`series` each would read, kept with the Supervisor; **clearance from facts**: a `source` option, or
+one naming a company system, or one reaching anything but this machine, the project's `[metrics]`
+store and Orchestra's own endpoint (a URL or `host:port` elsewhere, a bare dotted host name, a host
+given to `-h`/`--host`, `ssh`, `nc` or `psql`, a company CLI, a `curl`/`wget` whose URL comes from an
+environment variable or has no scheme) is "needs approval", never read or previewed, whatever the
+model says; a `[[sources]]` store or a scrape target off this machine is another system and needs
+approval too; until data classes exist the owner cannot clear one, and the answers say so; a
+secret-looking url or command is refused; `bearer_env` names a credential's variable, never its
+value), `add_instrument` (runs only what its option proposed; refused for `existing_series`, for
+"needs approval", for a script naming or reaching a company system, and for a name an entry in the
+repository or the overlay (or a draft) already has, so expiry never touches the owner's
+instrument; a script of at most 100 lines tried as Orchestra runs it, written to `instruments/`, its
+`[[collect]]`/`[[scrape]]` entry in the overlay, one act, with Orchestra's `draft = true` and
+`expires` when its collector spec has them, else said plainly; `simulated = true` for a
+placeholder, removed once a real option records; `where = repo` tries it the same way and hands a
+script that works to the Coordinator for `.orchestra/instruments/<name>.sh`, through a ticket, a
+review and the gate: **a deviation** from `machine-design.md` §2.1, which drafts a pull request in
+the outbox for the owner, because the agents make no pull request (A5's guard) and a worker's
+ticket is how code reaches the repository here), `keep_instrument` (backed by the owner's quote or
+their expect mark on the instrument's series or its element's linked stock; the flag taken off the
+entry, written twice, so two eras begin until `config_edit` drops a field in one write, and the
+option chosen; an unkept draft is removed after `draft_expiry` by the host's tick, each on its
+own; every write, removal, keep and expiry announced as `instruments.changed`), `mark_expected`,
 `ignore`, `link` (a manual binding, origin declared; publishes a confirmed machine's edits that
 waited for it), `declare_machine` (the envelope Orchestra checks, engagement as flat `mode`, `at`,
 `tz`, `missed`, and the opaque `spec`: Universal `invariants`, `steps`, `uses`, said in no AI terms;
-Programmatic fields by mode; ids `^[a-z][a-z0-9_]{1,40}$`; a Universal one drafted in `drafts/` in
-the format it runs from), `refine_machine` (flat changes applied all or none, each a change with
-the value it replaced; unquoted, or on a confirmed machine even quoted, a pending change; `set_kind`
-keeps the Universal description as `spec.specification` and back; with the request of the owner's
-switch click it applies at once on the stand-in, where Orchestra at C1 keeps it pending, the
-coordinator's open question), `declare_event`, `declare_expected_effect` (SPEC's `expect` kinds
-through Orchestra's grammar; a declared stock or `appears` end with no series waits; the horizon at
-least three runs by the schedule or by the observed rate of what wakes it, and at least what
-discovery needs to see an era), `confirm` and `discard` (for a Universal Machine, in this order:
-the confirm, its spec, role and agent records written to `machines/` and run from there with no
-`create_role` or `create_agent`, then its expected effect published as the Supervisor's
-`orchestra.prediction.made`, subject `machine:<name>`, about a change id chosen first, which the
-machine's first turn announces as `system.changed`, and recorded in a second call; a confirmed
+Programmatic fields by mode, `role` for an offer-driven one, and the Universal fields as its
+specification; ids `^[a-z][a-z0-9_]{1,40}$`; a Universal one managed here drafted in `drafts/` in
+the format it runs from; a use no tool group covers is said), `refine_machine` (flat changes
+applied all or none, each a change with the value it replaced: `add_`/`remove_` receives, emits,
+reads, tags, invariants and uses, `steps`, the engagement, and `set_field` for a text field only;
+unquoted, or on a confirmed machine even quoted, a pending change), `switch_kind` (the Universal |
+Programmatic switch: `{set: {kind}}` and nothing else, so Orchestra applies it at once in answer to
+the owner's `switch_kind` request, also on a confirmed machine; the spec is kept; a confirmed
+Universal Machine switched to Programmatic has its agent stopped and its records removed, and the
+program is handed to the Coordinator; switched back, it runs as an agent again),
+`declare_event`, `declare_expected_effect` (flat edits, each with its `kind`, checked here with an
+error naming the fields it needs, then through Orchestra's grammar; on a confirmed machine a
+pending change, published once confirmed; the horizon at least three runs by the schedule or by the
+observed rate of what wakes it, and at least what discovery needs to see an era), `confirm` and
+`discard`, and `read_design` (group `observe`: the layer's summary plus each machine's fields and
+each event type's declared and heard publishers and listeners).
+
+**Publishing a draft prediction.** An edit names keys (or declared ids, read through their
+`found_as`); the judge reads the era's ids, so each `stock`, `from` and `to` is resolved to the
+current model's id when it is published (`intended_api.resolve`, over the newest saved version
+through `ModelStore`), and an edit whose key has no id there waits, saying why ("not linked to a
+discovered stock yet: published once you say which one it is", or "not in the current model");
+with Orchestra's layer, Orchestra's own verdict (its "unpublishable draft" items) is read as well.
+`publish_waiting`, on a link and on the host's minute tick, reads nothing while no confirmed machine
+has an edit waiting.
+
+**Confirm**, by who runs it: one managed elsewhere starts nothing and writes nothing here, its
+prediction published and its change announced at the confirm; a Universal one managed here, in
+this order: the confirm, its spec, role and agent records written to `machines/` and run from there
+with no `create_role` or `create_agent` (its role's tool groups from `spec.uses`, `escalate` with
+them; a scheduled one reads its receives each run, listed in what it announces it listens for; a
+daily one's last run set to the confirm so it first runs at its next `at` in its `tz`, unless
+`missed` is `run once`; a run missed while the host was down is skipped with `missed = "skip"`),
+then its expected effect published as the Supervisor's `orchestra.prediction.made`, subject
+`machine:<name>`, about a change id chosen first, which the machine's first turn announces as
+`system.changed`, recorded on the declaration in a second call and in the Supervisor's own
+predictions, so a verdict wakes it (`verdicts.py`); a Programmatic one managed here waits for its
+program (a worker's), and its change is announced with `announce_change` once it runs. A confirmed
 pending change rewrites the records and restarts a resident session; a prediction an era
-interrupts is renewed with the change that began the new era, `verdicts.py`; discarding a stock or
-effect removes its instruments), and `read_design` (group `observe`: the layer's summary plus each
-machine's fields and each event type's declared and heard publishers and listeners). The owner's
-page request, `orchestra.intent.requested`, wakes the Supervisor only when its source is `owner` (a
-fixed wake-up, never capped). The `refine_map` duty, when the Supervisor's spec has it (a new
-project's starting spec does): the review round runs the refinement passes, a quick heuristic check
-with no model, when the declared layer changed, and they run again after the owner's confirm or
-discard is answered (the findings in that answer); the first pass runs every check of
-`machine-design.md` §3, each later one (at most `design_passes`) follows the neighbours the one
-before proposed to redraft, and it stops when one finds nothing new; it wakes the Supervisor once
-with one batched proposal; it proposes, never declares.
+interrupts is renewed with the change that began the new era, for what is left of its horizon (at
+least what one needs). **Discard** of a proposal removes it, kept only in the history; of a declared
+element it is `retract`, backed by the owner's discard request or quote, and a declared machine is
+then retired (its records removed, its session stopped by the host's next look); discarding a stock
+or effect removes its unkept drafts and simulated placeholders and names the instruments the owner
+kept, which stay.
+
+The owner's page request, `orchestra.intent.requested`, wakes the Supervisor only when its source
+is `owner` (a fixed wake-up, never capped). **The `refine_map` duty is built into the plugin**
+(`prompts/duties/refine_map.md` is part of the Supervisor's fixed prompt, like `operator.md`), so
+every Supervisor has it whatever its spec lists: the review round runs the refinement passes, a
+quick heuristic check with no model, when the declared layer changed, and they run again after the
+owner's confirm or discard is answered (the findings in that answer); the first pass runs every
+check of `machine-design.md` §3 (an expected part is matched by its key, `name{labels}` or `a -> b
+by counter`, against the last saved versions), each later one (at most `design_passes`) follows the
+neighbours the one before proposed to redraft, and it stops when one finds nothing new; it wakes
+the Supervisor once with one batched proposal; it proposes, never declares.
 
 ## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

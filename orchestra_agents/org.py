@@ -27,7 +27,7 @@ from pathlib import Path
 from orchestra.config import ConfigError
 
 from .builtins import ROLES as BUILTIN_ROLES
-from .clock import now, parse_interval
+from .clock import now, parse_interval, zone
 from .config import Project
 from .protocol import (
     ACCEPTED,
@@ -185,6 +185,9 @@ class AgentDef:
     wake_on: list[str] = field(default_factory=list)
     every: str | None = None
     at: str | None = None
+    tz: str | None = None                 # the zone `at` is in (the host's own when None)
+    missed: str | None = None             # a daily run missed while the host was down: skip, or run once (the default)
+    reads_events: list[str] = field(default_factory=list)   # what it reads each run without being woken by it (a scheduled one)
     description: str = ""
     created_by: str = "supervisor"
     created_at: str = field(default_factory=now)
@@ -227,6 +230,15 @@ class AgentDef:
                 raise OrgError(f"every: {e}")
         if self.at is not None and not re.fullmatch(r"\d{2}:\d{2}", self.at):
             raise OrgError("at must be HH:MM")
+        if self.tz is not None or self.missed is not None:
+            if self.at is None:
+                raise OrgError("tz and missed go with a daily `at`")
+            try:
+                zone(self.tz)
+            except ConfigError as e:
+                raise OrgError(str(e)) from None
+            if self.missed not in (None, "skip", "run once"):
+                raise OrgError("missed is skip or run once")
         if self.kind == "ad_hoc" and (self.every or self.at):
             raise OrgError("an ad_hoc agent runs when briefed or on a wake_on event; it has no `every` or `at`")
         if self.kind == "ad_hoc" and self.session != "ephemeral":
@@ -241,6 +253,9 @@ class AgentDef:
         d = asdict(self)
         for k in ("builtin", "triggers", "emits"):
             d.pop(k, None)
+        for k in ("tz", "missed", "reads_events"):         # written only when set
+            if not d.get(k):
+                d.pop(k, None)
         return d
 
     @classmethod

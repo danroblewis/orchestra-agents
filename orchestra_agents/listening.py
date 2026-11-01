@@ -3,7 +3,8 @@ Each agent's announcement (``orchestra.machine.started``, host.py) lists them, a
 declaration for the Machines page before it runs (web.py), so Orchestra draws every subscription
 to the agent that reacts, never to the host, which is no machine (events.py):
 
-- its own ``wake_on``, each entry's type without its filter;
+- its own ``wake_on``, each entry's type without its filter, and what a scheduled agent reads each
+  run without being woken by it (``reads_events``: a designed machine's receives, read at its time);
 - the answers to its own requests, ``request.done`` and ``request.refused``: the task system
   publishes them as the asker (its decision D17), and every agent the host wakes asks for a
   snapshot as itself (tooling.snapshot), as its tools do. A per-ticket role (worker, reviewer) is
@@ -37,7 +38,7 @@ def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | lis
     if groups is None:
         groups = [g for r in agent.roles if agent.builtin and r in BUILTIN_ROLES for g in BUILTIN_ROLES[r].tools]
     per_ticket = agent.builtin and not agent.resident
-    out = {w.split(":")[0] for w in agent.wake_on}
+    out = {w.split(":")[0] for w in agent.wake_on} | set(agent.reads_events or [])
     if not per_ticket:                                           # a woken agent asks the task system as itself
         out |= {DONE, REFUSED}
     if agent.name == SUPERVISOR:

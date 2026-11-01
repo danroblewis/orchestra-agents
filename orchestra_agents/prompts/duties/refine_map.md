@@ -1,3 +1,5 @@
+### Your built-in duty `refine_map`
+
 Keep the event map coherent while the owner designs the system (the owner: "an AI pass should
 probably run a few times, try to make sure no events have publishers but no subscribers, make sure
 the purposes of events aren't duplicated, make sure that events aren't excessively deduplicated and

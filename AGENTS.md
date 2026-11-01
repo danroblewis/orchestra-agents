@@ -68,7 +68,9 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
    `drafts/` (a drafted machine's implementation, not official), `machines/` (a confirmed Universal
    Machine's spec, role and agent records, which the host runs it from) and `intended/`, the
    stand-in for Orchestra's declared layer until Orchestra has its own (`intended_api.py`), renamed
-   `intended.replayed.<time>` once its calls are carried into Orchestra's. The organisation's custom records are in the repository under `.orchestra/`.
+   `intended.replayed.<time>` once its calls are carried into Orchestra's, or
+   `intended.abandoned.<time>` when the owner drops them (`intended_carry.py`, under
+   `intended.carry.lock`). The organisation's custom records are in the repository under `.orchestra/`.
    Nothing else touches a backend or those files directly.
 10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
     write a person has is the Supervisor chat (a page's confirm, discard or kind switch changes

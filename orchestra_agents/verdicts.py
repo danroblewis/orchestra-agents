@@ -25,7 +25,9 @@ VERDICT_TOOLS = ("model",)
 def reason(ev: dict, rec: dict) -> str:
     v = ev.get("verdict") or "?"
     where = f"ticket {rec['ticket']}, " if rec.get("ticket") else ""
-    return (f"event {JUDGED}: your prediction {rec.get('id')} ({where}experiment {rec.get('experiment')}) of change "
+    what = f"{rec['subject']}, {rec.get('note') or 'a designed machine'}" if rec.get("subject") and not rec.get("experiment") \
+        else f"{where}experiment {rec.get('experiment')}"
+    return (f"event {JUDGED}: your prediction {rec.get('id')} ({what}) of change "
             f"{rec.get('change')} was judged: {v} ({VERDICTS.get(v, 'see the numbers')}). read_predictions with id "
             f"{rec.get('id')} gives the numbers it was judged by.")
 

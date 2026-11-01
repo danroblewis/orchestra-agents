@@ -119,6 +119,10 @@ worker's, through the Coordinator (Orchestra's `docs/machines.md`).
 The Supervisor's `design` tools are how you design the system by talking: it declares the stocks,
 effects, targets and machines you name, measures them at once, drafts and refines machines as you
 talk, and starts one only when you confirm it (Orchestra's `docs/proposals/machine-design.md`).
+With the Orchestra this package pins, nothing is drawn: the declarations are kept in the agents'
+state directory and the Supervisor reads them back to you (`read_design`). Orchestra's declared
+layer (its task C1) keeps them in Orchestra instead, and the Dynamics and Machines pages draw them
+once Orchestra's C2 and C3 land; until a page says it draws them, the Supervisor names no page.
 
 The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
 processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
@@ -127,8 +131,9 @@ tools: which roles the AI agents fill, the kind of work, the gate's tests, the c
 `[[machines]]`, `[[collect]]` and `[[scrape]]` entries, and restarting a program. A change for the
 team is a commit of `orchestra.toml` alone on the base branch with the reason; one for you alone
 (and every instrument it adds while designing) goes in your private overlay and is committed
-nowhere; either way a `config.changed` event goes on the bus and it tells you in the chat what it
-changed and why. It never changes code: that is a
+nowhere. A change of an instrument (one added, kept, removed or expired) is announced on the bus as
+`instruments.changed`, any other as `config.changed`, and it tells you in the chat what it changed
+and why. It never changes code: that is a
 worker's, through a ticket, a review and the merge gate.
 
 With the task plugin in the same `orchestra web`, a ticket's drawer lists every agent turn that
@@ -165,6 +170,11 @@ and `demo/dummy.toml` as a worked example.
 
     uv run python -m pytest -q         # about four minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
+
+The design tools' tests run on both declared layers: the agents' stand-in always, and Orchestra's
+own only when an Orchestra with it is laid over this environment (skipped otherwise):
+
+    uv run --with-editable ~/orchestra-wt/C1 python -m pytest tests/unit/test_design_*.py tests/e2e/test_design_e2e.py
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
 protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`

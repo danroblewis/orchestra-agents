@@ -82,11 +82,11 @@ def machines_doc() -> str:
 
 def _fill(project: Project, text: str) -> str:
     """Placeholders: ``{operator}`` (the Supervisor's part shared by both kinds of work: seeing the
-    system and fixing its setup, prompts/operator.md, then designing it, prompts/design.md), then the
-    project's settings."""
+    system and fixing its setup, prompts/operator.md, then designing it, prompts/design.md, with its
+    built-in refine_map duty, prompts/duties/refine_map.md), then the project's settings."""
     if "{operator}" in text:
         text = text.replace("{operator}", "\n\n".join((PROMPTS_DIR / f).read_text(encoding="utf-8").strip()
-                                                       for f in ("operator.md", "design.md")))
+                                                       for f in ("operator.md", "design.md", "duties/refine_map.md")))
     return (text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
             .replace("{machines_doc}", machines_doc()))
 

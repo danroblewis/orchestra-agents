@@ -22,7 +22,7 @@ from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
 WHY = "the owner asked for it in the chat just now"
-CORE = intended_api.has_core()
+CORE = intended_api.core_installed()
 
 
 def git(repo, *args):
@@ -49,7 +49,8 @@ def layer_kind(request, monkeypatch):
     if request.param == "core" and not CORE:
         pytest.skip("the installed Orchestra has no declared layer (task C1): run with --with-editable ~/orchestra-wt/C1")
     if request.param == "standin" and CORE:
-        monkeypatch.setattr(intended_api, "has_core", lambda: False)
+        monkeypatch.setattr(intended_api, "has_core", lambda *a, **k: False)
+    intended_api._cache.clear()
     monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
     monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
     return request.param
@@ -113,8 +114,33 @@ def changes(project) -> list[dict]:
 
 
 def request(store, control: str, element: str, change: str | None = None, source: str = "owner") -> str:
-    """The owner's click on a page, as Orchestra's web server publishes it; its id."""
+    """The owner's click on a page, as Orchestra's web server publishes and notes it (C1's
+    ``requests.publish``; the stand-in's ``note_request``); its id. From any other ``source``, a
+    bare event on the bus, which nothing notes."""
     part, _, eid = element.partition(":")
-    ev = store.events.publish("orchestra.intent.requested", {"control": control, "part": part, "id": eid, "change": change,
-                                                            "from": "Machines page"}, source=source, subject=element)
-    return ev["id"]
+    body = {"control": control, "part": part, "id": eid, "change": change, "from": "Machines page"}
+    if source != "owner":
+        return store.events.publish("orchestra.intent.requested", body, source=source, subject=element)["id"]
+    project = store.project
+    if isinstance(intended_api.layer(project), intended_api.Core):
+        from orchestra.events import Events as CoreEvents
+        from orchestra.sd.intended import requests
+        return requests.publish(project.orchestra.intended, CoreEvents.for_project(project.orchestra), body)["id"]
+    from orchestra_agents.intended_standin import StandIn
+    return StandIn(project).note_request(body)["id"]
+
+
+def bare_request(store, control: str, element: str) -> str:
+    """An ``orchestra.intent.requested`` from ``owner`` put on the bus by hand: not noted."""
+    part, _, eid = element.partition(":")
+    return store.events.publish("orchestra.intent.requested", {"control": control, "part": part, "id": eid, "change": None,
+                                                              "from": "Machines page"}, source="owner", subject=element)["id"]
+
+
+def model_with(project, stocks: dict[str, tuple[str, dict]], flows: list[tuple[str, str | None, str | None]] = ()):
+    """Save a discovered model version: each stock ``id: (series name, labels)``, each flow ``(id, from, to)``."""
+    from orchestra.sd.model import Flow, Model, SeriesRef, Stock
+    from orchestra.sd.store import ModelStore
+    m = Model("m", "m", stocks=[Stock(sid, sid, series=SeriesRef(name, labels)) for sid, (name, labels) in stocks.items()],
+              flows=[Flow(fid, fid, a, b) for fid, a, b in flows])
+    return ModelStore.for_state(project.orchestra.state_dir).save(m, "for the test")

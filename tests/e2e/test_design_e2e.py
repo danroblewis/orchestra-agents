@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 from conftest import agents_project
-from design_fixtures import CORE, core_endpoint, journal
+from design_fixtures import CORE, core_endpoint, journal, model_with
 from fake_tasks import FakeTasks
 
 from orchestra_agents import intended_api, prompting
@@ -104,6 +104,8 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
     say, project, repo = chat
     head = git(repo, "rev-parse", "HEAD")
     why = "the owner's words this turn"
+    model_with(project, {"s4": ("coordinator_queue", {"instrument": "tasks"}), "s5": ("tasks_tickets", {"state": "DONE"})},
+               flows=[("tasks_done_rate", "s4", "s5")])                       # seeded model history: keys and ids differ
 
     turn1 = say(TURN1, [
         {"tool": "declare_stock", "args": {"name": "Features", "unit": "features", "near": "DONE",
@@ -130,6 +132,7 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
     turn3 = say(TURN3, [
         {"tool": "read_design", "args": {}},
         {"tool": "read_events", "args": {"minutes": 60}},
+        {"tool": "read_model", "args": {}},
         {"tool": "declare_machine", "args": {
             "name": "Feature Count Improver", "kind": "universal", "description": "Improves how many features get delivered a day",
             "mode": "continuous", "receives": ["session.settled", "task.reported"], "emits": ["work.improvement_proposed"],
@@ -139,13 +142,25 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
             "guesses": ["mode", "receives[0]", "receives[1]"],
             "quote": "Create a new Universal Machine called Feature Count Improver.", "reason": why}},
         {"tool": "declare_expected_effect", "args": {"machine": "feature_count_improver", "horizon": "3d", "reason": why,
-                                                     "expect": [{"flow": "tasks_done_rate", "factor": 1.2},
-                                                                {"stock": "features", "rises": True}]}}])
+                                                     "expect": [{"kind": "factor", "flow": "tasks_done_rate", "factor": 1.2},
+                                                                {"kind": "appears", "to": "coordinator_queue"},
+                                                                {"kind": "rises", "stock": "features"}]}}])
     m = intended_api.current(project)["machines"]["feature_count_improver"]
     assert m["state"] == "proposed" and m["provenance"]["author"] == "owner" and m["engagement"] == {"mode": "continuous"}
     assert m["receives"] == ["session.settled", "task.reported"]
-    assert any("woken by session.settled, task.reported" in line for line in turn3[2]["said"])     # the cost as drafted
-    assert m["expected_effect"]["edits"][1] == {"stock": "features", "rises": True}      # it waits for a series
+    declared = turn3[3]["said"]
+    assert any("woken by session.settled, task.reported" in line and "a day on the claude_code harness, model haiku" in line
+               for line in declared)                                                    # the cost as drafted
+    assert any("no listener yet for work.improvement_proposed" in line for line in declared)
+    assert m["expected_effect"]["edits"][1] == {"from": None, "to": "coordinator_queue", "appears": True}   # a key, kept as one
+    assert m["expected_effect"]["edits"][2] == {"stock": "features", "rises": True}      # it waits for a series
+    effect = turn3[4]["said"]
+    assert any("Features is not linked to a discovered stock yet" in line for line in effect)
+    assert not any("coordinator_queue" in line for line in effect)               # in the model: publishable once confirmed
+    from orchestra_agents import design_machines
+    lay = intended_api.current(project)
+    assert design_machines.publishable(project, lay, "feature_count_improver", m["expected_effect"]["edits"][1])[0] == {
+        "from": None, "to": "s4", "appears": True}                               # the era's id, when it is published
 
     turn4 = say(TURN4, [{"tool": "refine_machine", "args": {
         "name": "feature_count_improver", "quote": "watch the ticket queue for DONE and REJECTED tickets, and the Merge Gate",

@@ -179,8 +179,11 @@ def _s(v: str) -> str:
 
 def render(spec: MachineSpec) -> str:
     """``machine.toml`` for a spec (the duty tools rewrite it whole)."""
-    lines = [f"# The machine `{spec.name}`: its contract. Edited by its own duty tools (each change a commit with its",
-             "# reason) or by hand; read by orchestra-agents, never by Orchestra.",
+    head = ([f"# The machine `{spec.name}`: its contract. Edited by its own duty tools (each change a commit with its",
+             "# reason) or by hand; read by orchestra-agents, never by Orchestra."] if spec.root == ROOT else
+            [f"# The machine `{spec.name}`: its contract, the Supervisor's, kept in the state directory and never committed;",
+             "# written again from its declaration when the owner confirms a change; read by orchestra-agents, never by Orchestra."])
+    lines = [*head,
              f"name = {_s(spec.name)}"]
     for k in ("description", "engagement", "model", "created_by"):
         v = getattr(spec, k)
@@ -205,7 +208,14 @@ def render(spec: MachineSpec) -> str:
 
 
 def prompt_part(spec: MachineSpec) -> str:
-    """What the spec adds to the agent's system prompt: its loop and its duties, in full."""
+    """What the spec adds to the agent's system prompt: its loop and its duties, in full. A designed
+    machine's spec in the state directory is the Supervisor's (``state_machines``): it says so, and
+    has no duty tools and no second copy of its role (its role prompt is that ``role.md``)."""
+    if spec.root != ROOT:
+        return (f"## Your machine spec (`{spec.dir}/`)\n\n"
+                "The Supervisor wrote it from the declaration the owner confirmed. It is kept in the state directory and "
+                "never committed; it changes only when the owner confirms a change to the declaration, and then it is "
+                "written again whole. You have no tools to change it.\n")
     parts = [(f"## Your machine spec (`{spec.dir}/`)\n\n"
               "This part of your prompt is the project's: your own loop and standing duties, which you change with "
               "`add_duty`, `edit_duty` and `remove_duty` (each change a commit with its reason) and undo with "

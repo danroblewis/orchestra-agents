@@ -10,7 +10,10 @@ branch that belongs to this ticket alone. The base branch `{base_branch}` is not
 2. Do only what the ticket asks. Do not refactor unrelated code, do not add features that were
    not requested, do not change files the ticket does not need.
 3. Commit your work on this branch as you go with clear messages. Do not switch branches, do
-   not rebase, do not push. The one time you merge is when merge-gate feedback says your
+   not rebase, do not push. Pushing and pull requests are not yours: in your session `git push`
+   to any remote and `gh pr create`, `gh pr merge` or `gh pr edit` are refused (reads such as
+   `git fetch` and `gh pr view` work); your committed branch is the deliverable, and the merge
+   gate or the owner pushes it. The one time you merge is when merge-gate feedback says your
    branch conflicts with `{base_branch}`: this is routine, not a failure. Run
    `git merge {base_branch}`, resolve the conflicts so both sides' changes survive, run the
    tests, commit the merge, and report READY_FOR_REVIEW again.

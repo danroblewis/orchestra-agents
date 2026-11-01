@@ -425,6 +425,27 @@ its token, `tooling.handle`), and the token reaches the command only through the
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
 command, and the dummy harness in-process; the setting changes neither.
+**No push, no pull-request writes** (`push_guard.py`; the owner, 2026-10-31: using Orchestra at work
+"won't try to push things to master"). Every session runs with the owner's git and gh
+credentials and its harness's permission checks off, so the host gives each session whose role is
+not in `[agents] allow_push` (default none) a block in its environment, which every harness passes
+on to the commands the agent runs (`SessionSpec.env`): a git configuration
+(`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/`GIT_CONFIG_VALUE_n`, appended after the host's own) with
+`url."orchestra-no-push::".pushInsteadOf` set to the empty prefix, which turns every push URL of
+every remote, and one given on the command line, into a transport whose helper
+(`git-remote-orchestra-no-push`, first on the session's PATH) only refuses; and `git` and `gh` first
+on that PATH, written into `<state>/no-push/`, naming the real ones: `git` refuses `push` and
+`send-pack` (a remote with an explicit `pushurl` is not rewritten, git's rule) and passes the rest;
+`gh` passes the reads (`pr view`/`list`/`diff`/`checks`/`status`, `issue view`/`list`, `repo view`,
+`run`, `search`, `api` with no method and no fields) and refuses every other command. Each refusal
+says what to do instead: commit on the branch and report; the merge gate or the owner pushes, opens
+and merges. Fetching, committing and merging locally are untouched. The Supervisor's session is
+exempt (`push_guard.EXEMPT`), as it was before the block, until the owner decides otherwise: its git
+writes are its tools' local commits (AGENTS.md rule 2), and what it sends as the owner, a push
+among them, goes through the outbox, in the outbox's process. It stops a mistake, not an agent set
+on pushing (the limit below). The roles are matched by the session's `ORCHESTRA_ROLE` (a built-in
+role, or a custom agent's name); a change applies to sessions opened after it.
+
 Sessions of the Supervisor and the Coordinator are **read-only** (`builtins.Role.read_only`,
 `SessionSpec.read_only`): they read, search and run commands in the checkout, and their harness
 withholds its file-editing tools (Claude Code: `--disallowedTools Edit,Write,NotebookEdit`; Pi:
@@ -523,7 +544,8 @@ no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
 `provider`, `thinking`, `tools_via` (`mcp`, `bash` or `auto`, the default: section 6) (`model` is the default: a machine spec's own `model` wins for its agent
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
-reviewer), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
+reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
+section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
 rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`

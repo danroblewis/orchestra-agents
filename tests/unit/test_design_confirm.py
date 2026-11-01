@@ -426,3 +426,34 @@ def test_a_confirmed_daily_machine_is_announced_scheduled_and_listed_by_agents_s
     cmd_status(Args())
     out = capsys.readouterr().out
     assert "feature_count_improver" in out and "daily at 00:00 America/Los_Angeles" in out
+
+
+def test_create_role_and_create_agent_after_a_confirm_commit_nothing(project, store):
+    """Acceptance test 15: confirming commits nothing on the base branch, and neither do the
+    Supervisor's create_role and create_agent on the confirmed machine afterwards: the state
+    directory is the default root, the repository's .orchestra/ only on the owner's word."""
+    confirmed(project, store)
+    head = git(project.repo_root, "rev-parse", "HEAD")
+    d = project.state_dir / "machines" / "feature_count_improver"
+    role = call(project, store, "create_role", name="feature_count_improver", description="Improves delivery",
+                prompt="You improve how many features get delivered a day. " * 3, tools=["events", "escalate"])
+    agent = call(project, store, "create_agent", name="feature_count_improver", roles=["feature_count_improver"],
+                 kind="scheduled", session="ephemeral", at="00:00")
+    for out in (role, agent):
+        assert out["ok"] and str(d) in out["storage"] and "nothing committed" in out["storage"]
+    assert json.loads((d / "agent.json").read_text())["at"] == "00:00" and "features" in (d / "role.md").read_text()
+    assert git(project.repo_root, "rev-parse", "HEAD") == head
+    assert git(project.repo_root, "status", "--porcelain") == "" and not (project.repo_root / ".orchestra" / "roles").exists()
+    with pytest.raises(StoreError, match="only when the owner asks"):
+        call(project, store, "update_role", name="feature_count_improver", root="repository")
+    say(store, "Keep the improver's role in the repository.", 7)
+    out = call(project, store, "update_role", name="feature_count_improver", root="repository",
+               quote="Keep the improver's role in the repository.")
+    assert (project.repo_root / ".orchestra" / "roles" / "feature_count_improver.json").exists() and "state" not in out["storage"]
+
+
+def test_create_agent_on_an_unconfirmed_machine_is_refused(project, store):
+    improver(project, store)
+    with pytest.raises(StoreError, match="confirm writes its role and agent records"):
+        call(project, store, "create_agent", name="feature_count_improver", roles=["feature_count_improver"], kind="ad_hoc")
+    assert not (project.state_dir / "machines" / "feature_count_improver").exists()

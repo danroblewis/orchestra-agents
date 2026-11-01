@@ -54,6 +54,7 @@ from .design_machines import (
     min_horizon,
     publishable,
     reads_of,
+    stock_as_flow,
     waiting_line,
 )
 from .store import AgentStore, StoreError
@@ -148,6 +149,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     m = current(project, eid)
     if m.get("state") == "declared":
         raise StoreError(f"machine {eid} is confirmed already")
+    stock_as_flow(project, (m.get("expected_effect") or {}).get("edits") or [])   # before anything is confirmed
     here = m.get("managed") != "external"
     runs = here and m.get("kind") == "universal"
     if runs:

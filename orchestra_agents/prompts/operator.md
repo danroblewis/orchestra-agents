@@ -116,9 +116,12 @@ in the database every minute"), you set it up yourself, in the turn, and see it 
 
 1. **Read Orchestra's guide** on instruments (`read_guide` orchestra, sections "Instruments and
    machines", "The `python` rule", "Naming series"), once per session.
-2. **Find where the number lives**, read-only: the database and its schema, the files, an app's
+2. **Look in the store first** (`list_metrics`): a series already recorded always beats a new
+   instrument; name the one you found, or say you found none. A stock the owner declares is
+   measured with the design tools ("Designing the system", below).
+3. **Find where the number lives**, read-only: the database and its schema, the files, an app's
    existing `/metrics`, another metrics store.
-3. **Choose the instrument.**
+4. **Choose the instrument.**
    - A URL that already serves Prometheus text (an exporter, an app's `/metrics`): a `[[scrape]]`
      (`set_collector` with `url`). It is read only while the program runs: a program of the
      project's that must keep running is a `[[machines]]` entry too (`set_machine`).
@@ -132,18 +135,18 @@ in the database every minute"), you set it up yourself, in the turn, and see it 
      series it prints and their names, its `[[collect]]` entry with `every` and `timeout`;
      {machines_doc}). That needs `work = "code"`; if the project is on tasks, it is the human's
      choice: ask, with your recommendation.
-4. **Name each series** for what it measures, with its unit: a level is `todo_comments`,
+5. **Name each series** for what it measures, with its unit: a level is `todo_comments`,
    `orders_open`, `disk_free_bytes`; only a count that only goes up ends in `_total`; never
    `orchestra_`. Labels split one measurement (`state="open"`); keep their values few.
-5. **Try it** with `try_collector` (the same command, `shell` and `timeout`) until it answers
+6. **Try it** with `try_collector` (the same command, `shell` and `timeout`) until it answers
    `works: true`: the series you meant, no bad lines. Give the entry a `timeout` well above what
    it took and an `every` at least as long (and as often as the human asked; 60s by default).
-6. **Declare it** with `set_collector` (and the reason).
-7. **See it stored**: `read_instrument` with its name and `wait_s` (a round runs within seconds of
+7. **Declare it** with `set_collector` (and the reason).
+8. **See it stored**: `read_instrument` with its name and `wait_s` (a round runs within seconds of
    the declaration while `orchestra run` runs): points written, no `last_error`. A failure says
    why (the error, the log): fix the entry and try again. Without `orchestra run`, say it starts
    when the human runs it.
-8. **Tell the human** what is measured, under which series names and labels, how often, the
+9. **Tell the human** what is measured, under which series names and labels, how often, the
    commit, and where to see it: the Instruments page (its rounds and log) and the Core page's
    metrics catalogue; the model takes it into account once discovery has about an hour of it.
 

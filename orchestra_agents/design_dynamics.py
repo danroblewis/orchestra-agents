@@ -12,12 +12,13 @@ kept on the option itself (Orchestra's ``ops.OPTION``, ``intended_api.OPTION_FIE
 from __future__ import annotations
 
 import re
+import time
 
 from orchestra.config import ConfigError, parse_duration
 
 from . import intended_api
 from .config import Project
-from .design import answer, apply, page_line, plural
+from .design import MACHINE, answer, apply, page_line, plural
 from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
@@ -136,7 +137,33 @@ def options_of(project: Project, part: str, eid: str) -> dict:
     return el.get("measure") or {"options": [], "chosen": None}
 
 
+def _session_of(store: AgentStore) -> str | None:
+    """The Supervisor's Claude Code (or other harness) session, as the host records it: what one
+    conversation is, across its turns."""
+    s = store.find_session(MACHINE) or {}
+    return s.get("session_file") or None
+
+
+def note_metrics_listed(store: AgentStore) -> None:
+    """The Supervisor read the metrics catalogue (list_metrics) in its session."""
+    store.set_agent_state(MACHINE, metrics_listed={"at": time.time(), "session": _session_of(store)})
+
+
+def metrics_listed(store: AgentStore) -> bool:
+    """Whether the Supervisor called list_metrics in its current session (any session when the host
+    records none)."""
+    seen = store.agent_state(MACHINE).get("metrics_listed") or {}
+    return bool(seen) and (seen.get("session") == _session_of(store) or _session_of(store) is None)
+
+
+NOT_LOOKED = ("propose_measurements waits for list_metrics: call list_metrics first (this session has not), and read what the "
+              "store already records. A series already there (option kind existing_series, its series named) always beats a "
+              "script you would write; name the series you found, or say you found none")
+
+
 def propose_measurements(project, store, a, prov):
+    if not metrics_listed(store):
+        raise StoreError(NOT_LOOKED)
     part, eid, declared = resolve(project, a.get("element"))
     if not declared or part not in ("stock", "effect"):
         raise StoreError(f"{eid} is not a declared stock or effect: declare it first (declare_stock)")
@@ -159,7 +186,25 @@ def propose_measurements(project, store, a, prov):
              page_line(project, "the Dynamics page shows them in the element's drawer, \"How to measure it\"")]
     if waiting := [f"{o['key']} ({why})" for o, (_, why) in zip(options, pairs, strict=True) if o["clearance"] == NEEDS_APPROVAL]:
         lines.append(f"{', '.join(waiting)}: recorded \"needs approval\"; nothing reads or previews it {UNTIL}")
+    lines += link_hints(project, eid, [o.get("series") for o in options if o["kind"] == "existing_series"])
     return answer(project, done, lines, options=[{k: o[k] for k in ("key", "title", "kind", "clearance")} for o in options])
+
+
+def discovered_stock_of(project: Project, series: str) -> str | None:
+    """The key of the current model's stock that is ``series`` (its key, or the key's name before
+    its labels), or None."""
+    keys = intended_api.Keys(intended_api.current_model(project))
+    return next((k for k in keys.stocks if k == series or k.split("{", 1)[0] == series), None)
+
+
+def link_hints(project: Project, eid: str, series: list[str | None]) -> list[str]:
+    """For each existing series an option names that the model already has as a stock: link it."""
+    out = []
+    for name in dict.fromkeys(s for s in series if s):
+        if key := discovered_stock_of(project, name):
+            out.append(f"{name} is already a discovered stock ({key}): if it is what {eid} means, link it now "
+                       f"(link declared={eid} discovered={key}), so its expected effects can be judged")
+    return out
 
 
 def _mark(project, store, a, prov, op: str) -> dict:

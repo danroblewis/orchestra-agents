@@ -25,7 +25,13 @@ def E(values: list[str], d: str = "") -> dict:
 MODE = E(["ad hoc", "continuous", "scheduled"], "How it is engaged: ad hoc (when asked or woken), continuous (always up, woken "
                                                 "by its receives), scheduled (once a day at `at`)")
 AT = S("For scheduled: the time of day, HH:MM (00:00 is midnight)")
-TZ = S("For scheduled: the owner's time zone (America/Los_Angeles)")
+TZ = S("For scheduled: the owner's time zone (America/Los_Angeles), from their message; none configured, so leave it out "
+      "and ask them when they have not said one. Never UTC or the host's zone as a guess")
+RECEIVES_D = ("Event types (family.name) it watches, or reads at each run (a scheduled machine too): what the owner says it "
+              "watches goes here, never only in steps or uses. Only types a machine speaks: heard on the bus or announced "
+              "(read_events: by_type, announced_not_heard), or emitted by a declared machine")
+EMITS_D = ("Event types it publishes: one heard or announced (read_events), or one you declare first (declare_event); "
+           "never an invented name")
 MISSED = E(["skip", "run once"], "For scheduled: a run missed while the host was down is skipped or run once")
 OPTION = {"type": "object", "properties": {
     "label": S("A few words: acceptance tests passing on main"),
@@ -46,7 +52,7 @@ EXPECT = {"type": "object", "properties": {
     "kind": E(["factor", "below", "above", "rises", "falls", "appears"],
               "factor: a flow's rate times factor (needs flow, factor); below/above: a stock's level (needs stock, value); "
               "rises/falls: a stock's slope (needs stock); appears: a new flow into `to` (needs to; from, or outside)"),
-    "flow": S("For factor: the flow's id"), "factor": {"type": "number", "description": "For factor: 1.2 is 20% more"},
+    "flow": S("For factor: a flow's id from read_model (a rate: the flow into the stock), never a stock's key"), "factor": {"type": "number", "description": "For factor: 1.2 is 20% more"},
     "stock": S("For below, above, rises, falls: a stock's key or a declared stock's id (one with no series waits for one)"),
     "value": {"type": "number", "description": "For below and above: the level"},
     "to": S("For appears: the stock the new flow goes into"), "from": S("For appears: where it comes from (leave out: outside)"),
@@ -105,8 +111,10 @@ DESIGN_TOOLS: list[ToolDef] = [
              "over": S("The window its mean is judged over: 1h, 1d, 7d"), "quote": QUOTE, "reason": REASON},
             ("element", "compare", "value", "over", "reason")),
     ToolDef("propose_measurements", "design",
-            "Record the ways to measure a declared stock or effect, in order, after you looked: the store (list_metrics, "
-            "read_series), the repository's own reports (a CI JUnit report through orchestra.instruments.test_reports; "
+            "Record the ways to measure a declared stock or effect, in order, after you looked. Refused until you called "
+            "list_metrics in this session: a series already in the store (existing_series, its series named) always beats a "
+            "script, and is option a; when that series is a discovered stock (read_model), link the declared one to it. Then "
+            "the repository's own reports (a CI JUnit report through orchestra.instruments.test_reports; "
             "never run a suite in the working tree), other plugins' counters, another store or company system (named and "
             "costed only: never previewed until the owner clears it), and a simulated placeholder last. It only records. "
             "Whether one needs the owner's approval is decided from what it reads, not from what you say.",
@@ -114,7 +122,7 @@ DESIGN_TOOLS: list[ToolDef] = [
                                              "(three or four honest ones)"}, "quote": QUOTE, "reason": REASON},
             ("element", "options", "reason")),
     ToolDef("add_instrument", "design",
-            "Start recording one option at once: a script of at most 100 lines you write (to the state directory, "
+            "Start recording one option at once (never an existing_series one: link that instead), its option chosen: a script of at most 100 lines you write (to the state directory, "
             "instruments/<name>.sh), or the command or URL the option proposed; tried first exactly as Orchestra runs it, then "
             "its [[collect]] or [[scrape]] entry goes in the owner's private overlay, one act. Refused over 100 lines, with "
             "what looks like a secret, for an option that needs approval or reaches another host, or when the trial fails "
@@ -141,8 +149,9 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("ignore", "design", "Ignore a discovered suggestion: it moves to the collapsed \"ignored\" group; nothing is hidden.",
             {"part": E(["stock", "flow"]), "key": S("Its key"), "quote": QUOTE, "reason": REASON}, ("key", "reason")),
     ToolDef("link", "design",
-            "The owner says a declared stock is a discovered one (\"yes, that's Features\"): a manual binding, origin "
-            "declared, an assumption until fitted. It never renames the discovered stock. A confirmed machine's expected "
+            "A declared stock is a discovered one: the owner says so (\"yes, that's Features\"), or the series you measured it "
+            "with is that stock (read_model); yours to call, quoted or as your proposal. A manual binding, origin "
+            "declared, an assumption until fitted; it is how a declared stock's expected effects can be judged. It never renames the discovered stock. A confirmed machine's expected "
             "edits that waited for it are published then.",
             {"declared": ELEMENT, "discovered": S("The discovered stock's (or series') key"), "quote": QUOTE, "reason": REASON},
             ("declared", "discovered", "reason")),
@@ -158,7 +167,7 @@ DESIGN_TOOLS: list[ToolDef] = [
              "managed": E(["orchestra", "external"], "orchestra (default): started and kept here; external: runs elsewhere, "
                                                      "known by its events"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
-             "receives": A("Event types it wakes on or reads"), "emits": A("Event types it publishes"),
+             "receives": A(RECEIVES_D), "emits": A(EMITS_D),
              "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS, "spec": SPEC,
              "guesses": A("The fields you guessed, whole or one item: engagement (mode, at, tz), receives[0], ..."), "quote": QUOTE, "reason": REASON},
             ("name", "kind", "description", "reason")),
@@ -168,8 +177,9 @@ DESIGN_TOOLS: list[ToolDef] = [
             "quoted it applies at once on an unconfirmed machine; otherwise, or on a confirmed one, it is a proposed change "
             "the owner confirms. The Universal | Programmatic switch is switch_kind.",
             {"name": S("The machine"),
-             "add_receives": A("Event types to add to what wakes it"), "remove_receives": A("Event types to take out of its receives"),
-             "add_emits": A("Event types it will publish"), "remove_emits": A("Event types it will no longer publish"),
+             "add_receives": A("Event types to add to what it watches: " + RECEIVES_D),
+             "remove_receives": A("Event types to take out of its receives"),
+             "add_emits": A(EMITS_D), "remove_emits": A("Event types it will no longer publish"),
              "add_reads": A("Stocks or effects it may read"), "remove_reads": A("Stocks or effects it no longer reads"),
              "add_invariants": A("Lines a reviewer can check"), "remove_invariants": A("Invariants to drop, word for word"),
              "add_uses": A("What it may act on, in the work's terms (the ticket queue, read only)"),
@@ -192,7 +202,8 @@ DESIGN_TOOLS: list[ToolDef] = [
              "quote": QUOTE, "reason": REASON}, ("type", "purpose", "reason")),
     ToolDef("declare_expected_effect", "design",
             "A machine's expected effect, as a draft prediction: what it should change, rates where you can, judged after a "
-            "horizon of at least three of its runs. Published as your prediction only when the owner confirms the machine.",
+            "horizon of at least three of its runs. Read the model first (read_model): a rate (\"the commit rate up 1.2 times\") "
+            "is factor on a flow's id; a level is a stock (rises, falls, above, below). A stock named as a flow is refused. Published as your prediction only when the owner confirms the machine.",
             {"machine": S("The machine"), "expect": {"type": "array", "items": EXPECT, "description": "One object per edit, "
                                                      "each with its kind and the fields that kind needs"},
              "horizon": S("3d, 7d"), "quote": QUOTE, "reason": REASON},

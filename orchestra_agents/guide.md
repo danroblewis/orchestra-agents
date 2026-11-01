@@ -172,9 +172,14 @@ a file. Follow it top to bottom:
 
 1. **Declare.** `declare_stock` or `declare_effect` for what they named, `set_target` for a bound.
    It is drawn as a ghost in the Dynamics page's Expected group until a series measures it.
-2. **Measure, at once.** Look first (`list_metrics`, `read_series`, the repository's reports,
-   other plugins' counters, another store), record three or four options with their cost
-   (`propose_measurements`), then `add_instrument` the best: a script of at most 100 lines, tried
+2. **Measure, at once, from the store first.** `propose_measurements` is refused until
+   `list_metrics` was called in the session: a series already recorded always beats a script, and
+   is option `a` (`existing_series`, nothing added); when the model has it as a discovered stock,
+   `link` the declared stock to it in the same turn (yours to do; it is how its expected effects
+   are judged). Then the repository's reports, other plugins' counters, another store: three or
+   four options with their cost. Only when no series holds it, `add_instrument` the best, its
+   option chosen at once (the Dynamics page draws a draft as recording only on the chosen
+   option): a script of at most 100 lines, tried
    before it is written, to `~/.orchestrator/<key>/agents/instruments/<name>.sh`, and its
    `[[collect]]` or `[[scrape]]` entry to the owner's overlay, one act, nothing committed. It
    records at once as a **draft** (`draft = true`, discovery leaves it out) and is removed, entry
@@ -193,6 +198,15 @@ a file. Follow it top to bottom:
 3. **Machines.** Read the map (`read_design`, `read_events`, `read_model`), then `declare_machine`:
    a dashed, "unconfirmed" node; nothing runs. Refine it as the owner talks (`refine_machine`,
    `declare_event`, `switch_kind`), and give it an expected effect (`declare_expected_effect`).
+   What it watches, or reads at each run (a scheduled one too), is event types in `receives`
+   (`add_receives`), never only words in its steps or uses; only types a machine speaks: heard on
+   the bus, announced by a machine that listens for them (`read_events`' `announced_not_heard`),
+   or emitted by a declared machine; a new one it publishes is declared first (`declare_event`).
+   An answer says when a type is none of these. `read_events` shows the newest 20 by default (at
+   most 100), with a count of every type. A rate ("the commit rate up 1.2 times") is a `factor` on
+   a flow's id from `read_model`; a stock named there is refused, with the model's flows listed (at
+   `declare_expected_effect` and at `confirm`). A schedule's `tz` is the owner's, from their words:
+   the agents configure none, so without one it is left out (the host's clock) and asked for.
    Drafts live in `~/.orchestrator/<key>/agents/drafts/<name>/`. The fields are below.
 4. **Confirm.** Confirm, discard and the kind switch are the owner's: their quote, or the `request`
    of their click (it wakes you; the page shows "asked the Supervisor · waiting" until you answer).
@@ -207,6 +221,9 @@ a file. Follow it top to bottom:
    (`orchestra.prediction.made`, subject `machine:<name>`), judged over its horizon from its first
    turn; an edit on a stock with no series waits until it is linked; an interrupting era renews it.
    The verdict wakes you.
+
+**The tools you hold** are listed at the end of each session's prompt; one not listed (`add_duty`
+in a session narrowed to the design tools) is not yours there.
 
 **The refinement passes** (your built-in `refine_map` duty): at most `[agents] design_passes`
 (default 3) passes a round, in your review round when the declared layer changed and after the

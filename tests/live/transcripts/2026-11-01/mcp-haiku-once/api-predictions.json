@@ -1,0 +1,22 @@
+{
+ "ok": true,
+ "predictions": [
+  {
+   "id": "380d3938c7f745918ad82d52b7baccc8",
+   "source": "supervisor",
+   "made_at": 1793531560.787,
+   "subject": "machine:notes_improver",
+   "change": "50b13716756d4ab0909145744af96e4e",
+   "expect": [
+    {
+     "kind": "factor",
+     "flow": "repo_commits",
+     "factor": 1.2
+    }
+   ],
+   "horizon_s": 604800.0,
+   "status": "waiting",
+   "era": null
+  }
+ ]
+}

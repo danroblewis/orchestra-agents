@@ -168,8 +168,12 @@ TOOLS: list[ToolDef] = [
             {"type": S("Declared event type, lowercase_name"), "subject": S("What it is about, e.g. a ticket id or test name"),
              "note": S("One or two sentences")}, ("type",)),
     ToolDef("read_events", "events",
-            "Recent events on the bus (tickets, assignments, gate runs, staging, agents). Use to look back over what happened.",
-            {"minutes": I("How far back, default 60"), "types": A("Event types to include; empty for all")}),
+            "Recent events on the bus (tickets, assignments, gate runs, staging, agents). Use to look back over what happened. "
+            "by_type counts every type in the window (sources, last seen); announced_not_heard lists the types machines announced "
+            "they listen for that no event carried yet (they are known: name them); events are the newest first, at most limit, "
+            "each with its short fields.",
+            {"minutes": I("How far back, default 60"), "types": A("Event types to include; empty for all"),
+             "limit": I("How many events to show, newest first: default 20, at most 100 (by_type counts them all)")}),
     # team: reading the organisation, and talking down or up the tree (leads and the supervisor)
     ToolDef("list_teams", "team", "All teams: lead, agents, sub-teams, access, paused state."),
     ToolDef("get_team", "team", "One team in full: responsibilities (own and inherited), agents, access, space.",

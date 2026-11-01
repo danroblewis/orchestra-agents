@@ -26,7 +26,17 @@ import psutil
 from orchestra.runtime import alive
 from orchestra.tokens import owner_only
 
-from . import access, budget, handoff, parent, promises, prompting, supervisor_spec, tooling
+from . import (
+    access,
+    budget,
+    handoff,
+    parent,
+    promises,
+    prompting,
+    push_guard,
+    supervisor_spec,
+    tooling,
+)
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
@@ -376,11 +386,12 @@ class AgentHost:
         source = self._instance(session_id, role, ticket_id)
         model = self.model_of(role)
         token = access.issue(self.store, session_id, role, ticket_id)     # who the session's tool calls are (access.py)
+        env = {"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
+               "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token}
+        env |= push_guard.env(role, self.cfg.allow_push, self.project.state_dir / "no-push", {**os.environ, **env})
         proc = self.harness.start(SessionSpec(
             session_id=session_id, session_dir=self.project.sessions_dir, cwd=cwd,
-            system_prompt=system_prompt, role=role, tool_groups=tools,
-            env={"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
-                 "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token},
+            system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
             tools_via=self.cfg.tools_via, read_only=read_only))

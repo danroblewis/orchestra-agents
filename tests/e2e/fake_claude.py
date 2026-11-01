@@ -21,6 +21,9 @@ FAKE_CLAUDE_SUPERVISOR=<file>: in a chat turn (one with the human's message) the
 the tools the file lists, a JSON list of {"tool", "args"}, in order, and replies with what each
 answered, or with the text of a {"reply"} step when the list has one (a reply as a model might
 get it wrong); without it, a Supervisor only acknowledges.
+FAKE_CLAUDE_WORKER_SHELL=<file>: a code worker, after its commit, runs each command the file lists (a
+JSON list of strings) from its Bash tool, with this process's environment as Claude Code's Bash
+tool has it, and the output (stdout and stderr) is the call's result in the transcript.
 FAKE_CLAUDE_COORDINATOR=<file>: woken with a Supervisor's hand-off (work.requested), the Coordinator
 calls the tools the file lists the same way, with {request} replaced by the request's id.
 
@@ -233,6 +236,19 @@ def main() -> None:
         record("user", res)
         return out
 
+    def bash(command: str) -> str:
+        """One call of Claude Code's own Bash tool: the command in this process's environment."""
+        tid = f"toolu_{uuidlib.uuid4().hex[:12]}"
+        use = [{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": command}}]
+        emit({"type": "assistant", "message": {"role": "assistant", "content": use}, "session_id": sid})
+        record("assistant", use)
+        p = subprocess.run(["/bin/sh", "-c", command], cwd=cwd, capture_output=True, text=True, env=dict(os.environ), check=False)
+        out = f"{p.stdout}{p.stderr}(exit {p.returncode})"
+        res = [{"type": "tool_result", "tool_use_id": tid, "is_error": p.returncode != 0, "content": [{"type": "text", "text": out}]}]
+        emit({"type": "user", "message": {"role": "user", "content": res}, "session_id": sid})
+        record("user", res)
+        return out
+
     text = "ok"
     if role == "worker":
         if os.environ.get("FAKE_PI_WORKER_BLOCK"):
@@ -254,6 +270,8 @@ def main() -> None:
                 do_what_it_asks(prompt, cwd)
                 subprocess.run(["git", "add", "-A"], cwd=cwd, check=True)
                 subprocess.run(["git", "commit", "-qm", f"{ticket}: fake work"], cwd=cwd, check=True)
+                for command in json.loads(Path(os.environ["FAKE_CLAUDE_WORKER_SHELL"]).read_text()) if os.environ.get("FAKE_CLAUDE_WORKER_SHELL") else ():
+                    bash(command)
             else:
                 (cwd / "RESULT.md").write_text(f"# {ticket}\n\nthe answer\n")
             use_tool("report_ticket", {"state": "READY_FOR_REVIEW", "summary": "added WORK.md line"})

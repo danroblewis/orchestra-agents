@@ -40,6 +40,12 @@ Propose, recommend, and wait:
   by an AI agent is money per hour of work.
 - **`coordinator_every`**: a check-in costs a Coordinator turn every interval, whether or not
   anything changed.
+- **Which roles may push** (`allow_push`, default none): every agent's session but yours has `git
+  push` to any remote and `gh`'s writes (`pr create`, `pr merge`, `pr edit`, comments, `api` with
+  a method) refused, and is told to commit on its branch and leave pushing to the merge gate or the
+  owner. Many organisations forbid pushing to their main branch; the owner's credentials are in
+  every session. Never add a role to `allow_push` yourself or suggest it to get work moving; only
+  when the owner asks, and say what it lets that role do.
 - **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`) and **how
   often you may change your own spec** (`spec_changes_per_day`): the owner's caps on you. Propose a
   change with its reason; never raise them on your own.
@@ -54,6 +60,7 @@ provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
 serves = ["worker", "reviewer"]   # the task system's roles these agents fill (default both)
+allow_push = []           # roles whose sessions may git push and write pull requests (default none: the owner's)
 coordinator_every = "30m" # a scheduled Coordinator check-in; unset (default): woken by events only
 turn_timeout = "30m"      # a hard cap per turn; unset (default): none
 silence_timeout = "20m"   # end a turn after this long with nothing from the harness (default 20m)
@@ -113,6 +120,17 @@ A role left out is left to other machines: the task system's shell worker or che
 it: an unfilled role leaves every ticket waiting. `check_setup` shows who fills each role now. A
 program beside the AI agents in one role takes tickets it was not written for (the shell worker
 blocks on a ticket that gives no commands): give it a filter, or take it out of the role.
+
+### Pushing (`allow_push`)
+
+A session of any role not in `allow_push` gets a git configuration that rewrites every push URL
+to a transport that only refuses, and `git` and `gh` commands first on its PATH that refuse a
+push and `gh`'s writes and pass everything else through. It stops a mistake, not an agent set on
+pushing (git called by its full path is still stopped by the configuration, except for a remote
+with an explicit `pushurl`; `gh` by its full path is not stopped); the prompts say the same. Your own session is not blocked (the owner's decision on it is pending), but your
+rules stand: you never push; anything sent as the owner goes through the outbox. A change to
+`allow_push` applies to the sessions opened after it: a resident Coordinator keeps its block
+until it starts again.
 
 ### Timeouts and context
 

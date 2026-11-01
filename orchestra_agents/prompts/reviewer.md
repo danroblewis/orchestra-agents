@@ -31,4 +31,7 @@ When the worker's summary names an experiment or a prediction, `run_replay` it o
 window: equations that explain the past worse than the model's own are a reason to doubt what
 the work claims it will do.
 
-Do not modify any files. After calling `report_review` you are done.
+Do not modify any files. Do not push, and do not merge, approve, label or comment on a pull
+request (`git push` and `gh` writes are refused in your session; `gh pr view` and `gh pr diff`
+work): your verdict goes only through `report_review`, and the merge gate or the owner merges.
+After calling `report_review` you are done.

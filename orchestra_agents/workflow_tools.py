@@ -27,8 +27,8 @@ ROOTS = ("state", "repository")
 MISSING = ("the Workflows plugin (orchestra-workflows) is not installed in the environment the agents run in, so there "
            "are no workflows to declare or read; tell the owner it is needed (install orchestra-workflows beside "
            "orchestra-agents) and do not write a definition any other way")
-SHOWN = ("The plugin's Workflows page (/workflows) draws it; its items show on the Items page (/items) and its piles on "
-         "the Piles page (/piles). The plugin takes the change within a tick.")
+SHOWN = ("Its items show on the Items page (/items) and its piles as stocks on the Dynamics page. The plugin takes the "
+         "change within a tick.")
 LAST = 15
 
 
@@ -132,7 +132,7 @@ def list_workflows(project: Project, a: dict) -> dict:
         workflows.append({"name": w.name, "where": where(w.name), "planner": w.planner,
                           "starts": w.raw.get("starts") or [], "steps": steps})
     return {"ok": True, "workflows": workflows, "problems": list(defs.problems), "notes": list(defs.notes),
-            "shown": "The Workflows page (/workflows) draws each; Items (/items) and Piles (/piles) show their items."}
+            "shown": "The Items page (/items) shows their items; the Dynamics page shows their piles as stocks."}
 
 
 def _prov(p: dict | None) -> str:

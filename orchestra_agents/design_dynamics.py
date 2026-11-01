@@ -6,9 +6,8 @@ find anything (Orchestra's rules 6 and 7).
 
 **Clearance is decided from facts, never from the model's words** (``design_clearance.py``). What
 an option names (its system, series, url, command and the environment variable of its token) is
-kept on the option itself when the declared layer keeps those fields (``intended_api.option_fields``),
-and with the Supervisor too (its agent state, ``measure_targets``), which is all a layer without
-them has; ``add_instrument`` runs only what was proposed."""
+kept on the option itself (Orchestra's ``ops.OPTION``, ``intended_api.OPTION_FIELDS``), and
+``add_instrument`` reads it back from there: it runs only what was proposed."""
 
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from orchestra.config import ConfigError, parse_duration
 
 from . import intended_api
 from .config import Project
-from .design import MACHINE, answer, apply, page_line, plural
+from .design import answer, apply, page_line, plural
 from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
@@ -40,7 +39,7 @@ def _declare(project: Project, store: AgentStore, a: dict, prov: dict, part: str
     guessed = ["near"] if near and not owner_placed else []
     description = (a.get("description") or "").strip() or None
     op = {"op": f"declare_{part}", "name": name, "unit": a.get("unit") or None, "near": near, "note": prov.get("quote"),
-          "guessed": guessed, "description": description if intended_api.takes_description(project) else None}
+          "guessed": guessed, "description": description}
     done = apply(project, store, [{k: v for k, v in op.items() if v not in (None, [])}], prov)
     eid = done["changes"][0]["id"]
     origin = "added by you (from your message)" if prov["author"] == "owner" else "proposed by the Supervisor"
@@ -123,31 +122,18 @@ def _option(project: Project, i: int, o: dict) -> tuple[dict, dict]:
     level, why = clearance(project, kind, o["label"], o["how"], system, url, command)
     names = {"system": system or None, "series": series or None, "url": url or None, "command": command or None,
              "bearer_env": env or None}
-    keeps = intended_api.option_fields(project)
-    how = o["how"].strip()                     # what the layer's option has no field for is said in how
-    how += f" (the series {series})" if series and "series" not in keeps else ""
-    how += f" (reads {system})" if system and "system" not in keeps and system not in how.lower() else ""
-    how += f"; its token is read from the environment variable {env}, supplied out of band" if env and "bearer_env" not in keeps \
-        else ""
+    keeps = intended_api.OPTION_FIELDS
     key = "abcdefghij"[i]
-    kept = {"key": key, "title": o["label"].strip(), "kind": kind, "how": how, "cost": o["cost"].strip(),
+    kept = {"key": key, "title": o["label"].strip(), "kind": kind, "how": o["how"].strip(), "cost": o["cost"].strip(),
             "caveat": (o.get("caveat") or "").strip() or None, "clearance": level, "simulated": kind == "simulated",
             "instrument": None, "commit": None, "first_points": [], "provenance": None,
             **{k: v for k, v in names.items() if k in keeps and v is not None}}
-    mine = {"kind": kind, "url": url or None, "command": command or None, "series": series or None,
-            "bearer_env": env or None, "why_approval": why}
-    return kept, mine
+    return kept, why
 
 
 def options_of(project: Project, part: str, eid: str) -> dict:
     el = (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
     return el.get("measure") or {"options": [], "chosen": None}
-
-
-def targets_of(store: AgentStore, part: str, eid: str) -> dict:
-    """What the Supervisor kept of each option of ``part:eid`` (its url, command, series), by key:
-    the fallback for a declared layer whose options do not keep them (``option_fields``)."""
-    return dict((store.agent_state(MACHINE).get("measure_targets") or {}).get(f"{part}:{eid}") or {})
 
 
 def propose_measurements(project, store, a, prov):
@@ -169,11 +155,9 @@ def propose_measurements(project, store, a, prov):
             o.update({k: was[k] for k in ("instrument", "commit", "first_points", "provenance") if was.get(k)})
     chosen = old.get("chosen") if old.get("chosen") in {o["key"] for o in options} else None
     done = apply(project, store, [{"op": "record_measurement", "part": part, "id": eid, "options": options, "chosen": chosen}], prov)
-    store.update_agent_state(MACHINE, "measure_targets",
-                             lambda t: {**(t or {}), f"{part}:{eid}": {o["key"]: m for o, (_, m) in zip(options, pairs, strict=True)}})
     lines = [f"{plural(len(options), 'way')} to measure {eid}, in order: " + "; ".join(f"{o['key']} {o['title']} ({o['kind']})" for o in options),
              page_line(project, "the Dynamics page shows them in the element's drawer, \"How to measure it\"")]
-    if waiting := [f"{o['key']} ({m['why_approval']})" for o, (_, m) in zip(options, pairs, strict=True) if o["clearance"] == NEEDS_APPROVAL]:
+    if waiting := [f"{o['key']} ({why})" for o, (_, why) in zip(options, pairs, strict=True) if o["clearance"] == NEEDS_APPROVAL]:
         lines.append(f"{', '.join(waiting)}: recorded \"needs approval\"; nothing reads or previews it {UNTIL}")
     return answer(project, done, lines, options=[{k: o[k] for k in ("key", "title", "kind", "clearance")} for o in options])
 

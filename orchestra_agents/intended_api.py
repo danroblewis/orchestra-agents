@@ -1,35 +1,26 @@
 """The declared layer, as the design tools reach it: Orchestra's own (``docs/proposals/intended-model.md``
-§6.3, built in Orchestra's task C1) when the installed Orchestra has it, else the agents' stand-in
-(``intended_standin.py``); and every other name of Orchestra's the design tools read that Orchestra
-does not document yet, each with what to do when it is absent.
+§6.3, ``orchestra.sd.intended``), and every other name of Orchestra's the design tools read that
+Orchestra does not document yet, each with what to do when it is absent.
 
-**The integration seam.** This module is the one place that chooses, and the one place that imports
-an undocumented Orchestra name (the coordinator's list asks for public ones). The design tools call
-only ``apply(ops, provenance)``, ``read(version)``, ``design()`` and ``open_requests()`` on what
-``layer`` returns, in the proposal's shapes, so when Orchestra's store is installed it is used with
-no other change, and the stand-in (with this fallback) is deleted.
+**The integration seam.** This module is the one place that imports an undocumented Orchestra name
+(the coordinator's list asks for public ones). The design tools call only ``apply(ops,
+provenance)``, ``read(version)``, ``design()`` and ``open_requests()`` on what ``layer`` returns, in
+the proposal's shapes.
 
-- **Orchestra's** is written only by its host and its web server (Orchestra's rule 5 as amended:
-  nothing else opens anything under ``<state>/model/intended/``), so ``Core`` calls the host's
-  events endpoint over HTTP with the project's token: ``POST /intended`` (``{source, author, turn,
-  message, quote, reason, request, ops}``, 422 with the refused op's ``index``), ``GET /intended``
-  and ``GET /intended/design``. With it installed and its host not running, a call is refused,
-  never written anywhere else.
-- **Whether Orchestra has it** is asked of the endpoint itself (``GET /intended?version=0``), and,
-  when no endpoint answers, of the documented ``project.intended`` (§6.3).
-- **The stand-in** is used only when the installed Orchestra has no declared layer. What it holds
-  is kept in the agents' state directory, and no page draws it.
+- **Orchestra's layer** is written only by its host and its web server (Orchestra's rule 5 as
+  amended: nothing else opens anything under ``<state>/model/intended/``), so ``Core`` calls the
+  host's events endpoint over HTTP with the project's token: ``POST /intended`` (``{source, author,
+  turn, message, quote, reason, request, ops}``, 422 with the refused op's ``index``), ``GET
+  /intended`` and ``GET /intended/design``. With its host not running, a call is refused, never
+  written anywhere else.
 - **Drawn** where the installed Orchestra ships the page that draws it (``pages``: its Machines
   page's ``intended-machines.js``, its Dynamics page's ``intended-dynamics.js``), or where its
   summary says so (``draws``, if it ever has one); otherwise the tools say "kept" and read it back.
-- **Keys and names** (``Keys``, ``resolve``): Orchestra's own (``orchestra.sd.intended.keys`` and
-  ``names``) when they import, so a draft edit is resolved exactly as Orchestra resolves it; the
-  local copy is the stand-in's fallback only.
+- **Keys and names** are Orchestra's own (``orchestra.sd.intended.keys.Keys`` and
+  ``names.resolve``), so a draft edit is resolved exactly as Orchestra resolves it.
 - **One deadline per tool call** (``one_call``): after an endpoint timeout, the rest of the call
   fails at once, saying what it did; ``design()`` is read once per call (until a write); the host
-  skips its design tick for a while after a timeout (``backing_off``).
-- **Carried over once** (``intended_carry.py``): on the first use of Orchestra's layer, the
-  stand-in's calls are replayed into it."""
+  skips its design tick for a while after a timeout (``backing_off``)."""
 
 from __future__ import annotations
 
@@ -41,8 +32,12 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from importlib import resources
-from pathlib import Path
 from typing import Protocol
+
+from orchestra.sd.intended.keys import Keys
+from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK  # noqa: F401  (WAITS_LINK: the tools' wording keys on it)
+from orchestra.sd.intended.names import resolve as _core_resolve
+from orchestra.sd.intended.ops import OPTION
 
 from .config import Project
 from .store import StoreError
@@ -52,10 +47,6 @@ TIMEOUT_S = 30.0
 PROBE_S = 3.0
 CACHE_S = 30.0
 BACKOFF_S = 300.0
-try:
-    from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK
-except ImportError:
-    WAITS, WAITS_LINK, ABSENT = "waits for a series", "waits for a link", "not in the model"
 PAGES = {"Machines": "intended-machines.js", "Dynamics": "intended-dynamics.js"}
 _cache: dict[tuple, tuple[float, object]] = {}
 _scope: contextvars.ContextVar[dict | None] = contextvars.ContextVar("intended_call", default=None)
@@ -100,12 +91,6 @@ def _cached(key: tuple, fn, ttl: float = CACHE_S):
     return v
 
 
-def core_installed() -> bool:
-    """Whether the installed Orchestra documents a declared layer: ``project.intended`` (§6.3)."""
-    from orchestra.config import Project as OrchestraProject
-    return hasattr(OrchestraProject, "intended")
-
-
 def _recorded(project: Project) -> tuple[str, str] | None:
     url, token = os.environ.get("ORCHESTRA_EVENTS_ENDPOINT"), os.environ.get("ORCHESTRA_EVENTS_TOKEN")
     if url and token:
@@ -119,25 +104,6 @@ def endpoint_url(project: Project) -> str | None:
     """Orchestra's own events endpoint for the project, when its host recorded one."""
     addr = _recorded(project)
     return addr[0] if addr else None
-
-
-def has_core(project: Project) -> bool:
-    """Whether Orchestra keeps the declared layer: its endpoint answers ``GET /intended``; with no
-    endpoint answering, whether the installed Orchestra documents ``project.intended``."""
-    addr = _recorded(project)
-    if addr is None:
-        return core_installed()
-
-    def probe() -> bool:
-        req = urllib.request.Request(addr[0] + "/intended?version=0", headers={"Authorization": f"Bearer {addr[1]}"})
-        try:
-            with urllib.request.urlopen(req, timeout=PROBE_S) as r:
-                return r.status == 200
-        except urllib.error.HTTPError as e:
-            return False if e.code in (404, 405) else core_installed()      # no such route; else ask the install
-        except (urllib.error.URLError, OSError):
-            return core_installed()
-    return _cached(("core", addr[0]), probe)
 
 
 def _address(project: Project) -> tuple[str, str]:
@@ -221,18 +187,8 @@ def _edit_key(edit) -> str:
     return json.dumps(edit, sort_keys=True)
 
 
-def standin_dir(project: Project) -> Path:
-    return project.state_dir / "intended"
-
-
 def layer(project: Project) -> Layer:
-    if has_core(project):
-        from .intended_carry import carry_over
-        core = Core(project)
-        carry_over(project, core)
-        return core
-    from .intended_standin import StandIn
-    return StandIn(project)
+    return Core(project)
 
 
 def current(project: Project) -> dict:
@@ -241,10 +197,8 @@ def current(project: Project) -> dict:
 
 
 def unpublishable(project: Project, lay: Layer | None = None) -> dict[tuple[str, str], str]:
-    """Orchestra's verdict on each draft edit when Orchestra keeps the layer; empty for the stand-in
-    (whose rule is the plugin's, ``design_machines.publishable``)."""
-    lay = lay or layer(project)
-    return lay.unpublishable() if isinstance(lay, Core) else {}
+    """Orchestra's verdict on each draft edit (its ``unpublishable draft`` open items)."""
+    return (lay or layer(project)).unpublishable()
 
 
 def _shipped(asset: str) -> bool:
@@ -255,11 +209,8 @@ def _shipped(asset: str) -> bool:
 
 
 def pages(project: Project) -> set[str]:
-    """The pages that draw the declared layer: none for the stand-in; with Orchestra's, what its
-    summary says (``draws``) if it says anything, else the pages the installed Orchestra ships
-    (``PAGES``)."""
-    if not has_core(project):
-        return set()
+    """The pages that draw the declared layer: what its summary says (``draws``) if it says
+    anything, else the pages the installed Orchestra ships (``PAGES``)."""
 
     def ask() -> set[str]:
         try:
@@ -282,34 +233,10 @@ def where(project: Project) -> str:
     """Where a declaration is kept, for the tools' answers (``kept_in``)."""
     if got := pages(project):
         return f"Orchestra's declared layer: the {' and '.join(sorted(got))} page{'s draw' if len(got) > 1 else ' draws'} it"
-    if has_core(project):
-        return "Orchestra's declared layer (no page draws it in this Orchestra): kept, and read_design reads it back"
-    return ("the agents' stand-in for Orchestra's declared layer (this Orchestra has none yet): kept, and no page draws it; "
-            "read_design reads it back")
+    return "Orchestra's declared layer (no page draws it in this Orchestra): kept, and read_design reads it back"
 
 
-BASE_OPTION = frozenset({"key", "title", "how", "kind", "instrument", "simulated", "cost", "caveat", "clearance",
-                         "provenance", "commit", "first_points"})
-
-
-def option_fields(project: Project) -> frozenset[str]:
-    """The fields the declared layer keeps on a measurement option: Orchestra's ``ops.OPTION``
-    with its layer (since its C8, also what an option names: system, series, url, command,
-    bearer_env), the stand-in's own otherwise."""
-    if has_core(project):
-        try:
-            from orchestra.sd.intended.ops import OPTION
-        except ImportError:
-            return BASE_OPTION
-        return frozenset(OPTION)
-    from .intended_standin_ops import OPTION
-    return frozenset(OPTION)
-
-
-def takes_description(project: Project) -> bool:
-    """Whether ``declare_stock``/``declare_effect`` take a ``description``: Orchestra's layer since
-    the same change that made its options keep what they name (C8), and the stand-in."""
-    return "series" in option_fields(project)
+OPTION_FIELDS = frozenset(OPTION)      # what the layer keeps on a measurement option (with C8: system, series, url, command, bearer_env)
 
 
 def draft_flag_supported() -> bool:
@@ -362,92 +289,20 @@ def saved_models(project: Project, n: int) -> list:
     return [m for v in models.versions()[-n:] if (m := models.load(v.get("version"))) is not None]
 
 
-def _left_out() -> set[str]:
-    try:
-        from orchestra.sd.discover import NOT_IDENTITY
-    except ImportError:
-        NOT_IDENTITY = {"instrument", "machine", "source", "project", "instance"}
-    return set(NOT_IDENTITY) | {"simulated", "draft"}
-
-
-def _series_key(name: str, labels: dict) -> str:
-    try:
-        from orchestra.sd.series import series_key
-    except ImportError:
-        def series_key(n, lab):
-            inner = ",".join(f'{k}="{v}"' for k, v in sorted(lab.items()) if k != "project")
-            return f"{n}{{{inner}}}" if inner else n
-    return series_key(name, labels)
-
-
-def ref_key(ref) -> str | None:
-    """A series' key as the declared layer matches parts by (intended-model.md §3.1): its name and
-    the labels that say which thing it measures."""
-    if ref is None:
-        return None
-    left = _left_out()
-    return _series_key(ref.name, {k: v for k, v in (ref.labels or {}).items() if k not in left})
-
-
-def _stock_key(stock) -> str:
-    """Its series' key; else the key of the level its counters imply (``evidence["level"]``, a
-    state between counters); ``stock:<id>`` only for a stock with neither."""
-    level = (stock.evidence or {}).get("level") if isinstance(getattr(stock, "evidence", None), dict) else None
-    implied = None
-    if isinstance(level, dict) and level.get("name"):
-        implied = _series_key(level["name"], {k: v for k, v in (level.get("labels") or {}).items() if k not in _left_out()})
-    return ref_key(stock.series) or implied or f"stock:{stock.id}"
-
-
-class _LocalKeys:
-    """The stand-in's fallback for Orchestra's ``keys.Keys`` (``intended-model.md`` §3.1), as
-    Orchestra's main keys a model: ``stocks`` and ``flows`` key -> id, ``stock_of_id`` id -> key."""
-
-    def __init__(self, model):
-        self.model = model
-        self.stock_of_id = {s.id: _stock_key(s) for s in model.stocks} if model else {}
-        self.stocks: dict[str, str] = {}
-        for sid, k in self.stock_of_id.items():
-            self.stocks.setdefault(k, sid)
-        self.flows: dict[str, str] = {}
-        for f in (model.flows if model else []):
-            a = self.stock_of_id.get(f.src, f.src) if f.src else "outside"
-            b = self.stock_of_id.get(f.dst, f.dst) if f.dst else "outside"
-            counter = ref_key(f.counter) or "+".join(sorted(filter(None, (ref_key(r) for r in f.measured_by or []))))
-            self.flows.setdefault(f"{a} -> {b}" + (f" by {counter}" if counter else ""), f.id)
-
-
-try:
-    from orchestra.sd.intended.keys import Keys
-    from orchestra.sd.intended.names import resolve as _core_resolve
-except ImportError:
-    Keys, _core_resolve = _LocalKeys, None
-
-
 def all_keys(keys) -> set[str]:
     """Every stock and flow key of a model's ``Keys``."""
     return set(keys.stocks) | set(keys.flows)
 
 
-def resolve(text: str | None, lay: dict, keys) -> tuple[str | None, str | None, str | None]:
-    """One name of a draft edit (a ``stock``, ``from`` or ``to``) as the judge reads it: (the model's
-    id now, the key, why it cannot be published yet). A declared stock or effect is read through
-    its ``found_as`` ("waits for a link" while it has none but its measure has a chosen option,
-    else "waits for a series"); a discovered stock only by its key, never by its id (ids follow
-    arrival order). ``None`` is outside. Orchestra's ``names.resolve`` when it imports."""
+def resolve(text: str | None, lay: dict, keys: Keys) -> tuple[str | None, str | None, str | None]:
+    """One name of a draft edit (a ``stock``, ``from`` or ``to``) as the judge reads it, by
+    Orchestra's ``names.resolve``: (the model's id now, the key, why it cannot be published yet). A
+    declared stock or effect is read through its ``found_as`` ("waits for a link" while it has none
+    but its measure has a chosen option, else "waits for a series"); a discovered stock only by its
+    key, never by its id (ids follow arrival order). ``None`` is outside."""
     if text is None:
         return None, None, None
-    lay = {"stocks": {}, "effects": {}, **lay}
-    if _core_resolve is not None and isinstance(keys, Keys):
-        n = _core_resolve(text, lay, keys)
-        if n.why is not None:
-            return None, n.key, n.why
-        return (n.id, n.key, None) if n.id is not None else (None, n.key, ABSENT)
-    decl = lay["stocks"].get(text) or lay["effects"].get(text)
-    if decl is not None:
-        if not decl.get("found_as"):
-            return None, None, WAITS_LINK if (decl.get("measure") or {}).get("chosen") else WAITS
-        text = decl["found_as"]
-    if text in keys.stocks:
-        return keys.stocks[text], text, None
-    return None, text, ABSENT
+    n = _core_resolve(text, {"stocks": {}, "effects": {}, **lay}, keys)
+    if n.why is not None:
+        return None, n.key, n.why
+    return (n.id, n.key, None) if n.id is not None else (None, n.key, ABSENT)

@@ -172,11 +172,8 @@ and `demo/dummy.toml` as a worked example.
     uv run python -m pytest -q         # about four minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
 
-The design tools' tests run on both declared layers: the agents' stand-in always, and Orchestra's
-own only when an Orchestra with it is laid over this environment (skipped otherwise), for example a
-checkout of Orchestra's `main`:
-
-    uv run --with-editable <an Orchestra checkout with the declared layer> python -m pytest tests/unit/test_design_*.py tests/e2e/test_design_e2e.py
+The design tools' tests run on Orchestra's own declared layer (`orchestra.sd.intended`), served
+in process through its host's events endpoint; `uv.lock` names the Orchestra commit they ran on.
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
 protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`

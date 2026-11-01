@@ -2,12 +2,8 @@
 store, a turn begun with the owner's message (as the host records it), and a call through
 ``tooling`` as an agent's session makes it.
 
-The declared layer is each of the two the seam can choose (``intended_api.py``), so every test runs
-against both when it can: ``standin``, the agents' file-backed stand-in, and ``core``, Orchestra's
-own through its host's events endpoint, served here in-process. ``core`` runs only when the
-installed Orchestra has it (``uv run --with-editable <an Orchestra checkout with the declared
-layer> ...``) and is skipped otherwise; with it installed, ``standin`` forces the stand-in. A test of a choice the two make
-differently on purpose says so with ``differs``."""
+The declared layer is Orchestra's own (``orchestra.sd.intended``) through its host's events
+endpoint, served here in-process (``intended_api.py`` is the seam)."""
 
 from __future__ import annotations
 
@@ -22,7 +18,6 @@ from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
 WHY = "the owner asked for it in the chat just now"
-CORE = intended_api.core_installed()
 
 
 def git(repo, *args):
@@ -44,20 +39,11 @@ def core_endpoint(project):
         ep.stop()
 
 
-@pytest.fixture(params=["standin", "core"])
-def layer_kind(request, monkeypatch):
-    if request.param == "core" and not CORE:
-        pytest.skip("the installed Orchestra has no declared layer: run with --with-editable <an Orchestra checkout with it>")
-    if request.param == "standin" and CORE:
-        monkeypatch.setattr(intended_api, "has_core", lambda *a, **k: False)
+@pytest.fixture
+def project(tmp_path, monkeypatch):
     intended_api._cache.clear()
     monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
     monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
-    return request.param
-
-
-@pytest.fixture
-def project(tmp_path, monkeypatch, layer_kind):
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -67,10 +53,7 @@ def project(tmp_path, monkeypatch, layer_kind):
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     p.reload_config()
-    if layer_kind == "core":
-        with core_endpoint(p):
-            yield p
-    else:
+    with core_endpoint(p):
         yield p
 
 
@@ -85,12 +68,6 @@ def drafting(monkeypatch):
     does not know), so a draft instrument expires as it does with the flag."""
     from orchestra_agents import design_instruments
     monkeypatch.setattr(design_instruments, "supports_draft", lambda: True)
-
-
-def differs(layer_kind: str, why: str) -> None:
-    """A choice the stand-in makes on purpose where Orchestra's does not yet (the coordinator's list)."""
-    if layer_kind == "core":
-        pytest.xfail(why)
 
 
 def say(store, message: str, n: int = 1) -> None:
@@ -108,9 +85,8 @@ def layer(project) -> dict:
 
 
 def journal(project) -> list[dict]:
-    """The declared layer's journal: the stand-in's, or (in a test only) Orchestra's read in process."""
-    lay = intended_api.layer(project)
-    return lay.journal() if hasattr(lay, "journal") else project.orchestra.intended.journal()
+    """The declared layer's journal, read in process (in a test only)."""
+    return project.orchestra.intended.journal()
 
 
 def changes(project) -> list[dict]:
@@ -122,20 +98,17 @@ def changes(project) -> list[dict]:
 
 
 def request(store, control: str, element: str, change: str | None = None, source: str = "owner") -> str:
-    """The owner's click on a page, as Orchestra's web server publishes and notes it (C1's
-    ``requests.publish``; the stand-in's ``note_request``); its id. From any other ``source``, a
+    """The owner's click on a page, as Orchestra's web server publishes and notes it
+    (``requests.publish``); its id. From any other ``source``, a
     bare event on the bus, which nothing notes."""
     part, _, eid = element.partition(":")
     body = {"control": control, "part": part, "id": eid, "change": change, "from": "Machines page"}
     if source != "owner":
         return store.events.publish("orchestra.intent.requested", body, source=source, subject=element)["id"]
+    from orchestra.events import Events as CoreEvents
+    from orchestra.sd.intended import requests
     project = store.project
-    if isinstance(intended_api.layer(project), intended_api.Core):
-        from orchestra.events import Events as CoreEvents
-        from orchestra.sd.intended import requests
-        return requests.publish(project.orchestra.intended, CoreEvents.for_project(project.orchestra), body)["id"]
-    from orchestra_agents.intended_standin import StandIn
-    return StandIn(project).note_request(body)["id"]
+    return requests.publish(project.orchestra.intended, CoreEvents.for_project(project.orchestra), body)["id"]
 
 
 def bare_request(store, control: str, element: str) -> str:

@@ -196,10 +196,6 @@ DESIGN_TOOLS: list[ToolDef] = [
             "stock's instruments, leave no file.",
             {"element": ELEMENT, "change": S("A pending change's id, to discard only that"), "request": REQUEST, "quote": QUOTE,
              "reason": REASON}, ("element", "reason")),
-    ToolDef("carry_over", "design",
-            "Only when a design tool says both Orchestra's declared layer and the agents' stand-in hold declarations: the "
-            "owner's answer, quoted. finish replays the stand-in's calls into Orchestra's layer; abandon archives them.",
-            {"how": E(["finish", "abandon"]), "quote": QUOTE, "reason": REASON}, ("how", "quote", "reason")),
     ToolDef("read_design", "observe",
             "The declared layer in one read: every declared and proposed element with its state, link and guessed fields; "
             "each machine's fields; each event type's declared publishers and listeners and who was heard publishing it or "

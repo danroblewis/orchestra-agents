@@ -2,20 +2,19 @@
 real host, each turn a fake `claude -p` whose tool calls go through the real MCP server (or, with
 `[agents] tools_via = "bash"`, the session's shell), so provenance is recorded where a real
 session's calls are (the turn and the owner's message the host keeps). Every tool's answer is read
-back from the reply and must be `ok`. The assertions are on the declared layer: the stand-in, or
-Orchestra's own through its host's endpoint when the installed Orchestra has it (served here)."""
+back from the reply and must be `ok`. The assertions are on Orchestra's declared layer, through its
+host's endpoint (served here)."""
 
 import json
 import re
 import shutil
 import stat
 import subprocess
-from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 from conftest import agents_project
-from design_fixtures import CORE, core_endpoint, journal, model_with
+from design_fixtures import core_endpoint, journal, model_with
 from fake_tasks import FakeTasks
 
 from orchestra_agents import intended_api, prompting
@@ -84,7 +83,7 @@ def chat(request, tmp_path, monkeypatch):
     events = Events.for_project(project)
     host = AgentHost(project, AgentStore(project, events), events)
     host._refresh_org(host.store.runtime()["agent_state"])
-    with FakeTasks(project), (core_endpoint(project) if CORE else nullcontext()):
+    with FakeTasks(project), core_endpoint(project):
         def say(message: str, steps: list[dict]) -> list[dict]:
             script.write_text(json.dumps(steps))
             out = host.prompt_supervisor(message, lambda e: None)
@@ -127,7 +126,7 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
     assert (project.state_dir / "instruments" / "features.acceptance.sh").exists()
     project.reload_config()
     entry = next(e for e in project.orchestra.config.raw["collect"] if e["name"] == "features.acceptance")
-    assert turn1[-1]["draft"] is CORE and (entry.get("draft") is True) is CORE          # the flag, where Orchestra takes it
+    assert turn1[-1]["draft"] is True and entry.get("draft") is True                   # the draft flag
 
     turn3 = say(TURN3, [
         {"tool": "read_design", "args": {}},
@@ -228,7 +227,7 @@ def test_the_dummy_demos_supervisor_answers_the_owners_confirm_click(tmp_path, m
     store = AgentStore(project, Events.for_project(project, source="supervisor"))
     host = AgentHost(project, AgentStore(project, events), events)
     host._refresh_org(host.store.runtime()["agent_state"])
-    with FakeTasks(project), (core_endpoint(project) if CORE else nullcontext()):
+    with FakeTasks(project), core_endpoint(project):
         try:
             store.set_agent_state("supervisor", turn={"n": 1, "id": "sessions/supervisor/1", "message": TURN3, "at": 1.0})
             args = {"name": "Feature Count Improver", "kind": "universal", "description": "Improves delivery",

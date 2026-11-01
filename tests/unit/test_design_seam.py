@@ -1,8 +1,7 @@
-"""The seam to the declared layer (intended_api.py) and the rules the stand-in shares with
-Orchestra's main: keys and names as Orchestra resolves them, a request checked against the layer's
+"""The seam to the declared layer (intended_api.py) and the rules of Orchestra's layer the tools
+rely on: keys and names as Orchestra resolves them, a request checked against the layer's
 open-request row, an owner's mark that another author cannot overwrite, the deadline of one tool
-call, the pages that draw it, and the host's start. Each runs on both declared layers where it can
-(design_fixtures)."""
+call, the pages that draw it, and the host's start (design_fixtures)."""
 
 import http.server
 import threading

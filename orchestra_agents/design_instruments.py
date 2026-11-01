@@ -4,7 +4,7 @@ step"; §2.1, where writes go).
 ``add_instrument`` writes a script of at most 100 lines to the state directory
 (``~/.orchestrator/<key>/agents/instruments/<name>.sh``) and its ``[[collect]]`` entry (or a
 ``[[scrape]]`` entry for a URL) to the owner's private overlay through ``config_edit``, as one act.
-It runs only what the option proposed (its url or command, on the option or ``design_dynamics.targets_of``), never
+It runs only what the option proposed (its url or command, kept on the option), never
 an option that needs the owner's approval, nothing that names or reaches a company system (the
 script's own text included, ``design_clearance.far``), and nothing that looks like a secret; it
 never takes over an instrument of the same name already configured; the script is tried first
@@ -49,7 +49,7 @@ from .config import Project
 from .config_change import change
 from .design import MACHINE, OWNER, answer, apply, page_line
 from .design_clearance import NEEDS_APPROVAL, UNTIL, company_named, far
-from .design_dynamics import no_secret, options_of, resolve, targets_of
+from .design_dynamics import no_secret, options_of, resolve
 from .secret_shapes import secret_in
 from .setup_tools import INSTRUMENTS_CHANGED
 from .store import AgentStore, StoreError
@@ -151,8 +151,7 @@ def _what_runs(project: Project, store: AgentStore, part: str, eid: str, key: st
     if option.get("clearance") == NEEDS_APPROVAL:
         raise StoreError(f"option {key} reads a company system not cleared for the model (needs approval); nothing reads or "
                          f"previews it {UNTIL}")
-    mine = {**(targets_of(store, part, eid).get(key) or {}),                  # the layer's option, else the Supervisor's record
-            **{k: option[k] for k in ("url", "command") if option.get(k)}}
+    mine = {k: option[k] for k in ("url", "command") if option.get(k)}      # what the layer's option names
     script, command, url = a.get("script") or "", (a.get("command") or "").strip(), (a.get("url") or "").strip()
     for given, what in ((url, "url"), (command, "command")):
         if given and given != mine.get(what):

@@ -2,11 +2,9 @@
 15): every settlement backed by the owner, a request backing only the call it names and only once,
 the Universal | Programmatic switch end to end, a confirmed machine run from the state directory
 with nothing committed, its expected effect published after the confirm (and once a waiting stock
-is linked, and again when an era interrupts it), and the stand-in's declarations carried into
-Orchestra's layer. Each runs on both declared layers (design_fixtures)."""
+is linked, and again when an era interrupts it). Each runs on Orchestra's declared layer (design_fixtures)."""
 
 import json
-import threading
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -17,7 +15,6 @@ from design_fixtures import WHY, bare_request, call, changes, git, layer, model_
 from orchestra_agents import (
     design_confirm,
     intended_api,
-    intended_carry,
     machine_spec,
     state_machines,
 )
@@ -398,86 +395,6 @@ def test_a_proposal_cannot_retire_what_the_owner_declared(project, store):
     with pytest.raises(StoreError, match="owner's to ask"):
         call(project, store, "discard", element=FCI, reason=WHY)
     assert (state_machines.root(project) / "feature_count_improver").exists()
-
-
-Q = {"author": "owner", "source": "supervisor", "quote": "create a Features stock", "reason": WHY, "turn": "sessions/supervisor/1"}
-
-
-def _stand_in(project, n: int = 2):
-    from orchestra_agents.intended_standin import StandIn
-    standin = StandIn(project)
-    standin.apply([{"op": "declare_stock", "name": "Features"}], Q)
-    standin.apply([{"op": "declare_effect", "name": "Review backlog"}], {"author": "supervisor", "source": "supervisor", "reason": WHY})
-    if n > 2:
-        standin.apply([{"op": "declare_stock", "name": "Bugs"}], Q)
-
-
-def test_the_stand_ins_declarations_are_carried_into_orchestras_layer_once(project, store, layer_kind):
-    if layer_kind != "core":
-        pytest.skip("carrying over needs Orchestra's layer")
-    _stand_in(project)
-    lay = intended_api.layer(project)
-    got = lay.read()
-    assert got["version"] == 2 and got["layer"]["stocks"]["features"]["provenance"]["quote"] == "create a Features stock"
-    assert got["layer"]["effects"]["review_backlog"]["state"] == "proposed"
-    assert not intended_api.standin_dir(project).exists() and list(project.state_dir.glob("intended.replayed.*"))
-    from orchestra_agents.intended_standin import StandIn
-    StandIn(project).apply([{"op": "declare_stock", "name": "Bugs"}], Q)
-    with pytest.raises(StoreError, match="both Orchestra's declared layer and the agents' stand-in"):
-        intended_api.layer(project)
-    say(store, "Drop the old ones, keep what Orchestra has.", 9)
-    out = call(project, store, "carry_over", how="abandon", quote="Drop the old ones, keep what Orchestra has.", reason=WHY)
-    assert "abandoned" in out["said"][0] and list(project.state_dir.glob("intended.abandoned.*"))
-    assert intended_api.layer(project).read()["version"] == 2
-
-
-def test_a_carry_over_that_stopped_resumes_where_it_stopped(project, store, layer_kind, monkeypatch):
-    if layer_kind != "core":
-        pytest.skip("carrying over needs Orchestra's layer")
-    _stand_in(project, 3)
-    real, n = intended_api.Core.apply, []
-
-    def fails_once(self, ops, prov):
-        n.append(1)
-        if len(n) == 2:
-            raise StoreError("Orchestra refused op 0: for the test")
-        return real(self, ops, prov)
-    monkeypatch.setattr(intended_api.Core, "apply", fails_once)
-    with pytest.raises(StoreError, match="stopped at call 2"):
-        intended_api.layer(project)
-    assert intended_api.Core(project).read()["version"] == 1                  # call 1 is in
-    lay = intended_api.layer(project)                                         # resumes from call 2: no "both hold"
-    got = lay.read()
-    assert got["version"] == 3 and set(got["layer"]["stocks"]) == {"features", "bugs"}
-    assert not intended_api.standin_dir(project).exists()
-
-
-def test_two_first_calls_at_once_carry_over_once(project, store, layer_kind):
-    if layer_kind != "core":
-        pytest.skip("carrying over needs Orchestra's layer")
-    _stand_in(project)
-    errors = []
-
-    def first():
-        try:
-            intended_api.layer(project)
-        except Exception as e:  # noqa: BLE001 - collected for the assertion
-            errors.append(e)
-    threads = [threading.Thread(target=first) for _ in range(2)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert errors == [] and intended_api.Core(project).read()["version"] == 2
-
-
-def test_carry_over_is_the_owners_to_answer(project, store, layer_kind):
-    if layer_kind != "core":
-        pytest.skip("carrying over needs Orchestra's layer")
-    say(store, "", 9)
-    with pytest.raises(StoreError, match="quote"):
-        call(project, store, "carry_over", how="finish", reason=WHY)
-    assert intended_carry.carry_over(project, intended_api.Core(project)) is None   # nothing to carry
 
 
 def test_the_refinement_pass_runs_after_the_owner_confirms_whatever_the_spec(project, store):

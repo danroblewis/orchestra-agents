@@ -1,7 +1,7 @@
 """The design tools of the Machines side (machine-design.md §2.3, §2.5, §3; acceptance tests 12, 13,
 14, 16, 17): a machine declared with every field of its kind and its guesses, refined change by
 change with what each replaced, its expected effect and its horizon, the refinement passes, and
-the tools' schemas. Each runs on both declared layers (design_fixtures)."""
+the tools' schemas. Each runs on Orchestra's declared layer (design_fixtures)."""
 
 import time
 from datetime import UTC, datetime

@@ -1,7 +1,7 @@
 """The design tools of the Dynamics side (machine-design.md §2.2; acceptance tests 1, 2, 4–7, 9–11):
 declared stocks with their provenance, the ways to measure one and whether one needs the owner's
 approval, the instrument written to the state directory with its entry in the overlay as one act,
-kept or expired, and the link to a discovered stock. Each runs on both declared layers
+kept or expired, and the link to a discovered stock. Each runs on Orchestra's declared layer
 (design_fixtures)."""
 
 import json
@@ -92,12 +92,6 @@ def test_provenance_never_carries_via_or_at_and_orchestras_check_takes_it(projec
     assert core_check(prov)["via"] == "plugin"                              # the next drift fails here
 
 
-def test_the_stand_in_refuses_via_and_at_as_orchestra_does(project):
-    from orchestra_agents.intended_standin import StandIn
-    with pytest.raises(StoreError, match="via and at are set by the store"):
-        StandIn(project).apply([{"op": "declare_stock", "name": "X"}], {"author": "supervisor", "via": "plugin", "reason": WHY})
-
-
 def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it(project, store):
     features(project, store)
     s = layer(project)["stocks"]["features"]
@@ -112,7 +106,7 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
     assert "proposed by the Supervisor" in out["said"][0]
 
 
-def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, layer_kind, monkeypatch):
+def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, monkeypatch):
     monkeypatch.setattr(intended_api, "_shipped", lambda asset: False)       # an Orchestra without the pages that draw it
     outs = [features(project, store), options(project, store), add(project, store)]
     for o in outs:
@@ -132,10 +126,7 @@ def test_a_page_is_named_once_orchestra_says_one_draws_the_layer(project, store,
     assert not any("Machines page" in line for line in out["said"])          # the Machines page is not drawn in this one
 
 
-def test_the_pages_that_draw_the_layer_are_the_ones_the_installed_orchestra_ships(project, layer_kind, monkeypatch):
-    if layer_kind == "standin":
-        assert intended_api.pages(project) == set() and not intended_api.drawn(project)
-        return
+def test_the_pages_that_draw_the_layer_are_the_ones_the_installed_orchestra_ships(project, monkeypatch):
     shipped = {"intended-machines.js", "intended-dynamics.js"}
     monkeypatch.setattr(intended_api, "_shipped", lambda asset: asset in shipped)
     assert intended_api.pages(project) == {"Machines", "Dynamics"} and intended_api.drawn(project, "Machines")
@@ -154,10 +145,7 @@ def test_options_are_recorded_in_order_and_a_company_system_needs_approval(proje
     m = layer(project)["stocks"]["features"]["measure"]
     assert [o["kind"] for o in m["options"]] == ["script", "counters", "source", "simulated"]
     assert m["options"][2]["clearance"] == "needs approval"
-    if "bearer_env" in intended_api.option_fields(project):                    # kept on the option, where the layer keeps it
-        assert m["options"][2]["bearer_env"] == "JIRA_TOKEN" and "JIRA_TOKEN" not in m["options"][2]["how"]
-    else:
-        assert "environment variable JIRA_TOKEN" in m["options"][2]["how"]
+    assert m["options"][2]["bearer_env"] == "JIRA_TOKEN" and "JIRA_TOKEN" not in m["options"][2]["how"]   # kept on the option
     assert m["options"][1]["caveat"].startswith("counts what was planned") and m["chosen"] is None
     with pytest.raises(StoreError, match="never a value"):
         call(project, store, "propose_measurements", element="features", reason=WHY, options=[
@@ -292,19 +280,10 @@ def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_
     assert events and events[-1]["target"] == "overlay"
 
 
-def test_the_draft_flag_is_written_when_orchestra_takes_it_and_comes_off_when_kept(project, store, layer_kind, monkeypatch):
-    if layer_kind == "standin":                    # this Orchestra may not take it: then it is said plainly, and nothing written
-        monkeypatch.setattr(design_instruments, "supports_draft", lambda: False)
-        features(project, store)
-        options(project, store)
-        out = add(project, store)
-        assert "draft" not in entry(project, "features.acceptance") and design_instruments.NO_DRAFT in out["said"]
-        monkeypatch.setattr(design_instruments, "supports_draft", lambda: True)    # pinned Orchestra ignores the keys it does not know
-        out = add(project, store, option="b", name="features.tickets", command="echo 'features_done 7'")
-    else:
-        features(project, store)
-        options(project, store)
-        out = add(project, store, option="b", name="features.tickets", command="echo 'features_done 7'")
+def test_the_draft_flag_is_written_when_orchestra_takes_it_and_comes_off_when_kept(project, store):
+    features(project, store)
+    options(project, store)
+    out = add(project, store, option="b", name="features.tickets", command="echo 'features_done 7'")
     e = entry(project, "features.tickets")
     assert e["draft"] is True and e["expires"].endswith("Z") and out["draft"]
     say(store, "Keep the tickets one, please.", 2)

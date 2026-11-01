@@ -814,22 +814,21 @@ does not wait to see them act (except `restart_machine`, which watches the launc
 
 **Designing the system** (tool group `design`, the Supervisor's alone, checked in the handler;
 `design.py` and `design_dynamics.py`, `design_clearance.py`, `design_instruments.py`, `design_machines.py`,
-`design_confirm.py`, `design_passes.py`, `state_machines.py`, `intended_carry.py`;
+`design_confirm.py`, `design_passes.py`, `state_machines.py`;
 `prompts/design.md`; Orchestra's `machine-design.md`). The owner talks; the Supervisor declares,
 measures, drafts and refines; the declared layer is reached only through `intended_api.layer`:
-Orchestra's (its host's `POST /intended`, `GET /intended`, `GET /intended/design`), or else the
-stand-in in the state directory. **An answer names a page only where the installed Orchestra has
+Orchestra's (`orchestra.sd.intended`, through its host's `POST /intended`, `GET /intended`, `GET
+/intended/design`; the dependency is an Orchestra with it, and there is no other). **An answer names a page only where the installed Orchestra has
 the page that draws the layer** (`intended_api.pages`: its Machines page's `intended-machines.js`
 and its Dynamics page's `intended-dynamics.js` in its packaged assets, or a `draws` field in `GET
 /intended/design` if Orchestra ever has one): `design.page_line` names the Machines page for a
-machine and the Dynamics page for a stock, effect or flow; with no such page (the stand-in, or an
-Orchestra without them) it adds nothing, `kept_in` alone says where it is kept, and the Supervisor
+machine and the Dynamics page for a stock, effect or flow; with no such page (an Orchestra without
+them) it adds nothing, `kept_in` alone says where it is kept, and the Supervisor
 summarises from `read_design`. A draft edit's keys and names are Orchestra's own (`keys.Keys`,
-`names.resolve`) when they import, so the plugin resolves an edit as Orchestra does: a stock no
-series measures is keyed by the level its counters imply, and a discovered id is never accepted
-for a key; the local copy is the stand-in's fallback. Every Orchestra name the tools read that
-Orchestra does not document yet (the draft flag on a collector, discovery's minimum era, an era's
-cause, a series' key, the keys and names) is read in `intended_api.py` alone, each with what to do
+`names.resolve`), so the plugin resolves an edit as Orchestra does: a stock no series measures is
+keyed by the level its counters imply, and a discovered id is never accepted for a key. Every
+Orchestra name the tools read that Orchestra does not document yet (the draft flag on a collector,
+discovery's minimum era, an era's cause, the keys and names, the option's fields) is read in `intended_api.py` alone, each with what to do
 when it is absent. A tool call has one deadline (`intended_api.one_call`): after an endpoint
 timeout the rest of the call fails at once, saying what it applied, and `GET /intended/design` is
 read once per call until a write; the host skips its design tick for five minutes after a timeout,
@@ -856,11 +855,9 @@ owner declared (a target on it, unmarking their expect mark, retracting it) need
 their request, as Orchestra's `guard_owners` says.
 
 The tools: `declare_stock`, `declare_effect`, `set_target` (`compare`: below, above, within),
-`declare_stock` and `declare_effect` take a `description` (what the owner says it means), sent where
-the layer takes one; `propose_measurements` (options in order with `cost`, `caveat`, and the
-`system`, `series`, `url`, `command` and `bearer_env` each names, kept on the option where the layer
-keeps those fields (`intended_api.option_fields`: Orchestra's since its C8, and the stand-in) and
-with the Supervisor too, the fallback for a layer that does not; **clearance from facts**
+`declare_stock` and `declare_effect` take a `description` (what the owner says it means); `propose_measurements` (options in order with `cost`, `caveat`, and the
+`system`, `series`, `url`, `command` and `bearer_env` each names, kept on the option
+(`intended_api.OPTION_FIELDS`, Orchestra's `ops.OPTION`), from which `add_instrument` reads what to run; **clearance from facts**
 (`design_clearance.py`): a `source` option, or
 one naming a company system, or one reaching anything but this machine, the project's `[metrics]`
 store and Orchestra's own endpoint (a URL or `host:port` elsewhere, a bare dotted host name, a host

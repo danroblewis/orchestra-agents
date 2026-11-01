@@ -174,7 +174,7 @@ to edit a file.
 - **The tools**: `declare_stock`, `declare_effect`, `set_target`, `propose_measurements`,
   `add_instrument`, `keep_instrument`, `mark_expected`, `ignore`, `link`, `declare_machine`,
   `refine_machine`, `switch_kind`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`;
-  `read_design` reads it all back (`carry_over` is only for the one refusal that names it). Each
+  `read_design` reads it all back. Each
   takes a `reason`; a `quote` of the owner's words (three words or more, or their whole message)
   makes it theirs ("added by you"); without one it is your proposal. Confirm, discard and the kind
   switch need the owner: their quote, or the `request` of their click, which the declared layer

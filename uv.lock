@@ -429,7 +429,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#7cab755b6119ca07db3f0f48f37ffa9174e027b5" }
+source = { git = "https://github.com/danroblewis/orchestra?rev=main#d777cc38ba7649be5dd6f1aad70d747a75439705" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },

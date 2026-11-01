@@ -2,7 +2,7 @@
 or an engagement change confirmed as a pending change, spec edits that settle together, a
 prediction renewed after one interruption or two, a machine managed elsewhere or a program, the
 records' reads, and a draft instrument kept, expired, half-written or never drafted. Each runs on
-both declared layers (design_fixtures)."""
+Orchestra's declared layer (design_fixtures)."""
 
 import time
 from datetime import UTC, datetime
@@ -14,7 +14,7 @@ from orchestra_agents import (
     design_confirm,
     design_instruments,
     design_machines,
-    intended_api,
+    machine_spec,
     state_machines,
 )
 from orchestra_agents.events import Events
@@ -258,9 +258,7 @@ def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(
     assert len(after) == before + 1 and after[-1]["source"] == "supervisor"
 
 
-def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, drafting, layer_kind):
-    if layer_kind == "core":
-        pytest.skip("Orchestra leaves a draft series out of discovery, so it cannot be marked yet (the coordinator's list, d)")
+def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, drafting):
     features(project, store)
     add(project, store)
     say(store, "Yes, track acceptance tests passing.", 4)
@@ -331,10 +329,7 @@ def test_add_instrument_reads_what_the_option_names_from_the_layer(project, stor
     call(project, store, "propose_measurements", element="features", reason=WHY, options=[
         {"label": "the tickets counted", "kind": "script", "how": "a count", "cost": "nothing", "command": "echo 'features_done 7'"}])
     opt = layer(project)["stocks"]["features"]["measure"]["options"][0]
-    if "command" not in intended_api.option_fields(project):
-        pytest.skip("this layer keeps no option's command")
     assert opt["command"] == "echo 'features_done 7'"
-    monkeypatch.setattr(design_instruments, "targets_of", lambda *a: {})          # nothing kept with the Supervisor
     out = add(project, store, name="features.tickets", command="echo 'features_done 7'")
     assert entry(project, "features.tickets")["command"] == "echo 'features_done 7'" and out["instrument"] == "features.tickets"
 
@@ -360,3 +355,15 @@ def test_events_from_a_short_history_are_scaled_to_a_day_and_said_so(store, monk
     old = [{"type": "boot", "ts": iso(now - 3 * 86_400)}, *young]
     monkeypatch.setattr(design_machines, "_recent", lambda s, n=20_000: old)
     assert design_machines.runs_a_day(store, m, now=now) == (10.0, "woken by gate.landed: 10 such events in the last day")
+
+
+def test_a_machine_answering_the_floors_offers_is_written_with_its_role_and_read_by_the_one_loader(project):
+    m = {"id": "triager", "kind": "universal", "description": "Triages", "engagement": {"mode": "ad hoc"},
+         "receives": ["offer.made", "offer.withdrawn"], "emits": ["triage.done"], "spec": {}}
+    state_machines.write(project, m)
+    spec = machine_spec.load_all(project)["triager"]
+    assert spec.role == "triager" and spec.emits == ["triage.done"] and spec.root != machine_spec.ROOT
+    state_machines.write(project, {**m, "id": "builder", "receives": ["gate.landed"], "spec": {"role": "build"}})
+    assert machine_spec.load_all(project)["builder"].role == "build"
+    state_machines.write(project, {**m, "id": "plain", "receives": ["gate.landed"]})
+    assert machine_spec.load_all(project)["plain"].role is None

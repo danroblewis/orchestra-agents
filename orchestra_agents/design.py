@@ -28,8 +28,7 @@ options), ``design_clearance.py`` (whether an option needs the owner's approval)
 ``design_instruments.py`` (the instrument written and recorded, kept or expired),
 ``design_machines.py`` (machines, events, expected effects, the draft implementation),
 ``design_confirm.py`` (confirm and discard, the owner's page requests), ``design_passes.py`` (the
-refinement passes), ``intended_carry.py`` (the owner's answer when the stand-in and Orchestra's
-layer both hold declarations)."""
+refinement passes)."""
 
 from __future__ import annotations
 
@@ -180,9 +179,8 @@ def _modules():
         design_dynamics,
         design_instruments,
         design_machines,
-        intended_carry,
     )
-    return design_dynamics, design_instruments, design_machines, design_confirm, intended_carry
+    return design_dynamics, design_instruments, design_machines, design_confirm
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:

@@ -380,8 +380,9 @@ class AgentHost:
             extra["PATH"] = os.pathsep.join(dirs + [os.environ.get("PATH", "")])
             extra["ORCHESTRA_TEAM"] = team.name
         read_only = agent.builtin and any(BUILTIN_ROLES[r].read_only for r in agent.roles if r in BUILTIN_ROLES)
-        return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, self.role_defs, self.teams),
-                                  effective_tools(agent, self.role_defs, self.teams), cwd, extra_env=extra, read_only=read_only)
+        roles = self.role_defs or all_roles(self.project)     # a chat before the first tick's refresh still gets its tools
+        return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, roles, self.teams),
+                                  effective_tools(agent, roles, self.teams), cwd, extra_env=extra, read_only=read_only)
 
     def _open_session(self, session_id: str, role: str, system_prompt: str, tools: tuple[str, ...], cwd: Path,
                       ticket_id: str = "", extra_env: dict[str, str] | None = None, read_only: bool = False) -> AgentSession:

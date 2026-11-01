@@ -13,8 +13,8 @@
   False and nothing is scaffolded (the tool proposes the no-kit route instead).
 - **A scaffolded poller's files** live in the owner's repository, ``.orchestra/machines/<name>/``
   (the kit's ``--root repo``; the agents' machine specs are read from there too, and one whose
-  name is no agent is ignored), where a coding tool or the Coordinator's worker edits them and a
-  pull request lands them; in Orchestra's state directory, ``~/.orchestrator/<key>/machines/<name>/``
+  name is no agent is ignored), uncommitted: a coding tool may edit them and the owner commits them, or the
+  Coordinator's ticket lands them (``integrate_handoff``); in Orchestra's state directory, ``~/.orchestrator/<key>/machines/<name>/``
   (``--root state``), only when the owner says the repository must stay clean (``ROOTS``). Its
   ``machine.toml`` is the program's own file, never Orchestra's configuration, so it is edited here
   line by line (``set_keys``, comments kept): the owner's settings (``fill``) and, on the owner's

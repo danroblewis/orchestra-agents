@@ -265,10 +265,10 @@ DESIGN_TOOLS: list[ToolDef] = [
             "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
             "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
-            "owner's repository (.orchestra/machines/<name>/: a coding tool or the Coordinator may edit it there, a pull "
-            "request lands it), tested against the kit's fake, and the system is declared on the Machines page as a machine "
-            "managed elsewhere. A failed test, or a system with no template of its own, is handed to the Coordinator as "
-            "work. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
+            "owner's repository (.orchestra/machines/<name>/, uncommitted: a coding tool may edit it, the owner commits it), "
+            "tested against the kit's fake, and the system is declared on the Machines page as a machine managed elsewhere. "
+            "A failed test, or a system with no template of its own, is handed to the Coordinator as work (its ticket lands "
+            "the script); call again with the same name once the worker's test passes. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
             {"system": S("The system's name: jira, slack, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),

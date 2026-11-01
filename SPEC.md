@@ -955,8 +955,8 @@ Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone
 library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
 scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
 imported only in `integrate_kits`) into the owner's repository (`.orchestra/machines/<name>/`, the
-kit's `--root repo`, where a coding tool or the Coordinator's worker edits it and a pull request
-lands it), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
+kit's `--root repo`, uncommitted: a coding tool may edit it, and the owner commits it or approves
+its pull request, as INTEGRATING.md says), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
 with `root: state`, when the owner said the repository must stay clean; it runs the
 program's own test against the kit's fake in a child Python with every credential-looking variable
 left out of its environment, and only then fills the owner's words and settings into its
@@ -965,13 +965,24 @@ settings is refused). A poller's system is declared as a machine managed elsewhe
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
 Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
-plans nothing and hands the script to the Coordinator (`hand_to_coordinator`, `work.requested`
+plans nothing and hands the script to the Coordinator (`integrate_handoff.hand_on`, `work.requested`
 naming the directory, the failure and the kit's rules); so does a system with no template of its
-own (the generic `http` kit), whose integration goes on to wait for approval meanwhile. A test that
+own (the generic `http` kit), whose integration goes on to wait for approval meanwhile, the
+hand-off published only once its declarations held and its record was saved. A repository scaffold
+handed on is first moved out of the owner's checkout to `<state>/machines/<name>/` (a worker's
+worktree is cut from the base branch and lacks the untracked files, and git would refuse to land a
+copy over them): the requirements tell the worker to copy it to `.orchestra/machines/<name>/` in its
+own worktree, adapt and commit it there, and the ticket's review and gate land it; the record reads
+the landed copy once the checkout holds it, and `approve_integration` waits for it, since the
+landed script is what runs. An integration whose test failed is called again by the same name: its
+test runs again where the script is now (the draft, or the landed copy), and on a pass it goes on
+as a first call would, nothing scaffolded again and no second hand-off. A scaffold left with no
+record (a killed call) is removed before scaffolding, unless git tracks it. A test that
 could not run because pytest is not in Orchestra's Python declares and plans nothing either, but is
 no failure and is handed to no one (state `test not run`): the answer gives the reinstall with the
 `dev` extra, and the same call again begins it afresh; `approve_integration` refuses both. If a
-step after the declaration fails, the error names the changes that stayed in the declared layer.
+step after the declaration fails, the error names what stayed in the declared layer (the machine,
+the stock), each with its change ids; the answer's `changes` lists every declaration.
 Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
 bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
 Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer

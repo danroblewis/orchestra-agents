@@ -42,6 +42,11 @@ def scaffolded(project, name="jira_poller"):
     return project.repo_root / ".orchestra" / "machines" / name
 
 
+def draft_dir(project, name="jira_poller"):
+    """Where a repository scaffold handed to the Coordinator waits, out of the owner's checkout."""
+    return project.orchestra.state_dir / "machines" / name
+
+
 def machine_toml(project, name="jira_poller") -> dict:
     return tomllib.loads((scaffolded(project, name) / "machine.toml").read_text())
 
@@ -54,7 +59,8 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     got = connect(project, store)
     d = scaffolded(project)
     assert got["dir"] == str(d) and not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
-    assert any(str(d) in line and "a coding tool" in line and "pull request" in line for line in got["said"])
+    assert any(str(d) in line for line in got["said"])
+    assert any("a coding tool" in line and "the owner commits it or approves its pull request" in line for line in got["said"])
     assert got["ok"] and got["integration"] == "jira_poller" and got["clearance"] == "needs approval"
     assert {p.name for p in d.iterdir()} >= {"machine.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
     m = machine_toml(project)
@@ -145,12 +151,17 @@ def test_a_failed_test_is_handed_to_the_coordinator_and_declares_nothing(project
         "ran": True, "passed": False, "summary": "1 failed", "command": "pytest", "tail": ["E assert"]})
     got = connect(project, store)
     assert got["integrated"] is False and "jira" not in layer(project)["machines"]
+    draft = draft_dir(project)
+    assert got["dir"] == str(draft) and draft.is_dir() and not scaffolded(project).exists()   # out of the owner's checkout
     work = asked(store)
     assert len(work) == 1 and work[0]["request"] == got["request"] and work[0]["to"] == "coordinator"
-    assert str(scaffolded(project)) in work[0]["requirements"] and "1 failed" in work[0]["requirements"]
-    assert "pull request" in work[0]["requirements"] and "Outbox" in work[0]["requirements"]
-    assert design_integrate.integrations(store)["jira_poller"]["request"] == got["request"]
-    assert scaffolded(project).is_dir()                                       # kept for the worker
+    req = work[0]["requirements"]
+    assert f"cp -R {draft} .orchestra/machines/jira_poller" in req and "1 failed" in req and "Outbox" in req
+    assert "`python -m pytest .orchestra/machines/jira_poller/test_jira_poller.py -q` passes" in req
+    assert "the ticket's review and gate land it on the base branch" in req and "pull request" not in req
+    rec = design_integrate.integrations(store)["jira_poller"]
+    assert rec["request"] == got["request"] and rec["lands"] == str(scaffolded(project))
+    assert any("call integrate_system again with the same name" in line for line in got["said"])
     say(store, YES, 2)
     with pytest.raises(StoreError, match="test failed"):
         call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
@@ -316,10 +327,32 @@ def test_a_system_with_no_template_is_scaffolded_and_handed_to_the_coordinator(p
     say(store, "Connect Jenkins so I can see builds")
     got = call(project, store, "integrate_system", system="jenkins", wants="builds started and finished",
                base_url="https://ci.acme.test", quote="Connect Jenkins so I can see builds", reason=WHY)
-    assert got["ok"] and got["clearance"] == "needs approval" and got["dir"] == str(scaffolded(project, "jenkins_poller"))
+    draft = draft_dir(project, "jenkins_poller")
+    assert got["ok"] and got["clearance"] == "needs approval" and got["dir"] == str(draft)
+    assert not scaffolded(project, "jenkins_poller").exists() and (draft / "jenkins_poller.py").is_file()
     work = asked(store)
     assert len(work) == 1 and got["request"] == work[0]["request"] and "no template for Jenkins" in work[0]["requirements"]
     assert "jenkins_poller.py" in work[0]["requirements"]
+    say(store, "Yes, you may read Jenkins, metadata only, token in JENKINS_TOKEN", 2)
+    with pytest.raises(StoreError, match="has not landed at .* approve it once its ticket lands"):
+        call(project, store, "approve_integration", name="jenkins_poller", token_env="JENKINS_TOKEN",
+             quote="Yes, you may read Jenkins", reason=WHY)
+    land(project, draft, "jenkins_poller")                                    # the worker's ticket lands it
+    got = call(project, store, "approve_integration", name="jenkins_poller", token_env="JENKINS_TOKEN",
+               quote="Yes, you may read Jenkins", reason=WHY)
+    landed = scaffolded(project, "jenkins_poller")
+    assert got["clearance"] == "approved" and not draft.exists()
+    assert tomllib.loads((landed / "machine.toml").read_text())["clearance"] == "approved"
+    entry = next(e for e in overlay(project)["machines"] if e["name"] == "jenkins_poller")
+    assert str(landed / "jenkins_poller.py") in entry["command"]
+
+
+def land(project, draft, name):
+    """What the Coordinator's ticket does: the adapted script committed at .orchestra/machines/<name>/ on main."""
+    import shutil
+    shutil.copytree(draft, scaffolded(project, name))
+    git(project.repo_root, "add", "-A", ".orchestra")
+    git(project.repo_root, "commit", "-qm", f"{name}: the collector")
 
 
 def test_jira_cloud_is_approved_with_a_token_file_and_the_accounts_email_by_reference(project, store, tmp_path):
@@ -377,3 +410,99 @@ def test_a_store_takes_its_token_from_a_file(project, store, tmp_path):
     call(project, store, "approve_integration", name="chronosphere", token_file=str(tmp_path / "chrono-token"),
          quote="Yes, read Chronosphere", reason=WHY)
     assert overlay(project)["sources"][0]["auth"] == {"bearer_file": str(tmp_path / "chrono-token")}
+
+
+def fixed_when_marked(monkeypatch):
+    """The scaffold's test stood in for: it passes once the script in its directory is fixed (a FIXED file)."""
+    def run(target, name, **_):
+        ok = (target / "FIXED").exists()
+        return {"ran": True, "passed": ok, "summary": "3 passed" if ok else "1 failed", "command": "pytest",
+                **({} if ok else {"tail": ["E assert"]})}
+    monkeypatch.setattr(integrate_kits, "run_test", run)
+
+
+def test_a_failed_test_fixed_in_place_is_finished_by_the_same_call(project, store, monkeypatch):
+    fixed_when_marked(monkeypatch)
+    got = connect(project, store, root="state")
+    d = project.orchestra.state_dir / "machines" / "jira_poller"
+    assert got["integrated"] is False and got["dir"] == str(d)
+    again = connect(project, store, root="state")                           # not fixed yet: no second hand-off
+    assert again["integrated"] is False and again["request"] == got["request"] and len(asked(store)) == 1
+    assert "still does not pass" in " ".join(again["said"])
+    (d / "FIXED").write_text("the worker's adaptation\n")
+    (d / "jira_poller.py").write_text((d / "jira_poller.py").read_text() + "# adapted by the worker\n")
+    done = connect(project, store, root="state")
+    assert done["clearance"] == "needs approval" and done["request"] == got["request"] and len(asked(store)) == 1
+    assert "# adapted by the worker" in (d / "jira_poller.py").read_text()       # kept, not scaffolded again
+    assert layer(project)["machines"]["jira"]["aliases"] == ["bot.jira"] and done["changes"]
+    assert design_integrate.integrations(store)["jira_poller"]["state"] == "needs approval"
+    say(store, YES, 2)
+    ok = call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
+              quote="Yes, you may read Jira", reason=WHY)
+    assert ok["clearance"] == "approved"
+
+
+def test_a_failed_test_whose_ticket_landed_is_finished_from_the_landed_copy(project, store, monkeypatch):
+    fixed_when_marked(monkeypatch)
+    connect(project, store)
+    draft = draft_dir(project)
+    (draft / "FIXED").write_text("fixed\n")
+    land(project, draft, "jira_poller")
+    done = connect(project, store)
+    landed = scaffolded(project)
+    assert done["clearance"] == "needs approval" and done["dir"] == str(landed) and not draft.exists()
+    say(store, YES, 2)
+    call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
+         quote="Yes, you may read Jira", reason=WHY)
+    assert machine_toml(project)["clearance"] == "approved"
+    assert str(landed / "jira_poller.py") in next(e for e in overlay(project)["machines"])["command"]
+
+
+def jenkins(project, store):
+    say(store, "Connect Jenkins so I can see builds")
+    return call(project, store, "integrate_system", system="jenkins", wants="builds started and finished",
+                base_url="https://ci.acme.test", stock="Builds", quote="Connect Jenkins so I can see builds", reason=WHY)
+
+
+def test_no_work_is_handed_on_before_the_declarations_hold(project, store, monkeypatch):
+    def broken(*a, **k):
+        raise StoreError("the declared layer refused it")
+    monkeypatch.setattr(design_integrate, "_declare", broken)
+    with pytest.raises(StoreError, match="refused it"):
+        jenkins(project, store)
+    assert not asked(store)
+    assert not scaffolded(project, "jenkins_poller").exists() and not draft_dir(project, "jenkins_poller").exists()
+
+
+def test_a_refusal_after_the_stock_names_the_stock(project, store, monkeypatch):
+    def broken(*a, **k):
+        raise StoreError("the effect was refused")
+    monkeypatch.setattr(design_integrate, "_effect", broken)
+    with pytest.raises(StoreError) as e:
+        connect(project, store)
+    said = str(e.value)
+    sid = next(k for k, s in layer(project)["stocks"].items() if s["name"] == "Open issues")
+    assert f"stock {sid} (Open issues) declared (" in said and "machine jira declared, heard as bot.jira" in said
+    assert all(c["change"] in said for c in layer_changes(project))
+
+
+def test_the_answer_lists_every_declaration(project, store):
+    got = connect(project, store)
+    assert sorted(got["changes"]) == sorted(c["change"] for c in layer_changes(project)) and len(got["changes"]) >= 3
+
+
+def test_a_killed_calls_scaffold_is_replaced_and_a_tracked_one_kept(project, store):
+    d = scaffolded(project)
+    d.mkdir(parents=True)
+    (d / "jira_poller.py").write_text("half written\n")
+    got = connect(project, store)
+    assert got["clearance"] == "needs approval" and "half written" not in (d / "jira_poller.py").read_text()
+    s = scaffolded(project, "slack_poller")
+    s.mkdir(parents=True)
+    (s / "slack_poller.py").write_text("landed\n")
+    git(project.repo_root, "add", "-A", str(s))
+    git(project.repo_root, "commit", "-qm", "a landed poller")
+    say(store, "Connect Slack", 3)
+    with pytest.raises(StoreError, match="exists"):
+        call(project, store, "integrate_system", system="slack", wants="messages per channel", quote="Connect Slack", reason=WHY)
+    assert (s / "slack_poller.py").read_text() == "landed\n"

@@ -257,8 +257,8 @@ metrics and event collection"): kits (a cached, rate-limited, read-only client; 
 cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
 themselves. **Every collector is a script in the owner's repository**, at
 `.orchestra/machines/<name>/` (its `machine.toml`, `<name>.py`, `test_<name>.py` against the kit's
-fake, and an `AGENTS.md` with the kit's rules for whoever edits it), landed by a pull request like
-any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
+fake, and an `AGENTS.md` with the kit's rules for whoever edits it), uncommitted: the owner commits
+it or approves its pull request, like any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
 says their repository must stay clean (`root: state`). The kits stay read-only: a write to the
 system (a label, a transition, a Slack post) is an Outbox draft the owner's approval settings
 govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
@@ -276,8 +276,12 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    the owner a coding tool (theirs, or the Coordinator's worker) may now edit the script there.
    **When the test fails, or the kits have no template for the system** (Jenkins: the generic
    `http` kit's guess), the answer has already handed the script to the Coordinator as work
-   (`request`): a worker adapts it until its test passes, and a review and the gate land it. You
-   never stop there and never write the code yourself; tell the owner it is handed on.
+   (`request`), moved out of the owner's checkout first: a worker copies it into its worktree,
+   adapts it until its test passes and commits it, and the ticket's review and gate land it. You
+   never stop there and never write the code yourself; tell the owner it is handed on. A failed
+   one is finished by calling `integrate_system` again with the same name once the worker's test
+   passes (its test runs again where the script is now); a handed-on script is approved once its
+   ticket landed it.
 2. **Ask the owner** what the answer's `ask_owner` says, in your words: their yes to reading it
    (metadata only, read-only), and *where* the token is: an environment variable's name (in the
    environment `orchestra run` starts with) or a `chmod 600` file outside any repository

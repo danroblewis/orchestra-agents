@@ -1,0 +1,65 @@
+{
+ "turn": 6,
+ "model": "haiku",
+ "seconds": 14,
+ "message": "Confirm it. I expect notes files to rise, and the commit rate to go up 1.2 times.",
+ "text": "Notes Improver is confirmed and running. Its first run is at 00:00 tomorrow on the host's clock. Its prediction is published and judged 7 days after the first run: notes files rise, and the commit rate goes up 1.2 times.\n\nTwo things to know:\n- **Notes files:** the stock isn't linked to a discovered series yet, so the rise can't be judged until I link it. The notes-files counter is a draft, and it expires in 24 hours unless you keep it. Keep it now, so the link can be made?\n- **Commit rate:** the model has a measured input for commits (`repo_commits`), not a flow into it, so the 1.2 factor is attached to that input.\n\nStill open: your time zone for the 00:00 run, and whether `notes_files_improver` should be discarded as the duplicate.",
+ "error": null,
+ "timed_out": false,
+ "tools": [
+  "ToolSearch",
+  "read_model",
+  "declare_expected_effect",
+  "confirm"
+ ],
+ "ok": true,
+ "why": "",
+ "state": {
+  "state": "declared",
+  "expected_effect": {
+   "edits": [
+    {
+     "stock": "notes_files",
+     "rises": true
+    },
+    {
+     "flow": "repo_commits",
+     "factor": 1.2
+    }
+   ],
+   "horizon_s": 604800.0,
+   "prediction": "380d3938c7f745918ad82d52b7baccc8",
+   "change": "c10.0"
+  },
+  "predictions": [
+   {
+    "id": "380d3938c7f745918ad82d52b7baccc8",
+    "source": "supervisor",
+    "subject": "machine:notes_improver",
+    "change": "50b13716756d4ab0909145744af96e4e",
+    "expect": [
+     {
+      "kind": "factor",
+      "flow": "repo_commits",
+      "factor": 1.2
+     }
+    ],
+    "status": "waiting"
+   }
+  ],
+  "predictions_keys": [
+   "ok",
+   "predictions"
+  ]
+ },
+ "cost_so_far": {
+  "usd": 0.188,
+  "invocations": 6,
+  "usage": {
+   "input_tokens": 50,
+   "cache_creation_input_tokens": 109577,
+   "cache_read_input_tokens": 1214631,
+   "output_tokens": 13356
+  }
+ }
+}

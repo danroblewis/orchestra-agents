@@ -21,8 +21,10 @@ true`` and ``expires`` (RFC 3339) when the installed Orchestra's collector spec 
 (``supports_draft``; Orchestra labels the points ``draft="true"`` and discovery leaves them out
 until the flag is cleared). The Supervisor's own record (``drafts`` in its agent state, updated
 under the runtime lock) expires after ``[agents] draft_expiry`` (24 h by default) unless the owner
-keeps it: ``keep_instrument`` takes ``draft`` and ``expires`` off the entry, records it kept, then
-marks the option chosen (retried on the host's tick if that write fails, ``retry_chosen``);
+keeps it. ``add_instrument`` marks its option chosen at once (the Dynamics page draws a draft as
+recording only on the chosen option); ``keep_instrument`` takes ``draft`` and ``expires`` off the
+entry, records it kept, and marks the option chosen again (retried on the host's tick if that write
+fails, ``retry_chosen``);
 ``expire`` (the host's tick) keeps one the owner's expect mark backs and removes an unkept one's
 entry and script. The points it wrote stay in the store. An Orchestra without the flag records it
 as an ordinary instrument, which discovery reads at once, so it is not removed on a timer (that

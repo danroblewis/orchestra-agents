@@ -1,0 +1,1063 @@
+{
+ "ok": true,
+ "machines": [
+  {
+   "id": "orchestra-host",
+   "bootstrap": true,
+   "mode": "continuous",
+   "kind": "program",
+   "kinds": {},
+   "package": null,
+   "name": null,
+   "group": null,
+   "about": {},
+   "publishes": [
+    {
+     "type": "orchestra.intent.changed",
+     "count": 9,
+     "day": 9,
+     "per_min_10m": 0.9
+    },
+    {
+     "type": "orchestra.process.started",
+     "count": 4,
+     "day": 4,
+     "per_min_10m": 0.0
+    },
+    {
+     "type": "orchestra.host.started",
+     "count": 1,
+     "day": 1,
+     "per_min_10m": 0.0
+    }
+   ],
+   "subscribes": [],
+   "flows": [],
+   "logs": [],
+   "instances": [],
+   "first_seen": 1793530959.665,
+   "last_seen": 1793531544.06,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "coordinator",
+   "bootstrap": false,
+   "mode": "continuous",
+   "kind": "agent \u00d71, program \u00d71",
+   "kinds": {
+    "program": 1,
+    "agent": 1
+   },
+   "package": "agents",
+   "name": null,
+   "group": null,
+   "about": {
+    "role": "coordinator",
+    "harness": "claude_code",
+    "model": "haiku"
+   },
+   "publishes": [
+    {
+     "type": "task.assigned",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    }
+   ],
+   "subscribes": [
+    "gate.conflict",
+    "gate.rejected",
+    "request.done",
+    "request.refused",
+    "task.attention_needed",
+    "task.released",
+    "ticket.created",
+    "work.requested"
+   ],
+   "flows": [
+    {
+     "flow": "tasks_gate_runs_total_landed",
+     "name": "tasks gate runs (landed)",
+     "confidence": 1.0,
+     "by": "events on the bus",
+     "events": {
+      "type": "task.assigned",
+      "source": "coordinator"
+     },
+     "why": "coordinator's task.assigned events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 47% by chance",
+     "hypothesis": true
+    }
+   ],
+   "logs": [
+    "dispatch"
+   ],
+   "instances": [
+    {
+     "id": "dispatch",
+     "first_seen": 1793530960.169,
+     "last_seen": 1793531549.224,
+     "active": true,
+     "cadence_s": null,
+     "kind": "program",
+     "mode": "continuous"
+    }
+   ],
+   "first_seen": 1793530960.169,
+   "last_seen": 1793531549.224,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "merge_gate",
+   "bootstrap": false,
+   "mode": "continuous",
+   "kind": "program",
+   "kinds": {
+    "program": 1
+   },
+   "package": "tasks",
+   "name": null,
+   "group": null,
+   "about": {},
+   "publishes": [
+    {
+     "type": "gate.started",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "gate.landed",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    }
+   ],
+   "subscribes": [
+    "review.approved"
+   ],
+   "flows": [
+    {
+     "flow": "orchestra_events_total_merge_gate_gate_landed",
+     "name": "orchestra events (merge_gate, gate.landed)",
+     "confidence": 1.0,
+     "by": "its own events",
+     "events": {
+      "type": "gate.landed",
+      "source": "merge_gate"
+     },
+     "why": "its counter counts merge_gate's own events of type gate.landed",
+     "hypothesis": true
+    },
+    {
+     "flow": "tasks_gate_runs_total_landed",
+     "name": "tasks gate runs (landed)",
+     "confidence": 1.0,
+     "by": "events on the bus",
+     "events": {
+      "type": "gate.started",
+      "source": "merge_gate"
+     },
+     "why": "merge_gate's gate.started events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 50% by chance",
+     "hypothesis": true
+    }
+   ],
+   "logs": [
+    "merge_gate"
+   ],
+   "instances": [],
+   "first_seen": 1793530960.169,
+   "last_seen": 1793531550.678,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "planner",
+   "bootstrap": false,
+   "mode": null,
+   "kind": null,
+   "kinds": {},
+   "package": null,
+   "name": null,
+   "group": null,
+   "about": {},
+   "publishes": [
+    {
+     "type": "request.done",
+     "count": 30,
+     "day": 30,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "task.requested",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "ticket.created",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "milestone.requested",
+     "count": 1,
+     "day": 1,
+     "per_min_10m": 0.0
+    },
+    {
+     "type": "milestone.created",
+     "count": 1,
+     "day": 1,
+     "per_min_10m": 0.0
+    }
+   ],
+   "subscribes": [],
+   "flows": [
+    {
+     "flow": "tasks_gate_runs_total_landed",
+     "name": "tasks gate runs (landed)",
+     "confidence": 1.0,
+     "by": "events on the bus",
+     "events": {
+      "type": "task.requested",
+      "source": "planner"
+     },
+     "why": "planner's task.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 45% by chance",
+     "hypothesis": true
+    }
+   ],
+   "logs": [],
+   "instances": [],
+   "first_seen": 1793530960.264,
+   "last_seen": 1793531548.586,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "reviewer",
+   "bootstrap": false,
+   "mode": "continuous",
+   "kind": "program",
+   "kinds": {
+    "program": 1
+   },
+   "package": null,
+   "name": null,
+   "group": null,
+   "about": {},
+   "publishes": [
+    {
+     "type": "task.accepted",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "review.approved",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    }
+   ],
+   "subscribes": [
+    "review.requested",
+    "task.assigned"
+   ],
+   "flows": [
+    {
+     "flow": "tasks_gate_runs_total_landed",
+     "name": "tasks gate runs (landed)",
+     "confidence": 1.0,
+     "by": "events on the bus",
+     "events": {
+      "type": "review.approved",
+      "source": "reviewer"
+     },
+     "why": "reviewer's review.approved events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 48% by chance",
+     "hypothesis": true
+    }
+   ],
+   "logs": [
+    "program"
+   ],
+   "instances": [
+    {
+     "id": "program",
+     "first_seen": 1793530960.059,
+     "last_seen": 1793531550.04,
+     "active": true,
+     "cadence_s": null,
+     "kind": "program",
+     "mode": "continuous"
+    }
+   ],
+   "first_seen": 1793530960.059,
+   "last_seen": 1793531550.04,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "supervisor",
+   "bootstrap": false,
+   "mode": "continuous",
+   "kind": "agent",
+   "kinds": {
+    "agent": 1
+   },
+   "package": "agents",
+   "name": null,
+   "group": null,
+   "about": {
+    "role": "supervisor",
+    "harness": "claude_code",
+    "model": "haiku"
+   },
+   "publishes": [
+    {
+     "type": "task.query_requested",
+     "count": 5,
+     "day": 5,
+     "per_min_10m": 0.5
+    },
+    {
+     "type": "request.done",
+     "count": 5,
+     "day": 5,
+     "per_min_10m": 0.5
+    },
+    {
+     "type": "session.started",
+     "count": 5,
+     "day": 5,
+     "per_min_10m": 0.5
+    },
+    {
+     "type": "session.settled",
+     "count": 4,
+     "day": 4,
+     "per_min_10m": 0.4
+    },
+    {
+     "type": "agent.said",
+     "count": 4,
+     "day": 4,
+     "per_min_10m": 0.4
+    },
+    {
+     "type": "instruments.changed",
+     "count": 1,
+     "day": 1,
+     "per_min_10m": 0.1
+    },
+    {
+     "type": "agent.compacted",
+     "count": 1,
+     "day": 1,
+     "per_min_10m": 0.1
+    }
+   ],
+   "subscribes": [
+    "gate.landed",
+    "orchestra.intent.requested",
+    "orchestra.process.gave_up",
+    "request.done",
+    "request.refused",
+    "task.attention_needed",
+    "ticket.created",
+    "work.planned"
+   ],
+   "flows": [],
+   "logs": [],
+   "instances": [],
+   "first_seen": 1793530960.196,
+   "last_seen": 1793531549.78,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "worker",
+   "bootstrap": false,
+   "mode": "continuous",
+   "kind": "program",
+   "kinds": {
+    "program": 1
+   },
+   "package": null,
+   "name": null,
+   "group": null,
+   "about": {},
+   "publishes": [
+    {
+     "type": "task.accepted",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    },
+    {
+     "type": "review.requested",
+     "count": 29,
+     "day": 29,
+     "per_min_10m": 2.9
+    }
+   ],
+   "subscribes": [
+    "changes.requested",
+    "task.assigned",
+    "task.released"
+   ],
+   "flows": [
+    {
+     "flow": "tasks_gate_runs_total_landed",
+     "name": "tasks gate runs (landed)",
+     "confidence": 1.0,
+     "by": "events on the bus",
+     "events": {
+      "type": "review.requested",
+      "source": "worker"
+     },
+     "why": "worker's review.requested events match its increments event by event: 100% of its 23 increments pair with one of the 23 events within a step, 48% by chance",
+     "hypothesis": true
+    }
+   ],
+   "logs": [
+    "shell"
+   ],
+   "instances": [
+    {
+     "id": "shell",
+     "first_seen": 1793530960.056,
+     "last_seen": 1793531549.894,
+     "active": true,
+     "cadence_s": null,
+     "kind": "program",
+     "mode": "continuous"
+    }
+   ],
+   "first_seen": 1793530960.056,
+   "last_seen": 1793531549.894,
+   "active": true,
+   "intent": null,
+   "comparison": null,
+   "measured": null
+  },
+  {
+   "id": "notes_files_improver",
+   "bootstrap": false,
+   "mode": null,
+   "kind": "universal",
+   "package": null,
+   "about": {},
+   "unseen": true,
+   "publishes": [],
+   "subscribes": [],
+   "flows": [],
+   "logs": [],
+   "instances": [],
+   "first_seen": null,
+   "last_seen": null,
+   "active": false,
+   "intent": {
+    "state": "proposed",
+    "author": "owner",
+    "heard": false,
+    "title": "Notes Files Improver",
+    "description": "Once a day, looks at how many notes files were added to the repository and proposes one change that should raise the number added per day.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "09:00"
+    },
+    "receives": [],
+    "emits": [],
+    "reads": [
+     "notes_files"
+    ],
+    "spec": {
+     "invariants": [
+      "Never changes code or files itself; it proposes one change as work for the Coordinator",
+      "Reads the Notes Files stock and its history before proposing anything",
+      "Proposes at most one change per day, with the expected effect on Notes Files stated",
+      "Never edits or removes a measurement, a test or a check"
+     ],
+     "steps": [
+      "1. Read the Notes Files stock: its level today and its change over the last days.",
+      "2. Judge what would raise the number of notes files added per day, from the ticket and event history.",
+      "3. Propose the one change, with its expected effect on Notes Files, for the Supervisor to put to the owner."
+     ],
+     "uses": [
+      "the Notes Files stock (read only)"
+     ]
+    },
+    "guessed": [
+     "engagement (mode, at, tz)",
+     "steps",
+     "invariants"
+    ],
+    "pending": [],
+    "requested": null,
+    "aliases": [],
+    "expected_effect": {
+     "horizon_s": 604800.0,
+     "prediction": null,
+     "status": null,
+     "verdict": null,
+     "edits": [
+      {
+       "edit": {
+        "stock": "notes_files",
+        "rises": true
+       },
+       "label": "Notes Files \u2191",
+       "publishable": false,
+       "why": "waits for a link",
+       "link": "/dynamics#s:notes_files"
+      }
+     ]
+    },
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/1",
+     "message": "I want a feedback loop where once per day an agent runs and tries to improve how many notes files get added per day. I think we need to start tracking notes files. Create a Notes Files stock.",
+     "quote": "once per day an agent runs and tries to improve how many notes files get added per day",
+     "reason": "The owner wants a daily feedback loop that tries to improve how many notes files get added per day, measured by the Notes Files stock.",
+     "via": "plugin",
+     "at": 1793531483.3664188
+    },
+    "latest": null,
+    "change": "c5.0",
+    "confirmed": null,
+    "attachments": [],
+    "alias_candidates": []
+   },
+   "comparison": "declared, neither heard nor measured",
+   "measured": {
+    "attachments": [],
+    "measured": false,
+    "last_measured": null,
+    "instances": 0,
+    "instruments": [],
+    "unknown": false
+   }
+  },
+  {
+   "id": "notes_improver",
+   "bootstrap": false,
+   "mode": null,
+   "kind": "universal",
+   "package": null,
+   "about": {},
+   "unseen": true,
+   "publishes": [],
+   "subscribes": [],
+   "flows": [],
+   "logs": [],
+   "instances": [],
+   "first_seen": null,
+   "last_seen": null,
+   "active": false,
+   "intent": {
+    "state": "declared",
+    "author": "owner",
+    "heard": false,
+    "title": "Notes Improver",
+    "description": "Once a day, looks at how many notes files were added to the repository and proposes one change that should raise the number added per day.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "00:00"
+    },
+    "receives": [],
+    "emits": [
+     "work.requested"
+    ],
+    "reads": [
+     "notes_files"
+    ],
+    "spec": {
+     "invariants": [
+      "Never changes code or files itself; it proposes one change as work for the Coordinator",
+      "Reads the Notes Files stock and its history before proposing anything",
+      "Proposes at most one change per day, with the expected effect on Notes Files stated",
+      "Never edits or removes a measurement, a test or a check",
+      "Never changes code or files itself; it sends ideas to the Coordinator as work.requested"
+     ],
+     "steps": [
+      "1. Once a day at 12am, read the DONE and REJECTED tickets and the merge gate results since the last run.",
+      "2. For each rejection or gate failure, read the ticket's history and work out why it was rejected or failed the gate.",
+      "3. Read the Notes Files stock and judge what would stop those rejections and failures and raise notes added per day.",
+      "4. Send the ideas to the Coordinator as work.requested, one idea per request, each with its expected effect on Notes Files."
+     ],
+     "uses": [
+      "the Notes Files stock (read only)",
+      "the ticket queue: DONE and REJECTED tickets and the merge gate's results (read only)"
+     ]
+    },
+    "guessed": [],
+    "pending": [],
+    "requested": null,
+    "aliases": [],
+    "expected_effect": {
+     "horizon_s": 604800.0,
+     "prediction": "380d3938c7f745918ad82d52b7baccc8",
+     "status": "waiting",
+     "verdict": null,
+     "edits": [
+      {
+       "edit": {
+        "stock": "notes_files",
+        "rises": true
+       },
+       "label": "Notes Files \u2191",
+       "publishable": false,
+       "why": "waits for a link",
+       "link": "/dynamics#s:notes_files"
+      },
+      {
+       "edit": {
+        "flow": "repo_commits",
+        "factor": 1.2
+       },
+       "label": "repo_commits \u00d71.2",
+       "publishable": true,
+       "why": null,
+       "link": "/dynamics#f:repo_commits"
+      }
+     ]
+    },
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a new Universal Machine called Notes Improver.",
+     "quote": "Create a new Universal Machine called Notes Improver",
+     "reason": "The owner asked for a new Universal Machine called Notes Improver, to run the daily loop that tries to raise notes files added per day.",
+     "via": "plugin",
+     "at": 1793531498.417927
+    },
+    "latest": {
+     "change": "c9.5",
+     "at": 1793531543.0443149,
+     "quotes": [
+      "make it a scheduled task for 12am every day"
+     ],
+     "added": {},
+     "removed": {},
+     "before": {
+      "engagement": {
+       "mode": "scheduled",
+       "at": "09:00"
+      }
+     }
+    },
+    "change": "c7.0",
+    "confirmed": {
+     "by": "owner",
+     "change": "c11.0"
+    },
+    "attachments": [],
+    "alias_candidates": []
+   },
+   "comparison": "declared, neither heard nor measured",
+   "measured": {
+    "attachments": [],
+    "measured": false,
+    "last_measured": null,
+    "instances": 0,
+    "instruments": [],
+    "unknown": false
+   }
+  }
+ ],
+ "types": [
+  "agent.compacted",
+  "agent.said",
+  "changes.requested",
+  "gate.conflict",
+  "gate.landed",
+  "gate.rejected",
+  "gate.started",
+  "instruments.changed",
+  "milestone.created",
+  "milestone.requested",
+  "orchestra.host.started",
+  "orchestra.intent.changed",
+  "orchestra.intent.requested",
+  "orchestra.process.gave_up",
+  "orchestra.process.started",
+  "request.done",
+  "request.refused",
+  "review.approved",
+  "review.requested",
+  "session.settled",
+  "session.started",
+  "task.accepted",
+  "task.assigned",
+  "task.attention_needed",
+  "task.query_requested",
+  "task.released",
+  "task.requested",
+  "ticket.created",
+  "work.planned",
+  "work.requested"
+ ],
+ "edges": [
+  {
+   "from": "orchestra-host",
+   "to": "orchestra.intent.changed",
+   "kind": "publishes",
+   "count": 9,
+   "day": 9
+  },
+  {
+   "from": "orchestra-host",
+   "to": "orchestra.process.started",
+   "kind": "publishes",
+   "count": 4,
+   "day": 4
+  },
+  {
+   "from": "orchestra-host",
+   "to": "orchestra.host.started",
+   "kind": "publishes",
+   "count": 1,
+   "day": 1
+  },
+  {
+   "from": "coordinator",
+   "to": "task.assigned",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "merge_gate",
+   "to": "gate.started",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "merge_gate",
+   "to": "gate.landed",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "planner",
+   "to": "request.done",
+   "kind": "publishes",
+   "count": 30,
+   "day": 30
+  },
+  {
+   "from": "planner",
+   "to": "task.requested",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "planner",
+   "to": "ticket.created",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "planner",
+   "to": "milestone.requested",
+   "kind": "publishes",
+   "count": 1,
+   "day": 1
+  },
+  {
+   "from": "planner",
+   "to": "milestone.created",
+   "kind": "publishes",
+   "count": 1,
+   "day": 1
+  },
+  {
+   "from": "reviewer",
+   "to": "task.accepted",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "reviewer",
+   "to": "review.approved",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "supervisor",
+   "to": "task.query_requested",
+   "kind": "publishes",
+   "count": 5,
+   "day": 5
+  },
+  {
+   "from": "supervisor",
+   "to": "request.done",
+   "kind": "publishes",
+   "count": 5,
+   "day": 5
+  },
+  {
+   "from": "supervisor",
+   "to": "session.started",
+   "kind": "publishes",
+   "count": 5,
+   "day": 5
+  },
+  {
+   "from": "supervisor",
+   "to": "session.settled",
+   "kind": "publishes",
+   "count": 4,
+   "day": 4
+  },
+  {
+   "from": "supervisor",
+   "to": "agent.said",
+   "kind": "publishes",
+   "count": 4,
+   "day": 4
+  },
+  {
+   "from": "supervisor",
+   "to": "instruments.changed",
+   "kind": "publishes",
+   "count": 1,
+   "day": 1
+  },
+  {
+   "from": "supervisor",
+   "to": "agent.compacted",
+   "kind": "publishes",
+   "count": 1,
+   "day": 1
+  },
+  {
+   "from": "worker",
+   "to": "task.accepted",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "worker",
+   "to": "review.requested",
+   "kind": "publishes",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "gate.conflict",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "gate.rejected",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "request.done",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "request.refused",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.attention_needed",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.released",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "ticket.created",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "work.requested",
+   "to": "coordinator",
+   "kind": "subscribes"
+  },
+  {
+   "from": "review.approved",
+   "to": "merge_gate",
+   "kind": "subscribes"
+  },
+  {
+   "from": "review.requested",
+   "to": "reviewer",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.assigned",
+   "to": "reviewer",
+   "kind": "subscribes"
+  },
+  {
+   "from": "gate.landed",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "orchestra.intent.requested",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "orchestra.process.gave_up",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "request.done",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "request.refused",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.attention_needed",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "ticket.created",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "work.planned",
+   "to": "supervisor",
+   "kind": "subscribes"
+  },
+  {
+   "from": "changes.requested",
+   "to": "worker",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.assigned",
+   "to": "worker",
+   "kind": "subscribes"
+  },
+  {
+   "from": "task.released",
+   "to": "worker",
+   "kind": "subscribes"
+  }
+ ],
+ "handoffs": [
+  {
+   "from": "planner",
+   "via": "ticket.created",
+   "to": "coordinator",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "coordinator",
+   "via": "task.assigned",
+   "to": "worker",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "worker",
+   "via": "review.requested",
+   "to": "reviewer",
+   "count": 29,
+   "day": 29
+  },
+  {
+   "from": "reviewer",
+   "via": "review.approved",
+   "to": "merge_gate",
+   "count": 29,
+   "day": 29
+  }
+ ],
+ "unattributed_events": 0,
+ "era": null,
+ "current_era": null,
+ "eras": [],
+ "channels": [],
+ "counted": [],
+ "intended_edges": [
+  {
+   "from": "notes_improver",
+   "to": "work.requested",
+   "kind": "publishes",
+   "state": "declared",
+   "observed": false,
+   "gone": false
+  }
+ ],
+ "intended_types": [
+  {
+   "type": "changes.requested",
+   "description": null,
+   "implicit": true
+  },
+  {
+   "type": "gate.conflict",
+   "description": null,
+   "implicit": true
+  },
+  {
+   "type": "gate.landed",
+   "description": null,
+   "implicit": true
+  },
+  {
+   "type": "gate.rejected",
+   "description": null,
+   "implicit": true
+  },
+  {
+   "type": "work.requested",
+   "description": null,
+   "implicit": true
+  }
+ ],
+ "intended_version": 12
+}

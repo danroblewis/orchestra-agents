@@ -291,8 +291,9 @@ def spec_of(a: dict) -> dict:
     return {**nested, **{k: a[k] for k in SPEC_KEYS if a.get(k) not in (None, "", [])}}
 
 
-NO_RECEIVES = ("receives is empty: the events it watches, or reads at each run (a scheduled machine too), are event types in "
-               "receives (add_receives), never only words in steps or uses; read_events lists the types machines speak")
+NO_RECEIVES = ("receives is empty: the events it watches, or reads at each run (a scheduled machine too: scheduling it never "
+               "takes them out), are event types in receives (add_receives), never only words in steps or uses; read_events "
+               "lists the types machines speak")
 
 
 def type_lines(project: Project, store: AgentStore, mid: str, receives: list[str], emits: list[str]) -> list[str]:
@@ -444,7 +445,7 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         if runs_a_day(store, after)[0] != runs_a_day(store, m)[0]:
             lines.append(cost_line(project, store, after))
     lines += type_lines(project, store, mid, list(a.get("add_receives") or []), list(a.get("add_emits") or []))
-    if (a.get("steps") or a.get("add_uses")) and not after.get("receives"):
+    if (a.get("steps") or a.get("add_uses") or a.get("remove_receives")) and not after.get("receives"):
         lines.append(NO_RECEIVES)
     return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"))
 
@@ -607,8 +608,10 @@ def flows_line(project: Project, into: str | None = None) -> str:
 
 
 def stock_as_flow(project: Project, edits: list[dict], lay: dict | None = None) -> None:
-    """Refused: an edit that names a stock (a level) where a flow (a rate) is expected, as
-    ``{flow: repo_commits, factor: 1.2}`` for "the commit rate": the message lists the flows."""
+    """Refused: an edit that names a stock (a level), or anything else that is not one of the
+    model's flows (a measured input, a series), where a flow (a rate) is expected, as
+    ``{flow: repo_commits, factor: 1.2}`` for "the commit rate": the message lists the flows. With
+    no model saved yet nothing is refused (the edit waits for discovery)."""
     model = intended_api.current_model(project)
     keys = intended_api.Keys(model)
     lay = lay if lay is not None else intended_api.current(project)
@@ -624,6 +627,10 @@ def stock_as_flow(project: Project, edits: list[dict], lay: dict | None = None) 
             raise StoreError(f"{name} is a stock (a level), not a flow: a factor multiplies a flow's rate. A rate of "
                              f"{name} is a flow into it; {flows_line(project, sid)}. For a level, use rises, falls, above or "
                              "below on the stock")
+        if model is not None and model.flows:            # an input, a series, or nothing the model has: no rate to multiply
+            raise StoreError(f"{name} is not a flow of the model (a measured input or a series is not a rate it judges): a "
+                             f"factor names one of its flows; {flows_line(project, sid)}. For a level, use rises, falls, "
+                             "above or below on a stock")
 
 
 def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:

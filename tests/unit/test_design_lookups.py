@@ -138,6 +138,9 @@ def test_a_stock_named_as_a_flow_is_refused_with_the_models_flows(project, store
     with pytest.raises(StoreError, match="notes_files is a stock"):
         call(project, store, "declare_expected_effect", machine="notes_improver", horizon="3d", reason=WHY,
              expect=[{"kind": "factor", "flow": "notes_files", "factor": 1.2}])
+    with pytest.raises(StoreError, match=r"repo_commit_count is not a flow of the model.*commits_landed"):   # an input, as live
+        call(project, store, "declare_expected_effect", machine="notes_improver", horizon="3d", reason=WHY,
+             expect=[{"kind": "factor", "flow": "repo_commit_count", "factor": 1.2}])
     call(project, store, "declare_expected_effect", machine="notes_improver", horizon="3d", reason=WHY,
          expect=[{"kind": "factor", "flow": "commits_landed", "factor": 1.2}, {"kind": "rises", "stock": "repo_files"}])
 

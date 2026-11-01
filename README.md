@@ -200,13 +200,15 @@ as a worked example.
     uv run python -m pytest -q         # about twenty minutes: unit, in-process e2e per harness, the demo through a real Orchestra
     uv run ruff check orchestra_agents tests demo
 
-The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`) and the floor
-need the Workflows plugin, `orchestra-workflows`, which is optional at runtime: it is imported
-lazily and named in no runtime extra of this package (Orchestra's `workflows` extra installs it).
-Installed beside the agents, the tools use it; without it they say it is not installed. For the
-tests, the `dev` extra installs it and `uv.lock` pins it: the unit tests of `declare_workflow`
-and `list_workflows` use a fake plugin, and `tests/e2e/test_workflows_e2e.py` runs all three tools
-on the real one (`explain_item` on an item log its recorder wrote).
+The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`, and
+`request_work`, which the Coordinator has too) and the floor need the Workflows plugin,
+`orchestra-workflows`, which is optional at runtime: it is imported lazily and named in no runtime
+extra of this package (Orchestra's `workflows` extra installs it). Installed beside the agents, the
+tools use it; without it they say it is not installed. For the tests, the `dev` extra installs it
+and `uv.lock` pins it: the unit tests of the tools use a fake plugin, and
+`tests/e2e/test_workflows_e2e.py` and `tests/e2e/test_request_work_e2e.py` (the task loop
+example's target, the owner's request through the Supervisor's chat on the dummy harness) run on
+the real one (`explain_item` on an item log its recorder wrote).
 
 The design tools' tests run on Orchestra's own declared layer (`orchestra.sd.intended`), served
 in process through its host's events endpoint; `uv.lock` names the Orchestra commit they ran on.

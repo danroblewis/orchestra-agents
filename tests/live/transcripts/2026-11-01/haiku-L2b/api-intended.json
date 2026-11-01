@@ -1,0 +1,289 @@
+{
+ "ok": true,
+ "version": 7,
+ "at": 1793558645.6689112,
+ "layer": {
+  "stocks": {
+   "notes_files": {
+    "id": "notes_files",
+    "part": "stock",
+    "name": "Notes Files",
+    "description": "Notes files in the repository; the owner wants them tracked and grown.",
+    "unit": "files",
+    "near": null,
+    "note": "I think we need to start tracking notes files. Create a Notes Files stock.",
+    "found_as": "repo_files",
+    "measure": {
+     "options": [
+      {
+       "key": "a",
+       "title": "Tracked files in the repository (already recorded)",
+       "kind": "existing_series",
+       "how": "repo_stats instrument counts all git-tracked files every round",
+       "cost": "already running, no new reads",
+       "caveat": "Counts every tracked file, not only notes files: it moves when any file is added. The notes count is 24 of its 32 today.",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "series": "repo_files"
+      },
+      {
+       "key": "b",
+       "title": "Count of tracked notes files under notes/",
+       "kind": "script",
+       "how": "git ls-files counted for paths under notes/",
+       "cost": "one git call per round, negligible",
+       "caveat": "Counts notes files that are tracked, not those added per day; a day's additions are the change between rounds.",
+       "clearance": "cleared: reads only this machine, the project's own metrics store and its repository",
+       "simulated": false,
+       "instrument": null,
+       "commit": null,
+       "first_points": [],
+       "provenance": null,
+       "command": "git ls-files | grep -c '^notes/'"
+      }
+     ],
+     "chosen": "a",
+     "change": "c2.0"
+    },
+    "target": null,
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/1",
+     "message": "I want a feedback loop where once per day an agent runs and tries to improve how many notes files get added per day. I think we need to start tracking notes files. Create a Notes Files stock.",
+     "quote": "I think we need to start tracking notes files. Create a Notes Files stock.",
+     "reason": "The owner wants to start tracking notes files, as the level the feedback loop tries to grow.",
+     "via": "plugin",
+     "at": 1793558566.759557
+    },
+    "change": "c1.0",
+    "guessed": [],
+    "pending": [],
+    "linked": {
+     "by": "owner",
+     "change": "c2.1"
+    }
+   }
+  },
+  "effects": {},
+  "flows": {},
+  "machines": {
+   "notes_improver": {
+    "title": "Notes Improver",
+    "description": "Once a day, look at how many notes files were added and propose one change that might raise the daily count.",
+    "tags": [],
+    "kind": "universal",
+    "managed": "orchestra",
+    "engagement": {
+     "mode": "scheduled",
+     "at": "00:00"
+    },
+    "receives": [
+     "gate.landed",
+     "gate.rejected",
+     "changes.requested"
+    ],
+    "emits": [
+     "work.requested"
+    ],
+    "reads": [
+     "notes_files"
+    ],
+    "spec": {
+     "invariants": [
+      "Never changes code or files itself; it only proposes work to the Coordinator",
+      "Never changes the measurement of notes_files to make it look better",
+      "Proposes at most one change per day"
+     ],
+     "steps": [
+      "1. At each run, read the DONE tickets (gate.landed) and the REJECTED tickets and gate failures (changes.requested, gate.rejected) since its last run.",
+      "2. For each rejection or gate failure, find the cause the reviewer or gate gave.",
+      "3. Work out one idea that would make notes files get added per day, drawing on those causes and on notes_files.",
+      "4. Send each idea to the Coordinator as work.requested, with its cause and the acceptance a reviewer can check.",
+      "5. Record the day's count and the ideas it sent, whatever they were."
+     ],
+     "uses": [
+      "the ticket queue (read only)",
+      "the ticket queue: DONE and REJECTED tickets (read only)"
+     ]
+    },
+    "id": "notes_improver",
+    "state": "declared",
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/2",
+     "message": "Create a new Universal Machine called Notes Improver.",
+     "quote": "Create a new Universal Machine called Notes Improver.",
+     "reason": "The owner asked for a daily agent that tries to improve how many notes files get added per day, against the Notes Files stock.",
+     "via": "plugin",
+     "at": 1793558594.517746
+    },
+    "change": "c3.0",
+    "guessed": [],
+    "pending": [],
+    "aliases": [],
+    "expected_effect": {
+     "edits": [
+      {
+       "stock": "notes_files",
+       "rises": true
+      },
+      {
+       "flow": "tasks_gate_runs_total_landed@repo_stats",
+       "factor": 1.2
+      }
+     ],
+     "horizon_s": 604800.0,
+     "prediction": "f9aad435d82144d2a4633799bc631883",
+     "change": "c5.0"
+    },
+    "latest": {
+     "change": "c4.5",
+     "at": 1793558609.223198,
+     "changes": [
+      "c4.0",
+      "c4.1",
+      "c4.2",
+      "c4.3",
+      "c4.4",
+      "c4.5"
+     ],
+     "quotes": [
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+      "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate"
+     ],
+     "added": {
+      "receives": [
+       "gate.landed",
+       "gate.rejected",
+       "changes.requested"
+      ],
+      "emits": [
+       "work.requested"
+      ]
+     },
+     "removed": {},
+     "before": {
+      "steps": [
+       "1. At its daily run, read notes_files and the count of notes files added since the last run.",
+       "2. Compare with the previous day's count and the proposal it made last time.",
+       "3. If a change is likely to raise the daily count, propose it to the owner first; do not hand work on.",
+       "4. Record the day's count and the proposal, whatever they were."
+      ],
+      "uses": [
+       "the ticket queue (read only)"
+      ]
+     }
+    },
+    "base": {
+     "fields": {
+      "receives": [],
+      "emits": []
+     },
+     "spec": {
+      "invariants": [
+       "Never changes code or files itself; it only proposes work to the Coordinator",
+       "Never changes the measurement of notes_files to make it look better",
+       "Proposes at most one change per day"
+      ],
+      "steps": [
+       "1. At its daily run, read notes_files and the count of notes files added since the last run.",
+       "2. Compare with the previous day's count and the proposal it made last time.",
+       "3. If a change is likely to raise the daily count, propose it to the owner first; do not hand work on.",
+       "4. Record the day's count and the proposal, whatever they were."
+      ],
+      "uses": [
+       "the ticket queue (read only)"
+      ]
+     }
+    },
+    "confirmed": {
+     "by": "owner",
+     "change": "c6.0"
+    }
+   }
+  },
+  "events": {
+   "gate.landed": {
+    "type": "gate.landed",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+     "reason": "The owner wants it to read DONE and REJECTED tickets and the merge gate's failures, find why tickets were rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "via": "plugin",
+     "at": 1793558609.223198
+    },
+    "change": "c4.0"
+   },
+   "gate.rejected": {
+    "type": "gate.rejected",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+     "reason": "The owner wants it to read DONE and REJECTED tickets and the merge gate's failures, find why tickets were rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "via": "plugin",
+     "at": 1793558609.223198
+    },
+    "change": "c4.1"
+   },
+   "changes.requested": {
+    "type": "changes.requested",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+     "reason": "The owner wants it to read DONE and REJECTED tickets and the merge gate's failures, find why tickets were rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "via": "plugin",
+     "at": 1793558609.223198
+    },
+    "change": "c4.2"
+   },
+   "work.requested": {
+    "type": "work.requested",
+    "description": null,
+    "implicit": true,
+    "provenance": {
+     "source": "supervisor",
+     "author": "owner",
+     "turn": "sessions/supervisor/3",
+     "message": "I think the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate, figure out why tickets got rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "quote": "the Notes Improver would watch the ticket queue for DONE and REJECTED tickets and the merge gate",
+     "reason": "The owner wants it to read DONE and REJECTED tickets and the merge gate's failures, find why tickets were rejected or failed the gate, and send ideas to the Coordinator to schedule work.",
+     "via": "plugin",
+     "at": 1793558609.223198
+    },
+    "change": "c4.3"
+   }
+  },
+  "attachments": {},
+  "targets": {},
+  "marks": {
+   "expected": {},
+   "ignored": {}
+  }
+ }
+}

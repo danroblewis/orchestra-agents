@@ -85,7 +85,7 @@ def test_haiku_connects_jira_and_asks_for_the_variable(tmp_path, monkeypatch):
         assert "integrate_system" in calls and "approve_integration" in calls, calls
         jira = intended_api.current(project)["machines"].get("jira")
         assert jira and jira["managed"] == "external" and "bot.jira" in jira["aliases"], jira
-    d = project.orchestra.state_dir / "machines"
+    d = project.orchestra.repo_root / ".orchestra" / "machines"
     polls = [p for p in d.iterdir() if (p / "machine.toml").exists()]
     assert polls, "a poller was scaffolded"
     m = tomllib.loads((polls[0] / "machine.toml").read_text())

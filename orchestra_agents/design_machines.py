@@ -28,7 +28,7 @@ from pathlib import Path
 
 from orchestra.config import ConfigError, parse_duration
 
-from . import intended_api, state_machines
+from . import design_asked, intended_api, state_machines
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, check_request, plural
 from .expect_grammar import expect_edit
@@ -292,6 +292,12 @@ NO_RECEIVES = ("receives is empty: the events it watches, or reads at each run (
                "lists the types machines speak")
 
 
+SCHEDULE_KEEPS = ("nothing changed: a change of engagement (mode, at, tz, missed) never takes out receives. A scheduled "
+                  "machine reads its receives at each run instead of waking on each one, so scheduling it keeps them all; "
+                  "give the engagement alone. remove_receives is only for events the owner says it should stop "
+                  "watching, in a call of its own")
+
+
 def type_lines(project: Project, store: AgentStore, mid: str, receives: list[str], emits: list[str]) -> list[str]:
     """What to say of event types nothing speaks (``bus_reads.known_types``): receives must be
     heard, announced, or emitted by another declared machine; a new emit is declared first."""
@@ -313,8 +319,10 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     if not m["description"]:
         raise StoreError("describe what it achieves, in the work's terms")
     check_machine(m)
+    design_asked.check(store, mid, m["managed"])
     guessed = list(dict.fromkeys("engagement" if g in ("mode", "at", "tz", "missed") else g for g in a.get("guesses") or []))
     done = apply(project, [{"op": "propose_machine", **m, "guessed": guessed}], prov)
+    design_asked.note(store, mid)
     d = draft(project, {**m, "state": "proposed"}, store)
     who = "added by you (from your message)" if prov["author"] == OWNER else "proposed by the Supervisor"
     lines = [f"machine {mid} ({m['title']}) declared, {kind}, {who}: unconfirmed",
@@ -415,6 +423,8 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     if prov.get("request"):
         raise StoreError("a page request backs a switch of kind (switch_kind), a confirm or a discard; a change of the "
                          "declaration is quoted or proposed")
+    if a.get("remove_receives") and any(a.get(k) for k in ("mode", "at", "tz", "missed")):
+        raise StoreError(SCHEDULE_KEEPS)
     after = json.loads(json.dumps(m))
     ops = edits_of(a, after)
     folded = m.get("state") == "declared" and len(fold_spec(ops)) < len(ops)

@@ -175,10 +175,12 @@ a file. Follow it top to bottom:
    It is drawn as a ghost in the Dynamics page's Expected group until a series measures it.
 2. **Measure, at once, from the store first.** `propose_measurements` is refused until
    `list_metrics` was called in the session: a series already recorded always beats a script, and
-   is option `a` (`existing_series`, nothing added); when the model has it as a discovered stock,
-   `link` the declared stock to it in the same turn (yours to do; it is how its expected effects
-   are judged). Then the repository's reports, other plugins' counters, another store: three or
-   four options with their cost. Only when no series holds it, `add_instrument` the best, its
+   is option `a` (`existing_series`, nothing added), a superset or a proxy of the quantity
+   included, offered with its `caveat`; when the model has it as a discovered stock, `link` the
+   declared stock to it in the same turn, with the caveat (yours to do; it is how its expected
+   effects are judged). Then the repository's reports, other plugins' counters, another store:
+   three or four options with their cost. Only when no series holds it, or the owner rejects the
+   one offered (quoted), `add_instrument` the best, its
    option chosen at once (the Dynamics page draws a draft as recording only on the chosen
    option): a script of at most 100 lines, tried
    before it is written, to `~/.orchestrator/<key>/agents/instruments/<name>.sh`, and its
@@ -249,47 +251,67 @@ they propose, and you put the findings to the owner in one message.
 When the owner wants to see what happens in another system ("connect our Jira so I can see issue
 transitions and open counts"), the method is Orchestra's `docs/INTEGRATING.md`
 (https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md: the strategies, the kits,
-the rules, the checklist); the bridges' guide (`read_guide bridges`, its kits section) has the
-kits' settings. You do it with two `design` tools, and the owner writes nothing:
+the rules, the checklist). **The bridges are a library** (the owner, 2026-11-01: "a library or
+framework so that AI agents within my repo could write scripts in the target repo to do the
+metrics and event collection"): kits (a cached, rate-limited, read-only client; a poller with its
+cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
+themselves. **Every collector is a script in the owner's repository**, at
+`.orchestra/machines/<name>/` (its `machine.toml`, `<name>.py`, `test_<name>.py` against the kit's
+fake, and an `AGENTS.md` with the kit's rules for whoever edits it), landed by a pull request like
+any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
+says their repository must stay clean (`root: state`). The kits stay read-only: a write to the
+system (a label, a transition, a Slack post) is an Outbox draft the owner's approval settings
+govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
 
 1. **`integrate_system`** with the system, what the owner wants (their words), and their quote. The
    strategy follows INTEGRATING.md §2 when you leave it out: a store with a Prometheus API
    (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
-   narrow `match`); anything with items is a `poller` built from the bridges' kit (events as who
-   acted, and its series); `collect` is a measurement alone; `bridge` is the bridges' own reader
-   (Jira, Slack pings, GitHub) when it already reads what the owner wants, never beside a poller
-   over the same items. Give the owner's scope in `settings` (`jql`, `channels`), and `stock` when
-   they named what it fills ("open counts": `Open issues`). A poller is scaffolded into the state
-   directory (`~/.orchestrator/<key>/machines/<name>_poller/`), its own test is run against the
-   kit's fake, and the system is declared on the Machines page as a machine managed elsewhere,
-   heard as `bot.<system>`, with its expected effect on the stock. **The poller is never a
-   machine**: it relays what the system's people and bots did, as them.
+   narrow `match`); anything with items is a `poller` built from a kit (events as who acted, and
+   its series); `collect` is a measurement alone. Give the owner's scope in `settings` (`jql`,
+   `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The
+   script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   system is declared on the Machines page as a machine managed elsewhere, heard as
+   `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
+   relays what the system's people and bots did, as them. The answer names the directory: tell
+   the owner a coding tool (theirs, or the Coordinator's worker) may now edit the script there.
+   **When the test fails, or the kits have no template for the system** (Jenkins: the generic
+   `http` kit's guess), the answer has already handed the script to the Coordinator as work
+   (`request`): a worker adapts it until its test passes, and a review and the gate land it. You
+   never stop there and never write the code yourself; tell the owner it is handed on.
 2. **Ask the owner** what the answer's `ask_owner` says, in your words: their yes to reading it
-   (metadata only, read-only), and the *name* of the environment variable that will hold the token
-   in the environment `orchestra run` starts with. Never the token, never in the chat, and never a
-   file for them to change.
-3. **`approve_integration`** on their yes, quoted, with that name (`token_env`) and the site's
-   address if it was missing. The program's `machine.toml` records the clearance, the data class
-   and the variable's name (its test reads them from there), and what runs it is written to the
-   owner's overlay: a `[[machines]]` entry with `restart = "always"` (a process Orchestra keeps
-   running, never a machine) and a `[[collect]]` entry for its series. They are
-   written at the approval, not before: an uncleared poller only waits, reading nothing, but its
-   measurement would fail every round.
+   (metadata only, read-only), and *where* the token is: an environment variable's name (in the
+   environment `orchestra run` starts with) or a `chmod 600` file outside any repository
+   (`~/.config/orchestra-bridges/jira-token`). Jira Cloud (an `atlassian.net` site) logs in with the
+   account's email and the token together, so ask where the email is too. Never the token, never
+   in the chat, and never a file for them to change.
+3. **`approve_integration`** on their yes, quoted, with what they named: `token_env` or
+   `token_file`, and `user_env` or `user_file` for the account (Jira Cloud), plus the site's
+   address if it was missing. These are references, never values: a path inside a repository or
+   a value that looks like a credential is refused. The script's `machine.toml` records the
+   clearance, the data class and those references (its test reads them from there), and what runs
+   it is written to the owner's overlay: a `[[machines]]` entry with `restart = "always"` (a
+   process Orchestra keeps running, never a machine) and a `[[collect]]` entry for its series (a
+   store's `[[sources]]` entry takes `auth.bearer_env` or `auth.bearer_file`). They are written at
+   the approval, not before: an uncleared poller only waits, reading nothing, but its measurement
+   would fail every round. If the answer says the script does not log in with an account yet (the
+   Jira template speaks Data Center), hand that change to the Coordinator before saying it reads.
 
-Tell the owner what you did and what they must set (the variable, then a restart of
-`orchestra run` if it was not set when it started). Two things `integrate_system` needs in
-Orchestra's own Python, and each answer says when one is missing:
+**What the human decides, and nothing else:** whether the system may be read (their quoted yes,
+and the data class), where its credentials are (a variable's name or a file's path; they put the
+token there themselves), whether the repository must stay clean (`root: state`), and each write to
+the system (the Outbox's approval). Tell them what you did and what they must set (the answer's
+`owner_must_set`: a variable, then a restart of `orchestra run` if it was not set when it started;
+or a file, `chmod 600`). Two things `integrate_system` needs in Orchestra's own Python, and each
+answer says when one is missing:
 
 - **the bridges' kits not installed**: nothing was written. Propose the route the answer names:
   the owner's coding tool reinstalls Orchestra with the `bridges` extra (the answer gives the
   command), or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
-  Coordinator.
+  Coordinator (`hand_to_coordinator`).
 - **pytest not installed** (state `test not run`): the scaffolded test could not run, which is no
-  failure: hand nothing to the Coordinator. The owner's coding tool reinstalls Orchestra with the
-  `dev` extra (the answer gives the command, naming every plugin the tool already has); then call
-  `integrate_system` again, the same way.
-
-A test that ran and failed (state `test failed`) is code: hand it on with the failure.
+  failure: nothing is handed to the Coordinator. The owner's coding tool reinstalls Orchestra with
+  the `dev` extra (the answer gives the command, naming every plugin the tool already has); then
+  call `integrate_system` again, the same way.
 
 ## Workflows
 
@@ -300,17 +322,34 @@ not installed: tell the owner, and write nothing.
 - **The words** (the plugin's vocabulary, and nothing beyond it): an **item** is one thing that
   moves (a ticket, a pull request). A workflow is its **steps** in order, and each step says
   **who** does it: a **role** (any machine announcing it: an AI agent or a program, `worker`,
-  `reviewer`), a **program** the plugin runs per item, an **outside** system (GitHub, Jira: a wait,
-  nothing is offered), or the **outbox** (a write as the owner, after their approval). **Needs** are
-  resources claimed first (a `worktree`). **Done when** is what ends the step: for a role or a
-  program, its turn finishing (leave `done_when` out); otherwise an event about the item (or one of
-  its children), or a gauge above or below a value for a while. **Outcomes** map each result to the
-  next step (or `null`: the end); a move back is **rework**, offered to whoever did that step.
-  **Guards** are limits (`within` a time, at most `rounds` entries); past one, the planner gets
-  **attention**, or the item moves to a named step. **Starts** says what makes an item: a request,
-  an event type, or the clock (`every`). An item waits in a step's **piles**
-  (`<step>.waiting`, `<step>.held`), each wait with its reason (no offer taken, a resource, a
-  dependency, awaiting an outside event).
+  `reviewer`), offered to it; a **program** the plugin runs per item, told its workflow, step and
+  the item's fields (`ORCHESTRA_WORKFLOW`, `ORCHESTRA_STEP`, `ORCHESTRA_FIELDS`); an **outside**
+  system (GitHub, Jira: a wait, nothing is offered, only that system's events count); a **person**
+  (`person: owner`: a wait only the owner's own act moves; a machine may prepare it, never do it;
+  never offered); or the **outbox** (`outbox: owner`: an act in another system as the owner, a
+  label, a comment, a ticket closed, a message). An outbox step carries a **draft** (the outbox's
+  `kind`, the `target`, the `content`, the `fields`, each a value, an item field, `{"item": "id"}`
+  or a setting); the floor hands it to the Outbox plugin and never performs it, the item waits
+  "awaiting the owner's approval", and the step ends `sent`, `rejected` or `failed` on the
+  outbox's result. There is no text template: a role step writes the text into an item field
+  first (the ping into `nudge`), and the outbox step drafts from it. A fan-in or an `after` step
+  has no who. **Needs** are resources claimed first (a `worktree`). **Done when** is what ends the
+  step: for a role or a program, its turn finishing (leave `done_when` out; the outbox's too);
+  otherwise an event about the item (or one of its children), with `data` fields and a `count`
+  (events: one reviewer approving twice is 2; add `distinct: "source"` to count people, "two
+  distinct reviewers"); a gauge above or below a value for a while; a fan-in over the children
+  (`all`: the parent following its slowest child is this); or `{"after": "5m"}`, a pause before
+  a retry (never a machine that sleeps). **Outcomes** map each result to the next step (or
+  `null`: the end); a move back is **rework**, offered to whoever did that step; an outcome the map
+  does not name leaves the item at the step and tells the planner. **Guards** are limits (`within`
+  a time, at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
+  a named step. **Starts** says what makes an item: a request, an event type (with `data` it starts
+  only when the event's fields match: `{"event": "jira.issue.assigned", "data": {"assignee":
+  {"setting": "owner"}}}`, only the owner's tickets), or the clock (`every`). **Depends** holds a
+  step until another item is at a step (the relation is `item.related depends_on`, from the
+  machine that knows it). An item waits in a step's **piles** (`<step>.waiting`, `<step>.held`),
+  each wait with its reason (no offer taken, a resource, a dependency, awaiting an outside event,
+  a person or the owner's approval).
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
   so (quote them). The repository's is not committed by you: hand it to the Coordinator to land
@@ -319,15 +358,42 @@ not installed: tell the owner, and write nothing.
   a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
   what the project still lacks (a program or a resource kind no one declares): say them to the
   owner. `list_workflows` reads them all back; `explain_item` says why an item is where it is.
-- **The owner reads them** on the plugin's pages: Workflows (`/workflows`, each drawn), Items
-  (`/items`) and Piles (`/piles`). Nothing there changes anything.
+- **The owner reads them** on the Items page (`/items`: every item, its step and who holds it) and
+  the Dynamics page (each pile a stock). Nothing there changes anything.
 
 A worked example. The owner: "declare a two-step workflow: write then review". You call
 `declare_workflow` with `{"name": "write_review", "starts": [{"request": true}], "steps": [{"name":
 "write", "who": {"role": "worker"}, "outcomes": {"ready": "review"}}, {"name": "review", "who":
 {"role": "reviewer"}, "outcomes": {"approved": null, "rejected": "write"}, "guards": {"rounds": 3}}]}`,
 the quote "declare a two-step workflow" and a reason; then tell the owner where it was written,
-what the notes say, and that the Workflows page draws it.
+what the notes say, and that its items will show on the Items page.
+
+### Starting a piece of work
+
+When the owner asks for work ("do X", "start Y") and a workflow fits, start it with
+`request_work`; never tell the owner to publish an event themselves.
+
+1. `list_workflows`: the workflows a request starts (`starts` holds `{"request": true}`, or is
+   empty). One fits: use it. More than one fits: ask the owner which, and request nothing yet.
+   None fits: it is a ticket for the Coordinator (`hand_to_coordinator`), or a workflow to declare.
+2. `request_work` with `workflow`, `brief` (the work in the owner's terms: the first step's
+   machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
+   source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the
+   larger item this is part of) and `fields` (`{"priority": 2}`).
+3. Answer the owner with the item's id, the Items page link (`/items/<id>`) and that you can say
+   where it is and why (`explain_item`).
+
+It is refused, with nothing published, when the workflow is not loaded or not started by a
+request, when the id is already used, and when the Workflows floor is not running (no `orchestra
+run`, or `workflows.floor` stopped: `list_processes`, `read_machine_log workflows.floor`): say so
+to the owner, with what starts it.
+
+A worked example. The owner: "start the task loop on adding a /version endpoint". `list_workflows`
+shows one workflow a request starts, `task_loop`, so you call `request_work` with `{"workflow":
+"task_loop", "brief": "Add a /version endpoint that returns the app version, with a test",
+"quote": "start the task loop on adding a /version endpoint", "reason": "the owner asked for the
+/version endpoint"}`, and answer: "Started task_loop-3fa2c1; it shows on /items/task_loop-3fa2c1,
+and I can tell you where it is."
 
 ## Checking it took
 

@@ -137,8 +137,40 @@ def test_the_tools_are_the_supervisors_group_and_the_schema_spells_out_the_defin
     props = d["properties"]["definition"]["properties"]
     assert set(props) == {"name", "planner", "starts", "steps", "piles", "lifecycle", "settings"}
     step = props["steps"]["items"]["properties"]
-    assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends"}
+    assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends", "draft"}
     assert set(step["who"]["properties"]) == {"role", "program", "outside", "person", "outbox"}
+    assert props["steps"]["items"]["required"] == ["name"]          # a fan-in or an after step has no who
+
+
+def test_the_text_states_the_plugins_contract():
+    """The words since the vocabulary (S3) and the outbox writes (O1), so the Supervisor writes them."""
+    d = BY_NAME["declare_workflow"]
+    props = d.input_schema["properties"]["definition"]["properties"]
+    step = props["steps"]["items"]["properties"]
+    who, done = step["who"]["description"], step["done_when"]
+    assert "never performs" in who and "awaiting the owner's approval" in who and "sent, rejected or failed" in who
+    assert "never offered" in who and "ORCHESTRA_STEP" in who and "leave who out" in who
+    assert set(step["draft"]["properties"]) == {"kind", "target", "content", "fields", "recipients"}
+    assert step["draft"]["required"] == ["kind"] and "no text template" in step["draft"]["description"]
+    assert "after" in done["properties"] and "{after:" in done["description"] and "no who" in done["description"]
+    assert done["properties"]["distinct"]["enum"] == ["source"] and "counts events" in done["properties"]["count"]["description"]
+    starts = props["starts"]["items"]["properties"]
+    assert "data" in starts and "makes no item" in starts["data"]["description"]
+    for word in ("distinct: source", "person: owner", "outbox: owner", "draft", "after", "depends"):
+        assert word in d.description, word
+    assert "Piles page" not in d.description and "Workflows page" not in d.description
+
+
+def test_the_guide_and_the_coordinator_say_the_outbox_and_the_counts():
+    root = Path(workflow_tools.__file__).resolve().parent
+    guide = (root / "guide.md").read_text()
+    words = guide[guide.index("## Workflows"):guide.index("### Starting a piece of work")]
+    for w in ("never performs it", "awaiting the owner's approval", "`distinct: \"source\"`", "`{\"after\": \"5m\"}`",
+              "`person: owner`", "ORCHESTRA_FIELDS", "has no who", "only the owner's tickets"):
+        assert w in words, w
+    assert "Piles page" not in guide and "Workflows page" not in guide
+    coord = (root / "prompts" / "coordinator.md").read_text()
+    assert "awaiting the owner's approval" in coord and "outbox step's draft" in coord
 
 
 def test_a_definition_is_written_to_the_state_directory_by_default(project, store, fake):
@@ -146,7 +178,7 @@ def test_a_definition_is_written_to_the_state_directory_by_default(project, stor
     path = project.orchestra.state_dir / "workflows" / "write_review" / "workflow.json"
     assert out["ok"] and out["root"] == "state" and out["path"] == str(path) and path.is_file()
     assert fake.calls == [("problems", "write_review"), ("write", "state")]
-    assert "worktree" in out["notes"][0] and "/workflows" in out["shown"] and "Items" in out["shown"]
+    assert "worktree" in out["notes"][0] and "/workflows" not in out["shown"] and "/piles" not in out["shown"] and "Items" in out["shown"]
     assert out["author"] == "supervisor" and "committed" not in out
     assert "wrote the workflow write_review" in out["done"] and "as your proposal" in out["done"]
     assert store.agent_state("supervisor")["actions"][-1]["tool"] == "declare_workflow"

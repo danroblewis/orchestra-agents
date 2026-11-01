@@ -1,0 +1,27 @@
+{
+ "ok": true,
+ "predictions": [
+  {
+   "id": "f9aad435d82144d2a4633799bc631883",
+   "source": "supervisor",
+   "made_at": 1793558645.666,
+   "subject": "machine:notes_improver",
+   "change": "21085c3c7591442aa7541d898be37986",
+   "expect": [
+    {
+     "kind": "slope",
+     "stock": "repo_files",
+     "direction": "rises"
+    },
+    {
+     "kind": "factor",
+     "flow": "tasks_gate_runs_total_landed@repo_stats",
+     "factor": 1.2
+    }
+   ],
+   "horizon_s": 604800.0,
+   "status": "waiting",
+   "era": null
+  }
+ ]
+}

@@ -946,10 +946,13 @@ each event type's declared and heard publishers and listeners).
 **Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
 I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
 the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
-Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone, and `bridge`, the
-bridges' own reader). For `poller` and `collect` it scaffolds the bridges plugin's kit
-(`orchestra_bridges.kits.scaffold`, a dev dependency here, imported only in `integrate_kits`) into
-Orchestra's state directory (`<state>/machines/<name>/`, the kit's `--root state`), runs the
+Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone; the bridges are a
+library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
+scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
+imported only in `integrate_kits`) into the owner's repository (`.orchestra/machines/<name>/`, the
+kit's `--root repo`, where a coding tool or the Coordinator's worker edits it and a pull request
+lands it), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
+with `root: state`, when the owner said the repository must stay clean; it runs the
 program's own test against the kit's fake in a child Python with every credential-looking variable
 left out of its environment, and only then fills the owner's words and settings into its
 `machine.toml` (the fake serves the template's world; a `token`, `token_env` or clearance in the
@@ -957,29 +960,35 @@ settings is refused). A poller's system is declared as a machine managed elsewhe
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
 Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
-plans nothing (state `test failed`: code, for the Coordinator). A test that could not run because
-pytest is not in Orchestra's Python declares and plans nothing either, but is no failure (state
-`test not run`): the answer gives the reinstall with the `dev` extra, and the same call again
-begins it afresh; `approve_integration` refuses both. If a step after the declaration fails, the
-error names the changes that stayed in the declared layer. Without the kits nothing is written, and the answer says so and names
-INTEGRATING.md's routes (the bridges plugin installed, or the one-file poller of its §5.2, which is
-code and goes to the Coordinator). `source` and `bridge` write nothing either: the `[[sources]]`
-entry or the `[bridges.<system>]` section is planned. The answer carries `ask_owner`: the owner's
-approval and the NAME of the environment variable for the token, put to them in the chat.
-`approve_integration` takes a verified quote of the owner (refused otherwise), the variable's name
-(a name the kits take, `orchestra_bridges.kits.settings.ENV_NAME`; never a value), the data class
-(`metadata only` by default) and the site's address when the template's placeholder is still
-there; it writes `clearance = "approved"`, `data_class` and `token_env` into `machine.toml` (the
-scaffolded test reads the variable's name and the scope from there, so it is not run again), then
-the plan to the owner's overlay through
-`config_change`: a `[[machines]]` entry with `restart = "always"` (a process Orchestra's launcher
-keeps, never an announced machine: the poller only relays, Orchestra's rule 2; INTEGRATING.md §5.5's
-Workflows route is not taken for that reason) and a `[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
-bridge's section (with `token_env`, for the Jira and Slack readers), each announced
-(`instruments.changed` or `config.changed`). **The entries are written at the approval** (a
-deviation from the task's wording, which schedules at `integrate_system`): an uncleared poller run
-for good only waits, re-reading `machine.toml`, but its `[[collect]]` measurement would fail every
-round until the approval. Each
+plans nothing and hands the script to the Coordinator (`hand_to_coordinator`, `work.requested`
+naming the directory, the failure and the kit's rules); so does a system with no template of its
+own (the generic `http` kit), whose integration goes on to wait for approval meanwhile. A test that
+could not run because pytest is not in Orchestra's Python declares and plans nothing either, but is
+no failure and is handed to no one (state `test not run`): the answer gives the reinstall with the
+`dev` extra, and the same call again begins it afresh; `approve_integration` refuses both. If a
+step after the declaration fails, the error names the changes that stayed in the declared layer.
+Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
+bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
+Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer
+carries `ask_owner`: the owner's approval and where the token is (a variable's NAME or a file's
+path), put to them in the chat. `approve_integration` takes a verified quote of the owner (refused
+otherwise), the credentials by reference (`integrate_kits.credentials`: `token_env` or
+`token_file`, and `user_env` or `user_file` for an HTTP Basic account such as Jira Cloud's email;
+a name is one the kits take, `orchestra_bridges.kits.settings.ENV_NAME`, a path is absolute and
+outside any repository, nothing that looks like a secret), the data class (`metadata only` by
+default) and the site's address when the template's placeholder is still there; it writes
+`clearance = "approved"`, `data_class` and those references into `machine.toml` (dropping the
+template's `token_env` when the owner named only a file; the scaffolded test reads them from
+there, so it is not run again), says whether each variable is set and each file is there and
+`chmod 600` (never reading it), then the plan to the owner's overlay through `config_change`: a
+`[[machines]]` entry with `restart = "always"` (a process Orchestra's launcher keeps, never an
+announced machine: the poller only relays, Orchestra's rule 2; INTEGRATING.md §5.5's Workflows
+route is not taken for that reason) and a `[[collect]]` entry for the series, or the `[[sources]]`
+entry with `auth.bearer_env` or `auth.bearer_file`, each announced (`instruments.changed` or
+`config.changed`). **The entries are written at the approval** (a deviation from the task's
+wording, which schedules at `integrate_system`): an uncleared poller run for good only waits,
+re-reading `machine.toml`, but its `[[collect]]` measurement would fail every round until the
+approval. Each
 integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,
 `integrations`, in `runtime.json`.
 
@@ -1053,6 +1062,19 @@ is defined, its planner, starts, each step's who, needs and outcomes, the loader
 notes); `explain_item` gives an item's summary, its fields with the facts that set them, its
 position per workflow, the facts not counted and its last facts. The guide's "Workflows" section
 is the Supervisor's reference.
+
+**Starting work** (tool group `work`, the Supervisor's and the Coordinator's; `request_work.py`,
+2026-11-01, W9). `request_work` publishes the plugin's `item.requested` (its machine contract:
+`workflow`, `brief`, optional `parent`; subject the new item's id, `<workflow>-<6 hex>` unless
+given) and, with `fields`, one `item.fact` setting them. Whose request it is follows the design
+tools' provenance rule: the Supervisor asks only for the owner, so it must quote the owner's words
+in their message of the turn, and the request goes out as `owner` with `via: supervisor`, as
+Orchestra's page requests (`orchestra.intent.requested`) do; without a verified quote it is
+refused. The Coordinator's request is its own, as `coordinator` (a planner by the contract).
+Refused with nothing published: the plugin not installed, a workflow the loader does not load or a
+request does not start, an id the record already holds, and no floor to offer it (no live
+`orchestra run`, or its `workflows.floor` process not running). The answer carries the id, the
+Items page link (`/items/<id>`) and `explain_item` to follow it.
 
 ## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

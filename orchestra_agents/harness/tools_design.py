@@ -23,7 +23,8 @@ def E(values: list[str], d: str = "") -> dict:
 
 
 MODE = E(["ad hoc", "continuous", "scheduled"], "How it is engaged: ad hoc (when asked or woken), continuous (always up, woken "
-                                                "by its receives), scheduled (once a day at `at`)")
+                                                "by its receives), scheduled (once a day at `at`, reading its receives "
+                                                "at each run: scheduling keeps them)")
 AT = S("For scheduled: the time of day, HH:MM (00:00 is midnight)")
 TZ = S("For scheduled: the owner's time zone (America/Los_Angeles), from their message; none configured, so leave it out "
       "and ask them when they have not said one. Never UTC or the host's zone as a guess")
@@ -111,7 +112,11 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("propose_measurements", "design",
             "Record the ways to measure a declared stock or effect, in order, after you looked. Refused until you called "
             "list_metrics in this session: a series already in the store (existing_series, its series named) always beats a "
-            "script, and is option a; when that series is a discovered stock (read_model), link the declared one to it. Then "
+            "script, and is option a, also when it counts more than the owner means (a superset: every tracked file for "
+            "the notes files) or stands for it (a proxy): offer it with that caveat (caveat). When that series is a "
+            "discovered stock (read_model), this call links the declared one to it itself, with the option's caveat: tell "
+            "the owner it is linked; only their words unlink it (link unlink=true). A new instrument is proposed for "
+            "recording only when the owner rejects the series. Then "
             "the repository's own reports (a CI JUnit report through orchestra.instruments.test_reports; "
             "never run a suite in the working tree), other plugins' counters, another store or company system (named and "
             "costed only: never previewed until the owner clears it), and a simulated placeholder last. It only records. "
@@ -120,7 +125,8 @@ DESIGN_TOOLS: list[ToolDef] = [
                                              "(three or four honest ones)"}, "quote": QUOTE, "reason": REASON},
             ("element", "options", "reason")),
     ToolDef("add_instrument", "design",
-            "Start recording one option at once (never an existing_series one: link that instead), its option chosen: a script of at most 100 lines you write (to the state directory, "
+            "Start recording one option at once (never an existing_series one: link that instead), its option chosen. Refused "
+            "while an existing series is among the options, unless the owner rejected it (quote their words): a script of at most 100 lines you write (to the state directory, "
             "instruments/<name>.sh), or the command or URL the option proposed; tried first exactly as Orchestra runs it, then "
             "its [[collect]] or [[scrape]] entry goes in the owner's private overlay, one act. Refused over 100 lines, with "
             "what looks like a secret, for an option that needs approval or reaches another host, or when the trial fails "
@@ -177,13 +183,20 @@ DESIGN_TOOLS: list[ToolDef] = [
             ("attachment", "reason")),
     ToolDef("link", "design",
             "A declared stock is a discovered one: the owner says so (\"yes, that's Features\"), or the series you measured it "
-            "with is that stock (read_model); yours to call, quoted or as your proposal. A manual binding, origin "
+            "with is that stock (read_model), a superset or proxy of it included (say so in caveat); yours to call, quoted "
+            "or as your proposal. A manual binding, origin "
             "declared, an assumption until fitted; it is how a declared stock's expected effects can be judged. It never renames the discovered stock. A confirmed machine's expected "
             "edits that waited for it are published then.",
-            {"declared": ELEMENT, "discovered": S("The discovered stock's (or series') key"), "quote": QUOTE, "reason": REASON},
-            ("declared", "discovered", "reason")),
+            {"declared": ELEMENT, "discovered": S("The discovered stock's (or series') key"),
+             "caveat": S("What the series gets wrong for the declared stock, if anything (it counts every tracked file, "
+                         "not the notes files only): recorded with the link and on its option; tell the owner"),
+             "unlink": B("Take the link off, on the owner's words only (quote): they do not want that series"),
+             "quote": QUOTE, "reason": REASON},
+            ("declared", "reason")),
     ToolDef("declare_machine", "design",
-            "Declare a machine by name (\"Create a new Universal Machine called Feature Count Improver\"): its envelope and "
+            "Declare a machine the owner asked for in this turn's message (\"Create a new Universal Machine called Feature "
+            "Count Improver\"): no more than it asks for (a loop described in passing asks for none; refused past that). "
+            "Its envelope and "
             "its kind's fields (invariants, steps, uses for a Universal one; command and the rest for a Programmatic one), "
             "every guess named in guesses. It stays unconfirmed and never runs until the owner confirms. "
             "Read the map first (read_design, read_events, read_model); use existing event types where one has the purpose. "
@@ -205,7 +218,8 @@ DESIGN_TOOLS: list[ToolDef] = [
             "the owner confirms. The Universal | Programmatic switch is switch_kind.",
             {"name": S("The machine"),
              "add_receives": A("Event types to add to what it watches: " + RECEIVES_D),
-             "remove_receives": A("Event types to take out of its receives"),
+             "remove_receives": A("Event types to take out of its receives: only those the owner says it should stop watching, "
+                                  "in a call of its own; never with mode, at, tz or missed (scheduling keeps every receive)"),
              "add_emits": A(EMITS_D), "remove_emits": A("Event types it will no longer publish"),
              "add_reads": A("Stocks or effects it may read"), "remove_reads": A("Stocks or effects it no longer reads"),
              "add_invariants": A("Lines a reviewer can check"), "remove_invariants": A("Invariants to drop, word for word"),
@@ -248,16 +262,21 @@ DESIGN_TOOLS: list[ToolDef] = [
              "reason": REASON}, ("element", "reason")),
     ToolDef("integrate_system", "design",
             "The first call when the owner asks to connect an outside system (\"connect our Jira so I can see issue "
-            "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: a poller built from the bridges' kit (events and series), a measurement alone "
-            "(collect), a [[sources]] entry for a Prometheus-API store (source), or the bridges' own reader (bridge). A poller "
-            "is scaffolded into the state directory and tested against the kit's fake, and the system is declared on the "
-            "Machines page as a machine managed elsewhere. Nothing reads the real system until the owner approves: put the "
-            "answer's ask_owner to them, then approve_integration.",
+            "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
+            "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
+            "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
+            "owner's repository (.orchestra/machines/<name>/: a coding tool or the Coordinator may edit it there, a pull "
+            "request lands it), tested against the kit's fake, and the system is declared on the Machines page as a machine "
+            "managed elsewhere. A failed test, or a system with no template of its own, is handed to the Coordinator as "
+            "work. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
+            "approve_integration.",
             {"system": S("The system's name: jira, slack, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),
-             "strategy": E(["poller", "collect", "source", "bridge"],
+             "strategy": E(["poller", "collect", "source"],
                            "Leave out for INTEGRATING.md's default: source for a Prometheus-API store, poller otherwise"),
              "name": S("The poller's name (default <system>_poller); never the system's own name"),
+             "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
+                       "when the owner said their repository must stay clean"),
              "kit": E(["jira", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
              "base_url": S("The system's address (its API's root URL), when the owner gave it"),
              "settings": INTEGRATION_SETTINGS,
@@ -266,15 +285,21 @@ DESIGN_TOOLS: list[ToolDef] = [
              "unit": S("The stock's unit (issues)"), "quote": QUOTE, "reason": REASON},
             ("system", "wants", "reason")),
     ToolDef("approve_integration", "design",
-            "The owner approved reading the system (their yes, quoted) and named the environment variable holding its token: "
-            "the clearance and the variable's name are recorded, and what runs it is written to the owner's overlay, so the "
-            "program reads the real system from then on. Never pass or ask for the token itself.",
+            "The owner approved reading the system (their yes, quoted) and said where its token is: the clearance and the "
+            "credentials, by reference only (a variable's name or a file's path, never a value), are recorded in the "
+            "script's machine.toml, and what runs it is written to the owner's overlay, so the program reads the real system "
+            "from then on. Jira Cloud also needs the account's email (user_env or user_file). Never pass or ask for the "
+            "token itself.",
             {"name": S("The integration's name, from integrate_system's answer"),
              "token_env": S("The NAME of the environment variable holding the token (JIRA_TOKEN), never its value"),
+             "token_file": S("Or: the full path of a chmod 600 file outside any repository holding the token "
+                             "(~/.config/orchestra-bridges/jira-token)"),
+             "user_env": S("HTTP Basic (Jira Cloud): the NAME of the variable holding the account (its email)"),
+             "user_file": S("HTTP Basic (Jira Cloud): or the full path of a chmod 600 file holding the account's email"),
              "data_class": S("What the owner cleared it for (default: metadata only)"),
              "base_url": S("The system's address, when it was not given before"),
              "settings": INTEGRATION_SETTINGS, "quote": QUOTE, "reason": REASON},
-            ("name", "token_env", "quote", "reason")),
+            ("name", "quote", "reason")),
     ToolDef("read_design", "observe",
             "The declared layer in one read: every declared and proposed element with its state, link and guessed fields; "
             "each machine's fields; each event type's declared publishers and listeners and who was heard publishing it or "

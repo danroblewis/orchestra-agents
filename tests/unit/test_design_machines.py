@@ -78,7 +78,7 @@ def test_a_universal_declaration_says_nothing_in_ai_terms(project, store):
 
 
 def test_programmatic_fields_follow_the_mode_and_an_external_one_has_its_source(project, store):
-    say(store, "a nightly Jenkins job", 1)
+    say(store, "Add two machines: a nightly Jenkins job, and a task feed.", 1)
     call(project, store, "declare_machine", name="nightly_build", kind="programmatic", description="Builds main every night",
          managed="external", mode="scheduled", at="02:00", emits=["build.finished"],
          trigger="https://jenkins.example/job/nightly/build", exit="0 when green", source="bot.jenkins",
@@ -188,7 +188,7 @@ def test_the_horizon_is_three_runs_by_the_schedule_or_by_the_rate_of_what_wakes_
 
 
 def test_a_refinement_round_proposes_its_findings_once_and_declares_nothing(project, store):
-    say(store, "map", 1)
+    say(store, "Create a machine called Improver.", 1)
     call(project, store, "declare_machine", name="improver", kind="universal", description="Improves delivery",
          mode="continuous", receives=["session.settled"], emits=["work.improvement_proposed"], reason=WHY)
     call(project, store, "declare_expected_effect", machine="improver", horizon="1d", reason=WHY,
@@ -216,7 +216,7 @@ def test_a_refinement_round_proposes_its_findings_once_and_declares_nothing(proj
 
 
 def test_later_passes_follow_the_neighbours_and_stop_at_design_passes(project, store):
-    say(store, "map", 1)
+    say(store, "Create machines named A Maker, B Relay, C End and D Tail.", 1)
     for name, receives, emits in (("a_maker", [], ["work.a"]), ("b_relay", ["work.a"], ["work.b"]), ("c_end", ["work.b"], ["work.c"]),
                                   ("d_tail", ["work.c"], [])):
         call(project, store, "declare_machine", name=name, kind="universal", description="x", mode="ad hoc", receives=receives,

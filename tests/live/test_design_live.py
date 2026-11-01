@@ -41,6 +41,7 @@ It costs money and needs a logged-in ``claude``, so it runs only when asked:
     ORCHESTRA_LIVE_DESIGN=1 uv run python -m pytest -q -s tests/live/test_design_live.py
     #   ORCHESTRA_LIVE_TOOLS_VIA=bash      only one way of calling the tools (default: mcp,bash)
     #   ORCHESTRA_LIVE_CAP_USD=10          stop past this spend (default 10, the goal's cap)
+    #   ORCHESTRA_LIVE_RUN=haiku-L2        the transcripts' directory (default <tools_via>-<model>-once; <date>/<name> too)
     ORCHESTRA_LIVE_DESIGN=rehearse ...     the same run with the fake Claude, scripted: free
 
 The rehearsal also runs in every suite (tests/e2e/test_design_rehearsal_e2e.py). The scenario

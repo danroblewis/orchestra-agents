@@ -96,7 +96,7 @@ def test_the_owner_asks_for_a_two_step_workflow_and_the_plugin_loads_it(chat):
     assert declared["ok"] is True, declared
     path = project.orchestra.state_dir / "workflows" / "write_review" / "workflow.json"
     assert declared["path"] == str(path) and declared["root"] == "state" and declared["author"] == "owner"
-    assert isinstance(declared["notes"], list) and "/workflows" in declared["shown"]
+    assert isinstance(declared["notes"], list) and "/items" in declared["shown"]
     assert json.loads(path.read_text()) == DEFINITION
     loaded = define.load(project.orchestra)
     (wf,) = [w for w in loaded.workflows if w.name == "write_review"]

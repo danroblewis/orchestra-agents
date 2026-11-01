@@ -29,6 +29,7 @@ from .base import (
     _LineReader,
     _NormalizerBase,
     records,
+    session_env,
 )
 
 
@@ -65,7 +66,7 @@ class DummySession(AgentSession):
             result, emit = TurnResult(), _NormalizerBase(on_event)
             self.spec.log_path.parent.mkdir(parents=True, exist_ok=True)
             stderr = self.spec.log_path.open("a", encoding="utf-8")
-            env = {**os.environ, **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+            env = {**session_env(), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
             try:
                 self.proc = subprocess.Popen([sys.executable, "-m", "orchestra_agents.harness.dummy_agent", self.session_file],
                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr, text=True,

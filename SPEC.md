@@ -490,6 +490,11 @@ its token, `tooling.handle`), and the token reaches the command only through the
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
 command, and the dummy harness in-process; the setting changes neither.
+**No host credentials in a session** (`harness/base.session_env`): every harness starts its process
+with the host's environment minus each name that may hold a credential (`integrate_kits.CREDENTIAL_VARS`,
+or ending in `_TOKEN`/`_SECRET`/`_PASSWORD`/`_KEY`; the host's `ORCHESTRA_*` tokens among them), keeping
+only that harness's own sign-in (Claude Code's `CLAUDE_AUTH`, Pi's provider keys `PI_AUTH`, Codex's
+`CODEX_AUTH`) and the session's own `SessionSpec.env`.
 **No push, no pull-request writes** (`push_guard.py`; the owner, 2026-10-31: using Orchestra at work
 "won't try to push things to master"). Every session runs with the owner's git and gh
 credentials and its harness's permission checks off, so the host gives each session whose role is

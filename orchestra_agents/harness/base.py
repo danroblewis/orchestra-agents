@@ -41,6 +41,22 @@ from pathlib import Path
 OnEvent = Callable[[dict], None]
 
 
+SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
+
+
+def session_env(keep: tuple[str, ...] = (), environ: dict[str, str] | None = None) -> dict[str, str]:
+    """The host's environment for a session's process, without anything that may hold a credential
+    (a name ``integrate_kits.CREDENTIAL_VARS`` matches, or one ending in ``SECRET_SUFFIXES``), the
+    host's ``ORCHESTRA_*`` tokens among them: a session has its own (``SessionSpec.env``). Kept: the
+    rest (PATH, HOME, locale, proxies and CA bundles, the harness's config directory) and ``keep``,
+    the harness's own sign-in or provider keys. Sessions run without permission prompts, so a
+    credential in their environment is one any command they run can read."""
+    from ..integrate_kits import CREDENTIAL_VARS
+    env = os.environ if environ is None else environ
+    return {k: v for k, v in env.items()
+            if k in keep or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}
+
+
 def resolve_binary(binary: str) -> str:
     """The product's binary as configured: a bare name is found on PATH when a session starts;
     a path is made absolute here, because every session runs in its own working directory

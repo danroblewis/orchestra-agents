@@ -32,6 +32,7 @@ from .base import (
     _NormalizerBase,
     records,
     resolve_binary,
+    session_env,
 )
 from .mcp_status import (
     BACKOFF,
@@ -72,18 +73,6 @@ def transcript_path(cwd: Path, session_uuid: str) -> Path:
 # Claude Code's own ways to sign in without its login (which is in the macOS keychain or under its
 # config directory): without them a session signed in that way cannot start.
 CLAUDE_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
-SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
-
-
-def session_env(environ: dict[str, str] | None = None) -> dict[str, str]:
-    """The host's environment without anything that may hold a credential (a name
-    ``integrate_kits.CREDENTIAL_VARS`` matches, or one ending in ``SECRET_SUFFIXES``), the
-    host's ``ORCHESTRA_*`` tokens among them: a session has its own (``SessionSpec.env``). Kept:
-    the rest (PATH, HOME, locale, proxies, CLAUDE_CONFIG_DIR) and Claude Code's own sign-in."""
-    from ..integrate_kits import CREDENTIAL_VARS
-    env = os.environ if environ is None else environ
-    return {k: v for k, v in env.items()
-            if k in CLAUDE_AUTH or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}
 
 
 class ClaudeCodeSession(AgentSession):
@@ -164,7 +153,7 @@ class ClaudeCodeSession(AgentSession):
         runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
         ``orchestra agents tool`` reads. The session runs with --dangerously-skip-permissions, so it
         gets none of the host's credentials (``session_env``)."""
-        return {**session_env(), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        return {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
 
     def _mcp_config(self, via: str = "mcp") -> Path:
         """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the

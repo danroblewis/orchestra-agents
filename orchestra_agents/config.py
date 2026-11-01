@@ -41,16 +41,14 @@ def claude_found() -> bool:
 def default_harness() -> tuple[str, str | None, str]:
     """The harness, model and a note for the human, when ``[agents]`` names no harness: Claude Code
     with Haiku when ``claude`` is found, else the dummy harness (scripted, no model, no cost)."""
-    how = ("Tell the Supervisor which harness and model to use (it sets [agents] harness and model), or set them "
-           "in orchestra.toml yourself.")
     if claude_found():
         return "claude_code", DEFAULT_MODEL, (
             "No harness is set in [agents], so the agents run on Claude Code with Haiku (the claude command was found). "
-            + how)
-    return "dummy", None, (
+            "To use another harness or model, tell the Supervisor (it sets [agents] harness and model).")
+    return "dummy", None, (       # a scripted Supervisor cannot change the harness: only the step that works
         "No harness is set in [agents] and no claude command is on the PATH, so the agents run on the dummy harness: "
-        "scripted, with no model and no cost, so they cannot read or set up your repository. Install Claude Code and log "
-        "in once (run claude), then restart orchestra run; or set [agents] harness to pi, codex or claude_code. " + how)
+        "scripted, with no model and no cost, so they cannot read or set up your repository. To run them on a model, "
+        "install Claude Code, log in once (run claude), then restart orchestra run.")
 
 
 @dataclass

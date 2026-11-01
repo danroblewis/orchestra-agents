@@ -30,6 +30,7 @@ from .builtins import ROLES as BUILTIN_ROLES
 from .clock import now, parse_interval, zone
 from .config import Project
 from .events import GAVE_UP, INTENT_REQUESTED
+from .floor import ATTENTION_NEEDED as FLOOR_ATTENTION
 from .protocol import (
     ACCEPTED,
     APPROVED,
@@ -68,7 +69,7 @@ DIVERGED, RETURNED = "orchestra.model.diverged", "orchestra.model.returned"
 ORCHESTRA_EVENT_TYPES = (JUDGED, STALLED, RESUMED, QUIET, DIVERGED, RETURNED, GAVE_UP, INTENT_REQUESTED)
 # Other plugins' events an agent is asked to wake on (the outbox's SPEC §7.2: the Supervisor wakes on a rate limit it cannot resolve)
 OUTBOX_STUCK = "outbox.rate_limit.unresolvable"
-PLUGIN_EVENT_TYPES = (OUTBOX_STUCK,)
+PLUGIN_EVENT_TYPES = (OUTBOX_STUCK, FLOOR_ATTENTION)   # and the Workflows floor's: a planner asked to look
 EVENT_TYPES = TASK_EVENT_TYPES + AGENT_EVENT_TYPES + ORCHESTRA_EVENT_TYPES + PLUGIN_EVENT_TYPES
 # What each of them means, in one line, for the Agents page's triggers (served in /org).
 EVENT_HELP = {
@@ -109,6 +110,7 @@ EVENT_HELP = {
     "machine.restarted": "the Supervisor restarts one of the project's programs",
     "work.requested": "the Supervisor hands the human's requirements to a planner (filter with :coordinator)",
     "work.planned": "the Coordinator reports how it planned a request (filter with :supervisor)",
+    FLOOR_ATTENTION: "the Workflows floor asks a planner to look: a guard passed (filter with :supervisor or :coordinator)",
     STALLED: "a stock fills while its outflows stopped, or a flow that moved stopped (filter with :stock:<id> or :flow:<id>)",
     RESUMED: "a stalled stock or flow moves again", QUIET: "a machine that kept a rhythm has gone silent (filter with :<machine>)",
     DIVERGED: "a stock left the band the model predicted", RETURNED: "a diverged stock is back in its band",

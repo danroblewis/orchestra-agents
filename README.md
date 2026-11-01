@@ -28,6 +28,20 @@ packages import nothing from each other; the contract is `orchestra_agents/proto
 
 ## Try it
 
+The way in is Orchestra's QUICKSTART: the core, the agents and the Workflows plugin, and the
+Workflows plugin's first example, the **task loop** (write → review → gate), run by scripted
+machines with no model and no cost:
+
+    git clone https://github.com/danroblewis/orchestra-workflows
+    orchestra-workflows/examples/task_loop/demo.sh
+
+On your own repository the Supervisor starts a piece of work on such a workflow when you ask for it
+(`request_work`). The workflows repository is private (as are this one and the other plugins), so
+cloning or installing it needs GitHub access to it.
+
+This repository's own demo is **the tasking plugin's demo** (orchestra-tasking: milestones, tickets
+and a merge gate), from a clone of this repository:
+
     uv sync --extra dev                # Orchestra and the task system from GitHub, the commits uv.lock pins ("Developing against a local Orchestra")
     uv run demo/run.py                 # a fresh demo project at ~/orchestra-agents-demo, http://127.0.0.1:8072
     uv run demo/run.py --dummy         # the same demo for free: scripted agents, no model, no network
@@ -38,21 +52,23 @@ date, which the program worker or an AI worker takes, whichever accepts first) a
 tickets only an AI worker can write (DEMO-3, a line-counting tool and its test; DEMO-4, a
 collector), each reviewed by an AI reviewer and landed on main by the merge gate. With `--dummy`
 the agents run on the dummy harness, playing `demo/dummy.toml`: the four tickets land with real
-work, DEMO-3's first review rejects it and the rework lands, and the Supervisor answers the chat
-with the project's status, in about a minute, without a model and at no cost. `demo/README.md`
-says what you will see and where. Ctrl-C stops everything; remove `~/orchestra-agents-demo`
-first to run it again.
+work, DEMO-3's first review rejects it and the rework lands, and the Supervisor answers a question
+in the chat (a message ending in "?", or with "going on", "status", "how are", "how is", "how
+far", "what is" or "doing") with the first milestone's status; any other message becomes a ticket
+a dummy worker lands on main. It takes about a minute, without a model
+and at no cost. `demo/README.md` says what you will see and where. Ctrl-C stops everything; remove
+`~/orchestra-agents-demo` first to run it again.
 
 ## Use it on a repository
 
 Install Orchestra with the agents beside it, once, as one tool (no clone):
 
-    uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main'
+    uv tool install 'orchestra[sd,agents,workflows,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main'
 
-`bridges` brings the integration kits the Supervisor builds a connection to another system from
+`workflows` brings the Workflows plugin, which moves the work you ask for (below); `bridges` brings the integration kits the Supervisor builds a connection to another system from
 (`integrate_system`), and `dev` brings pytest, which runs each scaffolded poller's own test in
 Orchestra's Python (as Orchestra's `docs/INTEGRATING.md` §4 installs them); add `tasking` for the
-task system and `workflows` for the Workflows floor. That puts one executable on your PATH,
+tasking plugin's milestones and tickets instead. That puts one executable on your PATH,
 `orchestra`. The agents' command line comes with it as `orchestra agents …` and the task system's
 as `orchestra tasks …`; neither has an executable of its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.
 
@@ -89,10 +105,14 @@ with its recommendation. Answer it on the Agents page, or in the terminal:
     orchestra agents status      # the host, what it runs the agents on, what each agent is doing
 
 Ask it for what you want: "measure the open orders every minute" (it sets up and checks the
-collector itself), "re-check the setup", or work ("add a page that lists the orders"), which it
-hands to the Coordinator as requirements; the Coordinator plans the milestone and tickets, the
-workers and reviewers do them, and the Supervisor tells you the plan and when it is done. You make
-no tickets yourself. To choose the harness and model yourself, tell the Supervisor, or set
+collector itself), "re-check the setup", or work ("add a page that lists the orders"). Where work
+goes depends on what is installed. With the Workflows plugin, the Supervisor starts it with
+`request_work` on a workflow (it declares one with you first, such as the task loop of
+`examples/task_loop`), the workers and reviewers take its steps, and it tells you where the item is.
+With the tasking plugin, it hands the work to the Coordinator as requirements; the Coordinator plans
+the milestone and tickets, the workers and reviewers do them, and the Supervisor tells you the plan
+and when it is done. With neither, nothing can take the work, and the Supervisor says so. You make
+no tickets or items yourself. To choose the harness and model yourself, tell the Supervisor, or set
 `[agents]` (the agents' guide, `orchestra_agents/guide.md`, says what each setting does):
 
     [agents]
@@ -105,6 +125,13 @@ If your organisation's Claude Code policy blocks MCP servers it has not listed, 
 Orchestra's tools from their shell instead (`orchestra agents tool <name> '<json>'`): `auto`, the
 default, switches when Claude Code reports the server blocked; `bash` never starts it. Tell the
 Supervisor "use bash for tools", or set `tools_via = "bash"`.
+
+**What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
+duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
+review_usd_per_day` and `review_turns_per_day`). Your chat turns are not capped, nor are the
+wake-ups its fixed core always takes (the first-start setup, an escalation, a plan reported, a
+program given up on). The other agents run on `[agents] model` (Haiku by default), one session per
+ticket or workflow step.
 
 The host follows a change of harness or model once no turn runs. `enabled = false` turns the
 agents off.

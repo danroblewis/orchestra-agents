@@ -74,7 +74,7 @@ async function openTranscript(id) {
   html += `</div><div id="transcript-more" class="empty" style="margin-top:8px">${d.has_more ? "scroll for older messages…" : "beginning of session"}</div>`;
   openDrawer(html);
   transcriptPaging = { id, nextBefore: d.next_before, hasMore: d.has_more, loading: false, total: d.total,
-                       markerTs: Math.max(0, ...(d.markers || []).map(tsOf)) };
+                       markerTs: Math.max(0, ...(d.markers || []).map(tsOf)), finished: !transcriptLive(d.session) };
   const ta = $("chat-input");
   if (ta) { ta.focus(); ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chat").requestSubmit(); } }); }
 }
@@ -91,7 +91,7 @@ function transcriptHead(id, s, d) {
     <div>last started</div><div>${when(s.started_at)}${s.status === "running" ? ` <span class="muted">(turn running ${ago((Date.now() / 1000) - s.started_at)})</span>` : ""}</div>
     <div>last output</div><div>${s.last_output_at ? ago((Date.now() / 1000) - s.last_output_at) + " ago" : "—"}</div>
     <div>last turn ended</div><div>${when(s.settled_at)}</div>
-    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>`;
+    <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· ${transcriptLive(s) ? `live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s` : `finished ${when(s.settled_at)}`}</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>`;
   const scripted = id === "supervisor" && s.harness === "dummy" ? ' <span class="tag" title="the dummy harness: a script answers, no model">scripted (dummy)</span>' : "";
   return `<h3>${esc(id)} <span class="chip ${st.cls}" title="${esc(st.title)}"><span class="dot"></span>${esc(st.text)}${st.tag ? `<span class="chip-tag">${esc(st.tag)}</span>` : ""}</span>${scripted}${agentLink}</h3>
     ${id === "supervisor" ? `<details class="started"><summary class="muted">session details</summary>${kv}</details>` : kv}
@@ -99,12 +99,14 @@ function transcriptHead(id, s, d) {
 }
 
 const TRANSCRIPT_POLL_MS = 5000;
+// a transcript that can still grow: its turn runs, or its session is kept between turns (resident)
+const transcriptLive = (s) => !!s && s.status !== "archived" && (s.status === "running" || !!s.alive);
 
 // The open transcript polls for what arrived since it was rendered and prepends it
 // (newest first), keeping the reader's place and the older pages already loaded.
 async function refreshTranscript() {
   const p = transcriptPaging;
-  if (!p || p.loading || !$("overlay").classList.contains("open") || !$("transcript")) return;
+  if (!p || p.loading || p.finished || !$("overlay").classList.contains("open") || !$("transcript")) return;
   p.loading = true;
   try {
     const r = await fetch(`${AGENTS_API}/sessions/${p.id}/transcript?after=${p.total}`);
@@ -112,6 +114,7 @@ async function refreshTranscript() {
     const d = await r.json();
     if (d.total < p.total) { transcriptPaging = null; return openTranscript(p.id); }  // file replaced: start over
     const head = $("transcript-head"); if (head) head.innerHTML = transcriptHead(p.id, d.session, d);
+    if (!transcriptLive(d.session)) p.finished = true;          // nothing more will come: stop polling it
     const fresh = withMarkers(d.messages, d.markers, p.markerTs);
     p.markerTs = Math.max(p.markerTs || 0, ...(d.markers || []).map(tsOf));
     if (!fresh.length) return;
@@ -359,7 +362,13 @@ function runningPhase(s, now) {
   if (wait <= 60) return { cls: "working", text: `working · ${ago(wait)}`, title: `${turn}; quiet since then, which is normal while a tool runs` };
   return { cls: "waiting", text: `quiet for ${ago(wait)}`, title: `the turn is still running; no output for ${ago(wait)}` };
 }
-function sessionChip(s, now, a) {
+// compact (a Dashboard machine row): the status's first words, the rest and the tag in its title
+function sessionChip(s, now, a, compact) {
   const p = agentStatus(s, now, a);
+  if (compact) {
+    const short = /^waiting\b/.test(p.text) ? "waiting" : p.text.split(" · ")[0];
+    const title = [p.text, p.title, p.tag].filter((x, i, xs) => x && xs.indexOf(x) === i).join(" · ");
+    return `<span class="chip ${p.cls}" title="${esc(title)}"><span class="dot"></span>${esc(short)}</span>`;
+  }
   return `<span class="chip ${p.cls}" title="${esc(p.title)}"><span class="dot"></span>${esc(p.text)}${p.tag ? `<span class="chip-tag">${esc(p.tag)}</span>` : ""}</span>`;
 }

@@ -38,7 +38,28 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..integrate_kits import CREDENTIAL_VARS, TEST_TIMEOUT_S
+
 OnEvent = Callable[[dict], None]
+
+
+SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
+# How long one tool call may take, in every harness (Codex's MCP tool_timeout_sec, the Pi extension's
+# call, Claude Code's Bash tool on the bash route): integrate_system runs a scaffolded poller's own
+# test (up to integrate_kits.TEST_TIMEOUT_S) and then calls Orchestra's declared layer.
+TOOL_CALL_S = TEST_TIMEOUT_S + 120
+
+
+def session_env(keep: tuple[str, ...] = (), environ: dict[str, str] | None = None) -> dict[str, str]:
+    """The host's environment for a session's process, without anything that may hold a credential
+    (a name ``integrate_kits.CREDENTIAL_VARS`` matches, or one ending in ``SECRET_SUFFIXES``), the
+    host's ``ORCHESTRA_*`` tokens among them: a session has its own (``SessionSpec.env``). Kept: the
+    rest (PATH, HOME, locale, proxies and CA bundles, the harness's config directory) and ``keep``,
+    the harness's own sign-in or provider keys. Sessions run without permission prompts, so a
+    credential in their environment is one any command they run can read."""
+    env = os.environ if environ is None else environ
+    return {k: v for k, v in env.items()
+            if k in keep or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}
 
 
 def resolve_binary(binary: str) -> str:
@@ -239,6 +260,11 @@ class Harness(ABC):
         ``opus``: a machine's ``model`` in ``.orchestra/machines/<name>/machine.toml``), or None
         when this harness cannot take that name, and the configured ``[agents] model`` stands.
         Default: none taken (a harness whose model names differ says which it accepts)."""
+        return None
+
+    def turn_usd(self, model: str | None) -> float | None:
+        """An estimate of what one turn of a narrow machine costs on ``model`` (for a drafted
+        machine's cost line), or None when it is not known. Default: not known."""
         return None
 
     @staticmethod

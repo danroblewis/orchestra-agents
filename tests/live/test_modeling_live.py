@@ -1,8 +1,7 @@
 """A live check of the modeling tools with a real model: Claude Code on Haiku, as the Supervisor,
 asked "What would happen if review were twice as fast?" about a project whose metrics are a ticket
 pipeline (tickets created, worked, then reviewed). It should read the model (and its series) and
-answer with the numbers. (Until 2026-11-01 it also made an experiment and ran it forward; the
-experiments were removed then.)
+answer with the numbers.
 
 It costs money and needs a logged-in ``claude``, so it runs only when asked:
 

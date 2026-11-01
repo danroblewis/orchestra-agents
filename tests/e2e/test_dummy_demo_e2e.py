@@ -105,6 +105,10 @@ def handoffs(events: list[dict], subject: str) -> list[tuple[str, str | None, st
         def read(self, since=0, limit=500):
             return seen[since:][-limit:], len(seen)
 
+        def page(self, since=0, limit=500):          # forward, bounded (the core's EventBus.page)
+            end = min(since + limit, len(seen))
+            return seen[since:end], end
+
     idx, out = MachineIndex(Grown()), []
     for ev in events:
         before = dict(idx.handoffs)

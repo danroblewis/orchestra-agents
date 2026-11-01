@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import bash_tools
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -32,6 +33,7 @@ from .base import (
     _NormalizerBase,
     records,
     resolve_binary,
+    session_env,
 )
 from .mcp_status import (
     BACKOFF,
@@ -55,7 +57,9 @@ from .mcp_status import (
 # ReportFindings is the product's own review report: a reviewer that calls it reports to nobody.
 NOT_ORCHESTRA = ("TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite",
                  "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "RemoteTrigger", "ReportFindings")
-EDITS = ("Edit", "Write", "NotebookEdit")    # taken from a read-only agent: it reads, searches and runs read-only commands
+EDITS = ("Edit", "Write", "NotebookEdit")
+# an estimate of one turn of a narrow machine by model family (a drafted machine's cost line: turn_usd)
+TURN_USD = (("haiku", 0.03), ("sonnet", 0.12), ("opus", 0.60))    # taken from a read-only agent: it reads, searches and runs read-only commands
 
 
 def claude_config_dir() -> Path:
@@ -72,18 +76,6 @@ def transcript_path(cwd: Path, session_uuid: str) -> Path:
 # Claude Code's own ways to sign in without its login (which is in the macOS keychain or under its
 # config directory): without them a session signed in that way cannot start.
 CLAUDE_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
-SECRET_SUFFIXES = ("_TOKEN", "_SECRET", "_PASSWORD", "_KEY")
-
-
-def session_env(environ: dict[str, str] | None = None) -> dict[str, str]:
-    """The host's environment without anything that may hold a credential (a name
-    ``integrate_kits.CREDENTIAL_VARS`` matches, or one ending in ``SECRET_SUFFIXES``), the
-    host's ``ORCHESTRA_*`` tokens among them: a session has its own (``SessionSpec.env``). Kept:
-    the rest (PATH, HOME, locale, proxies, CLAUDE_CONFIG_DIR) and Claude Code's own sign-in."""
-    from ..integrate_kits import CREDENTIAL_VARS
-    env = os.environ if environ is None else environ
-    return {k: v for k, v in env.items()
-            if k in CLAUDE_AUTH or not (CREDENTIAL_VARS.search(k) or k.upper().endswith(SECRET_SUFFIXES))}
 
 
 class ClaudeCodeSession(AgentSession):
@@ -164,7 +156,11 @@ class ClaudeCodeSession(AgentSession):
         runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
         ``orchestra agents tool`` reads. The session runs with --dangerously-skip-permissions, so it
         gets none of the host's credentials (``session_env``)."""
-        return {**session_env(), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        env = {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        if self.via() == "bash":              # a tool run from the Bash tool may take as long as any tool call
+            ms = str(int(TOOL_CALL_S * 1000))
+            env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms}
+        return env
 
     def _mcp_config(self, via: str = "mcp") -> Path:
         """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the
@@ -448,6 +444,11 @@ class ClaudeCodeHarness(Harness):
         """Claude Code takes the aliases (``haiku``, ``sonnet``, ``opus``) and full model ids."""
         w = (wanted or "").strip()
         return w if w in ("haiku", "sonnet", "opus") or w.startswith("claude-") else None
+
+    def turn_usd(self, model: str | None) -> float | None:
+        """One turn of a narrow machine, by the model family in its name; None for one not named so."""
+        m = (model or "").lower()
+        return next((usd for name, usd in TURN_USD if name in m), None)
 
     @staticmethod
     def context(session_file: str | Path) -> ContextSize:

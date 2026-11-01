@@ -119,3 +119,12 @@ def test_a_reply_newer_than_a_failure_is_the_message(project):
                        last_text="The prediction held.", settled_at=T0 + 12)
     store.add_marker("supervisor", {"type": "session.error", "ts": T0 + 5, "session": "supervisor", "error": "x"})
     assert unread(store.runtime())["text"] == "The prediction held."
+
+
+def test_a_landing_wake_up_shows_what_landed_not_the_directive():
+    from orchestra_agents.attention import WOKEN, reasons
+    said = ("ticket DEMO-5 (List open orders), which was made for the human's request, is DONE: it landed on main. "
+            "Leave the human one short message (a line or two): what now works and where they can see it.")
+    assert reasons(f"x\n{WOKEN}\n- {said}\n") == ["DEMO-5 landed on main (List open orders)"]
+    tasks = said.replace("it landed on main", "its result was approved")
+    assert reasons(f"x\n{WOKEN}\n- {tasks}\n") == ["DEMO-5's result was approved (List open orders)"]

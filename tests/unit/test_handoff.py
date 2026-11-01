@@ -92,3 +92,26 @@ def test_creating_tickets_is_planning_and_the_human_s_decisions_are_the_supervis
     assert not tooling.may_change_tickets(project, "supervisor", "create_ticket")
     assert tooling.may_change_tickets(project, "supervisor", "cancel_ticket")
     assert not tooling.may_change_tickets(project, "", "cancel_ticket")
+
+
+def test_a_hand_off_never_planned_wakes_the_supervisor_once(project):
+    import time
+
+    from orchestra_agents import handoff_overdue as late
+    store = AgentStore(project, Events.for_project(project))
+    rid = call(project, store, "hand_to_coordinator", "supervisor", requirements=ASK)["request"]
+    other = call(project, store, "hand_to_coordinator", "supervisor", requirements=ASK)["request"]
+    now = time.time()
+    assert late.wake(store, now + 60) == [] and late.facts_line(store, now + 60, late.DEADLINE_S) == ""
+    with FakeTasks(project):
+        m = call(project, store, "create_milestone", "coordinator", name="Orders page")["milestone"]["id"]
+        t = call(project, store, "create_ticket", "coordinator", title="List open orders", objective="o", description="d",
+                 acceptance="a", verification="v", milestone_id=m)["ticket"]["id"]
+        call(project, store, "report_plan", "coordinator", request=other, summary="One ticket.", milestone=m, tickets=[t])
+    past = now + late.DEADLINE_S + 5
+    [why] = late.wake(store, past)
+    assert rid in why and other not in why and "no plan after 30 min" in why
+    assert late.wake(store, past + 600) == []                                    # once
+    line = late.facts_line(store, past, late.DEADLINE_S)
+    assert rid in line and other not in line
+    assert late.deadline(SimpleNamespace(coordinator_every="2h")) == 7200 and late.deadline(SimpleNamespace()) == late.DEADLINE_S

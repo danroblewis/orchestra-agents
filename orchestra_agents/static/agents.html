@@ -138,7 +138,7 @@ function triggerRows(a) {
     const [type, filter] = w.split(/:(.*)/);
     let what = ((ORG && ORG.event_help) || {})[type];
     if (!what && declared[type]) what = `an agent of team ${declared[type]} raises it with emit_event`;
-    if (!what) what = "not an event the task system or the agents emit";
+    if (!what) what = "no installed package describes this event";
     return `<div><code>${esc(w)}</code> <span class="muted">${esc(what)}${filter ? ` · only when it is ${esc(filter)}` : ""}</span></div>`;
   });
   if (a.every) rows.push(`<div><code>every ${esc(a.every)}</code> <span class="muted">a scheduled check-in</span></div>`);
@@ -247,7 +247,7 @@ async function openAgent(name) {
       <div>team</div><div>${a.team ? ((r.team_chain || []).length ? r.team_chain.map((t) => `<a href="#" onclick="openTeam('${t}');return false">${esc(t)}</a>`).join(" ← ") : `<code>${esc(a.team)}</code> is not created yet; the agent runs without team responsibilities until it is`) : "none (reports to the Supervisor)"}${(r.leads || []).length ? ` · leads ${r.leads.map((t) => `<code>${esc(t)}</code>`).join(", ")}` : ""}</div>
       <div>triggers</div><div class="tools">${triggerRows(a)}</div>
       <div>next wake-up</div><div>${nextWake(a, now)}</div>
-      ${a.resident ? `<div>last turn</div><div>${st.last_turn ? ago(now - st.last_turn) + " ago" : "none yet"} <span class="muted">(a wake-up or your message)</span></div><div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never, by an event or schedule"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
+      ${a.resident ? `<div>last turn</div><div>${st.last_turn ? ago(now - st.last_turn) + " ago" : "none yet"} <span class="muted">(${a.name === "supervisor" ? "a wake-up or your message" : "a wake-up"})</span></div><div>last woken</div><div>${st.last_woken ? ago(now - st.last_woken) + " ago" : "never, by an event or schedule"}</div>` : `<div>last run</div><div>${(r.runs || [])[0] && r.runs[0].started_at ? ago(now - r.runs[0].started_at) + " ago" : "never"}</div>`}
       <div>session</div><div>${a.resident ? "resident: one conversation that continues across wake-ups (a process only while a turn runs, on harnesses that start one per turn); it shows on the Dashboard while the host is up" : "a new session for each run; it shows on the Dashboard only while a run is in progress"}</div>
       <div>tools it can call</div><div class="tools">${tools}</div>
       <div>defined by</div><div>${a.builtin ? "the agents package (built in)" : `${esc(a.created_by || "supervisor")} on ${esc((a.created_at || "").slice(0, 16).replace("T", " "))}`}</div>
@@ -283,7 +283,10 @@ async function refresh() {
     // "Here" includes agents whose team does not exist yet (created before the team, which the
     // Supervisor's guide tells it to do), labelled as such.
     const loose = org.agents.filter((a) => (!a.team || a.team_exists === false) && !(a.builtin && !a.resident));
-    const sup = org.supervisor_model && org.supervisor_model !== org.model ? `; the Supervisor on ${esc(org.supervisor_model)}` : "";
+    // on a harness with no model behind it (dummy) the Supervisor's spec only asks for one
+    const sup = !org.supervisor_model || org.supervisor_model === org.model ? ""
+      : org.harness === "dummy" ? `; the Supervisor's spec asks for ${esc(org.supervisor_model)} (used once a model harness runs it)`
+      : `; the Supervisor on ${esc(org.supervisor_model)}`;
     let html = `<div class="harness-note${org.harness_note ? " warn" : ""}" id="harness-note">Running on <b>${esc(org.harness)}</b>${org.model ? " · " + esc(org.model) : ""}${sup}${org.harness === "dummy" ? " (scripted agents: no model, no cost)" : ""}.${org.harness_note ? " " + esc(org.harness_note) : ""}</div>`;
     html += timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');

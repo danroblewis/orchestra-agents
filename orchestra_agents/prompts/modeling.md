@@ -60,8 +60,8 @@ Every answer starts with a `summary`: a few lines with the numbers that matter. 
 trend, latest readings); ask for `points: true` only when the shape matters. `check_equation`
 tells you whether an equation parses against the model and what it reads.
 
-A designed machine's expected effect is the Supervisor's to declare and confirm,
-`declare_expected_effect` and `confirm`, which publish its prediction.
+A designed machine's expected effect is declared and confirmed with `declare_expected_effect` and
+`confirm`, which publish its prediction.
 
 ## Before you predict
 

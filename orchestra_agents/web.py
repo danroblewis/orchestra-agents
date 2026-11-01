@@ -60,13 +60,8 @@ def supervisor_model(project: Project) -> str | None:
     """The model the Supervisor runs on, as the host chooses it (``host.model_of``): its spec's when
     the harness takes that name, else ``[agents] model``."""
     from .harness import get_harness
-    from .machine_spec import load
-    try:
-        spec = load(project, "supervisor")
-    except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
-        spec = None
-    wanted = spec.model if spec is not None else None
-    return (get_harness(project.config.harness).model_for(wanted) if wanted else None) or project.config.model
+    from .machine_spec import model_of
+    return model_of(project, get_harness(project.config.harness), "supervisor")
 
 
 GUIDE = Path(__file__).with_name("guide.md")     # how to configure the agents, for the Supervisor (orchestra.guides)

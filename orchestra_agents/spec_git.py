@@ -158,8 +158,15 @@ def commit(project: Project, changes: dict[str, str | None], message: str, *, al
         merged = _merge_side(project)
         if merged is None:
             _write_tree(root, changes)
-            _git(root, "add", "-A", "--", ROOT)
-            p = _git(root, "commit", "-q", "-m", message, "--", ROOT, env=_ident(root))
+            for path in changes:                     # only the specs' own files: never a poller scaffolded beside them
+                if (root / path).exists():
+                    _git(root, "add", "--", path)
+                else:
+                    _git(root, "rm", "-q", "--cached", "--ignore-unmatch", "--", path)
+            staged = [n for n in _git(root, "diff", "--cached", "--name-only", "--", *changes).stdout.splitlines() if n.strip()]
+            if not staged:
+                return {"commit": None, "where": "base", "note": "nothing changed"}
+            p = _git(root, "commit", "-q", "-m", message, "--", *staged, env=_ident(root))
             if p.returncode != 0 and "nothing" in (p.stdout + p.stderr):
                 return {"commit": None, "where": "base", "note": "nothing changed"}
             if p.returncode != 0:

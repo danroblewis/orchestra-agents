@@ -26,6 +26,7 @@ from pathlib import Path
 
 from . import bash_tools
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -37,10 +38,12 @@ from .base import (
     _NormalizerBase,
     records,
     resolve_binary,
+    session_env,
 )
 
 MCP_SERVER = "orchestra"
-TOOL_TIMEOUT_S = 420                       # a tool call may run the model: an inverse run searches for up to 300 s
+TOOL_TIMEOUT_S = TOOL_CALL_S              # how long one tool call may take (base.TOOL_CALL_S)
+CODEX_AUTH = ("OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_HOME")   # Codex's own sign-in (its login is under CODEX_HOME)
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"      # how Codex names an MCP server's functions
 _INJECTED = re.compile(r"\s*<[a-z_]+>")    # <environment_context>, <user_instructions>: Codex's own context messages
 _TOOL_ITEMS = {"command_execution": "exec", "mcp_tool_call": None, "file_change": "apply_patch", "web_search": "web_search"}
@@ -170,7 +173,7 @@ class CodexSession(AgentSession):
             stderr = self.spec.log_path.open("a", encoding="utf-8")
             try:
                 self.proc = subprocess.Popen(self._args(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
-                                             text=True, cwd=str(self.spec.cwd), env={**os.environ, **self.spec.env},
+                                             text=True, cwd=str(self.spec.cwd), env={**session_env(CODEX_AUTH), **self.spec.env},
                                              bufsize=1, start_new_session=True)
             except OSError as e:
                 result.error = f"cannot start {self.binary}: {e}"

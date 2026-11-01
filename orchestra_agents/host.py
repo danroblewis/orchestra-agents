@@ -33,7 +33,9 @@ from . import (
     design_instruments,
     floor,
     handoff,
+    handoff_overdue,
     intended_api,
+    machine_spec,
     parent,
     promises,
     prompting,
@@ -233,6 +235,8 @@ class AgentHost:
         except Exception as e:  # noqa: BLE001 - a broken probe never stops the host
             log(f"probes: {e!r}")
         self._schedule_wakeups(states)
+        for why in handoff_overdue.wake(self.store, limit=handoff_overdue.deadline(self.cfg)):
+            self.store.add_wakeup("supervisor", why)
         self._wake_on_events()
         self.verdicts.tick()
         self._expire_drafts()
@@ -272,13 +276,8 @@ class AgentHost:
             self.store.set_agent_state("supervisor", wake_waits=kept + waits)
 
     def model_of(self, name: str) -> str | None:
-        """The model an agent runs on: its machine spec's (``.orchestra/machines/<name>/``) when the
-        harness takes that name (``Harness.model_for``), else ``[agents] model``."""
-        try:
-            spec = load_spec(self.project, name)
-        except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
-            spec = None
-        return (self.harness.model_for(spec.model) if spec is not None and spec.model else None) or self.cfg.model
+        """The model an agent runs on (``machine_spec.model_of``)."""
+        return machine_spec.model_of(self.project, self.harness, name)
 
     def _duty_types(self) -> set[str]:
         """The event types only the Supervisor's own duties listen for (not its fixed core's)."""
@@ -380,8 +379,9 @@ class AgentHost:
             extra["PATH"] = os.pathsep.join(dirs + [os.environ.get("PATH", "")])
             extra["ORCHESTRA_TEAM"] = team.name
         read_only = agent.builtin and any(BUILTIN_ROLES[r].read_only for r in agent.roles if r in BUILTIN_ROLES)
-        return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, self.role_defs, self.teams),
-                                  effective_tools(agent, self.role_defs, self.teams), cwd, extra_env=extra, read_only=read_only)
+        roles = self.role_defs or all_roles(self.project)     # a chat before the first tick's refresh still gets its tools
+        return self._open_session(session_id, agent.name, prompting.agent_prompt(self.project, agent, roles, self.teams),
+                                  effective_tools(agent, roles, self.teams), cwd, extra_env=extra, read_only=read_only)
 
     def _open_session(self, session_id: str, role: str, system_prompt: str, tools: tuple[str, ...], cwd: Path,
                       ticket_id: str = "", extra_env: dict[str, str] | None = None, read_only: bool = False) -> AgentSession:
@@ -708,16 +708,16 @@ class AgentHost:
         """A Supervisor turn whose reply is for the human. A reply that claims an action the turn
         did not take (promises.py) gets one more turn on the same session to take it or say it is
         not done; the human gets both, the correction after the reply."""
-        calls = [0]
+        calls: list[str] = []
 
         def counting(ev: dict) -> None:
             if ev.get("type") == "tool_start":
-                calls[0] += 1
+                calls.append(str(ev.get("name") or ""))
             on_event(ev)
 
         limits = {"timeout": self.cfg.turn_timeout or None, "idle_timeout": self.cfg.silence_timeout}
         res = proc.prompt(text, on_event=counting, **limits)
-        said = None if res.error or res.timed_out else promises.unkept(res.text, calls[0])
+        said = None if res.error or res.timed_out else promises.unkept(res.text, calls)
         if said is None:
             return res
         log(f"supervisor: the reply claims an action the turn did not take ({said[:120]!r}); one more turn to do it or say so")
@@ -775,6 +775,7 @@ class AgentHost:
         if target == "supervisor":
             self._turn_began(None)
             facts, began = self.facts.before(snap)
+            facts += handoff_overdue.facts_line(self.store, began, handoff_overdue.deadline(self.cfg))
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))

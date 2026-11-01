@@ -180,7 +180,9 @@ system (`list_tickets`), then publishes `work.planned` {request, to: supervisor,
 tickets [{id, title}], questions, by} as the Coordinator, its causation the hand-off. That wakes the
 Supervisor (`work.planned:supervisor`), which tells the human; the tickets a plan names are followed
 until they end (`landings.py`), so the Supervisor also tells the human when they are done. The
-hand-offs are kept in the Supervisor's agent state (`handoffs`, the last 30).
+hand-offs are kept in the Supervisor's agent state (`handoffs`, the last 30). One the Coordinator
+has not planned 30 minutes on (or `[agents] coordinator_every`, when longer) wakes the Supervisor
+once, and its wake-ups' facts list such hand-offs by request id (`handoff_overdue.py`).
 
 **Attention**: the task system asks a planner to look at something with `task.attention_needed`
 (`to`: supervisor or coordinator, the reason, the ticket), from the machine whose work is stuck
@@ -370,8 +372,9 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   fill the session's context. The notices are marked as the Supervisor's alone, and the human's
   message follows whole after `[The human's message]` (`prompting.chat_turn`). Streamed as NDJSON.
   A reply that claims an action the turn did not take (a promise of a later action not tied to
-  anything that will happen, or a claim of a change with no tool call; `promises.py`, a
-  heuristic) gets one more turn on the session to take it or say it is not done; the human gets
+  anything that will happen, or a claim of a change with no tool call; a promise to tell the
+  human later is kept in a turn that called `hand_to_coordinator`, whose plan wakes it;
+  `promises.py`, a heuristic) gets one more turn on the session to take it or say it is not done; the human gets
   the correction after the reply. The same check runs on the Supervisor's wake-ups, whose reply
   is left for the human as a message. The prompt alone did not keep the replies true (a live
   test, 2026-10-27: "I have not done anything" right after two commits; two DONE tickets called
@@ -490,6 +493,11 @@ its token, `tooling.handle`), and the token reaches the command only through the
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
 command, and the dummy harness in-process; the setting changes neither.
+**No host credentials in a session** (`harness/base.session_env`): every harness starts its process
+with the host's environment minus each name that may hold a credential (`integrate_kits.CREDENTIAL_VARS`,
+or ending in `_TOKEN`/`_SECRET`/`_PASSWORD`/`_KEY`; the host's `ORCHESTRA_*` tokens among them), keeping
+only that harness's own sign-in (Claude Code's `CLAUDE_AUTH`, Pi's provider keys `PI_AUTH`, Codex's
+`CODEX_AUTH`) and the session's own `SessionSpec.env`.
 **No push, no pull-request writes** (`push_guard.py`; the owner, 2026-10-31: using Orchestra at work
 "won't try to push things to master"). Every session runs with the owner's git and gh
 credentials and its harness's permission checks off, so the host gives each session whose role is
@@ -548,10 +556,13 @@ script says only what differs, and `harness = "dummy"` alone is a working team: 
 `work/<ticket>.md` in a code ticket's worktree (`RESULT.md` in a task's folder), commits it and
 reports READY_FOR_REVIEW; a reviewer approves; the Supervisor hands a chat message to the
 Coordinator (`hand_to_coordinator`), which makes a milestone and a ticket from it and reports the plan
-(`report_plan`), and the Supervisor tells the human the plan (without the tasking plugin, which keeps
-the tickets, it hands nothing on and says it changed nothing and why); on the first run the Supervisor says it
-cannot read the repository and how to get one that can; any other turn replies "Nothing to do." or
-that it is scripted. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
+(`report_plan`), titled from the request's first words, and the Supervisor tells the human the plan,
+and which ticket landed when one does (without the tasking plugin, which keeps the tickets, it hands
+nothing on and says it changed nothing and why); a request for another harness or model is answered
+that a scripted Supervisor cannot change it (nothing handed on); Orchestra's follow-up to a promise
+is answered "Done above."; on the first run the Supervisor says it cannot read the repository and how
+to get one that can; any other turn replies "Nothing to do." or that it is scripted and has no
+answer for it. Without `[agents] dummy_script`, the repository's `.orchestra/dummy.toml` is the
 script when it exists. A rule's conditions:
 `role` (required; a role's or custom agent's name, or `"*"`), `ticket` (a glob on the ticket id),
 `prompt` (a regular expression searched in the turn's prompt; its named groups are
@@ -951,8 +962,8 @@ Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone
 library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
 scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
 imported only in `integrate_kits`) into the owner's repository (`.orchestra/machines/<name>/`, the
-kit's `--root repo`, where a coding tool or the Coordinator's worker edits it and a pull request
-lands it), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
+kit's `--root repo`, uncommitted: a coding tool may edit it, and the owner commits it or approves
+its pull request, as INTEGRATING.md says), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
 with `root: state`, when the owner said the repository must stay clean; it runs the
 program's own test against the kit's fake in a child Python with every credential-looking variable
 left out of its environment, and only then fills the owner's words and settings into its
@@ -961,13 +972,24 @@ settings is refused). A poller's system is declared as a machine managed elsewhe
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
 Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
-plans nothing and hands the script to the Coordinator (`hand_to_coordinator`, `work.requested`
+plans nothing and hands the script to the Coordinator (`integrate_handoff.hand_on`, `work.requested`
 naming the directory, the failure and the kit's rules); so does a system with no template of its
-own (the generic `http` kit), whose integration goes on to wait for approval meanwhile. A test that
+own (the generic `http` kit), whose integration goes on to wait for approval meanwhile, the
+hand-off published only once its declarations held and its record was saved. A repository scaffold
+handed on is first moved out of the owner's checkout to `<state>/machines/<name>/` (a worker's
+worktree is cut from the base branch and lacks the untracked files, and git would refuse to land a
+copy over them): the requirements tell the worker to copy it to `.orchestra/machines/<name>/` in its
+own worktree, adapt and commit it there, and the ticket's review and gate land it; the record reads
+the landed copy once the checkout holds it, and `approve_integration` waits for it, since the
+landed script is what runs. An integration whose test failed is called again by the same name: its
+test runs again where the script is now (the draft, or the landed copy), and on a pass it goes on
+as a first call would, nothing scaffolded again and no second hand-off. A scaffold left with no
+record (a killed call) is removed before scaffolding, unless git tracks it. A test that
 could not run because pytest is not in Orchestra's Python declares and plans nothing either, but is
 no failure and is handed to no one (state `test not run`): the answer gives the reinstall with the
 `dev` extra, and the same call again begins it afresh; `approve_integration` refuses both. If a
-step after the declaration fails, the error names the changes that stayed in the declared layer.
+step after the declaration fails, the error names what stayed in the declared layer (the machine,
+the stock), each with its change ids; the answer's `changes` lists every declaration.
 Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
 bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
 Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer
@@ -1086,14 +1108,7 @@ afterwards whether it did. The tools hold Orchestra's Python objects (`orchestra
 for the reads, `orchestra.sd.predictions.Predictions` for a prediction, as the agent's instance,
 its `source`) in the tool server's process: no HTTP, no token of Orchestra's.
 
-**Experiments were removed on 2026-11-01** (the owner). An experiment was a draft copy of the
-model an agent edited and ran forward, replayed over a past window or asked the inverse question
-of, and committed as a prediction (the groups `experiments` and `replay`, and `commit_prediction`).
-What replaced them: the Supervisor's design tools (A1: `declare_expected_effect` states a designed
-machine's expected effect on the declared layer, and `confirm` publishes it as
-`orchestra.prediction.made` through Orchestra's `Predictions`, `design_confirm.py`), and
-`predict_fix` for a fix's or a ticket's change. A saved role that still names `experiments` or
-`replay` simply has nothing from them.
+Predictions come from the design tools (`declare_expected_effect` and `confirm`, `design_confirm.py`) and `predict_fix`.
 
 **The tools, in two groups.** `model` reads: the model (`read_model`), series (`read_series`),
 the eras and what changed at the last boundary (`read_eras`), observability, an equation checked

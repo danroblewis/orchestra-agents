@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from .builtins import ROLES as BUILTIN
 from .clock import now
@@ -101,7 +102,7 @@ class RepoRoleStore:
         role.updated_at = now()
         (self.dir / f"{role.name}.json").write_text(json.dumps(role.to_dict(), indent=2) + "\n", encoding="utf-8")
         (self.dir / f"{role.name}.md").write_text(prompt.rstrip() + "\n", encoding="utf-8")
-        self._commit(f"agents: role {role.name}")
+        self._commit(f"agents: role {role.name}", role.name)
         return role
 
     def delete(self, name: str) -> None:
@@ -115,17 +116,19 @@ class RepoRoleStore:
                 found = True
         if not found:
             raise RoleError(f"no role {name!r}")
-        self._commit(f"agents: remove role {name}")
+        self._commit(f"agents: remove role {name}", name)
 
-    def _commit(self, message: str) -> None:
-        self.last_commit_note = commit_orchestra_files(self.project, message)
+    def _commit(self, message: str, name: str) -> None:
+        paths = [self.dir / f"{name}{suffix}" for suffix in (".json", ".md")]
+        self.last_commit_note = commit_orchestra_files(self.project, message, paths)
 
 
-def commit_orchestra_files(project: Project, message: str) -> str:
-    """Commit everything under .orchestra/ to the base branch when the checkout is on it
-    and otherwise clean. Otherwise nothing is committed: the files stay written and the
-    checkout is dirty until a human commits them. Returns a note saying which happened.
-    Shared by the role and org stores."""
+def commit_orchestra_files(project: Project, message: str, paths: list[Path]) -> str:
+    """Commit ``paths`` (the files the store just wrote or removed under .orchestra/, and nothing
+    else there: a workflow definition or a scaffolded poller beside them is not the store's) to the
+    base branch when the checkout is on it and otherwise clean. Otherwise nothing is committed: the
+    files stay written and the checkout is dirty until a human commits them. Returns a note saying
+    which happened. Shared by the role and org stores."""
     root = project.repo_root
     base = project.config.base_branch
     run = lambda *a: subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, check=False)
@@ -135,8 +138,16 @@ def commit_orchestra_files(project: Project, message: str) -> str:
     if branch != base or dirty:
         return (f"files written under .orchestra/ but not committed: checkout is on {branch!r}"
                 + (" with other changes" if dirty else "") + f"; commit them on {base} when convenient")
-    run("add", "-A", ".orchestra")
-    p = run("commit", "-q", "-m", message)
+    rel = [str(Path(p).resolve().relative_to(root.resolve())) for p in paths]
+    for r in rel:
+        if (root / r).exists():
+            run("add", "--", r)
+        else:
+            run("rm", "-q", "--cached", "--ignore-unmatch", "--", r)
+    staged = [r for r in run("diff", "--cached", "--name-only", "--", *rel).stdout.splitlines() if r.strip()]
+    if not staged:
+        return "nothing to commit"
+    p = run("commit", "-q", "-m", message, "--", *staged)
     return "committed to " + base if p.returncode == 0 else "nothing to commit"
 
 

@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from .base import (
+    TOOL_CALL_S,
     AgentSession,
     ContextSize,
     Harness,
@@ -28,9 +29,16 @@ from .base import (
     assistant_text,
     records,
     resolve_binary,
+    session_env,
 )
 
 EXTENSION_PATH = Path(__file__).parent / "pi_extension.ts"
+# The providers' API keys Pi reads from its environment (its own login is in ~/.pi): the one sign-in a
+# session keeps of the host's credentials.
+PI_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_OAUTH_TOKEN", "OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "GEMINI_API_KEY",
+           "GROQ_API_KEY", "CEREBRAS_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "ZAI_API_KEY",
+           "AI_GATEWAY_API_KEY", "COPILOT_GITHUB_TOKEN", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+           "AWS_PROFILE", "AWS_BEARER_TOKEN_BEDROCK")
 
 
 class PiError(RuntimeError):
@@ -53,8 +61,8 @@ class PiSession(AgentSession):
             args += ["--thinking", spec.thinking]
         if spec.system_prompt:
             args += ["--append-system-prompt", spec.system_prompt]
-        full_env = {**os.environ, **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
-                    "ORCHESTRA_PYTHON": sys.executable}
+        full_env = {**session_env(PI_AUTH), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
+                    "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr = spec.log_path.open("a", encoding="utf-8")
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr, text=True,

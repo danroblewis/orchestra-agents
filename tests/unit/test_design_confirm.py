@@ -355,7 +355,9 @@ def test_a_machine_managed_elsewhere_starts_nothing_and_publishes_nothing_here(p
     assert not (state_machines.root(project) / "feature_count_improver").exists()
     assert not (project.state_dir / "drafts" / "feature_count_improver").exists()
     assert any("nothing runs here" in line for line in out["said"]) and out["prediction"] is None
-    assert any("kept as an expectation" in line and "until a change of it is announced (announce_change)" in line for line in out["said"])
+    assert any("stays on the declaration as an expectation" in line and "nothing publishes or judges it" in line
+               for line in out["said"])
+    assert not any("announce_change" in line for line in out["said"])                    # it would refuse: no prediction here
     assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]   # no era begins: nothing changed
     assert not predictions(store)
     m = layer(project)["machines"]["feature_count_improver"]

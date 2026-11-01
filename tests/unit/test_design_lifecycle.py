@@ -221,7 +221,8 @@ def test_a_machine_managed_elsewhere_publishes_no_change_at_confirm(project, sto
     out = confirm(project, store)
     assert out["prediction"] is None and not predictions(store)
     assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]
-    assert any("kept as an expectation" in line and "until a change of it is announced (announce_change)" in line for line in out["said"])
+    assert any("stays on the declaration as an expectation" in line and "nothing publishes or judges it" in line
+               for line in out["said"])
 
 
 def test_a_programs_waiting_edit_names_the_change_its_program_announces(project, store):
@@ -332,6 +333,14 @@ def test_a_dummy_harness_turn_costs_nothing_and_a_model_turn_its_price(project, 
     assert design_machines.turn_usd(project) == 0.0
     monkeypatch.setattr(project.config, "harness", "claude_code")
     assert design_machines.turn_usd(project) == pytest.approx(0.03)
+
+
+@pytest.mark.real_harness            # Pi's harness object, for its turn_usd; opens no session
+def test_a_harness_that_knows_no_price_says_the_cost_is_unknown(project, store, monkeypatch):
+    monkeypatch.setattr(project.config, "harness", "pi")
+    assert design_machines.turn_usd(project) is None
+    line = design_machines.cost_line(project, store, {"receives": ["ticket.created"]})
+    assert "at a cost per turn this harness does not report" in line and "$" not in line
 
 
 def test_events_from_a_short_history_are_scaled_to_a_day_and_said_so(store, monkeypatch):

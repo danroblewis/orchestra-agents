@@ -38,12 +38,28 @@ def for_the_human(turn: dict) -> bool:
     return turn["kind"] == "chat" or not quiet(text)
 
 
+# What a wake-up reason tells the model to do (landings.py: "Leave the human one short message ..."):
+# the panel shows the human what happened, never the directive.
+DIRECTIVE = re.compile(r"(?<=[.:])\s+(?:Leave|Tell|Answer|Reply|Write|Say|Act|Decide|Ask)\b.*$", re.DOTALL)
+LANDED = re.compile(r"^ticket (\S+) \((.*)\), which was made for the human's request, is DONE: (?:it )?(.+?)\.?$", re.DOTALL)
+
+
+def subject(reason: str) -> str:
+    """What happened, from a wake-up reason: "DEMO-5 landed on main (its title)"."""
+    r = DIRECTIVE.sub("", reason).strip()
+    if m := LANDED.match(r):
+        tid, title, how = m.groups()
+        how = f"'s {how[4:]}" if how.startswith("its ") else f" {how}"
+        return f"{tid}{how}" + (f" ({title})" if title else "")
+    return r
+
+
 def reasons(prompt: str) -> list[str]:
-    """Why a wake-up woke the Supervisor, as its prompt lists it."""
+    """Why a wake-up woke the Supervisor, as its prompt lists it: what happened, each."""
     if WOKEN not in prompt:
         return []
     block = prompt.split(WOKEN, 1)[1].split("\n## ", 1)[0]
-    return [ln[2:].strip() for ln in block.splitlines() if ln.startswith("- ")][:5]
+    return [subject(ln[2:].strip()) for ln in block.splitlines() if ln.startswith("- ")][:5]
 
 
 def unread(rt: dict) -> dict | None:

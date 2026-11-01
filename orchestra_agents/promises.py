@@ -7,7 +7,9 @@ It is a heuristic over the reply's sentences, kept narrow so it does not cost a 
 - a promise of a later action ("I'll", "I will", "I'm going to", "Let me") counts unless the
   sentence ties it to something that will happen ("when", "once", "if", "after", "as soon as",
   "tell me", "let me know"): "tell me the city and I'll update DEMO-6" waits on the human, and
-  "I'll tell you when it lands" is kept by the landing wake-up (landings.py);
+  "I'll tell you when it lands" is kept by the landing wake-up (landings.py); and a promise to tell
+  the human later ("I will tell you the plan") counts as kept in a turn that called a tool whose
+  answer schedules that wake-up (``WAKES``: a hand-off, whose plan wakes it);
 - a claim that something was done ("I've updated", "I asked") counts only in a turn that made no
   tool call at all.
 What it finds gets one more turn (``follow_up``) to do it now or say it is not done."""
@@ -19,17 +21,21 @@ import re
 _SENTENCES = re.compile(r"[^.!?\n]+[.!?]?")
 _LATER = re.compile(r"\b(I'll|I will|I'm going to|I am going to|let me)\b", re.IGNORECASE)
 _TIED = re.compile(r"\b(when|once|if|after|as soon as|tell me|let me know)\b", re.IGNORECASE)
+_TELL = re.compile(r"\b(tell|let) you\b", re.IGNORECASE)
+WAKES = ("hand_to_coordinator",)      # its answer wakes the Supervisor with the plan (work.planned), which it then tells
 _DONE = re.compile(r"\bI(?:'ve| have)? (?:just )?(updated|created|cancelled|canceled|messaged|asked|told|notified|checked|filed|"
                    r"added|changed|set|raised|unblocked|resumed|paused|restarted|reset)\b", re.IGNORECASE)
 
 
-def unkept(text: str, tool_calls: int) -> str | None:
-    """The first sentence of ``text`` that claims an action not taken in this turn, or None."""
+def unkept(text: str, tools: list[str]) -> str | None:
+    """The first sentence of ``text`` that claims an action not taken in this turn (whose tool
+    calls were ``tools``, by name), or None."""
+    woken = any(t in WAKES for t in tools)
     for m in _SENTENCES.finditer(text or ""):
         s = m.group(0).strip()
-        if _LATER.search(s) and not _TIED.search(s):
+        if _LATER.search(s) and not _TIED.search(s) and not (woken and _TELL.search(s)):
             return s
-        if tool_calls == 0 and _DONE.search(s):
+        if not tools and _DONE.search(s):
             return s
     return None
 

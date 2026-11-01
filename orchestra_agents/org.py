@@ -30,6 +30,7 @@ from .builtins import ROLES as BUILTIN_ROLES
 from .clock import now, parse_interval, zone
 from .config import Project
 from .events import GAVE_UP, INTENT_REQUESTED
+from .floor import ATTENTION_NEEDED as FLOOR_ATTENTION
 from .protocol import (
     ACCEPTED,
     APPROVED,
@@ -109,6 +110,7 @@ EVENT_HELP = {
     "machine.restarted": "the Supervisor restarts one of the project's programs",
     "work.requested": "the Supervisor hands the human's requirements to a planner (filter with :coordinator)",
     "work.planned": "the Coordinator reports how it planned a request (filter with :supervisor)",
+    FLOOR_ATTENTION: "the Workflows floor asks a planner to look: a guard passed (filter with :supervisor or :coordinator)",
     STALLED: "a stock fills while its outflows stopped, or a flow that moved stopped (filter with :stock:<id> or :flow:<id>)",
     RESUMED: "a stalled stock or flow moves again", QUIET: "a machine that kept a rhythm has gone silent (filter with :<machine>)",
     DIVERGED: "a stock left the band the model predicted", RETURNED: "a diverged stock is back in its band",

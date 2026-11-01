@@ -35,7 +35,7 @@
   const servesTickets = (a, role) => TASK_ROLES.has(role) || ((a && a.roles) || []).some((r) => ((D && D.serves) || []).includes(r));
   const perTicket = (m) => { const a = D && D.agents.find((x) => x.name === roleOf(m)); return a ? !a.resident && servesTickets(a, roleOf(m)) : m.mode === "ad hoc" && TASK_ROLES.has(roleOf(m)); };
   const titled = (m) => `${e_(m.id)}${m.intent && m.intent.title ? ` <span class="muted">· ${e_(m.intent.title)}</span>` : ""}`;
-  const chip = (s, m) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000, m ? agentOf(m) : undefined) : "");
+  const chip = (s, m, compact) => (typeof sessionChip === "function" ? sessionChip(s, D ? D.now : Date.now() / 1000, m ? agentOf(m) : undefined, compact) : "");
   const more = (m, compact) => (compact ? "" : `<div class="tkc-more" onclick="event.stopPropagation();Orchestra.machineCards.openDefault('${e_(m.id)}')">machine details</div>`);
 
   const css = document.createElement("style");
@@ -110,9 +110,9 @@
     summary(m) {
       if (kindOf(m) !== "agent") return null;
       const live = sessionsOf(m).filter((s) => s.status === "running");
-      if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0], m);
+      if (live.length) return live.map((s) => `${e_(s.instance || roleOf(m))} on ${e_((s.ticket || {}).id || "a turn")}`).join(" · ") + " " + chip(live[0], m, true);
       const s = sessionsOf(m).sort((a, b) => (b.settled_at || 0) - (a.settled_at || 0))[0];
-      return s || m.mode === "ad hoc" ? chip(s || null, m) : null;
+      return s || m.mode === "ad hoc" ? chip(s || null, m, true) : null;
     },
     card(m, { compact } = {}) {
       if (kindOf(m) !== "agent") return null;

@@ -76,13 +76,18 @@ def identify(store: AgentStore, env: Mapping[str, str]) -> tuple[str, str]:
 
 def granted_groups(project: Project, role: str) -> tuple[str, ...] | None:
     """The tool groups ``role`` (an agent's name, or a built-in role's) holds now; None when no
-    agent or built-in role has that name. A built-in name always means the built-in agent."""
+    agent or built-in role has that name. A built-in name always means the built-in agent. An agent
+    that serves a Workflows floor role also holds that role's exit tool (``report_outcome``)."""
     ag = all_agents(project).get(role)
     if role in BUILTIN_ROLES and (ag is None or not ag.builtin):
         ag = built_in_agents()[role]
     if ag is None:
         return None
-    return effective_tools(ag, all_roles(project), all_teams(project))
+    groups = effective_tools(ag, all_roles(project), all_teams(project))
+    if not ag.builtin:                       # a confirmed Universal Machine's agent: its floor exit tool (floor_roles.py)
+        from .floor_roles import extra_groups
+        groups += tuple(g for g in extra_groups(project, role) if g not in groups)
+    return groups
 
 
 def authorize(project: Project, command: str, role: str) -> None:

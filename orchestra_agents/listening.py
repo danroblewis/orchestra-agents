@@ -14,7 +14,9 @@ to the agent that reacts, never to the host, which is no machine (events.py):
 - an agent that may commit predictions (the ``predict`` group): Orchestra's verdict,
   ``orchestra.prediction.judged``, which wakes it for its own change (verdicts.py); and, for a
   per-ticket one, the acts that end its ticket, on which a change it said takes effect when the
-  ticket lands is announced as it (modeling.announce_landed).
+  ticket lands is announced as it (modeling.announce_landed);
+- an agent that serves a Workflows floor role (floor_roles.py): the floor's offers and their
+  withdrawals, ``offer.made`` and ``offer.withdrawn`` (floor.py), which the host answers for it.
 
 What wakes an agent without an event on the bus (a human's message, a brief or a message from
 another agent, a crash loop) is not listed: nothing on the bus causes it. Neither is what the host
@@ -24,14 +26,17 @@ the archive)."""
 from __future__ import annotations
 
 from .builtins import ROLES as BUILTIN_ROLES
+from .floor import LISTENS_FOR as FLOOR_EVENTS
 from .org import JUDGED, AgentDef
 from .protocol import CREATED, DONE, REFUSED, SUPERVISOR, endings
 
 
-def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | list[str] | None = None) -> list[str]:
+def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | list[str] | None = None,
+                floor: bool = False) -> list[str]:
     """The event types ``agent`` reacts to, as its announcement lists them; ``work`` is the
     project's mode (``code`` or ``tasks``), which decides what ends a ticket; ``groups``, its tool
-    groups (``org.effective_tools``; by default a built-in role's own)."""
+    groups (``org.effective_tools``; by default a built-in role's own); ``floor``, whether it
+    serves a Workflows floor role (``floor_roles.served``)."""
     if agent is None:
         return []
     if groups is None:
@@ -40,6 +45,8 @@ def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | lis
     out = {w.split(":")[0] for w in agent.wake_on}
     if not per_ticket:                                           # a woken agent asks the task system as itself
         out |= {DONE, REFUSED}
+    if floor:
+        out |= set(FLOOR_EVENTS)
     if agent.name == SUPERVISOR:
         out |= {CREATED, *endings(work)}
     if "predict" in groups:

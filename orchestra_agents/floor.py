@@ -1,0 +1,112 @@
+"""What the agents and the Workflows plugin's floor say to each other on Orchestra's bus (its
+docs/machine-contract.md and SPEC §5.4), beside protocol.py, which is the task system's. The names
+and the claim rule are copied by hand from orchestra-workflows' ``orchestra_workflows/contract.py``;
+nothing is imported from it (tests/unit/test_floor.py checks the copy when it is installed).
+
+- An offer (``offer.made``, from ``<planner>/dispatch`` or a holder passing on) names its ``role``,
+  the ``item`` (the subject of every event of the turn), a ``brief`` (text), the ``resources``
+  handed to it (a ``worktree`` unit's ``handle`` is the workspace), ``heartbeat_s``, ``lease_s``,
+  ``outcomes`` (empty: any) and ``to`` (an instance, for rework; null: any instance of the role).
+- The claim (``offer.claimed``) has the offer id as its causationid; the first claim in bus order
+  after the offer and before any withdrawal holds it (``winner``), and a loser says nothing more.
+- The holder says it is alive (``offer.alive`` with ``text``) at least every ``heartbeat_s`` and
+  ends with ``offer.finished`` and an ``outcome``. **The BLOCKED rule**: work it cannot do, a turn
+  that ended without an outcome among them, finishes ``blocked`` with the reason in ``summary``.
+- ``offer.withdrawn`` naming the offer, or the holder's instance with no other offer, stops the
+  turn; nothing more is published for it.
+
+The agents' exit tools map onto outcomes (``outcome_of``): ``report_outcome`` (an agent of a
+confirmed Universal Machine, machine_spec ``role``) names it; the built-in worker's
+``report_ticket`` is ``ready`` or ``blocked``, the reviewer's ``report_review`` is ``approved`` or
+``rejected``."""
+
+from __future__ import annotations
+
+MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN = "offer.made", "offer.claimed", "offer.alive", "offer.finished", "offer.withdrawn"
+LISTENS_FOR = (MADE, WITHDRAWN)          # what the host watches on behalf of an agent that serves a floor role
+BLOCKED = "blocked"
+HEARTBEAT_S = 30.0                       # when an offer names none
+REPORT_TOOL = {"worker": "report_ticket", "reviewer": "report_review"}   # a built-in role's exit tool; any other: report_outcome
+OUTCOME_TOOL = "report_outcome"
+
+
+def for_role(ev: dict, role: str) -> bool:
+    """An ``offer.made`` (flat) for ``role``."""
+    return ev.get("type") == MADE and ev.get("role") == role and bool(ev.get("offer")) and bool(ev.get("item"))
+
+
+def winner(evs: list[dict], offer: str) -> str | None:
+    """Who holds ``offer`` by these flat events in bus order (read from before its ``offer.made``):
+    the first claim after it and before any withdrawal. Every earlier claim counts as a rival's, as
+    the contract's cautious reading does."""
+    made = None
+    for ev in evs:
+        if ev.get("offer") != offer:
+            continue
+        if ev.get("type") == MADE:
+            made = ev
+        elif made is not None and ev.get("type") == WITHDRAWN:
+            return None
+        elif made is not None and ev.get("type") == CLAIMED and made.get("to") in (None, "", ev.get("source")):
+            return ev.get("source")
+    return None
+
+
+def stops(ev: dict, offer: str, instance: str) -> bool:
+    """An ``offer.withdrawn`` that names this offer, or this instance's hold with no other offer."""
+    return ev.get("type") == WITHDRAWN and (ev.get("offer") == offer or ev.get("instance") == instance
+                                            and ev.get("offer") in (None, offer))
+
+
+def workspace(offer: dict) -> str | None:
+    """The handed worktree's path, if the offer hands one."""
+    for r in offer.get("resources") or []:
+        if isinstance(r, dict) and r.get("kind") == "worktree" and r.get("handle"):
+            return str(r["handle"])
+    return None
+
+
+def outcome_of(report: dict | None, outcomes: list[str] | None) -> tuple[str, str]:
+    """The (outcome, summary) an exit tool's report finishes the offer with. No report, or an
+    outcome the offer does not allow, is ``blocked`` with why (the BLOCKED rule)."""
+    if not report:
+        return BLOCKED, "the agent's turn ended without reporting an outcome"
+    summary = str(report.get("summary") or "")
+    if "outcome" in report:
+        outcome = str(report["outcome"] or "")
+    elif "state" in report:                                   # report_ticket
+        outcome = "ready" if report["state"] == "READY_FOR_REVIEW" else BLOCKED
+        if outcome == BLOCKED:
+            summary = str(report.get("blocked_reason") or summary)
+    elif "verdict" in report:                                 # report_review
+        outcome = "approved" if report["verdict"] == "APPROVED" else "rejected"
+        if report.get("feedback"):
+            summary = f"{summary}\n\n{report['feedback']}".strip()
+    else:
+        outcome = ""
+    allowed = [str(o) for o in outcomes or []]
+    if not outcome or (allowed and outcome != BLOCKED and outcome not in allowed):
+        return BLOCKED, f"the agent reported {outcome or 'no outcome'!r}, not one of {', '.join(allowed) or 'any'}: {summary}".strip()
+    return outcome, summary
+
+
+def task_text(offer: dict, role: str, path: str | None) -> tuple[str, str]:
+    """The turn's prompt and the nudge when the agent stopped without its outcome."""
+    allowed = [str(o) for o in offer.get("outcomes") or []]
+    tool = REPORT_TOOL.get(role, OUTCOME_TOOL)
+    if tool == "report_ticket":
+        how = ("call `report_ticket`: READY_FOR_REVIEW when your work is done (committed, if you were handed a worktree), "
+               "otherwise BLOCKED with the reason.")
+    elif tool == "report_review":
+        how = "call `report_review`: APPROVED, or REJECTED with your feedback."
+    else:
+        how = (f"call `report_outcome` with `outcome` one of {', '.join(f'`{o}`' for o in allowed)} or `blocked`, "
+               if allowed else "call `report_outcome` with the `outcome` your work came to (or `blocked`), ") + \
+              "and a `summary` of what you did; `blocked` with the reason when you cannot do it."
+    where = (f"Your workspace is {path}, a worktree on the item's branch: work and commit there; leave it committed and clean."
+             if path else "No workspace was handed to you: you are in the repository, read only.")
+    lines = [f"# Your offer: {offer.get('item')}, step {offer.get('step') or '?'}"
+             + (f" of workflow {offer['workflow']}" if offer.get("workflow") else ""),
+             "", f"Offer: {offer.get('offer')}", where, "", "## Brief", "", str(offer.get("brief") or "(no brief)"), "",
+             f"When you are finished, {how} Call it exactly once; after it you are done."]
+    return "\n".join(lines) + "\n", f"You stopped without reporting the outcome. Now {how}"

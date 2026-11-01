@@ -28,6 +28,8 @@ broken without updating the spec and saying so in the commit.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
+   The Workflows floor's names are its machine contract, copied by hand into `floor.py` the same
+   way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
@@ -58,9 +60,10 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
    acceptance, the task system's flow, the web) uses the dummy harness, never a model.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
    `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
-   each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host and
-   the harnesses, and `PROJECT.md` is seeded by the first read and written by the Supervisor's
-   context tool. The organisation's custom records are in the repository under `.orchestra/`.
+   each session was started with, `PROJECT.md`, `machines/`) is named in SPEC §7 and written by
+   the host and the harnesses, `PROJECT.md` is seeded by the first read and written by the
+   Supervisor's context tool, and `machines/<name>/` holds a confirmed Universal Machine's spec
+   when it is not in the repository (machine-design.md §2.1). The organisation's custom records are in the repository under `.orchestra/`.
    Nothing else touches a backend or those files directly.
 10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
     write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or

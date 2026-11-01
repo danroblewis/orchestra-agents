@@ -16,7 +16,7 @@ from .harness import read_transcript
 # A user message that goes on the turn before it instead of starting one: the host's nudge after
 # a turn that ended without its report (runner.py) and the Supervisor's promise follow-up (promises.py).
 CONTINUES = ("You stopped without", "[Orchestra: your reply says")
-OUTCOME_TOOLS = {"report_ticket": "state", "report_review": "verdict"}    # a per-ticket turn's exit tools and what they decide
+OUTCOME_TOOLS = {"report_ticket": "state", "report_review": "verdict", "report_outcome": "outcome"}    # a per-ticket turn's exit tools and what they decide
 STOPS = {"session.timed_out": "cut off", "session.error": "failed", "session.interrupted": "interrupted"}
 HUMAN = "[The human's message]\n"
 WOKEN = "## Why you were woken"

@@ -93,9 +93,9 @@ def test_each_subscription_is_announced_by_the_agent_that_reacts(project, tmp_pa
                                   "request.refused", "review.approved", "task.attention_needed", "ticket.created", "work.planned"]
     assert said["coordinator"] == ["request.done", "request.refused", "task.attention_needed", "work.requested"]
     # a per-ticket role asks nothing; a worker hears its predictions' verdicts and its ticket's end
-    # (a predicted change announced when it lands)
-    assert said["worker/1"] == ["changes.requested", "gate.landed", "orchestra.prediction.judged", "request.done",
-                                "review.approved", "task.assigned", "task.released"]
+    # (a predicted change announced when it lands), and the Workflows floor's offers for its role (floor_roles.py)
+    assert said["worker/1"] == ["changes.requested", "gate.landed", "offer.made", "offer.withdrawn", "orchestra.prediction.judged",
+                                "request.done", "review.approved", "task.assigned", "task.released"]
     builtins = built_in_agents()
     assert "review.approved" not in listens_for(builtins["supervisor"], "code")              # in code mode the gate ends a ticket
     assert {d.id: d.listens_for for d in web.declared(project)}["supervisor"] == said["supervisor"]   # declared as announced

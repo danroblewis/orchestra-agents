@@ -7,7 +7,7 @@ behalf (listening.py).
 
 Each second it matches new events on the bus against every agent's wake rules and queues wake-ups,
 queues the scheduled ones, runs the teams' probes, answers the task system's assignments for the
-roles it serves (runner.py) and runs one turn per woken agent. The resident sessions are kept up
+roles it serves (runner.py) and the Workflows floor's offers (floor_runner.py), and runs one turn per woken agent. The resident sessions are kept up
 by residents.py, a turn's progress and its end are recorded by turns.py, and the Supervisor chat
 is served here through the control endpoint (control.py). Which product runs a session is
 invisible past ``harness``. Tickets are the task system's: the agents reach them only over the
@@ -46,6 +46,8 @@ from .events import GAVE_UP, Events
 from .facts import SupervisorFacts
 from .fillers import Fillers
 from .first_run import FirstRun
+from .floor_roles import served
+from .floor_runner import FloorRunner
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
 from .listening import listens_for
@@ -112,6 +114,7 @@ class AgentHost:
         self.landings = Landings(store)                # the human's tickets, followed until they are done
         self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s))
         self.runner = AgentRunner(self)                # answers the task system's assignments
+        self.floor = FloorRunner(self)                 # answers the Workflows floor's offers
         self.residents = Residents(self)               # the resident sessions
         self.turns = Turns(self)                       # a turn's progress and how it ended
         self.prober = Prober(project, store, events)   # the teams' probes
@@ -188,7 +191,7 @@ class AgentHost:
                 close_together(list(self.live_procs.values()),                    # mid-turn: no orphans
                                lambda _s, e: log(f"closing a running session: {e!r}"))
                 deadline = time.time() + SHUTDOWN_REPORTS_S     # each open assignment reports that it failed
-                for th in list(self.runner.threads.values()):
+                for th in [*self.runner.threads.values(), *self.floor.threads.values()]:
                     th.join(max(0.1, deadline - time.time()))
                 self.residents.close_all()
             finally:
@@ -202,12 +205,12 @@ class AgentHost:
         self.stop.set()
 
     def _busy(self) -> bool:
-        return self.runner.busy() or any(t.is_alive() for t in self.agent_threads.values())
+        return self.runner.busy() or self.floor.busy() or any(t.is_alive() for t in self.agent_threads.values())
 
     def idle(self, up_to: int) -> bool:
         """Nothing left to do for the bus as it stood at ``up_to``: both readers of the bus have passed it,
         no turn or assignment thread is alive, and no wake-up is queued."""
-        return (self._wake_at >= up_to and self.runner.offset >= up_to and not self._busy()
+        return (self._wake_at >= up_to and self.runner.offset >= up_to and self.floor.offset >= up_to and not self._busy()
                 and not self.store.runtime()["wakeups"])
 
     def tick(self) -> None:
@@ -246,6 +249,7 @@ class AgentHost:
                 if reasons:
                     self._spawn(self.agent_threads, target, self._wake, target, reasons)
         self.runner.tick()
+        self.floor.tick()
 
     def _note_waits(self, drained: list[dict]) -> None:
         """How long the Supervisor's wake-ups waited before their turn (head-of-line blocking, load.py)."""
@@ -436,14 +440,17 @@ class AgentHost:
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
         mode = "continuous" if agent is not None and agent.resident else "ad hoc"
+        floor = [r for r, a in served(self.project).items() if a == role]     # the Workflows floor roles it answers (floor_roles.py)
         self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
-                                                          "kind": "agent", "role": role,
+                                                          "kind": "agent", "role": role, **({"roles": floor} if floor else {}),
                                                           "harness": self.harness.name, "model": model},
                             source=source)
 
     def _listens_for(self, agent: AgentDef | None) -> list[str]:
+        floor = agent is not None and agent.name in served(self.project).values()
         return listens_for(agent, self.cfg.work, None if agent is None else effective_tools(agent, self.role_defs or all_roles(self.project),
-                                                                                             self.teams or all_teams(self.project)))
+                                                                                             self.teams or all_teams(self.project)),
+                           floor=floor)
 
     @staticmethod
     def _pid(proc: AgentSession) -> int | None:

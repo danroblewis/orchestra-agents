@@ -60,7 +60,11 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
    `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
    each session was started with, `PROJECT.md`) is named in SPEC §7 and written by the host and
    the harnesses, and `PROJECT.md` is seeded by the first read and written by the Supervisor's
-   context tool. The organisation's custom records are in the repository under `.orchestra/`.
+   context tool. Since 2026-11-01 (proposal 4, `machine-design.md` §2.1) the Supervisor's design
+   tools also write `instruments/` (its measurement scripts), `drafts/` (a drafted machine's
+   implementation, not official) and `machines/` (a confirmed Universal Machine's spec), and
+   `intended/`, the stand-in for Orchestra's declared layer until Orchestra has its own
+   (`intended_api.py`). The organisation's custom records are in the repository under `.orchestra/`.
    Nothing else touches a backend or those files directly.
 10. **Humans talk only to the Supervisor** (Orchestra's rule 9). The pages and CLI read; the one
     write a person has is the Supervisor chat. Pausing, resuming, restarting, resetting or
@@ -68,7 +72,11 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration and
     never edits a file in the checkout; new code is a worker's, through a ticket, a review and the
-    gate. Its one exception is a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
+    gate. One amendment (2026-11-01, the owner's proposal 4, `machine-design.md` §2.1): a
+    measurement script of at most 100 lines is configuration the Supervisor writes, to the state
+    directory (`instruments/<name>.sh`, `add_instrument`), with its entry in the owner's overlay, as
+    one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
+    One the owner wants in the repository still goes through the Coordinator. Its one exception is a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,
     never of Orchestra or this package, with its upstream issue an outbox draft the owner approves.

@@ -545,7 +545,16 @@ file lock and written only by `store.py`; `sessions/` (the harnesses' session re
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its
 harness keeps it and records the path on the archived run); `logs/` (the host's log and, under `agents/`, each
 session's stderr and the prompt it was started with); `PROJECT.md`, the project context the
-Supervisor maintains. The organisation's custom records are in the repository under `.orchestra/`.
+Supervisor maintains; and, from the design tools (section 10, "Designing the system"):
+`instruments/<name>.sh` (the measurement scripts the Supervisor writes), `drafts/<name>/` (a drafted
+machine's implementation, not official), `machines/<name>/` (a confirmed Universal Machine's spec;
+nothing is committed), `trials/` (a script's trial round) and `intended/` (`layer.json`,
+`journal.jsonl`: the stand-in for Orchestra's declared layer, used only while the installed
+Orchestra has no `project.intended`, `intended_api.py`). The Supervisor's agent state also keeps the
+turn its tools record in their provenance (`turn`), its draft instruments (`drafts`), the changes
+its confirmed machines' first turns announce (`machine_starts`) and the refinement pass's proposal
+(`refinement`). `[agents]` adds `design_passes` (default 3) and `draft_expiry` (default 24h). The
+organisation's custom records are in the repository under `.orchestra/`.
 
 ## 8. The web plugin (`web.py`, `org_views.py`, `static/`)
 
@@ -658,7 +667,10 @@ one-liner over tools already there is configuration, so the Supervisor declares 
 reviewed as a commit of `orchestra.toml` with its reason, can be tried before it is declared, and
 asks nothing of the human. Anything longer is a script, which is code: the Supervisor hands it to
 the Coordinator, and it lands through a ticket, a review and the gate (`work = "code"`, the human's
-choice). Another store is looked at before it is declared (`check_sources`, `source_schema`,
+choice). **Amended 2026-11-01** (the owner's proposal 4, `machine-design.md` §2.1): a measurement
+script of at most 100 lines is configuration the Supervisor writes itself, to the state directory,
+through the design tools' `add_instrument` (below); only a longer one, or one the owner wants in
+the repository, goes through the Coordinator. Another store is looked at before it is declared (`check_sources`, `source_schema`,
 `preview_query`, `infer_source`, over `orchestra.sources`, by a declared name or by `url` and `auth`;
 no credential's value is shown).
 
@@ -722,6 +734,37 @@ pipeline, puts the ticket back to APPROVED and asks the Supervisor for attention
 lands it on the next run. A tool's answer about what applies describes the readers' rules; it
 does not wait to see them act (except `restart_machine`, which watches the launcher).
 
+
+**Designing the system** (tool group `design`, the Supervisor's alone, checked in the handler;
+`design.py` and `design_dynamics.py`, `design_instruments.py`, `design_machines.py`,
+`design_confirm.py`, `design_passes.py`; `prompts/design.md`; Orchestra's `machine-design.md`). The
+owner talks; the Supervisor declares, measures, drafts and refines; Orchestra's Dynamics and
+Machines pages draw the result from its declared layer (`intended-model.md`), reached only through
+`intended_api.layer`: Orchestra's `project.intended` when installed, else the stand-in in the state
+directory. Every tool takes a `reason`, records provenance itself (the turn and the owner's message
+that began it, which the host keeps; a `quote` must be in that message, and a call with one, or
+with the `request` id of the owner's page click, is the owner's), writes only through the layer and
+`config_edit`, calls no model, and answers with the change ids. The tools: `declare_stock`,
+`declare_effect`, `set_target`, `propose_measurements` (options in order with `cost`, `caveat`,
+`clearance`: a company system is "needs approval" until data classes exist; `bearer_env` names a
+credential's variable, never its value), `add_instrument` (a script of at most 100 lines tried as
+Orchestra runs it, written to `instruments/`, its `[[collect]]`/`[[scrape]]` entry in the overlay,
+one act; `simulated = true` for a placeholder, removed once a real option records; `where = repo`
+hands it to the Coordinator), `keep_instrument` (an unkept draft expires after `draft_expiry`: the
+host removes its entry and script), `mark_expected`, `ignore`, `link` (a manual binding, origin
+declared), `declare_machine` (the envelope Orchestra checks and the opaque `spec`: Universal
+`invariants`, `steps`, `uses`, said in no AI terms; Programmatic fields by mode; ids
+`^[a-z][a-z0-9_]{1,40}$`; a Universal one drafted in `drafts/`), `refine_machine` (edits applied all
+or none, each with the value it replaced; unquoted or on a confirmed machine, a pending change),
+`declare_event`, `declare_expected_effect` (SPEC's `expect` kinds; a stock with no series waits;
+the horizon at least three runs), `confirm` and `discard` (the owner's, quoted or by request; a
+Universal Machine's spec moves to `machines/`, its expected effect is published as the Supervisor's
+`orchestra.prediction.made`, subject `machine:<name>`, about a change id chosen then, which the
+machine's first turn announces as `system.changed`), and `read_design` (group `observe`). The owner's
+page request, `orchestra.intent.requested` from `owner`, wakes the Supervisor (a fixed wake-up, never
+capped). The `refine_map` duty: the review round runs the refinement passes without a model when the
+declared layer changed (at most `design_passes`, stopping when one finds nothing new) and wakes the
+Supervisor once with one batched proposal; it proposes, never declares.
 
 ## 11. The model, experiments and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

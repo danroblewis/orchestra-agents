@@ -37,6 +37,10 @@ def starting(at: str | None = None) -> MachineSpec:
                        about="review the system on a schedule; name the one thing that would improve flow most",
                        added_by="orchestra-agents", added_at=at,
                        reason="the owner, 2026-10-28: a schedule where it reviews the current state of the system"))
+    duties.append(Duty(name="refine_map", prompt="duties/refine_map.md", tools=["design", "observe", "events"],
+                       about="keep the event map coherent: one batched proposal of refinements per round, declaring nothing",
+                       added_by="orchestra-agents", added_at=at,
+                       reason="the owner, 2026-11-01: an AI pass should run a few times to refine the events and their purposes"))
     return MachineSpec(name="supervisor", engagement="continuous", model=DEFAULT_MODEL, created_by="orchestra-agents",
                        description="Talks with the owner; keeps the project set up and its work moving; grows its own duties.",
                        review_every=DEFAULT_REVIEW_EVERY, duties=duties)

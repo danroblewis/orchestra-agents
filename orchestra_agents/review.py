@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import time
 
-from . import budget, flow_signals, load, prompting, split_proposal
+from . import budget, design_passes, flow_signals, load, prompting, split_proposal
 from .clock import parse_interval
 from .machine_spec import DEFAULT_REVIEW_EVERY
 from .machine_spec import load as load_spec
@@ -78,14 +78,23 @@ class ReviewRound:
         new = [f for f in findings if f["key"] not in seen]
         record = {"at": now, "findings": [f["text"] for f in findings], "new": len(new), "crossed": [x["signal"] for x in hit],
                   "seen": (seen + [f["key"] for f in new])[-REMEMBER:]}
+        try:                                       # the refinement passes, when the declared layer changed (design_passes.py)
+            design = design_passes.run(h.project, h.store, evs)
+        except Exception as e:  # noqa: BLE001 - a pass that fails leaves the round as it was
+            h.log(f"review round: the refinement pass failed: {e!r}")
+            design = None
+        design = design if design and design["findings"] else None
+        if design:
+            record["design"] = len(design["findings"])
         reason = None
-        if new or proposal:
-            why_not = budget.over(h.store, h.cfg, now) if new and not proposal else None
+        if new or proposal or design:
+            why_not = budget.over(h.store, h.cfg, now) if (new or design) and not proposal else None
             if why_not:
                 record["woke"], record["skipped"] = False, why_not
                 h.log(f"review round: {len(new)} new finding(s); the Supervisor is not woken: {why_not}")
             else:
-                reason = self.reason(new, proposal)
+                reason = "\n\n".join(r for r in (self.reason(new, proposal) if new or proposal else "",
+                                                   design_passes.reason(design, MARK) if design else "") if r)
                 h.store.add_wakeup(MACHINE, reason)
                 record["woke"] = True
         else:

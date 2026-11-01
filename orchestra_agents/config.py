@@ -74,6 +74,8 @@ class Config:
     spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
     review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
+    design_passes: int = 3              # the most refinement passes in one round (design_passes.py)
+    draft_expiry_s: float = 86_400.0    # how long a draft instrument records before it expires unkept (design_instruments.py)
     base_branch: str = "main"           # from the task system's [project], for the prompts
     ticket_prefix: str = "ORC"
     work: str = "tasks"
@@ -114,7 +116,8 @@ class Config:
             compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
             spec_changes_per_day=_count(a, "spec_changes_per_day", 5), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
-            review_turns_per_day=_count(a, "review_turns_per_day", 48),
+            review_turns_per_day=_count(a, "review_turns_per_day", 48), design_passes=_count(a, "design_passes", 3),
+            draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 
 

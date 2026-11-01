@@ -58,7 +58,8 @@ def test_the_starting_spec_is_written_once_as_a_commit_and_read_as_the_superviso
     assert supervisor_spec.ensure(project) is None                                  # never twice, never overwritten
     spec = load(project, "supervisor")
     assert spec.model == "sonnet" and spec.review_every == "30m"
-    assert [d.name for d in spec.duties] == ["talk_to_owner", "setup", "hand_to_planner", "keep_flow", "review_round"]
+    assert [d.name for d in spec.duties] == ["talk_to_owner", "setup", "hand_to_planner", "keep_flow", "review_round",
+                                             "refine_map"]
     assert spec.duty_text(spec.duty("keep_flow")).startswith("Keep the work moving")
     sup = all_agents(project)["supervisor"]
     assert "orchestra.model.stalled" in sup.wake_on and "orchestra.machine.quiet" in sup.wake_on

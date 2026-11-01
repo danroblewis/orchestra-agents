@@ -548,6 +548,9 @@ TOOLS: list[ToolDef] = [
             {"note": S("What needs deciding and why")}, ("note",)),
 ]
 
+from .tools_design import DESIGN_TOOLS
+
+TOOLS += DESIGN_TOOLS
 BY_NAME = {t.name: t for t in TOOLS}
 
 

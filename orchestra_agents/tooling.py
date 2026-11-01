@@ -21,6 +21,7 @@ from typing import Any
 from . import (
     access,
     balance_tools,
+    design,
     duties,
     guides,
     handoff,
@@ -44,6 +45,8 @@ from .restart import restart_machine
 from .roles import all_roles
 from .setup_tools import SETUP_COMMANDS, handle_setup
 from .store import AgentStore, StoreError
+
+DESIGN_COMMANDS = design.commands()
 
 
 def check_args(command: str, args: dict[str, Any]) -> None:
@@ -138,6 +141,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)
+    if command in DESIGN_COMMANDS:
+        return design.handle(project, store, command, a, role)
 
     if command in SETUP_COMMANDS or command in SYSTEM_COMMANDS:
         project.reload_config()               # the configuration as it is now: an earlier call may have changed it

@@ -131,7 +131,8 @@ def test_cohesion_clusters_duties_that_share_wake_ups_or_tools(project):
                     Duty(name="retry_ci", listens=["gate.rejected:x"], tools=["pipeline"]),
                     Duty(name="morning_note", tools=["context"])]
     groups = split_proposal.clusters(spec)
-    assert sorted(map(sorted, groups)) == [["keep_flow", "retry_ci", "watch_gate"], ["morning_note"], ["review_round"]]
+    assert sorted(map(sorted, groups)) == [["keep_flow", "retry_ci", "watch_gate"], ["morning_note"], ["refine_map"],
+                                           ["review_round"]]
 
 
 def test_the_supervisor_runs_on_its_spec_s_model_when_the_harness_takes_it(host):

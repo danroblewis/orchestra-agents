@@ -22,6 +22,9 @@ Tool groups:
   observe      read the whole system: the configuration, processes, logs, metrics, instruments, other
                time-series stores ([[sources]]), the model, the snapshot
   flows        find_balance: the counters in the stores that fill and drain a given level (read only)
+  design       declare stocks, effects, targets and machines on Orchestra's declared layer, measure what was
+               declared (an instrument written to the state directory, its entry in the owner's overlay), refine
+               machines, confirm or discard at the owner's word, expected effects (the Supervisor only)
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
                overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
                collectors, any key), try a collector once, and restart a machine (the Supervisor only)
@@ -40,7 +43,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .events import GAVE_UP
+from .events import GAVE_UP, INTENT_REQUESTED
 from .events import WORK_PLANNED as PLANNED
 from .events import WORK_REQUESTED as REQUESTED
 from .protocol import (
@@ -83,8 +86,8 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
-           "model", "experiments", "replay", "predict", "patch"),
-    wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}"),
+           "design", "model", "experiments", "replay", "predict", "patch"),
+    wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}", INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
               "the project not set up yet, when the host starts (first_run.py)",
               "its review round, when the round's quick check finds something (review.py)"),

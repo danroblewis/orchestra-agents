@@ -26,7 +26,17 @@ import psutil
 from orchestra.runtime import alive
 from orchestra.tokens import owner_only
 
-from . import access, budget, handoff, promises, prompting, supervisor_spec, tooling
+from . import (
+    access,
+    budget,
+    design_confirm,
+    design_instruments,
+    handoff,
+    promises,
+    prompting,
+    supervisor_spec,
+    tooling,
+)
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import due_at, parse_interval
 from .closing import CLOSE_S, close_together
@@ -98,6 +108,7 @@ class AgentHost:
         self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
+        self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
         self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
         self.landings = Landings(store)                # the human's tickets, followed until they are done
         self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s))
@@ -208,6 +219,7 @@ class AgentHost:
         self._schedule_wakeups(states)
         self._wake_on_events()
         self.verdicts.tick()
+        self._expire_drafts()
         try:
             self.review.tick()
         except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
@@ -458,7 +470,7 @@ class AgentHost:
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
-        if said := handoff.wake_reason(ev):
+        if said := handoff.wake_reason(ev) or design_confirm.wake_reason(ev):
             return said
         if ev["type"] == GAVE_UP:
             name = ev.get("name")
@@ -594,6 +606,7 @@ class AgentHost:
         snap = tooling.snapshot(self.store, "supervisor")
         prefix = prompting.supervisor_context(snap, new, self.project, self.store, roles=self.fillers.lines(self.cfg.serves))
         facts, began = self.facts.before(snap, message)
+        self._turn_began(message)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
 
@@ -609,6 +622,24 @@ class AgentHost:
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])
         return {"text": res.text, "error": res.error, "timed_out": res.timed_out}
+
+    def _turn_began(self, message: str | None) -> None:
+        """The Supervisor's turn as its design tools record it in their provenance: its id, and the
+        owner's message that began it (None for a wake-up: then no quote can be the owner's)."""
+        n = int((self.store.agent_state("supervisor").get("turn") or {}).get("n") or 0) + 1
+        self.store.set_agent_state("supervisor", turn={"n": n, "id": f"sessions/supervisor/{n}", "message": message,
+                                                       "at": time.time()})
+
+    def _expire_drafts(self) -> None:
+        """Draft instruments the owner did not keep, past their expiry (design_instruments.py), once a minute."""
+        if time.time() - self._drafts_at < 60:
+            return
+        self._drafts_at = time.time()
+        try:
+            if gone := design_instruments.expire(self.project, self.store):
+                log(f"draft instruments expired unkept: {', '.join(gone)}")
+        except Exception as e:  # noqa: BLE001 - tried again in a minute
+            log(f"draft instruments: {e!r}")
 
     def _honest(self, proc: AgentSession, text: str, on_event) -> TurnResult:
         """A Supervisor turn whose reply is for the human. A reply that claims an action the turn
@@ -673,10 +704,13 @@ class AgentHost:
                 proc = self._session_for(agent, sid)
                 self.residents.procs[target] = proc
         self.store.set_agent_state(target, last_woken=time.time(), turn_depth=self._pending_depth.pop(target, 0))
+        if target != "supervisor" and (change := design_confirm.announce_start(self.store, target)):
+            log(f"{sid}: its first turn as a confirmed machine: system.changed {change}, the change its prediction is about")
         log(f"{sid}: waking ({len(reasons)} reason(s))")
         self._session_running(sid, target, proc)
         task = prompting.wake_task(target, reasons, snap, self.fillers.lines(self.cfg.serves))
         if target == "supervisor":
+            self._turn_began(None)
             facts, began = self.facts.before(snap)
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)

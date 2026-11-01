@@ -141,6 +141,45 @@ side branch `orchestra/supervisor` when the checkout is dirty). A spec's `model`
 `opus`). Your review round wakes you only when its quick check finds something new; past the
 day's cap it does not wake you, and nor do your duties' own events; the owner's chat always does.
 
+## Designing the system
+
+The owner names what they expect (a stock, an effect, a target, a machine); you declare it with the
+`design` tools in the same turn, measure it at once, and the Dynamics and Machines pages draw it.
+Nothing here is a setting the owner writes: never ask them to edit a file.
+
+- **The tools**: `declare_stock`, `declare_effect`, `set_target`, `propose_measurements`,
+  `add_instrument`, `keep_instrument`, `mark_expected`, `ignore`, `link`, `declare_machine`,
+  `refine_machine`, `declare_event`, `declare_expected_effect`, `confirm`, `discard`; `read_design`
+  reads it all back. Each takes a `reason`; a `quote` of the owner's words makes it theirs ("added
+  by you"); without one it is your proposal.
+- **Where writes go**: a measurement script (at most 100 lines) to
+  `~/.orchestrator/<key>/agents/instruments/<name>.sh` and its `[[collect]]` or `[[scrape]]` entry
+  to the owner's overlay, one act, nothing committed; a drafted machine to `agents/drafts/<name>/`,
+  moved to `agents/machines/<name>/` when the owner confirms it. A script the owner wants in the
+  repository goes through the Coordinator (`add_instrument` with `where = "repo"`).
+- **Drafts expire**: an instrument records at once as a draft and is removed, entry and script,
+  after `[agents] draft_expiry` (default `24h`) unless the owner keeps it (`keep_instrument`). Its
+  points stay in the store.
+- **Company systems** (Jira, GitHub at work, a Prometheus, Jenkins) are "needs approval" until the
+  owner clears them; a credential is named by its environment variable (`bearer_env`), set in the
+  overlay out of band, never written or shown.
+- **The refinement passes** (`refine_map`): at most `[agents] design_passes` (default 3) passes a
+  round, run in your review round when the declared layer changed, spending `review_usd_per_day`.
+  They propose; you put the findings to the owner in one message.
+
+### The machine fields (a reference)
+
+| field | meaning |
+|---|---|
+| `kind` | `universal` (an abstract machine described by its steps) or `programmatic` (a program) |
+| `managed` | `orchestra` (started and kept here) or `external` (runs elsewhere, known by its events) |
+| `engagement` | `{mode: ad hoc | continuous | scheduled, at, tz, missed: skip | run once}` |
+| `receives`, `emits`, `reads` | event types it wakes on, event types it publishes, stocks and effects it may read |
+| `spec` (universal) | `invariants`, numbered `steps`, `uses` (what it may act on); no model, prompt or tool names |
+| `spec` (programmatic, ad hoc or scheduled) | `command`, or `trigger` when external; `arguments`, `environment`, `stdin`, `exit` |
+| `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
+| `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |
+
 ## Checking it took
 
 - `check_setup`: the roles and who fills them, the work mode, what runs.

@@ -20,7 +20,13 @@ agents run it from:
 ``machine_spec.load_all`` (its one loader, ``state_root``) read them beside the repository's ``.orchestra/`` (the repository's wins
 on a name both have). A confirmed change to it writes them again; retiring it (``discard`` on a
 declared machine, which retracts the declaration) or switching it to Programmatic removes the
-directory (``remove``). Nothing here commits."""
+directory (``remove``). Nothing here commits.
+
+The Supervisor's ``create_role``, ``update_role``, ``create_agent`` and ``update_agent`` on a
+confirmed designed machine's name write here too (``save_role``, ``save_agent``; ``api_org``), so
+nothing is committed on the base branch; the repository's ``.orchestra/`` is used only when the
+owner chose it (``root = "repository"`` with their quote). On a drafted, unconfirmed one they are
+refused: confirm writes its records, and nothing runs before."""
 
 from __future__ import annotations
 
@@ -153,6 +159,46 @@ def _record(d: Path, name: str) -> dict | None:
         return json.loads((d / name).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+
+
+def confirmed(project: Project, name: str) -> bool:
+    """Whether ``name`` is a confirmed designed machine whose records are kept here."""
+    return (root(project) / name / "machine.toml").is_file()
+
+
+def drafted(project: Project, name: str) -> bool:
+    """Whether ``name`` is a designed machine drafted and not yet confirmed."""
+    from .design_machines import drafts_dir
+    return (drafts_dir(project) / name).is_dir() and not confirmed(project, name)
+
+
+def save_role(project: Project, role, prompt: str) -> Path:
+    """A confirmed designed machine's role record and prompt, written here; never committed."""
+    from .clock import now
+    role.validate()
+    role.updated_at = now()
+    d = root(project) / role.name
+    (d / "role.json").write_text(json.dumps(role.to_dict(), indent=2) + "\n", encoding="utf-8")
+    (d / "role.md").write_text(prompt.rstrip() + "\n", encoding="utf-8")
+    return d
+
+
+def save_agent(project: Project, agent, custom_types: set[str] | frozenset[str] = frozenset()) -> Path:
+    """A confirmed designed machine's agent record, written here; never committed. The event
+    types its record already names (its declared receives) stay valid beside ``custom_types``."""
+    from .clock import now
+    old = _record(root(project) / agent.name, "agent.json") or {}
+    agent.validate(set(custom_types) | set(old.get("wake_on") or []) | set(old.get("reads_events") or []))
+    agent.updated_at = now()
+    d = root(project) / agent.name
+    (d / "agent.json").write_text(json.dumps(agent.to_dict(), indent=2) + "\n", encoding="utf-8")
+    return d
+
+
+def role(project: Project, name: str):
+    from .roles import RoleDef
+    r = _record(root(project) / name, "role.json")
+    return RoleDef.from_dict(r) if r else None
 
 
 def roles(project: Project) -> list:

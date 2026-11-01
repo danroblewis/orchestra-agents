@@ -5,6 +5,7 @@ the tools' schemas. Each runs on Orchestra's declared layer (design_fixtures).""
 
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from design_fixtures import WHY, call, changes, layer, model_with, say
@@ -308,6 +309,25 @@ def test_the_supervisors_prompt_says_never_to_ask_the_owner_to_edit_a_file(proje
     text = prompting.agent_prompt(project, built_in_agents()["supervisor"])
     assert "never ask the owner to edit a file" in text.lower() and "## Designing the system" in text
     assert "Your built-in duty `refine_map`" in text                  # every Supervisor's, whatever its spec says
+
+
+def test_the_supervisor_knows_the_pages_states_and_answers_in_two_or_three_lines(project):
+    """The pages' states as the Dynamics and Machines pages tag them, explained in the prompt, and
+    the reply rule of machine-design.md §2.6: two or three lines, ids, where to look, no question
+    back; each standard reply in the prompt is itself that short."""
+    from orchestra_agents.org import built_in_agents
+    text = prompting.agent_prompt(project, built_in_agents()["supervisor"])
+    for state in ("**Ghost**", "**Expected**", "**New in vN**", "**Unconfirmed**", "**Measured, never heard**",
+                  "**Asked the Supervisor · waiting**"):
+        assert state in text, state
+    flat = " ".join(text.split())
+    assert "two or three lines" in flat and "never ask a question back when the request was clear" in flat
+    design = (Path(prompting.__file__).parent / "prompts" / "design.md").read_text(encoding="utf-8")
+    standard = design.split("The standard, one reply per owner's turn:")[1].split("**Where the owner looks.**")[0]
+    replies = [r for r in standard.strip().split("\n- ") if r.strip()]
+    assert len(replies) == 4
+    for r in replies:
+        assert "page" in r and "`" in r and "?" not in r and len(r) < 330, r
 
 
 def test_every_design_schema_is_typed_all_the_way_down():

@@ -28,7 +28,8 @@ options), ``design_clearance.py`` (whether an option needs the owner's approval)
 ``design_instruments.py`` (the instrument written and recorded, kept or expired),
 ``design_machines.py`` (machines, events, expected effects, the draft implementation),
 ``design_confirm.py`` (confirm and discard, the owner's page requests), ``design_passes.py`` (the
-refinement passes)."""
+refinement passes), ``design_integrate.py`` (connecting an outside system: Orchestra's
+``docs/INTEGRATING.md`` as a flow, on the bridges plugin's kits)."""
 
 from __future__ import annotations
 
@@ -178,9 +179,10 @@ def _modules():
         design_confirm,
         design_dynamics,
         design_instruments,
+        design_integrate,
         design_machines,
     )
-    return design_dynamics, design_instruments, design_machines, design_confirm
+    return design_dynamics, design_instruments, design_machines, design_confirm, design_integrate
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:

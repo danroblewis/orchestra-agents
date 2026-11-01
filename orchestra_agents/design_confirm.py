@@ -155,7 +155,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     change = uuid.uuid4().hex                            # the id of the system.changed its first turn will publish
     done = apply(project, store, [{"op": "confirm", "part": "machine", "id": eid}], prov)
     m = current(project, eid)
-    lines = [f"machine {eid} confirmed", page_line(project, "the Machines page draws it solid, \"declared · not heard yet\"")]
+    lines = [f"machine {eid} confirmed", page_line(project, "the Machines page draws it solid, \"declared · never heard\"")]
     extra: dict = {"change": change}
     if runs:
         dst = state_machines.write(project, m, reads_of(project, store, m))

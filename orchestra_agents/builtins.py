@@ -25,6 +25,8 @@ Tool groups:
   design       declare stocks, effects, targets and machines on Orchestra's declared layer, measure what was
                declared (an instrument written to the state directory, its entry in the owner's overlay), refine
                machines, confirm or discard at the owner's word, expected effects (the Supervisor only)
+  workflows    write a workflow the owner describes through the Workflows plugin's validated writer (the
+               Supervisor only), read the loaded definitions back, explain an item (workflow_tools.py)
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private
                overlay (roles the AI agents fill, work mode, gate tests, capacity limit, machines,
                collectors, any key), try a collector once, and restart a machine (the Supervisor only)
@@ -86,7 +88,7 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
-           "design", "model", "experiments", "replay", "predict", "patch"),
+           "design", "workflows", "model", "experiments", "replay", "predict", "patch"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}", INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
               "the project not set up yet, when the host starts (first_run.py)",

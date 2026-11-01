@@ -5,7 +5,7 @@ only by it; and the verdict wakes it.
 
 Orchestra's model reads run in this process on a known system (a chain: arrivals to a queue,
 moved on to a ready stock, a side supply, a drain), its history the model's own run, stepped
-here. (The experiments' tools were removed on 2026-11-01.)"""
+here."""
 
 import subprocess
 

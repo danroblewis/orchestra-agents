@@ -12,9 +12,10 @@ Every tool here:
   optional ``quote`` that must be the owner's words in that message (``quote_in``), so "from your
   message: …" is never invented. A call with a verified quote is the owner's (``author: owner``);
   one answering the owner's page click carries its ``request`` id (``check_request``: the request
-  must be one the declared layer noted and holds unanswered, name the same control, element and
-  change, and back one call only), and stays the Supervisor's answer to it (``author:
-  supervisor``); any other is the Supervisor's proposal. ``via`` and ``at`` are never sent: the
+  must be one the declared layer noted and holds open, and name the same control, element and
+  change; the layer counts it answered once an op verified it, so it backs one call only), and
+  stays the Supervisor's answer to it (``author: supervisor``); any other is the Supervisor's
+  proposal. ``via`` and ``at`` are never sent: the
   store sets them. The owner's message is kept whole (or, past Orchestra's limit, the part around
   the quote), with anything that looks like a secret hidden (``secret_shapes.redact``);
 - writes only through the declared layer (``intended_api.layer``) and ``project.config_edit``
@@ -23,7 +24,8 @@ Every tool here:
   where they are kept (``kept_in``).
 
 The tools by side: ``design_dynamics.py`` (stocks, effects, targets, marks, links, measurement
-options), ``design_instruments.py`` (the instrument written and recorded, kept or expired),
+options), ``design_clearance.py`` (whether an option needs the owner's approval),
+``design_instruments.py`` (the instrument written and recorded, kept or expired),
 ``design_machines.py`` (machines, events, expected effects, the draft implementation),
 ``design_confirm.py`` (confirm and discard, the owner's page requests), ``design_passes.py`` (the
 refinement passes), ``intended_carry.py`` (the owner's answer when the stand-in and Orchestra's
@@ -88,44 +90,29 @@ def turn_of(store: AgentStore) -> dict:
     return store.agent_state(MACHINE).get("turn") or {}
 
 
-def _request_event(store: AgentStore, rid: str) -> dict:
+def recent_events(store: AgentStore, n: int = 5000) -> list[dict]:
+    """The last ``n`` events on the bus, oldest first."""
     end = store.events.end()
-    evs, _ = store.events.read(max(0, end - 5000), limit=5000)
-    ev = next((e for e in reversed(evs) if e.get("id") == rid), None)
-    if ev is None or ev.get("type") != REQUESTED or str(ev.get("source") or "").split("/")[0] != OWNER:
-        raise StoreError(f"no request {rid!r} from the owner on the bus (orchestra.intent.requested, source owner)")
-    return ev
-
-
-def answered_requests(project: Project, store: AgentStore) -> set[str]:
-    """The request ids an earlier call already answered: the agents' own record, and the layer's
-    journal where the layer offers one (the stand-in; Orchestra's endpoint has no journal read)."""
-    out = set(store.agent_state(MACHINE).get("requests_answered") or [])
-    journal = getattr(intended_api.layer(project), "journal", None)
-    if journal is not None:
-        out |= {(e.get("provenance") or {}).get("request") for e in journal()} - {None}
-    return out
+    return store.events.read(max(0, end - n), limit=n)[0]
 
 
 def check_request(project: Project, store: AgentStore, prov: dict, control: str, part: str, eid: str,
                   change: str | None = None) -> None:
     """The owner's backing of one call: their quote, or the request ``prov`` names, which must be
-    the owner's ``orchestra.intent.requested`` for this ``control`` on ``part:eid`` (and this pending
-    ``change``), noted by the declared layer and not yet answered by another call. Refused otherwise."""
+    one the declared layer noted from the owner's page and holds open (its row carries the control,
+    the element and the change asked), for this ``control`` on ``part:eid`` (and this pending
+    ``change``). Refused otherwise; the layer counts a request answered once an op verified it."""
     rid = prov.get("request")
     if not rid:
         if prov.get("author") == OWNER:
             return
         raise StoreError(f"{control} is the owner's to ask: quote their words (quote) or pass the request id of their click "
                          "(request)")
-    if rid in answered_requests(project, store):
-        raise StoreError(f"request {rid} was answered already: one click backs one call")
-    if rid not in intended_api.layer(project).open_requests():
-        raise StoreError(f"request {rid} is not one the declared layer noted from the owner's page and holds unanswered "
-                         "(read_design lists the unanswered requests): an event on the bus alone backs nothing")
-    ev = _request_event(store, rid)
-    s_part, _, s_id = str(ev.get("subject") or "").partition(":")
-    asked = {"control": ev.get("control"), "element": f"{s_part}:{s_id}", "change": ev.get("change") or None}
+    row = intended_api.layer(project).open_requests().get(rid)
+    if row is None:
+        raise StoreError(f"request {rid} is not one the declared layer noted from the owner's page and holds open (answered "
+                         "already, or never noted; read_design lists the open requests): an event on the bus alone backs nothing")
+    asked = {"control": row.get("control"), "element": f"{row.get('part')}:{row.get('id')}", "change": row.get("change") or None}
     given = {"control": control, "element": f"{part}:{eid}", "change": change or None}
     if wrong := [k for k in asked if asked[k] != given[k]]:
         raise StoreError(f"request {rid} asked {asked['control']} on {asked['element']}"
@@ -150,8 +137,6 @@ def provenance(store: AgentStore, a: dict) -> dict:
                          "three words exactly, or their whole message), or leave quote out (the change is then yours, a "
                          "proposal)")
     rid = (a.get("request") or "").strip()
-    if rid:
-        _request_event(store, rid)
     prov = {"author": OWNER if quote else MACHINE, "source": MACHINE, "turn": turn.get("id"),
             "message": kept_message(message, quote) or None, "quote": redact(quote) or None, "reason": reason,
             "request": rid or None}
@@ -172,16 +157,15 @@ def kept_message(message: str, quote: str = "") -> str:
 
 
 def apply(project: Project, store: AgentStore, ops: list[dict], prov: dict) -> dict:
-    done = intended_api.layer(project).apply(ops, prov)
-    if rid := prov.get("request"):
-        store.update_agent_state(MACHINE, "requests_answered", lambda xs: [*(xs or []), rid][-500:])
-    return done
+    return intended_api.layer(project).apply(ops, prov)
 
 
-def page_line(project: Project, drawn: str) -> str | None:
-    """Where the owner sees it: the page that draws it, when a page draws the declared layer;
-    otherwise nothing (where it is kept is the answer's ``kept_in``)."""
-    return drawn if intended_api.drawn(project) else None
+def page_line(project: Project, drawn: str, page: str | None = None) -> str | None:
+    """Where the owner sees it, when the installed Orchestra has the page that draws it (``page``:
+    Machines for a machine, Dynamics for a stock, effect or flow; read from ``drawn`` when not
+    given); otherwise nothing (where it is kept is the answer's ``kept_in``)."""
+    page = page or ("Machines" if "Machines page" in drawn else "Dynamics")
+    return drawn if intended_api.drawn(project, page) else None
 
 
 def answer(project: Project, done: dict, lines: list[str | None], **extra: Any) -> dict:
@@ -205,12 +189,14 @@ def handle(project: Project, store: AgentStore, command: str, a: dict, role: str
     for mod in _modules():
         if command in mod.COMMANDS:
             if command in getattr(mod, "READS", ()):              # read_design: any role with `observe`
-                return mod.COMMANDS[command](project, store, a)
+                with intended_api.one_call():
+                    return mod.COMMANDS[command](project, store, a)
             if role != MACHINE:
                 raise StoreError(f"refused {command}: designing the system is the Supervisor's alone (the caller is "
                                  f"{role or 'none'!r})")
             project.reload_config()
-            return mod.COMMANDS[command](project, store, a, provenance(store, a))
+            with intended_api.one_call():
+                return mod.COMMANDS[command](project, store, a, provenance(store, a))
     raise StoreError(f"unknown design command {command!r}")
 
 

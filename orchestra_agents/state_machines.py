@@ -7,8 +7,10 @@ agents run it from:
 
 - ``machine.toml``: its spec in ``machine_spec``'s format (description, engagement, model: Haiku,
   D20's default for narrow machines, and ``emits``, the only types its ``emit_event`` may raise);
-- ``role.md``: its role's prompt, the description, invariants and steps as instructions, and for a
-  scheduled one the events it reads each run;
+- ``role.md``: its role's prompt, the description, invariants and steps as instructions, for a
+  scheduled one the events it reads each run, and each stock or effect it reads as a series it can
+  read (``reads``: its link, else its instrument's series; ``design_machines.reads_of``), written
+  again when a link or a keep changes that;
 - ``role.json``: its role record (``roles.RoleDef``): the fewest tool groups its ``spec.uses``
   need (``USES``), with ``events`` (its emits) and ``escalate`` (it reaches the Supervisor);
 - ``agent.json``: its agent record (``org.AgentDef``: scheduled at its time in its zone, with what
@@ -75,8 +77,9 @@ def _steps(steps: list[str]) -> list[str]:
     return [f"{i}. {NUMBERED.sub('', str(x))}" for i, x in enumerate(steps or [], 1)]
 
 
-def files(m: dict) -> dict[str, str]:
-    """The files of a Universal Machine's implementation, written from its declaration ``m``."""
+def files(m: dict, reads: dict[str, str] | None = None) -> dict[str, str]:
+    """The files of a Universal Machine's implementation, written from its declaration ``m``;
+    ``reads``: each of its reads as the series it reads (``design_machines.reads_of``)."""
     from .machine_spec import MachineSpec, render
     from .org import AgentDef
     from .roles import RoleDef
@@ -97,9 +100,12 @@ def files(m: dict) -> dict[str, str]:
         role += [f"Each run, read these events since your last run (read_events): {', '.join(receives)}.", ""]
     role += _steps(s.get("steps") or [])
     role += ["", f"You may act on: {', '.join(uses) or 'nothing but your events'}.",
-             (f"Emit only {', '.join(m.get('emits') or []) or 'nothing'} (emit_event); read only "
-              f"{', '.join(m.get('reads') or []) or 'nothing'}."),
-             "When something is beyond what you may do, say so to the Supervisor (escalate_to_supervisor)."]
+             f"Emit only {', '.join(m.get('emits') or []) or 'nothing'} (emit_event)."]
+    if m.get("reads"):
+        role += ["Read only these:", *[f"- {(reads or {}).get(r) or r}" for r in m["reads"]]]
+    else:
+        role.append("Read no stock or effect.")
+    role.append("When something is beyond what you may do, say so to the Supervisor (escalate_to_supervisor).")
     tools = list(dict.fromkeys(["events", "escalate", *groups, *(["model"] if m.get("reads") else [])]))
     rec = RoleDef(name=m["id"], description=m.get("description") or "", tools=tools, created_by="supervisor")
     scheduled = mode == "scheduled"
@@ -121,8 +127,8 @@ def write_files(d: Path, out: dict[str, str]) -> Path:
     return d
 
 
-def write(project: Project, m: dict) -> Path:
-    return write_files(root(project) / m["id"], files(m))
+def write(project: Project, m: dict, reads: dict[str, str] | None = None) -> Path:
+    return write_files(root(project) / m["id"], files(m, reads))
 
 
 def remove(project: Project, name: str) -> bool:

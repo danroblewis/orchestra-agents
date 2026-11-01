@@ -137,8 +137,8 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
             "name": "Feature Count Improver", "kind": "universal", "description": "Improves how many features get delivered a day",
             "mode": "continuous", "receives": ["session.settled", "task.reported"], "emits": ["work.improvement_proposed"],
             "reads": ["features", "acceptance_tests_passing"],
-            "spec": {"invariants": ["never changes code itself; it proposes work", "at most one proposal a run",
-                                    "reads only what it is given"], "steps": STEPS, "uses": ["the coordinator's queue"]},
+            "invariants": ["never changes code itself; it proposes work", "at most one proposal a run",
+                           "reads only what it is given"], "steps": STEPS, "uses": ["the coordinator's queue"],
             "guesses": ["mode", "receives[0]", "receives[1]"],
             "quote": "Create a new Universal Machine called Feature Count Improver.", "reason": why}},
         {"tool": "declare_expected_effect", "args": {"machine": "feature_count_improver", "horizon": "3d", "reason": why,
@@ -147,6 +147,7 @@ def test_the_feature_count_improver_is_declared_measured_drafted_and_refined_by_
                                                                 {"kind": "rises", "stock": "features"}]}}])
     m = intended_api.current(project)["machines"]["feature_count_improver"]
     assert m["state"] == "proposed" and m["provenance"]["author"] == "owner" and m["engagement"] == {"mode": "continuous"}
+    assert m["spec"]["steps"] == STEPS and len(m["spec"]["invariants"]) == 3            # the flat fields, as the spec
     assert m["receives"] == ["session.settled", "task.reported"]
     declared = turn3[3]["said"]
     assert any("woken by session.settled, task.reported" in line and "a day on the claude_code harness, model haiku" in line
@@ -201,3 +202,46 @@ def test_no_prompt_or_guide_asks_the_owner_to_write_configuration():
     guide = (PACKAGE / "guide.md").read_text(encoding="utf-8").lower()
     for phrase in FORBIDDEN[:-1]:
         assert phrase not in guide, ("guide.md", phrase)
+
+
+def test_the_dummy_demos_supervisor_answers_the_owners_confirm_click(tmp_path, monkeypatch):
+    """The free demo (`--dummy`): the owner clicks confirm on a proposed machine; the wake-up the
+    host gives the scripted Supervisor makes it call confirm with the request's id."""
+    from design_fixtures import request
+
+    from orchestra_agents import design_confirm, tooling
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("ORCHESTRA_EVENTS_ENDPOINT", raising=False)
+    monkeypatch.delenv("ORCHESTRA_EVENTS_TOKEN", raising=False)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
+        git(repo, *args)
+    shutil.copy(Path(__file__).parents[2] / "demo" / "dummy.toml", repo / "dummy.toml")
+    project = agents_project(repo, harness="dummy")
+    toml = repo / "orchestra.toml"
+    toml.write_text(toml.read_text() + 'dummy_script = "dummy.toml"\n')
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "init")
+    project.reload_config()
+    events = Events.for_project(project)
+    store = AgentStore(project, Events.for_project(project, source="supervisor"))
+    host = AgentHost(project, AgentStore(project, events), events)
+    host._refresh_org(host.store.runtime()["agent_state"])
+    with FakeTasks(project), (core_endpoint(project) if CORE else nullcontext()):
+        try:
+            store.set_agent_state("supervisor", turn={"n": 1, "id": "sessions/supervisor/1", "message": TURN3, "at": 1.0})
+            args = {"name": "Feature Count Improver", "kind": "universal", "description": "Improves delivery",
+                    "mode": "continuous", "receives": ["gate.landed"], "quote": TURN3, "reason": "the owner asked"}
+            tooling.check_args("declare_machine", args)
+            tooling.handle(project, store, "declare_machine", args, role="supervisor")
+            rid = request(store, "confirm", "machine:feature_count_improver")
+            ev = next(e for e in store.events.read(0, 500)[0] if e["id"] == rid)
+            host._wake("supervisor", [design_confirm.wake_reason(ev, project)])
+            m = intended_api.current(project)["machines"]["feature_count_improver"]
+            assert m["state"] == "declared"
+            assert rid not in intended_api.layer(project).open_requests()
+            said = [e for e in events.read(0, 2000)[0] if e["type"] == "agent.said"]
+            assert said and "as you asked on the page" in said[-1].get("summary", "")
+        finally:
+            host.residents.close_all()

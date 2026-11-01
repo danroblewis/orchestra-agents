@@ -1,13 +1,15 @@
-"""The stand-in's consent and revision rules (``intended_standin.py``), ported from Orchestra's at
-C1 fe185af0 (``orchestra/sd/intended/consent.py`` and ``revise.py``) so the design tools meet the
+"""The stand-in's consent and revision rules (``intended_standin.py``), ported from Orchestra's main
+at 64ea32a0 (``orchestra/sd/intended/consent.py`` and ``revise.py``) so the design tools meet the
 same rules before and after Orchestra's own is installed. Deleted with the stand-in.
 
 - The owner **asks**: ``author: owner`` with the owner's words quoted.
 - A call **answers the owner's request**: ``provenance.request`` names a request the stand-in
   noted (``StandIn.note_request``, as Orchestra's web server notes one) that no call has answered
   yet, about the same part and id, with the same control and the same ``change`` when it names
-  one. A bare event on the bus from source ``owner`` is not a noted request.
-- What the owner declared is changed or removed only with the owner's consent.
+  one. A bare event on the bus from source ``owner`` is not a noted request. A request counts as
+  answered only once an op verified it (``ctx["answered"]``, written on the journal line).
+- What is the owner's (``owners``: declared by the owner, or confirmed by the owner, quoting them or
+  in answer to their request) is changed or removed only with the owner's consent.
 - A revision by the owner applies at once, except on a machine or attachment no longer proposed,
   where it waits as a pending change; one the call has the owner's consent for (it answers their
   request) applies at once. Where the owner's pending change and another's touch the same fields,
@@ -35,10 +37,15 @@ def request(ctx: dict) -> dict | None:
 
 
 def verified(ctx: dict, part: str, eid, control: str, change: str | None = None, *, exact: bool = False) -> bool:
+    """The call answers the owner's open request to ``control`` this ``part`` ``eid``; a request
+    found answered is added to ``ctx["answered"]``."""
     r = request(ctx)
     if r is None or (r.get("part"), r.get("id"), r.get("control")) != (part, eid, control):
         return False
-    return r.get("change") == change or (not exact and r.get("change") is None)
+    ok = r.get("change") == change or (not exact and r.get("change") is None)
+    if ok and ctx.get("answered") is not None:
+        ctx["answered"].add(r["event"])
+    return ok
 
 
 def may_settle(ctx: dict, part: str, eid, control: str, change: str | None = None) -> None:
@@ -52,12 +59,21 @@ def may_settle(ctx: dict, part: str, eid, control: str, change: str | None = Non
                          + (f" (change {change})" if change else ""))
 
 
+def owners(owned: dict | None) -> bool:
+    """Whether a record (an element, mark or target, with its ``provenance`` and ``confirmed``) is
+    the owner's: the owner declared it, or the owner confirmed it."""
+    owned = owned or {}
+    return (owned.get("provenance") or {}).get("author") == "owner" or (owned.get("confirmed") or {}).get("by") == "owner"
+
+
+def consents(ctx: dict, part: str, eid, control: str = "discard") -> bool:
+    return owner_asks(ctx["provenance"]) or verified(ctx, part, eid, control)
+
+
 def guard_owners(owned: dict | None, ctx: dict, part: str, eid, control: str = "discard") -> None:
-    if (owned or {}).get("author") != "owner":
-        return
-    if owner_asks(ctx["provenance"]) or verified(ctx, part, eid, control):
-        return
-    raise StoreError(ASK_THE_OWNER)
+    """Refuse a change to what is the owner's (``owned``: the whole record) without their consent."""
+    if owners(owned) and not consents(ctx, part, eid, control):
+        raise StoreError(ASK_THE_OWNER)
 
 
 def _apply(el: dict, set_: dict, add: dict, remove: dict) -> dict:
@@ -123,7 +139,8 @@ def settle_pending(el: dict, change: str, accept: bool, ctx: dict, part: str) ->
     if p is None:
         raise StoreError(f"{el.get('id')} has no pending change {change}")
     by = overridden(pend).get(change)
-    if accept and by is not None and not verified(ctx, part, el.get("id"), "confirm", change, exact=True):
+    if accept and by is not None and not (owner_asks(ctx["provenance"])
+                                          or verified(ctx, part, el.get("id"), "confirm", change, exact=True)):
         raise StoreError(f"{part} {el.get('id')}: the owner's pending change {by} touches the same fields as {change}; "
                          "it is confirmed only when the owner asks for it")
     el["pending"] = [x for x in pend if x is not p]

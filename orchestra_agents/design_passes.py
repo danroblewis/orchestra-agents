@@ -98,9 +98,15 @@ def check(layer: dict, events: list[dict], drafts: dict, seen: set[str], focus: 
                 f"add it to the receives of {', '.join(users)}" if users else f"name a listener, or remove the emit from {', '.join(by)}")
     for t, by in received.items():                                                   # 2
         if not emitted.get(t) and t not in observed:
-            add(f"unemitted:{t}", 2, "heard, never emitted",
-                f"{', '.join(by)} listen{'s' if len(by) == 1 else ''} for {t}, which nothing emits or was ever heard",
-                "declare the machine that would emit it (an external one under the relayed actor's source), or drop the receive")
+            listen = f"{', '.join(by)} listen{'s' if len(by) == 1 else ''} for {t}, which no declared machine emits"
+            if owners := family_publishers(events, t):                               # a known machine owns the family
+                add(f"unemitted:{t}", 2, "heard, never emitted", f"{listen} and is not heard on the bus yet; "
+                    f"{', '.join(owners)} publish{'es' if len(owners) == 1 else ''} {t.split('.')[0]}.* already",
+                    f"ask whether {owners[0]} publishes {t} (then it is the expected publisher), or use a type it does publish")
+            else:
+                add(f"unemitted:{t}", 2, "heard, never emitted", f"{listen} and is not heard on the bus yet",
+                    "declare the machine that would emit it (an external one under the relayed actor's source), or drop "
+                    "the receive")
     described = {t: d.get("description") or "" for t, d in types.items() if d.get("description")}
     names = sorted(described)
     for i, a in enumerate(names):                                                    # 3
@@ -149,6 +155,17 @@ def check(layer: dict, events: list[dict], drafts: dict, seen: set[str], focus: 
     return out, proposed
 
 
+def family_publishers(events: list[dict], t: str) -> list[str]:
+    """The machines heard publishing other types of ``t``'s family (``gate.*``), by source, most first."""
+    family = t.split(".", 1)[0] + "."
+    counts: dict[str, int] = {}
+    for e in events:
+        typ, src = str(e.get("type") or ""), str(e.get("source") or "").split("/", 1)[0]
+        if typ.startswith(family) and typ != t and src and src != "owner":
+            counts[src] = counts.get(src, 0) + 1
+    return sorted(counts, key=lambda s_: (-counts[s_], s_))
+
+
 def _ts(e: dict) -> float:
     from datetime import datetime
     try:
@@ -184,9 +201,10 @@ def last_proposal(store) -> dict | None:
 
 def _absent(project) -> list[set[str]]:
     """The stock and flow keys of the last saved versions, oldest first, as the declared layer's
-    marks name them (``name{labels}`` for a stock, ``a -> b by counter`` for a flow)."""
-    from .intended_api import Keys, saved_models
-    return [Keys(m).all() for m in saved_models(project, ABSENT_VERSIONS)]
+    marks name them (``name{labels}`` for a stock, the level its counters imply for one no series
+    measures, ``a -> b by counter`` for a flow)."""
+    from .intended_api import Keys, all_keys, saved_models
+    return [all_keys(Keys(m)) for m in saved_models(project, ABSENT_VERSIONS)]
 
 
 def run(project, store, events: list[dict], force: bool = False) -> dict | None:

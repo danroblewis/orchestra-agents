@@ -1,14 +1,18 @@
 """The stand-in's ops (``intended_standin.py``), each applied to a layer in place, ported from
-Orchestra's at C1 fe185af0 (``orchestra/sd/intended/ops.py``, ``machine_ops.py``, ``checks.py``;
+Orchestra's main at 64ea32a0 (``orchestra/sd/intended/ops.py``, ``machine_ops.py``, ``checks.py``;
 consent and revision in ``intended_standin_consent.py``) so the design tools meet the same rules
 before and after Orchestra's own is installed. Deleted with the stand-in.
 
 What the owner asks for (``author: owner`` with a quote) is declared at once, a re-declaration of
 a proposed stock or effect included; anything else is proposed. A proposal or a pending change is
-settled only by the owner or in answer to their noted request (``provenance.request``). What the
-owner declared (an element, a mark, a target) is re-targeted, unmarked or retracted only with the
-owner's consent; a declared stock or effect that a flow, a keyed target or an expected effect
-names is not removed until they change. A revision answering the owner's ``switch_kind`` request
+settled only by the owner or in answer to their noted request (``provenance.request``); a confirm
+answering the owner's request makes the element the owner's (``confirmed: {by: owner, via:
+request}``). What is the owner's (an element, a mark, a target, a described event type:
+``owners``) is re-targeted, unmarked, overwritten or retracted only with the owner's consent;
+another author's re-mark of the owner's mark is a no-op, and a key is expected or ignored, never
+both. A declared stock or effect that a flow, a keyed target or an expected effect names (a
+pending change's included) is not removed until they change; an event type a machine names is
+not retracted until the machine changes. A revision answering the owner's ``switch_kind`` request
 (one that sets ``kind`` and nothing else) applies at once, also on a confirmed machine; a machine's
 new expected effect, once it is no longer proposed, waits as a pending change, and new edits drop
 the prediction linked to the old ones."""
@@ -20,9 +24,11 @@ import re
 
 from .expect_grammar import expect_edit
 from .intended_standin_consent import (
+    consents,
     guard_owners,
     may_settle,
     owner_asks,
+    owners,
     revise,
     settle_pending,
     verified,
@@ -42,7 +48,10 @@ ENVELOPE = ("id", "title", "description", "tags", "kind", "managed", "engagement
 DEFAULTS = {"title": None, "description": None, "tags": [], "kind": "universal", "managed": "orchestra",
             "engagement": {"mode": "ad hoc"}, "receives": [], "emits": [], "reads": [], "spec": {}}
 OPTION = ("key", "title", "how", "kind", "instrument", "simulated", "cost", "caveat", "clearance", "provenance", "commit",
-          "first_points")
+          "first_points", "bearer_env", "system", "series", "url", "command")
+OPTION_TEXT = ("system", "series", "url", "command")
+ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+URL_SECRET = re.compile(r"://[^/@\s]*:[^/@\s]*@")
 DERIVED = frozenset({"present", "heard", "recording", "points", "points_series", "measured", "met", "instances",
                      "candidates", "alias_candidates", "unexpected", "verdict", "verdicts"})
 
@@ -118,14 +127,14 @@ def _new(ctx: dict, **fields) -> dict:
 
 
 def declare_level(L: dict, op: dict, ctx: dict, part: str) -> tuple[str, str]:
-    only(op, ("id", "name", "unit", "near", "note"))
+    only(op, ("id", "name", "description", "unit", "near", "note"))
     name = op.get("name")
     if not isinstance(name, str) or not name.strip():
         raise StoreError("a stock or effect needs a name")
     eid = op.get("id") or make_slug(name)
     if not SLUG.match(eid):
         raise StoreError(f"id must be a slug, not {eid!r}")
-    fields = {"name": name, **{k: op.get(k) for k in ("unit", "near", "note")}}
+    fields = {"name": name, **{k: op.get(k) for k in ("description", "unit", "near", "note")}}
     other = "effects" if part == "stock" else "stocks"
     if eid in L[other]:
         raise StoreError(f"{eid} is already declared as {'an effect' if part == 'stock' else 'a stock'}")
@@ -148,10 +157,11 @@ def set_target(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
     t = {"op": op["target"], "value": op.get("value"), "over_s": op.get("over_s"), **({"hi": op["hi"]} if "hi" in op else {})}
     if op.get("id") is not None:
         el = element(L, part, op["id"])
-        guard_owners(el.get("provenance"), ctx, part, op["id"])
+        guard_owners(el.get("target_by") or el, ctx, part, op["id"])     # who set the target, else whose the element is
         el["target"] = t
+        el["target_by"] = {"provenance": ctx["provenance"], "change": ctx["change"]}
         return part, op["id"]
-    guard_owners((L["targets"].get(op.get("key")) or {}).get("provenance"), ctx, part, op.get("key"))
+    guard_owners(L["targets"].get(op.get("key")), ctx, part, op.get("key"))
     L["targets"][op["key"]] = {"part": part, "key": op["key"], "target": t, "provenance": ctx["provenance"], "change": ctx["change"]}
     return part, op["key"]
 
@@ -160,13 +170,19 @@ def mark(L: dict, op: dict, ctx: dict, which: str, on: bool) -> tuple[str, str]:
     only(op, ("part", "key"))
     if op.get("part") not in ("stock", "flow") or not op.get("key"):
         raise StoreError("a mark names a discovered stock or flow by key")
-    box = L["marks"][which]
+    box, key, part = L["marks"][which], op["key"], op["part"]
     if on:
-        box[op["key"]] = {"part": op["part"], "key": op["key"], "provenance": ctx["provenance"], "change": ctx["change"]}
-        return op["part"], op["key"]
-    if op["key"] not in box:
-        raise StoreError(f"{op['key']} is not {which}")
-    guard_owners(box[op["key"]].get("provenance"), ctx, op["part"], op["key"])
+        other = L["marks"]["ignored" if which == "expected" else "expected"]
+        if key in other:                          # expected or ignored, never both
+            guard_owners(other[key], ctx, part, key)
+            del other[key]
+        if key in box and owners(box[key]) and not consents(ctx, part, key):
+            return part, key                      # the owner's mark stands, with the owner's provenance
+        box[key] = {"part": part, "key": key, "provenance": ctx["provenance"], "change": ctx["change"]}
+        return part, key
+    if key not in box:
+        raise StoreError(f"{key} is not {which}")
+    guard_owners(box[key], ctx, part, key)
     del box[op["key"]]
     return op["part"], op["key"]
 
@@ -186,6 +202,9 @@ def declare_event(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
     only(op, ("type", "description"))
     if not isinstance(op.get("type"), str) or not op["type"].strip():
         raise StoreError("an event type is named")
+    old = L["events"].get(op["type"])
+    if old is not None and not old.get("implicit"):          # an undescribed type is described at once
+        guard_owners(old, ctx, "event", op["type"])
     L["events"][op["type"]] = {"type": op["type"], "description": op.get("description"), "implicit": False,
                                "provenance": ctx["provenance"], "change": ctx["change"]}
     return "event", op["type"]
@@ -205,6 +224,7 @@ def record_measurement(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
             raise StoreError(f"an option's unknown fields: {sorted(extra) if isinstance(o, dict) else o!r}")
         if not isinstance(o.get("key"), str) or not o["key"]:
             raise StoreError("each option has its key")
+        _option_names(o)
     keys = [o["key"] for o in opts]
     if len(set(keys)) != len(keys):
         raise StoreError("each option's key is used once")
@@ -212,6 +232,18 @@ def record_measurement(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
         raise StoreError(f"chosen must be one of the options' keys ({', '.join(keys)}), not {op['chosen']!r}")
     el["measure"] = {"options": [dict(o) for o in opts], "chosen": op.get("chosen"), "change": ctx["change"]}
     return part, el["id"]
+
+
+def _option_names(o: dict) -> None:
+    """What an option names is text; its credential only by the environment variable that holds it."""
+    for k in OPTION_TEXT:
+        if o.get(k) is not None and not isinstance(o[k], str):
+            raise StoreError(f"an option's {k} is text")
+    if o.get("url") and URL_SECRET.search(o["url"]):
+        raise StoreError("an option's url carries no password: name the credential by its environment variable (bearer_env)")
+    env = o.get("bearer_env")
+    if env is not None and (not isinstance(env, str) or not ENV_NAME.match(env)):
+        raise StoreError(f"an option's bearer_env is the name of an environment variable (WORK_TOKEN), never a value, not {env!r}")
 
 
 def _implicit(L: dict, m: dict, ctx: dict) -> None:
@@ -297,25 +329,50 @@ def confirm(L: dict, op: dict, ctx: dict, accept: bool) -> tuple[str, str]:
     if el.get("state") != "proposed":
         raise StoreError(f"{part} {eid} is {el.get('state')}, not proposed" + ("" if accept else ": retract it"))
     if accept:
-        el.update(state="declared", guessed=[], confirmed={"by": ctx["provenance"].get("author"), "change": ctx["change"]})
+        el.update(state="declared", guessed=[], confirmed=_confirmed_by(ctx))
     else:
         _remove(L, part, eid)
     return part, eid
 
 
+def _confirmed_by(ctx: dict) -> dict:
+    """Who confirmed: the owner (quoted, or by the request the call answers), else the author."""
+    prov, cid = ctx["provenance"], ctx["change"]
+    if owner_asks(prov):
+        return {"by": "owner", "change": cid}
+    if prov.get("request"):                       # may_settle verified it: the owner's request
+        return {"by": "owner", "via": "request", "request": prov["request"], "change": cid}
+    return {"by": prov.get("author"), "change": cid}
+
+
+def _names(edits, eid: str) -> bool:
+    return any(eid in (e.get("stock"), e.get("from"), e.get("to")) for e in edits or [])
+
+
 def _named_by(L: dict, eid: str) -> list[str]:
+    """What names a declared stock or effect: flows, a keyed target, expected effects, and the
+    pending changes that would set one of them."""
     out = [f"flow {fid}" for fid, f in L["flows"].items() if eid in (f.get("from"), f.get("to"))]
     if eid in L["targets"]:
         out.append(f"the target on {eid}")
     for mid, m in L["machines"].items():
-        if any(eid in (e.get("stock"), e.get("from"), e.get("to")) for e in (m.get("expected_effect") or {}).get("edits") or []):
+        if _names((m.get("expected_effect") or {}).get("edits"), eid):
             out.append(f"machine {mid}'s expected effect")
+    for part, group in (("machine", "machines"), ("attachment", "attachments"), ("flow", "flows")):
+        for xid, x in L[group].items():
+            for p in x.get("pending") or []:
+                s = p.get("set") or {}
+                if _names((s.get("expected_effect") or {}).get("edits"), eid) or eid in (s.get("from"), s.get("to")):
+                    out.append(f"{part} {xid}'s pending change {p.get('change')}")
     return out
 
 
 def _remove(L: dict, part: str, eid: str) -> None:
     if part in ("stock", "effect") and (by := _named_by(L, eid)):
         raise StoreError(f"{part} {eid} is named by {', '.join(by)}: retract or change {'it' if len(by) == 1 else 'them'} first")
+    if part == "event" and (ms := [mid for mid, m in L["machines"].items()
+                                   if eid in [*(m.get("receives") or []), *(m.get("emits") or [])]]):
+        raise StoreError(f"event {eid} is named by machine{'s' if len(ms) > 1 else ''} {', '.join(ms)}: change the machine first")
     del L[GROUP[part]][eid]
     if part == "machine":
         L["attachments"] = {k: a for k, a in L["attachments"].items() if a.get("machine") != eid}
@@ -324,7 +381,7 @@ def _remove(L: dict, part: str, eid: str) -> None:
 def retract(L: dict, op: dict, ctx: dict) -> tuple[str, str]:
     only(op, ("part", "id"))
     part, eid = op.get("part"), op.get("id")
-    guard_owners(element(L, part, eid).get("provenance"), ctx, part, eid)
+    guard_owners(element(L, part, eid), ctx, part, eid)
     _remove(L, part, eid)
     return part, eid
 

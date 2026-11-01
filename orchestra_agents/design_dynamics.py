@@ -4,51 +4,27 @@ the discovered one it turned out to be, and the ways to measure a declared eleme
 an op on the declared layer (``design.apply``); nothing here binds a series or makes discovery
 find anything (Orchestra's rules 6 and 7).
 
-**Clearance is decided from facts, never from the model's words.** An option needs the owner's
-approval (``needs approval``: nothing reads it, nothing previews it, ``add_instrument`` refuses it)
-when it reads a company system: a ``source`` option, one whose label, how, system, url, command or
-script names one (``COMPANY``), or one that reaches anything but this machine, the project's own
-metrics store and Orchestra's own endpoint (``far``): a URL or ``host:port`` to another host, a
-bare dotted host name, a host given to ``-h``/``--host``, ``ssh``, ``nc`` or ``psql``, a company
-CLI (``gh``, ``jira``, ``aws``, ``kubectl``, ``ssh``), or a ``curl``/``wget`` whose URL comes from
-an environment variable or has no scheme. A ``[[sources]]`` store and a scrape target off this
-machine are another system, so they need approval too. Until data classes exist (the work charter
-§8) the owner cannot clear one yet, so every such option stays "needs approval". An option's url,
-command and series are kept with the Supervisor (its agent state, ``measure_targets``: Orchestra's
-option keeps only its own fields), and ``add_instrument`` runs only what was proposed."""
+**Clearance is decided from facts, never from the model's words** (``design_clearance.py``). What
+an option names (its system, series, url, command and the environment variable of its token) is
+kept on the option itself when the declared layer keeps those fields (``intended_api.option_fields``),
+and with the Supervisor too (its agent state, ``measure_targets``), which is all a layer without
+them has; ``add_instrument`` runs only what was proposed."""
 
 from __future__ import annotations
 
 import re
-import socket
-from urllib.parse import urlsplit
 
 from orchestra.config import ConfigError, parse_duration
 
 from . import intended_api
 from .config import Project
 from .design import MACHINE, answer, apply, page_line, plural
+from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
 
 OPTION_KINDS = ("existing_series", "script", "scrape", "source", "counters", "simulated")
-# a company system: an option naming one (in its label, how, system, url or command) needs the owner's approval
-COMPANY = ("jira", "github", "gitlab", "bitbucket", "prometheus", "jenkins", "confluence", "slack", "pagerduty", "datadog",
-           "grafana", "splunk", "sentry", "opsgenie", "servicenow", "circleci", "buildkite")
-NEEDS_APPROVAL = "needs approval"
-UNTIL = "until data classes exist (the owner cannot clear one yet)"
-CLEARED = "cleared: reads only this machine, the project's own metrics store and its repository"
-LOCAL = ("localhost", "127.0.0.1", "::1", "0.0.0.0", "")
-CLIS = ("gh", "jira", "aws", "kubectl", "ssh", "nc", "psql")
-TLDS = ("com", "net", "org", "io", "co", "dev", "app", "cloud", "ai", "internal", "corp", "lan", "local", "intra", "intranet",
-        "example", "us", "uk", "de", "eu", "biz", "info")
-BARE_HOST = re.compile(r"(?<![\w/.@$-])((?:[a-z0-9][a-z0-9-]*\.)+(?:" + "|".join(TLDS) + r"))(?![\w.-])", re.IGNORECASE)
-CLI = re.compile(r"(?:^|[\s;|&(`])(?:\S*/)?(" + "|".join(CLIS) + r")(?=\s|$)", re.MULTILINE)
-HOST_FLAG = re.compile(r"(?:^|\s)(?:-h|--host)(?:\s+|=)(['\"]?)([^\s'\"]+)\1")
-FETCH = re.compile(r"(?:^|[\s;|&(`])(?:\S*/)?(curl|wget)\b([^\n;|&]*)", re.MULTILINE)
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
-URL = re.compile(r"\b[a-z][a-z0-9+.-]*://(?:[^/\s@'\"]*@)?(\[[^\]]+\]|[^/\s:'\"?#]+)", re.IGNORECASE)
-HOST_PORT = re.compile(r"(?<![\w/.@-])((?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*):\d{2,5}\b", re.IGNORECASE)
 
 
 def _words(s: str) -> set[str]:
@@ -62,8 +38,9 @@ def _declare(project: Project, store: AgentStore, a: dict, prov: dict, part: str
     near = (a.get("near") or "").strip() or None
     owner_placed = bool(near and prov.get("quote") and _words(near) & _words(prov["quote"]))
     guessed = ["near"] if near and not owner_placed else []
+    description = (a.get("description") or "").strip() or None
     op = {"op": f"declare_{part}", "name": name, "unit": a.get("unit") or None, "near": near, "note": prov.get("quote"),
-          "guessed": guessed}
+          "guessed": guessed, "description": description if intended_api.takes_description(project) else None}
     done = apply(project, store, [{k: v for k, v in op.items() if v not in (None, [])}], prov)
     eid = done["changes"][0]["id"]
     origin = "added by you (from your message)" if prov["author"] == "owner" else "proposed by the Supervisor"
@@ -85,7 +62,7 @@ def declare_effect(project, store, a, prov):
 
 def resolve(project: Project, element: str) -> tuple[str, str, bool]:
     """``element`` as (part, id or key, declared?): ``stock:features``, or a declared id, or a
-    discovered stock's key."""
+    discovered part's key (a flow's when it has `` -> ``, a stock's otherwise)."""
     element = (element or "").strip()
     if not element:
         raise StoreError("name the element: a declared stock or effect's id, or part:id")
@@ -96,7 +73,7 @@ def resolve(project: Project, element: str) -> tuple[str, str, bool]:
     for p in ("stock", "effect", "machine", "flow", "attachment"):
         if element in (layer.get(f"{p}s") or {}):
             return p, element, True
-    return "stock", element, False
+    return ("flow" if " -> " in element else "stock"), element, False
 
 
 def set_target(project, store, a, prov):
@@ -117,61 +94,7 @@ def set_target(project, store, a, prov):
     done = apply(project, store, [op], prov)
     hi = f"–{a['hi']}" if cmp == "within" else ""
     return answer(project, done, [f"target on {part} {eid}: {cmp} {a['value']}{hi} (the mean over {a['over']})",
-                                  page_line(project, "the page marks it met, missed or unknown")])
-
-
-def allowed_hosts(project: Project) -> set[str]:
-    """This machine, the project's own metrics store and Orchestra's own endpoint: never another
-    store (``[[sources]]``) or a scrape target, which are other systems."""
-    out = set(LOCAL) | {socket.gethostname().lower()}
-    raw = project.orchestra.config.raw
-    urls = [(raw.get("metrics") or {}).get("url"), intended_api.endpoint_url(project)]
-    return out | {(urlsplit(u).hostname or "").lower() for u in urls if isinstance(u, str) and "://" in u}
-
-
-def reaches(text: str) -> set[str]:
-    """The hosts a url, command or script names: a scheme's URL, host:port, a bare dotted host
-    name, and a host given to ``-h`` or ``--host``."""
-    text = text or ""
-    found = {m.group(1).strip("[]").lower() for m in URL.finditer(text)}
-    found |= {m.group(1).lower() for m in HOST_PORT.finditer(text)}
-    found |= {m.group(1).lower() for m in BARE_HOST.finditer(URL.sub(" ", text))}
-    found |= {m.group(2).lower() for m in HOST_FLAG.finditer(text) if not m.group(2).startswith(("-", "/", ".", "$"))}
-    return found
-
-
-def far(project: Project, text: str) -> list[str]:
-    """Why ``text`` (a url, command or script) reaches beyond this machine and the project's own
-    store; empty when it does not."""
-    text = text or ""
-    why = []
-    if hosts := sorted(reaches(text) - allowed_hosts(project)):
-        why.append(f"it reaches {', '.join(hosts)}, neither this machine nor the project's own metrics store")
-    if clis := sorted({m.group(1) for m in CLI.finditer(text)}):
-        why.append(f"it runs {', '.join(clis)}, which reach{'es' if len(clis) == 1 else ''} other systems")
-    for m in FETCH.finditer(text):
-        args = [a for a in m.group(2).split() if not a.startswith("-")]
-        if any("$" in a for a in args):
-            why.append(f"its {m.group(1)} takes its URL from an environment variable, so where it goes cannot be checked")
-        elif not any("://" in a for a in args):
-            why.append(f"its {m.group(1)} names no URL with a scheme, so where it goes cannot be checked")
-    return list(dict.fromkeys(why))
-
-
-def company_named(*texts: str) -> list[str]:
-    words = set(re.findall(r"[a-z0-9]+", " ".join(t or "" for t in texts).casefold()))
-    return [c for c in COMPANY if c in words]
-
-
-def clearance(project: Project, kind: str, *texts: str) -> tuple[str, str | None]:
-    """(clearance, why) from facts: the option's kind, the company systems it names, where it reaches."""
-    if kind == "source":
-        return NEEDS_APPROVAL, "it reads another store"
-    if named := company_named(*texts):
-        return NEEDS_APPROVAL, f"it names {', '.join(named)}"
-    if why := far(project, " \n".join(t for t in texts if t)):
-        return NEEDS_APPROVAL, "; ".join(why)
-    return CLEARED, None
+                                  page_line(project, "the Dynamics page marks it met, missed or unknown")])
 
 
 def no_secret(*texts: str) -> None:
@@ -198,14 +121,19 @@ def _option(project: Project, i: int, o: dict) -> tuple[dict, dict]:
     system = (o.get("system") or "").strip().lower()
     no_secret(url, command, o["how"], o["label"])
     level, why = clearance(project, kind, o["label"], o["how"], system, url, command)
-    how = o["how"].strip()                     # Orchestra keeps an option's fields only (its OPTION): the rest goes in how
-    how += f" (the series {series})" if series else ""
-    how += f" (reads {system})" if system and system not in how.lower() else ""
-    how += f"; its token is read from the environment variable {env}, supplied out of band" if env else ""
+    names = {"system": system or None, "series": series or None, "url": url or None, "command": command or None,
+             "bearer_env": env or None}
+    keeps = intended_api.option_fields(project)
+    how = o["how"].strip()                     # what the layer's option has no field for is said in how
+    how += f" (the series {series})" if series and "series" not in keeps else ""
+    how += f" (reads {system})" if system and "system" not in keeps and system not in how.lower() else ""
+    how += f"; its token is read from the environment variable {env}, supplied out of band" if env and "bearer_env" not in keeps \
+        else ""
     key = "abcdefghij"[i]
     kept = {"key": key, "title": o["label"].strip(), "kind": kind, "how": how, "cost": o["cost"].strip(),
             "caveat": (o.get("caveat") or "").strip() or None, "clearance": level, "simulated": kind == "simulated",
-            "instrument": None, "commit": None, "first_points": [], "provenance": None}
+            "instrument": None, "commit": None, "first_points": [], "provenance": None,
+            **{k: v for k, v in names.items() if k in keeps and v is not None}}
     mine = {"kind": kind, "url": url or None, "command": command or None, "series": series or None,
             "bearer_env": env or None, "why_approval": why}
     return kept, mine
@@ -217,7 +145,8 @@ def options_of(project: Project, part: str, eid: str) -> dict:
 
 
 def targets_of(store: AgentStore, part: str, eid: str) -> dict:
-    """What the Supervisor kept of each option of ``part:eid`` (its url, command, series), by key."""
+    """What the Supervisor kept of each option of ``part:eid`` (its url, command, series), by key:
+    the fallback for a declared layer whose options do not keep them (``option_fields``)."""
     return dict((store.agent_state(MACHINE).get("measure_targets") or {}).get(f"{part}:{eid}") or {})
 
 
@@ -271,6 +200,7 @@ def ignore(project, store, a, prov):
 
 def link(project, store, a, prov):
     from .design_confirm import publish_waiting
+    from .design_machines import rewrite_readers
     part, eid, declared = resolve(project, a.get("declared"))
     found = (a.get("discovered") or "").strip()
     if not declared or part not in ("stock", "effect") or not found:
@@ -279,6 +209,8 @@ def link(project, store, a, prov):
     lines = [(f"{eid} linked to {found}: a manual binding, origin declared, drawn as an assumption until fitted; {found} "
               "keeps its name")]
     lines += publish_waiting(project, store)
+    if again := rewrite_readers(project, store, eid):
+        lines.append(f"the records of {', '.join(again)}, which read {eid}, are written again: they read {found} now")
     return answer(project, done, lines)
 
 

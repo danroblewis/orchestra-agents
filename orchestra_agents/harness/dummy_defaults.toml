@@ -61,7 +61,7 @@ reply = "The Coordinator planned your request {match.request}: {match.plan} Mile
 
 [[rule]]
 role = "supervisor"
-reply = "I am a scripted Supervisor (the dummy harness). I read your message and changed nothing."
+reply = "I am a scripted Supervisor (the dummy harness). I read your request and changed nothing."
 
 # The Supervisor's hand-off: one milestone and one ticket with the requirements, reported back.
 [[rule]]

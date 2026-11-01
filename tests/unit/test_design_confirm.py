@@ -73,7 +73,8 @@ def test_the_owners_request_wakes_the_supervisor_which_confirms_and_runs_it_from
     out = call(project, store, "confirm", element=FCI, request=rid, reason=WHY)
     m = layer(project)["machines"]["feature_count_improver"]
     assert m["state"] == "declared" and m["expected_effect"]["prediction"] == out["prediction"]
-    assert m["provenance"]["author"] == "owner" and m["confirmed"]["by"] == "supervisor"     # the request backs it
+    assert m["provenance"]["author"] == "owner"                                  # the owner's request backs it
+    assert m["confirmed"]["by"] == "owner" and m["confirmed"]["via"] == "request" and m["confirmed"]["request"] == rid
     d = project.state_dir / "machines" / "feature_count_improver"
     assert {p.name for p in d.iterdir()} == {"machine.toml", "role.md", "role.json", "agent.json"}
     assert not (project.state_dir / "drafts" / "feature_count_improver").exists()
@@ -144,7 +145,7 @@ def test_a_request_backs_only_the_call_it_names_and_only_once(project, store):
     call(project, store, "confirm", element="other_machine", request=other, reason=WHY)    # a bare id is resolved
     with pytest.raises(StoreError, match="answered already"):
         call(project, store, "confirm", element="machine:other_machine", request=other, reason=WHY)
-    with pytest.raises(StoreError, match="no request"):
+    with pytest.raises(StoreError, match="not one the declared layer noted"):
         call(project, store, "discard", element=FCI, request="not-an-event", reason=WHY)
 
 
@@ -267,7 +268,8 @@ def test_an_edit_into_a_key_the_model_does_not_have_waits_and_says_why(project, 
                expect=[{"kind": "appears", "to": "coordinator_queue"}])
     assert any("coordinator_queue is not in the current model" in line for line in out["said"])
     design = intended_api.layer(project).design()
-    assert [i["why"] for i in design["open"] if i["what"] == "unpublishable draft"] == ["not in the model"]
+    whys = [i["why"] for i in design["open"] if i["what"] == "unpublishable draft"]
+    assert len(whys) == 1 and "not in the model" in whys[0]
     say(store, "Confirm it.", 6)
     assert call(project, store, "confirm", element=FCI, quote="Confirm it.", reason=WHY)["prediction"] is None
     calls, real = [], intended_api.current
@@ -299,7 +301,7 @@ def test_an_interrupted_prediction_is_renewed_for_the_new_era(project, store):
     assert len(made) == 2 and made[-1]["change"] == later.cause and "recorded again" in said
     assert made[-1]["horizon_s"] == pytest.approx(6 * 86_400, abs=60) and "what is left of its horizon: 6 days" in said
     rec = design_confirm.starts(store)["feature_count_improver"]
-    design_confirm._starts(store, lambda d: d["feature_count_improver"].update(announced=time.time() - 6.5 * 86_400))
+    design_confirm._starts(store, lambda d: d["feature_count_improver"]["published"][-1].update(at=time.time() - 5.5 * 86_400))
     said = design_confirm.renew(project, store, {"type": "orchestra.prediction.judged", "verdict": "interrupted",
                                                  "correlationid": later.cause, "interrupted_by": later.id})
     assert predictions(store)[-1]["horizon_s"] == pytest.approx(3 * 86_400) and "raised to what one needs" in said   # 3 runs
@@ -356,13 +358,16 @@ def test_a_daily_run_missed_while_the_host_was_down_is_skipped(project, store, m
     assert store.agent_state("feature_count_improver")["next_scheduled_at"] == tomorrow
 
 
-def test_a_machine_managed_elsewhere_starts_nothing_here_and_is_still_predicted(project, store):
+def test_a_machine_managed_elsewhere_starts_nothing_and_publishes_nothing_here(project, store):
     out = confirmed(project, store, managed="external")
     assert not (state_machines.root(project) / "feature_count_improver").exists()
     assert not (project.state_dir / "drafts" / "feature_count_improver").exists()
-    assert any("nothing runs here" in line for line in out["said"]) and out["prediction"]
-    started = [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]
-    assert started and started[-1]["id"] == out["change"]
+    assert any("nothing runs here" in line for line in out["said"]) and out["prediction"] is None
+    assert any("kept as an expectation" in line for line in out["said"])
+    assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]   # no era begins: nothing changed
+    assert not predictions(store)
+    m = layer(project)["machines"]["feature_count_improver"]
+    assert m["state"] == "declared" and m["expected_effect"]["edits"]
 
 
 def test_discard_leaves_no_file_but_the_history(project, store):
@@ -374,17 +379,13 @@ def test_discard_leaves_no_file_but_the_history(project, store):
     assert not (project.state_dir / "machines" / "feature_count_improver").exists()
 
 
-@pytest.mark.parametrize("by", ["request", "quote"])
-def test_a_confirmed_machine_is_retired_by_the_owners_discard(project, store, by):
+def test_a_confirmed_machine_is_retired_by_the_owners_discard_in_the_chat(project, store):
     from orchestra_agents.org_store import all_agents
     confirmed(project, store)
-    if by == "request":
-        rid = request(store, "discard", FCI)
-        say(store, "", 7)
-        out = call(project, store, "discard", element=FCI, request=rid, reason=WHY)
-    else:
-        say(store, "Retire the feature count improver.", 7)
-        out = call(project, store, "discard", element=FCI, quote="Retire the feature count improver.", reason=WHY)
+    with pytest.raises(Exception, match="not proposed: there is nothing to discard"):   # no page request retires it (yet)
+        request(store, "discard", FCI)
+    say(store, "Retire the feature count improver.", 7)
+    out = call(project, store, "discard", element=FCI, quote="Retire the feature count improver.", reason=WHY)
     assert "feature_count_improver" not in layer(project)["machines"] and "retracted" in out["said"][0]
     assert not (state_machines.root(project) / "feature_count_improver").exists() and "feature_count_improver" not in all_agents(project)
     assert any(line.startswith("retired") for line in out["said"])

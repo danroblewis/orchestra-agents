@@ -119,10 +119,11 @@ worker's, through the Coordinator (Orchestra's `docs/machines.md`).
 The Supervisor's `design` tools are how you design the system by talking: it declares the stocks,
 effects, targets and machines you name, measures them at once, drafts and refines machines as you
 talk, and starts one only when you confirm it (Orchestra's `docs/proposals/machine-design.md`).
-With the Orchestra this package pins, nothing is drawn: the declarations are kept in the agents'
-state directory and the Supervisor reads them back to you (`read_design`). Orchestra's declared
-layer (its task C1) keeps them in Orchestra instead, and the Dynamics and Machines pages draw them
-once Orchestra's C2 and C3 land; until a page says it draws them, the Supervisor names no page.
+Where the installed Orchestra has a declared layer, the declarations are kept in it, and its
+Dynamics page draws the stocks, effects and flows and its Machines page the machines; the
+Supervisor's answers name the page that draws each. An Orchestra without one (such as the one this
+package pins today) draws nothing: the declarations are kept in the agents' state directory, and
+the Supervisor reads them back to you (`read_design`) instead of naming a page.
 
 The Supervisor is also the project's operator. It reads the whole system (orchestra.toml, the
 processes Orchestra runs and their logs, the metrics catalogue, the model, the task system's
@@ -172,9 +173,10 @@ and `demo/dummy.toml` as a worked example.
     uv run ruff check orchestra_agents tests demo
 
 The design tools' tests run on both declared layers: the agents' stand-in always, and Orchestra's
-own only when an Orchestra with it is laid over this environment (skipped otherwise):
+own only when an Orchestra with it is laid over this environment (skipped otherwise), for example a
+checkout of Orchestra's `main`:
 
-    uv run --with-editable ~/orchestra-wt/C1 python -m pytest tests/unit/test_design_*.py tests/e2e/test_design_e2e.py
+    uv run --with-editable <an Orchestra checkout with the declared layer> python -m pytest tests/unit/test_design_*.py tests/e2e/test_design_e2e.py
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
 protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`

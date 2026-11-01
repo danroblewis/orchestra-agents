@@ -3,7 +3,7 @@
 (``intended_api.py``, the seam; delete this file, ``intended_standin_ops.py``,
 ``intended_standin_consent.py`` and ``intended_carry.py`` once every project has Orchestra's).
 
-It takes the same ops in the same shapes, with the same rules, as Orchestra's at C1 fe185af0
+It takes the same ops in the same shapes, with the same rules, as Orchestra's main at 64ea32a0
 (``intended_standin_ops.py``, ``intended_standin_consent.py``): all of a call or none, change ids
 ``c<seq>.<i>``, ``read(version) -> {version, at, layer}``, ``apply -> {version, changes: [{op, part,
 id, change}]}``; provenance as Orchestra's store takes it (``via`` and ``at`` refused when given:
@@ -15,9 +15,11 @@ thing. It derives nothing Orchestra derives on read (presence, recording, verdic
 draws it.
 
 **Requests are noted, as Orchestra's web server notes them** (``requests.jsonl``,
-``note_request``): a call answering the owner's request cites one noted here and not answered
-yet; a bare event on the bus from source ``owner`` is not one. No page publishes a request to the
-stand-in (none draws it), so only the tests note one."""
+``note_request``, refused as Orchestra's ``requests.named`` refuses one): a call answering the
+owner's request cites one noted here and still open, or it is refused; a bare event on the bus
+from source ``owner`` is not one. A request is answered once an op verified it (the journal line's
+``answered``), and open only while it can still be acted on (``actionable``). No page publishes a
+request to the stand-in (none draws it), so only the tests note one."""
 
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ PROVENANCE = ("author", "source", "turn", "message", "quote", "reason", "request
 NAME = re.compile(r"^d(\d{4,})\.json$")
 REQUESTED = "orchestra.intent.requested"
 CONTROLS = ("confirm", "discard", "switch_kind")
+SETTLES = ("confirm", "discard")
 
 
 def checked_provenance(p: dict | None) -> dict:
@@ -100,6 +103,10 @@ class StandIn:
         el = self.read()["layer"][GROUP[body["part"]]].get(body.get("id"))
         if el is None:
             raise StoreError(f"there is no declared {body['part']} {body.get('id')!r}")
+        if body.get("change") and body["change"] not in {p.get("change") for p in el.get("pending") or []}:
+            raise StoreError(f"{body['part']} {body['id']} has no pending change {body['change']}")
+        if not body.get("change") and body["control"] in SETTLES and el.get("state") != "proposed":
+            raise StoreError(f"{body['part']} {body['id']} is {el.get('state')}, not proposed: there is nothing to {body['control']}")
         data = {k: body.get(k) for k in ("control", "part", "id", "change", "from")}
         ev = Events.for_project(self.project).publish(REQUESTED, data, source="owner", subject=f"{data['part']}:{data['id']}")
         with self._locked(), (self.dir / "requests.jsonl").open("a", encoding="utf-8") as f:
@@ -110,10 +117,11 @@ class StandIn:
         p = self.dir / "requests.jsonl"
         return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()] if p.exists() else []
 
-    def open_requests(self) -> dict[str, dict]:
-        """Every noted request no call has answered yet, by its event id."""
-        answered = {(e.get("provenance") or {}).get("request") for e in self.journal()}
-        return {r["event"]: r for r in self._noted() if r.get("event") and r["event"] not in answered}
+    def open_requests(self, layer: dict | None = None) -> dict[str, dict]:
+        """Every noted request no op has answered that can still be acted on, by its event id."""
+        answered = {rid for e in self.journal() for rid in e.get("answered") or []}
+        layer = self.read()["layer"] if layer is None else layer
+        return {r["event"]: r for r in self._noted() if r.get("event") and r["event"] not in answered and actionable(r, layer)}
 
     def apply(self, ops: list[dict], provenance: dict) -> dict:
         if not isinstance(ops, list) or not ops:
@@ -121,7 +129,11 @@ class StandIn:
         prov = checked_provenance(provenance)
         with self._locked():
             cur = self.read()
-            asked = self.open_requests() if prov.get("request") else {}
+            asked = self.open_requests(cur["layer"]) if prov.get("request") else {}
+            if prov.get("request") and prov["request"] not in asked:
+                raise StoreError(f"provenance.request {prov['request']} is not one of the owner's unanswered requests; nothing "
+                                 "was applied")
+            answered: set[str] = set()
             prov["at"] = time.time()
             layer = copy.deepcopy(cur["layer"])
             seq = cur["version"] + 1
@@ -129,7 +141,7 @@ class StandIn:
             for i, op in enumerate(ops):
                 cid = f"c{seq}.{i}"
                 try:
-                    part, eid = apply_op(layer, op, {"provenance": prov, "change": cid, "requests": asked})
+                    part, eid = apply_op(layer, op, {"provenance": prov, "change": cid, "requests": asked, "answered": answered})
                 except StoreError as e:
                     raise StoreError(f"op {i} ({op.get('op') if isinstance(op, dict) else op}): {e}; nothing was applied") from None
                 changes.append({"op": op.get("op"), "part": part, "id": eid, "change": cid})
@@ -139,15 +151,8 @@ class StandIn:
             stamped = [{**op, "change": c["change"]} for op, c in zip(ops, changes, strict=True)]
             with (self.dir / "journal.jsonl").open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"seq": seq, "at": prov["at"], "provenance": prov, "ops": stamped, "sent": ops,
-                                    "changes": changes}) + "\n")
+                                    "changes": changes, **({"answered": sorted(answered)} if answered else {})}) + "\n")
         return {"version": seq, "changes": changes}
-
-    def _unanswered(self, journal: list[dict]) -> list[dict]:
-        """The latest noted request per element that no call answered (Orchestra's ``unanswered``)."""
-        answered = {(e.get("provenance") or {}).get("request") for e in journal}
-        latest = {(r["part"], r["id"]): r for r in self._noted()}
-        return [{"what": "unanswered request", "part": p, "id": i, "control": r.get("control"), "event": r["event"]}
-                for (p, i), r in latest.items() if r["event"] not in answered]
 
     def design(self) -> dict:
         from .design_machines import publishable
@@ -172,7 +177,9 @@ class StandIn:
                 open_items += [{"what": "pending change", "part": part, "id": eid, "change": c} for c in row.get("pending", [])]
         for key, mk in L["marks"]["expected"].items():
             elements.append({"part": mk["part"], "key": key, "state": "expected"})
-        open_items += self._unanswered(journal)
+        open_items += [{"what": "unanswered request", "part": r["part"], "id": r["id"], "control": r.get("control"),
+                        "event": r["event"], **({"change": r["change"]} if r.get("change") else {})}
+                       for r in self.open_requests(L).values()]
         keys = Keys(current_model(self.project)) if L["machines"] else None
         for mid, m in L["machines"].items():
             for e in (m.get("expected_effect") or {}).get("edits") or []:
@@ -180,3 +187,13 @@ class StandIn:
                     open_items.append({"what": "unpublishable draft", "part": "machine", "id": mid, "edit": e, "why": why})
         last = [c for e in journal[-20:] for c in e.get("changes", [])][-20:]
         return {"version": cur["version"], "elements": elements, "open": open_items, "last_changes": last, "stabilised": None}
+
+
+def actionable(r: dict, layer: dict) -> bool:
+    """Whether a request can still be acted on in ``layer`` (Orchestra's ``requests.actionable``)."""
+    el = layer.get(GROUP.get(r.get("part"), ""), {}).get(r.get("id"))
+    if el is None:
+        return False
+    if r.get("change"):
+        return r["change"] in {p.get("change") for p in el.get("pending") or []}
+    return r.get("control") not in SETTLES or el.get("state") == "proposed"

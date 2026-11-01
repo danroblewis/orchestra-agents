@@ -32,6 +32,7 @@ from . import (
     design_confirm,
     design_instruments,
     handoff,
+    intended_api,
     promises,
     prompting,
     supervisor_spec,
@@ -170,6 +171,7 @@ class AgentHost:
             self.first_run.offer()
         except Exception as e:  # noqa: BLE001 - the host runs whether or not the setup could be offered
             log(f"first run: {e!r}")
+        self.wake_open_requests()
         try:
             while not self.stop.is_set():
                 try:
@@ -470,6 +472,29 @@ class AgentHost:
                 self.store.add_wakeup(name, self._wake_reason(ev))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
 
+    def wake_open_requests(self) -> int:
+        """At start: one Supervisor wake-up for each of the owner's page requests the declared layer
+        still holds open (made while the host was down, so no event woke it), worded as a live one
+        would be; how many. Nothing is read while the layer holds no machine."""
+        try:
+            with intended_api.one_call():
+                lay = intended_api.layer(self.project)
+                held = lay.read()["layer"]
+                if not (held.get("machines") or held.get("attachments")):
+                    return 0
+                rows = lay.open_requests()
+        except Exception as e:  # noqa: BLE001 - the host runs; a click made meanwhile waits for the next start
+            log(f"open requests: not read at start: {e!r}")
+            return 0
+        for rid, r in rows.items():
+            ev = {"type": INTENT_REQUESTED, "source": "owner", "id": rid, "control": r.get("control"),
+                  "change": r.get("change"), "subject": f"{r.get('part')}:{r.get('id')}", "from": r.get("from")}
+            if said := design_confirm.wake_reason(ev, self.project):
+                self.store.add_wakeup("supervisor", said)
+        if rows:
+            log(f"supervisor: woken for {len(rows)} open request(s) the owner made while the host was down")
+        return len(rows)
+
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
@@ -644,15 +669,20 @@ class AgentHost:
     def _expire_drafts(self) -> None:
         """Once a minute: draft instruments the owner did not keep, past their expiry, removed
         (design_instruments.py); and a confirmed machine's expected edits that waited for a series
-        published once it is linked (design_confirm.publish_waiting)."""
-        if time.time() - self._drafts_at < 60:
-            return
+        published once it is linked (design_confirm.publish_waiting); a kept instrument whose option
+        could not be marked chosen, marked again (design_instruments.retry_chosen). Skipped for
+        ``intended_api.BACKOFF_S`` after an endpoint timeout, so the tick never stalls on it."""
+        if time.time() - self._drafts_at < 60 or intended_api.backing_off():
+            return                                      # after an endpoint timeout, wake-ups keep running meanwhile
         self._drafts_at = time.time()
         try:
-            if gone := design_instruments.expire(self.project, self.store, log=log):
-                log(f"draft instruments expired unkept: {', '.join(gone)}")
-            for said in design_confirm.publish_waiting(self.project, self.store):
-                log(said)
+            with intended_api.one_call():
+                if gone := design_instruments.expire(self.project, self.store, log=log):
+                    log(f"draft instruments expired unkept: {', '.join(gone)}")
+                for said in design_confirm.publish_waiting(self.project, self.store):
+                    log(said)
+                for said in design_instruments.retry_chosen(self.project, self.store):
+                    log(said)
         except Exception as e:  # noqa: BLE001 - tried again in a minute
             log(f"design: {e!r}")
 

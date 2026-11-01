@@ -4,9 +4,9 @@ store, a turn begun with the owner's message (as the host records it), and a cal
 
 The declared layer is each of the two the seam can choose (``intended_api.py``), so every test runs
 against both when it can: ``standin``, the agents' file-backed stand-in, and ``core``, Orchestra's
-own (task C1) through its host's events endpoint, served here in-process. ``core`` runs only when
-the installed Orchestra has it (``uv run --with-editable ~/orchestra-wt/C1 ...``) and is skipped
-otherwise; with it installed, ``standin`` forces the stand-in. A test of a choice the two make
+own through its host's events endpoint, served here in-process. ``core`` runs only when the
+installed Orchestra has it (``uv run --with-editable <an Orchestra checkout with the declared
+layer> ...``) and is skipped otherwise; with it installed, ``standin`` forces the stand-in. A test of a choice the two make
 differently on purpose says so with ``differs``."""
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def git(repo, *args):
 
 @contextmanager
 def core_endpoint(project):
-    """Orchestra's events endpoint for ``project``, as its host serves it (only with C1 installed)."""
+    """Orchestra's events endpoint for ``project``, as its host serves it (only with its declared layer installed)."""
     from orchestra import endpoint
     from orchestra.endpoint.server import EventsEndpoint
     from orchestra.events import Events as CoreEvents
@@ -47,7 +47,7 @@ def core_endpoint(project):
 @pytest.fixture(params=["standin", "core"])
 def layer_kind(request, monkeypatch):
     if request.param == "core" and not CORE:
-        pytest.skip("the installed Orchestra has no declared layer (task C1): run with --with-editable ~/orchestra-wt/C1")
+        pytest.skip("the installed Orchestra has no declared layer: run with --with-editable <an Orchestra checkout with it>")
     if request.param == "standin" and CORE:
         monkeypatch.setattr(intended_api, "has_core", lambda *a, **k: False)
     intended_api._cache.clear()
@@ -77,6 +77,14 @@ def project(tmp_path, monkeypatch, layer_kind):
 @pytest.fixture
 def store(project):
     return AgentStore(project, Events.for_project(project, source="supervisor"))
+
+
+@pytest.fixture
+def drafting(monkeypatch):
+    """The installed Orchestra takes the draft flag (an Orchestra that does not ignores the keys it
+    does not know), so a draft instrument expires as it does with the flag."""
+    from orchestra_agents import design_instruments
+    monkeypatch.setattr(design_instruments, "supports_draft", lambda: True)
 
 
 def differs(layer_kind: str, why: str) -> None:

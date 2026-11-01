@@ -51,34 +51,39 @@ EXPECT = {"type": "object", "properties": {
     "value": {"type": "number", "description": "For below and above: the level"},
     "to": S("For appears: the stock the new flow goes into"), "from": S("For appears: where it comes from (leave out: outside)"),
 }, "required": ["kind"]}
-SPEC = {"type": "object", "description": "The kind's fields, in the work's terms (a Universal one names no model, prompt or tool)",
-        "properties": {
-            "invariants": A("universal: lines a reviewer can check (never changes code itself; it proposes work)"),
-            "steps": A("universal: numbered, naming each event where it is used"),
-            "uses": A("universal: what it may act on (the ticket queue, read only)"),
-            "command": S("programmatic: what runs it"),
-            "trigger": S("programmatic, managed external: the remote call that starts it (a Jenkins job's URL)"),
-            "arguments": S("programmatic, ad hoc or scheduled: its arguments"),
-            "environment": S("programmatic, ad hoc or scheduled: the environment it needs"),
-            "stdin": S("programmatic, ad hoc or scheduled: what it reads on stdin"),
-            "exit": S("programmatic, ad hoc or scheduled: what its exit code means"),
-            "protocol": E(["http", "graphql", "grpc", "other"], "programmatic, continuous: how it is spoken to"),
-            "send": S("programmatic, continuous: what it sends"),
-            "receive": S("programmatic, continuous: what it receives (push, or a poll and its interval)"),
-            "source": S("managed external: the relayed actor whose events it is (bot.jira), never the bridge"),
-        }}
+# the kind's fields, flat on declare_machine (in the work's terms: a Universal one names no model, prompt or tool)
+SPEC_FIELDS = {
+    "invariants": A("Universal: lines a reviewer can check (never changes code itself; it proposes work)"),
+    "steps": A("Universal: numbered, naming each event where it is used"),
+    "uses": A("Universal: what it may act on (the ticket queue, read only)"),
+    "command": S("Programmatic: what runs it"),
+    "trigger": S("Programmatic, managed external: the remote call that starts it (a Jenkins job's URL)"),
+    "arguments": S("Programmatic, ad hoc or scheduled: its arguments"),
+    "environment": S("Programmatic, ad hoc or scheduled: the environment it needs"),
+    "stdin": S("Programmatic, ad hoc or scheduled: what it reads on stdin"),
+    "exit": S("Programmatic, ad hoc or scheduled: what its exit code means"),
+    "protocol": E(["http", "graphql", "grpc", "other"], "Programmatic, continuous: how it is spoken to"),
+    "send": S("Programmatic, continuous: what it sends"),
+    "receive": S("Programmatic, continuous: what it receives (push, or a poll and its interval)"),
+    "role": S("Programmatic, ad hoc, answering a workflow's offers: the role whose offers it answers"),
+    "source": S("Managed external: the relayed actor whose events it is (bot.jira), never the bridge"),
+}
+SPEC = {"type": "object", "description": "Older form, kept for one release: the same fields nested. Give them at the top level",
+        "properties": SPEC_FIELDS}
 
 DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("declare_stock", "design",
             "Declare a stock the owner expects to accumulate, measured or not yet (\"I'm going to create a Features stock\"). "
             "Then find how to measure it (propose_measurements) and start recording (add_instrument) in the same turn.",
-            {"name": S("In the owner's words: Features"), "unit": S("features, tickets, tests, ..."),
+            {"name": S("In the owner's words: Features"), "description": S("What the owner says it means, in a sentence"),
+             "unit": S("features, tickets, tests, ..."),
              "near": S("A stock it is drawn beside (DONE, or a key); \"where you said it belongs\" only when your quote names it"),
              "quote": QUOTE, "reason": REASON}, ("name", "reason")),
     ToolDef("declare_effect", "design",
             "Declare an effect: a measurable consequence of the system nobody owns (latency, error budget, review backlog "
             "age, on-call load). Kept like a declared stock.",
-            {"name": S("In the owner's words"), "unit": S("What it is counted in: seconds, percent, tickets"),
+            {"name": S("In the owner's words"), "description": S("What the owner says it means, in a sentence"),
+             "unit": S("What it is counted in: seconds, percent, tickets"),
              "near": S("A stock it is drawn beside"), "quote": QUOTE, "reason": REASON}, ("name", "reason")),
     ToolDef("set_target", "design",
             "A target on a stock or effect (a level) or a flow (a rate), judged on its mean over a window: met, missed or "
@@ -131,7 +136,8 @@ DESIGN_TOOLS: list[ToolDef] = [
             ("declared", "discovered", "reason")),
     ToolDef("declare_machine", "design",
             "Declare a machine by name (\"Create a new Universal Machine called Feature Count Improver\"): its envelope and "
-            "its kind's fields, every guess named in guesses. It stays unconfirmed and never runs until the owner confirms. "
+            "its kind's fields (invariants, steps, uses for a Universal one; command and the rest for a Programmatic one), "
+            "every guess named in guesses. It stays unconfirmed and never runs until the owner confirms. "
             "Read the map first (read_design, read_events, read_model); use existing event types where one has the purpose. "
             "A Universal one is drafted under drafts/<name>/; say its cost.",
             {"name": S("Its bus source, or the title (\"Feature Count Improver\" becomes feature_count_improver)"),
@@ -141,7 +147,7 @@ DESIGN_TOOLS: list[ToolDef] = [
                                                      "known by its events"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
              "receives": A("Event types it wakes on or reads"), "emits": A("Event types it publishes"),
-             "reads": A("Stocks and effects it may read (never one it produces)"), "spec": SPEC,
+             "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS, "spec": SPEC,
              "guesses": A("The fields you guessed, whole or one item: engagement (mode, at, tz), receives[0], ..."), "quote": QUOTE, "reason": REASON},
             ("name", "kind", "description", "reason")),
     ToolDef("refine_machine", "design",

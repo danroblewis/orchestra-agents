@@ -72,6 +72,7 @@ def cmd_status(args) -> int:
     if d.get("harness_note"):
         print(f"         {d['harness_note']}")
     live = {s["role"]: s for s in d["sessions"] if s["status"] == "running"}
+    width = max([14, *(len(a["name"]) for a in d["agents"])])
     for a in d["agents"]:
         if not a["resident"] and a.get("builtin"):
             continue                                        # per-ticket roles: their sessions are listed below
@@ -79,13 +80,14 @@ def cmd_status(args) -> int:
         next_ = f", next wake-up in {_ago(a['next_scheduled_at'] - now)}" if a.get("next_scheduled_at") and a["next_scheduled_at"] > now else ""
         if a["resident"]:
             woken = f"last woken {_ago(now - a['last_woken'])} ago" if a.get("last_woken") else "never woken"
-            print(f"  {a['name']:14} {state:8} {woken}{next_}")
+            print(f"  {a['name']:{width}} {state:8} {woken}{next_}")
             continue
         when = (f"daily at {a['at']}{' ' + a['tz'] if a.get('tz') else ''}" if a.get("at") else
                 f"every {a['every']}" if a.get("every") else "when woken")
         run = a.get("last_run")
         ran = (f"last run {_ago(now - run['at'])} ago ({run.get('status') or '?'})" if run and run.get("at") else "never run")
-        print(f"  {a['name']:14} {state:8} {a.get('engaged') or 'ad_hoc'}, {when}; {ran}{next_}")
+        engaged = str(a.get("engaged") or "ad hoc").replace("_", " ")
+        print(f"  {a['name']:{width}} {state:8} {engaged}, {when}; {ran}{next_}")
     tickets = [s for s in d["sessions"] if s["ticket"] and s["status"] == "running"]
     print(f"on tickets: {len(tickets)}")
     for s in tickets:

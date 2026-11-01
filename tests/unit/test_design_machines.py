@@ -178,8 +178,10 @@ def test_the_horizon_is_three_runs_by_the_schedule_or_by_the_rate_of_what_wakes_
     for _ in range(6):                                                              # six a day: three runs take half a day
         store.events.publish("session.settled", {}, source="worker/1")
     busy = {**m, "engagement": {"mode": "continuous"}}
-    h, why = design_machines.min_horizon(project, store, busy)
-    assert h == pytest.approx(43_200) and "6 such events" in why
+    h, why = design_machines.min_horizon(project, store, busy)               # a bus seconds old: six scaled to a day
+    per_day = design_machines.runs_a_day(store, busy)[0]
+    assert per_day > 6 and h == pytest.approx(max(3 * 86_400 / per_day, intended_api.min_era_s(project.orchestra.config)))
+    assert "6 such events in the last" in why and "a day" in why
     quiet = {**busy, "receives": ["nothing.ever"]}
     assert design_machines.min_horizon(project, store, quiet)[1].startswith("what discovery needs")
 

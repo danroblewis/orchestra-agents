@@ -112,9 +112,10 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
     assert "proposed by the Supervisor" in out["said"][0]
 
 
-def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, layer_kind):
+def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, layer_kind, monkeypatch):
+    monkeypatch.setattr(intended_api, "_shipped", lambda asset: False)       # an Orchestra without the pages that draw it
     outs = [features(project, store), options(project, store), add(project, store)]
-    for o in outs:                                  # C1 keeps the layer and draws nothing: its pages are C2's and C3's
+    for o in outs:
         assert not any(page in line for line in o["said"] for page in ("Dynamics page", "Machines page")), o["said"]
         assert not any("read_design" in line for line in o["said"])               # where it is kept is kept_in's alone
         assert "no page draws it" in o["kept_in"]
@@ -123,9 +124,27 @@ def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store
 
 
 def test_a_page_is_named_once_orchestra_says_one_draws_the_layer(project, store, monkeypatch):
-    monkeypatch.setattr(intended_api, "drawn", lambda p: True)
+    monkeypatch.setattr(intended_api, "pages", lambda p: {"Dynamics"})
     out = features(project, store)
-    assert any("Dynamics page" in line for line in out["said"])
+    assert any("Dynamics page" in line for line in out["said"]) and "the Dynamics page draws it" in out["kept_in"]
+    say(store, "Make a machine too.", 2)
+    out = call(project, store, "declare_machine", name="m_one", kind="universal", description="Does one thing", reason=WHY)
+    assert not any("Machines page" in line for line in out["said"])          # the Machines page is not drawn in this one
+
+
+def test_the_pages_that_draw_the_layer_are_the_ones_the_installed_orchestra_ships(project, layer_kind, monkeypatch):
+    if layer_kind == "standin":
+        assert intended_api.pages(project) == set() and not intended_api.drawn(project)
+        return
+    shipped = {"intended-machines.js", "intended-dynamics.js"}
+    monkeypatch.setattr(intended_api, "_shipped", lambda asset: asset in shipped)
+    assert intended_api.pages(project) == {"Machines", "Dynamics"} and intended_api.drawn(project, "Machines")
+    intended_api._cache.clear()
+    shipped.discard("intended-machines.js")
+    assert intended_api.pages(project) == {"Dynamics"} and not intended_api.drawn(project, "Machines")
+    intended_api._cache.clear()
+    monkeypatch.undo()
+    assert intended_api.pages(project) == {p for p, a in intended_api.PAGES.items() if intended_api._shipped(a)}
 
 
 def test_options_are_recorded_in_order_and_a_company_system_needs_approval(project, store):
@@ -134,7 +153,11 @@ def test_options_are_recorded_in_order_and_a_company_system_needs_approval(proje
     assert [o["key"] for o in out["options"]] == ["a", "b", "c", "d"]
     m = layer(project)["stocks"]["features"]["measure"]
     assert [o["kind"] for o in m["options"]] == ["script", "counters", "source", "simulated"]
-    assert m["options"][2]["clearance"] == "needs approval" and "environment variable JIRA_TOKEN" in m["options"][2]["how"]
+    assert m["options"][2]["clearance"] == "needs approval"
+    if "bearer_env" in intended_api.option_fields(project):                    # kept on the option, where the layer keeps it
+        assert m["options"][2]["bearer_env"] == "JIRA_TOKEN" and "JIRA_TOKEN" not in m["options"][2]["how"]
+    else:
+        assert "environment variable JIRA_TOKEN" in m["options"][2]["how"]
     assert m["options"][1]["caveat"].startswith("counts what was planned") and m["chosen"] is None
     with pytest.raises(StoreError, match="never a value"):
         call(project, store, "propose_measurements", element="features", reason=WHY, options=[
@@ -246,7 +269,7 @@ def test_an_existing_series_is_an_option_with_no_instrument_and_no_binding(proje
     assert not project.orchestra.config.raw.get("collect")
 
 
-def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store):
+def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store, drafting):
     features(project, store)
     options(project, store)
     before = git(project.repo_root, "rev-parse", "HEAD")
@@ -289,7 +312,14 @@ def test_the_draft_flag_is_written_when_orchestra_takes_it_and_comes_off_when_ke
     e = entry(project, "features.tickets")
     assert e is not None and "draft" not in e and "expires" not in e and e["command"] == "echo 'features_done 7'"
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] == "b"
-    assert any("two eras began" in line for line in out["said"])
+    assert not any("two configuration changes" in line for line in out["said"])    # no prediction is open: nothing to say
+    store.add_prediction("supervisor", {"id": "p1", "change": "x", "at": time.time(), "horizon_s": 86_400})
+    add(project, store, option="a", name="features.acc2")
+    say(store, "Keep the acceptance one too.", 3)
+    out = call(project, store, "keep_instrument", name="features.acc2", quote="Keep the acceptance one too", reason=WHY)
+    assert any("two configuration changes were recorded" in line and "judged interrupted and renewed" in line
+               for line in out["said"])
+    assert not any("coordinator" in line.lower() for line in out["said"])
 
 
 def test_keeping_an_instrument_needs_the_owners_words_or_their_expect_mark(project, store):
@@ -337,7 +367,7 @@ def test_repo_tries_the_script_then_hands_it_to_the_coordinator_and_writes_nothi
     assert "acceptance_tests_passing" in req[-1]["requirements"]
 
 
-def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store):
+def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store, drafting):
     features(project, store)
     options(project, store)
     add(project, store, every="15m")
@@ -367,7 +397,7 @@ def test_removing_the_chosen_option_clears_chosen(project, store):
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] is None
 
 
-def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch):
+def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch, drafting):
     features(project, store)
     options(project, store)
     add(project, store)

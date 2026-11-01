@@ -30,7 +30,7 @@ from orchestra.config import ConfigError, parse_duration
 
 from . import intended_api, state_machines
 from .config import Project
-from .design import OWNER, answer, apply, check_request, page_line, plural
+from .design import MACHINE, OWNER, answer, apply, check_request, page_line, plural
 from .expect_grammar import expect_edit, is_slope, slopes
 from .store import AgentStore, StoreError
 
@@ -43,9 +43,12 @@ BY_MODE = {"ad hoc": ("command", "trigger", "arguments", "environment", "stdin",
            "continuous": ("command", "protocol", "send", "receive")}
 PROGRAM_FIELDS = tuple(dict.fromkeys(f for fs in BY_MODE.values() for f in fs))
 EXTERNAL = ("source", "log")
+SPEC_KEYS = tuple(dict.fromkeys((*UNIVERSAL, *PROGRAM_FIELDS, *EXTERNAL)))
 AI_WORDS = re.compile(r"\b(AI|LLM|LLMs|GPT|haiku|sonnet|opus|claude|gemini|prompt|prompts|language model|tool call|tool group)\b",
                       re.IGNORECASE)
-TURN_USD = 0.03          # an estimate of one Haiku turn of a narrow machine, for the cost line
+# an estimate of one turn of a narrow machine by model, for the cost line (the first whose name is in the model's)
+TURN_USD = (("haiku", 0.03), ("sonnet", 0.12), ("opus", 0.60))
+NO_COST = ("dummy",)     # harnesses with no model behind them
 EVENT = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
 DAY = 86_400.0
 # the flat shape of one expected edit (tools_design.EXPECT): its kind, and the fields each kind needs
@@ -158,25 +161,53 @@ def _t(e: dict) -> float:
 
 
 def _recent(store: AgentStore, n: int = 20_000) -> list[dict]:
-    end = store.events.end()
-    return store.events.read(max(0, end - n), limit=n)[0]
+    from .design import recent_events
+    return recent_events(store, n)
 
 
-def runs_a_day(store: AgentStore, m: dict) -> tuple[float, str]:
+def _span(seconds: float) -> str:
+    if seconds < 120:
+        return f"{seconds:.0f} s"
+    if seconds < 7200:
+        return f"{seconds / 60:.0f} min"
+    return f"{seconds / 3600:.0f} h"
+
+
+def runs_a_day(store: AgentStore, m: dict, now: float | None = None) -> tuple[float, str]:
     """How many turns a day it would take, and how that was worked out: a scheduled machine by its
-    schedule (once a day at its ``at``), one woken by events by how often they came in the last day."""
+    schedule (once a day at its ``at``), one woken by events by how often they came in the last day,
+    read by time; when what was read covers less than a day (a young bus, or a busy one), scaled up
+    to a day, saying so."""
     e = m.get("engagement") or {}
     if e.get("mode") == "scheduled":
         return 1.0, f"scheduled once a day at {e.get('at') or '?'}" + (f" {e['tz']}" if e.get("tz") else "")
-    since, types = time.time() - DAY, set(m.get("receives") or [])
-    n = float(sum(1 for ev in _recent(store) if ev.get("type") in types and _t(ev) >= since))
-    return n, f"woken by {', '.join(sorted(types)) or 'nothing'}: {plural(int(n), 'such event')} in the last day"
+    now = now or time.time()
+    since, types = now - DAY, set(m.get("receives") or [])
+    read = _recent(store)
+    n = sum(1 for ev in read if ev.get("type") in types and _t(ev) >= since)
+    woken = f"woken by {', '.join(sorted(types)) or 'nothing'}"
+    covered = now - min((_t(ev) for ev in read), default=since)          # what was read reaches back this far
+    if not n or covered >= DAY - 60:
+        return float(n), f"{woken}: {plural(n, 'such event')} in the last day"
+    per_day = n * DAY / max(covered, 60.0)
+    return per_day, (f"{woken}: {plural(n, 'such event')} in the last {_span(covered)}, about {round(per_day):,} a day")
+
+
+def turn_usd(project: Project) -> float:
+    """What one turn of a designed machine costs on this project's harness and model: nothing on a
+    harness with no model behind it."""
+    from .harness import get_harness
+    h = get_harness(project.config.harness)
+    if h.name in NO_COST:
+        return 0.0
+    model = str(h.model_for(state_machines.DEFAULT_MODEL) or project.config.model or state_machines.DEFAULT_MODEL).lower()
+    return next((usd for name, usd in TURN_USD if name in model), TURN_USD[0][1])
 
 
 def cost_line(project: Project, store: AgentStore, m: dict) -> str:
     per_day, how = runs_a_day(store, m)
     return (f"as drafted: about {plural(round(per_day), 'turn')} a day on {state_machines.runs_on(project)}, about "
-            f"${per_day * TURN_USD:.2f} a day ({how}); unconfirmed, it never runs and costs nothing")
+            f"${per_day * turn_usd(project):.2f} a day ({how}); unconfirmed, it never runs and costs nothing")
 
 
 def listeners(project: Project, store: AgentStore, types: list[str], but: str) -> dict[str, list[str]]:
@@ -195,20 +226,69 @@ def listeners(project: Project, store: AgentStore, types: list[str], but: str) -
     return out
 
 
-def draft(project: Project, m: dict) -> Path | None:
+def reads_of(project: Project, store: AgentStore | None, m: dict) -> dict[str, str]:
+    """Each stock or effect the machine reads, as a line its role can act on: a declared one through
+    its link (``read_series <key>``), else the series its instrument records (not linked yet), else
+    that nothing records it; anything else is a discovered key, read as it is."""
+    from .design_instruments import drafts
+    lay = intended_api.current(project)
+    recs = drafts(store) if store is not None else {}
+    out = {}
+    for r in m.get("reads") or []:
+        decl = (lay.get("stocks") or {}).get(r) or (lay.get("effects") or {}).get(r)
+        if decl is None:
+            out[r] = f"{r}: read_series {r}"
+            continue
+        name = decl.get("name") or r
+        if decl.get("found_as"):
+            out[r] = f"{name}: read_series {decl['found_as']}"
+            continue
+        measure = decl.get("measure") or {}
+        chosen = next((o for o in measure.get("options") or [] if o.get("key") == measure.get("chosen")), None) or {}
+        mine = [n for n, rec in recs.items() if str(rec.get("element", "")).partition(":")[2] == r]
+        inst = chosen.get("instrument") or next((n for n in mine if recs[n].get("kept")), None) or next(iter(mine), None)
+        series = (recs.get(inst) or {}).get("series") or []
+        out[r] = (f"{name}: read_series {', '.join(series)} (instrument {inst}); not linked in the model yet" if series else
+                  f"{name}: recorded by instrument {inst}, its series not read yet; not linked in the model yet" if inst else
+                  f"{name}: nothing records it yet")
+    return out
+
+
+def rewrite_readers(project: Project, store: AgentStore, eid: str) -> list[str]:
+    """The confirmed machines run here that read ``eid``, their records written again (after a
+    link or a keep changed what they read); their ids."""
+    done = []
+    for mid, m in (intended_api.current(project).get("machines") or {}).items():
+        if m.get("state") == "declared" and eid in (m.get("reads") or []) and draft(project, m, store) is not None:
+            done.append(mid)
+    return done
+
+
+def draft(project: Project, m: dict, store: AgentStore | None = None) -> Path | None:
     """The machine's implementation, written again from the declaration: a proposed Universal
     one's draft in ``drafts/``; a declared one's live files in ``machines/`` (``state_machines``),
-    unless it is managed elsewhere (nothing runs here)."""
+    unless it is managed elsewhere (nothing runs here). ``store``: to name the series its reads
+    are recorded as (``reads_of``)."""
     d = drafts_dir(project) / m["id"]
     if m.get("kind") != "universal" or m.get("managed") == "external":
         shutil.rmtree(d, ignore_errors=True)
         return None
+    reads = reads_of(project, store, m)
     if m.get("state") == "declared":
-        return state_machines.write(project, m)
-    out = state_machines.files(m)
+        return state_machines.write(project, m, reads)
+    out = state_machines.files(m, reads)
     out["machine.toml"] = "# A draft, not official: written by the Supervisor from the declaration; confirm moves it to machines/.\n" \
         + out["machine.toml"]
     return state_machines.write_files(d, out)
+
+
+def spec_of(a: dict) -> dict:
+    """The kind's fields from declare_machine's flat arguments (a nested ``spec``, the older form,
+    taken too: the flat ones win)."""
+    nested = a.get("spec") or {}
+    if not isinstance(nested, dict):
+        raise StoreError("spec is an object; better, give its fields at the top level (invariants, steps, uses, command, ...)")
+    return {**nested, **{k: a[k] for k in SPEC_KEYS if a.get(k) not in (None, "", [])}}
 
 
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
@@ -218,7 +298,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
          "description": (a.get("description") or "").strip(), "tags": list(a.get("tags") or []), "kind": kind,
          "managed": a.get("managed") or "orchestra", "engagement": engagement(a),
          "receives": list(a.get("receives") or []), "emits": list(a.get("emits") or []), "reads": list(a.get("reads") or []),
-         "spec": {k: v for k, v in dict(a.get("spec") or {}).items() if v not in (None, "", [])}}
+         "spec": {k: v for k, v in spec_of(a).items() if v not in (None, "", [])}}
     if kind not in ("universal", "programmatic"):
         raise StoreError("kind is universal (an abstract machine, described by its steps) or programmatic (a program)")
     if not m["description"]:
@@ -226,7 +306,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     check_machine(m)
     guessed = list(dict.fromkeys("engagement" if g in ("mode", "at", "tz", "missed") else g for g in a.get("guesses") or []))
     done = apply(project, store, [{"op": "propose_machine", **m, "guessed": guessed}], prov)
-    d = draft(project, {**m, "state": "proposed"})
+    d = draft(project, {**m, "state": "proposed"}, store)
     who = "added by you (from your message)" if prov["author"] == OWNER else "proposed by the Supervisor"
     lines = [f"machine {mid} ({m['title']}) declared, {kind}, {who}: unconfirmed",
              page_line(project, "the Machines page draws it dashed, \"unconfirmed\""), cost_line(project, store, m),
@@ -300,6 +380,17 @@ def edits_of(a: dict, m: dict) -> list[tuple[str, dict]]:
     return ops
 
 
+def fold_spec(ops: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+    """A confirmed machine's spec edits of one call as one ``revise_machine`` (one pending change):
+    each sets the whole spec as the earlier ones left it, so as separate pending changes, settling
+    one would restore or drop another. The folded op takes the first one's place."""
+    spec = [i for i, (_, op) in enumerate(ops) if set(op.get("set") or {}) == {"spec"} and not op.get("add") and not op.get("remove")]
+    if len(spec) < 2:
+        return ops
+    one = ("spec: " + "; ".join(ops[i][0] for i in spec), {**ops[spec[-1]][1]})
+    return [one if i == spec[0] else x for i, x in enumerate(ops) if i == spec[0] or i not in spec]
+
+
 def _pending(project: Project, mid: str, done: dict) -> tuple[dict, bool]:
     now = current(project, mid)
     waiting = {p["change"] for p in now.get("pending") or []}
@@ -314,6 +405,9 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                          "declaration is quoted or proposed")
     after = json.loads(json.dumps(m))
     ops = edits_of(a, after)
+    folded = m.get("state") == "declared" and len(fold_spec(ops)) < len(ops)
+    if m.get("state") == "declared":
+        ops = fold_spec(ops)
     if not ops:
         raise StoreError("say what changes: add_/remove_ receives, emits, reads, tags, invariants or uses; steps; mode (with "
                          "at, tz, missed); or set_field and value. A switch of kind is switch_kind")
@@ -321,9 +415,12 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     done = apply(project, store, [op for _, op in ops], prov)
     now, pending = _pending(project, mid, done)
     if not pending:
-        draft(project, now)
+        draft(project, now, store)
     lines = [f"{plural(len(ops), 'change')} to {mid}: " + ", ".join(f"{c['change']} {label}"
                                                                    for c, (label, _) in zip(done["changes"], ops, strict=True))]
+    if folded:
+        spec_change = next(c["change"] for c, (label, _) in zip(done["changes"], ops, strict=True) if label.startswith("spec: "))
+        lines.append(f"the spec edits are one change, {spec_change}: confirmed or discarded together")
     if pending:
         lines.append("recorded as a proposed change: the owner confirms or discards it in the chat")
     else:
@@ -334,9 +431,45 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"))
 
 
+def runs_here(m: dict) -> bool:
+    """Whether the agents' host runs it: a Universal Machine managed here."""
+    return m.get("kind") == "universal" and m.get("managed") != "external"
+
+
+def apply_kind(project: Project, store: AgentStore, before: dict, after: dict, prov: dict) -> tuple[list[str], dict]:
+    """A confirmed machine whose ``kind`` or ``managed`` changed, made so here: no longer run here
+    (Programmatic, or managed elsewhere), its agent stopped, its records removed, its wake-ups
+    drained and, for a program to be written here, the program handed to the Coordinator; run here
+    again (Universal, managed here), its records written. What to say, and the hand-off's id."""
+    from .handoff import hand_to_coordinator
+    mid = after["id"]
+    lines: list[str] = []
+    extra: dict = {}
+    if runs_here(before) and not runs_here(after):
+        stopped = state_machines.remove(project, mid)
+        drained = store.drain_wakeups(mid)
+        shutil.rmtree(drafts_dir(project) / mid, ignore_errors=True)
+        lines.append(("its agent is stopped and its records in the state directory removed" + (
+            f" ({plural(len(drained), 'queued wake-up')} dropped)" if drained else "") + ": nothing runs it here")
+                     if stopped else "no agent ran it")
+        if after.get("kind") == "programmatic" and after.get("managed") != "external":
+            req = hand_to_coordinator(store, {"requirements": (
+                f"Write the program for the confirmed machine {mid} ({after.get('title')}), now Programmatic: "
+                f"{after.get('description')}. It receives {', '.join(after.get('receives') or []) or 'nothing'}, emits "
+                f"{', '.join(after.get('emits') or []) or 'nothing'} and is engaged {json.dumps(after.get('engagement'))}; its "
+                f"specification is {json.dumps(after.get('spec'))}."), "context": prov["reason"]}, MACHINE)
+            lines.append(f"the program is handed to the Coordinator ({req['request']}): a worker writes it on a ticket")
+            extra["request"] = req["request"]
+        elif after.get("managed") == "external":
+            lines.append("it is managed elsewhere now: the declaration waits to be heard on the bus")
+    elif runs_here(after) and not runs_here(before):
+        dst = state_machines.write(project, after, reads_of(project, store, after))
+        lines.append(f"it runs as an agent here again: its spec, role and agent records are written to {dst}")
+    return lines, extra
+
+
 def switch_kind(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     """The Universal | Programmatic switch: ``kind`` alone, on the owner's click (``request``) or words."""
-    from .handoff import hand_to_coordinator
     mid = machine_id(a)
     m = current(project, mid)
     to = "programmatic" if m.get("kind") == "universal" else "universal"
@@ -348,26 +481,14 @@ def switch_kind(project: Project, store: AgentStore, a: dict, prov: dict) -> dic
              + (": the Universal description is the program's specification" if to == "programmatic" else "")]
     extra: dict = {}
     if pending:
-        lines.append("recorded as a proposed change: the owner confirms or discards it")
+        lines.append("recorded as a proposed change: the owner confirms or discards it (when confirmed, it is made so here)")
     elif now.get("state") != "declared":
-        draft(project, now)
+        draft(project, now, store)
         lines.append("unconfirmed: nothing runs" + (", and its draft implementation is gone" if to == "programmatic" else
                                                     "; its draft implementation is written again"))
-    elif to == "programmatic":
-        stopped = state_machines.remove(project, mid)
-        shutil.rmtree(drafts_dir(project) / mid, ignore_errors=True)
-        req = hand_to_coordinator(store, {"requirements": (
-            f"Write the program for the confirmed machine {mid} ({now.get('title')}), now Programmatic: {now.get('description')}. "
-            f"It receives {', '.join(now.get('receives') or []) or 'nothing'}, emits {', '.join(now.get('emits') or []) or 'nothing'}"
-            f" and is engaged {json.dumps(now.get('engagement'))}; its specification is {json.dumps(now.get('spec'))}."),
-            "context": prov["reason"]}, "supervisor")
-        lines += [("its agent is stopped and its records in the state directory removed: nothing runs it until the program "
-                   "exists" if stopped else "no agent ran it"),
-                  f"the program is the Coordinator's to plan ({req['request']}): a worker writes it on a ticket"]
-        extra["request"] = req["request"]
     else:
-        dst = draft(project, now)
-        lines.append(f"it runs as an agent again: its spec, role and agent records are written to {dst}")
+        said, extra = apply_kind(project, store, m, now, prov)
+        lines += said
     return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"), **extra)
 
 
@@ -399,11 +520,15 @@ def publishable(project: Project, lay: dict, mid: str, e: dict, keys: intended_a
 
 
 def waiting_line(project: Project, store: AgentStore, lay: dict, e: dict, why: str) -> str:
-    """Why one edit waits, and what publishes it."""
+    """Why one edit waits, and what publishes it: a declared stock or effect waits for its link
+    (discovery never finds a declared id); anything else for discovery to find it."""
     from .design_instruments import drafts
     name = next((e[k] for k in ("stock", "to", "from") if e.get(k)), "?")
     decl = (lay.get("stocks") or {}).get(name) or (lay.get("effects") or {}).get(name)
-    if why == intended_api.WAITS and decl is not None:
+    if decl is not None and decl.get("found_as"):
+        return (f"{decl.get('name') or name} is linked to {decl['found_as']}, which is not in the current model: published "
+                "once discovery finds it")
+    if decl is not None:                     # a declared stock or effect: a link publishes it, whatever reason is given
         rec = [n for n, r in drafts(store).items() if r.get("element", "").endswith(f":{name}")]
         return (f"{decl.get('name') or name} is not linked to a discovered stock yet: published once you say which one it is "
                 f"(link)" + (f"; {', '.join(rec)} records it now" if rec else ""))

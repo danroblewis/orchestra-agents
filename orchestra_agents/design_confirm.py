@@ -8,9 +8,12 @@ the chat. Every confirm and discard, of any part and of a pending change, is bac
 their quote, or their noted request for exactly that (``design.check_request``).
 
 What confirming a machine does here depends first on who runs it. **Managed elsewhere**
-(``managed: external``), of either kind: nothing runs here and nothing is written to the state
-directory; the declaration waits to be heard or measured, and its expected effect is still
-published. **A Universal one managed here**, in this order: the op on the declared layer (with the
+(``managed: external``), of either kind: nothing runs here, nothing is written to the state
+directory and nothing is published (no ``system.changed``: nothing changed, and a change would
+interrupt every open prediction); the declaration waits to be heard or measured, and its expected
+effect is kept on it as an expectation. **A Programmatic one managed here**: its prediction is
+published about a change its program announces when it runs (``announce_change`` with the id the
+answer names). **A Universal one managed here**, in this order: the op on the declared layer (with the
 id of the ``system.changed`` that will announce its start, chosen first); its implementation
 written to the state directory's ``machines/<name>/`` from the declaration, with its role and its
 agent records (``state_machines``: the host runs it from there; nothing is committed; a daily
@@ -22,7 +25,9 @@ verdict wakes it (``verdicts.py``). The agent's first turn publishes that ``syst
 (``announce_start``, from the host), which begins the era the prediction is judged in. An edit
 that waits for a series is published once it has one (``publish_waiting``), and a prediction an
 era interrupts is renewed for what is left of its horizon (``renew``). Until confirm nothing runs
-and nothing is published.
+and nothing is published. A confirmed pending change is made so here too: one that changes
+``kind`` or ``managed`` stops or starts the agent (``design_machines.apply_kind``), one that changes
+the engagement counts the schedule from now, any other rewrites the records.
 
 **Discard** of a proposal leaves nothing but the history. Discard of a declared element retracts
 it (the owner's request or words back it); a declared machine is then retired: its records in the
@@ -41,12 +46,14 @@ from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, page_line, plural
 from .design_dynamics import resolve
 from .design_machines import (
+    apply_kind,
     cannot_judge,
     current,
     draft,
     drafts_dir,
     min_horizon,
     publishable,
+    reads_of,
     waiting_line,
 )
 from .store import AgentStore, StoreError
@@ -127,16 +134,14 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     pending = (a.get("change") or "").strip() or None
     check_request(project, store, prov, "confirm", part, eid, pending)
     if part != "machine" or pending:
+        before = current(project, eid) if part == "machine" else None
         done = apply(project, store, [{"op": "confirm", "part": part, "id": eid, **({"change": pending} if pending else {})}], prov)
         lines = [f"{part} {eid}: {'change ' + pending if pending else 'it'} confirmed"]
-        if part == "machine":
-            m = current(project, eid)
-            if draft(project, m) is not None and m.get("state") == "declared":
-                _restart(project, store, eid)
-                lines.append(f"its spec, role and agent records in {machines_dir(project) / eid} are written again from the "
-                             "declaration (no update_role or update_agent is needed); a running session starts over with them")
+        extra: dict = {}
+        if before is not None:
+            lines += _made_so(project, store, before, current(project, eid), prov, extra)
         lines += _refinement_after(project, store, prov)
-        return answer(project, done, lines)
+        return answer(project, done, lines, **extra)
     m = current(project, eid)
     if m.get("state") == "declared":
         raise StoreError(f"machine {eid} is confirmed already")
@@ -150,7 +155,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     lines = [f"machine {eid} confirmed", page_line(project, "the Machines page draws it solid, \"declared · not heard yet\"")]
     extra: dict = {"change": change}
     if runs:
-        dst = state_machines.write(project, m)
+        dst = state_machines.write(project, m, reads_of(project, store, m))
         shutil.rmtree(drafts_dir(project) / eid, ignore_errors=True)
         if (m.get("engagement") or {}).get("missed") != "run once":
             store.set_agent_state(eid, last_at_fire=time.time())
@@ -162,16 +167,44 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
                      "set_machine adds its [[machines]] entry, in the overlay")
     else:
         lines.append("nothing runs here: the declaration waits to be heard on the bus or measured")
-    _starts(store, lambda d: d.__setitem__(eid, {"change": change, "prediction": None, "published": [], "at": time.time(),
-                                                 "announced": None, "runs": runs, "waiting": 0}))
-    lines += _publish_at_confirm(project, store, eid, m, change, extra)
-    if not here and extra.get("prediction"):            # it runs elsewhere already: judged from its confirm
-        announce_start(store, eid, source=MACHINE)
-        lines.append(f"system.changed {change} published now: it runs elsewhere, so its prediction is judged from its confirm")
-    elif not runs and extra.get("prediction"):
+    if here:
+        _starts(store, lambda d: d.__setitem__(eid, {"change": change, "prediction": None, "published": [], "at": time.time(),
+                                                     "announced": None, "runs": runs, "waiting": 0}))
+    if here:
+        lines += _publish_at_confirm(project, store, eid, m, change, extra)
+    else:                                                # nothing changed here: no era begins, nothing is published
+        extra.update(change=None, prediction=None)
+        if (m.get("expected_effect") or {}).get("edits"):
+            lines.append("its expected effect is kept as an expectation: published when you say it is new, or when it is "
+                         "first heard")
+    if here and not runs and extra.get("prediction"):
         lines.append(f"its prediction is judged once its program runs: announce_change with change {change} then")
     lines += _refinement_after(project, store, prov)
     return answer(project, done, lines, machine=eid, **extra)
+
+
+def _made_so(project: Project, store: AgentStore, before: dict, m: dict, prov: dict, extra: dict) -> list[str]:
+    """A confirmed pending change on a machine, made so here: a change of ``kind`` or ``managed``
+    stops or starts its agent (``apply_kind``); any other rewrites its records; a change of its
+    engagement counts its schedule from now (unless a missed run is ``run once``)."""
+    if m.get("state") != "declared":
+        draft(project, m, store)
+        return []
+    eid = m["id"]
+    if (before.get("kind"), before.get("managed")) != (m.get("kind"), m.get("managed")):
+        said, more = apply_kind(project, store, before, m, prov)
+        extra.update(more)
+        return said
+    lines = []
+    if draft(project, m, store) is not None:
+        _restart(project, store, eid)
+        lines.append(f"its spec, role and agent records in {machines_dir(project) / eid} are written again from the "
+                     "declaration (no update_role or update_agent is needed); a running session starts over with them")
+        if before.get("engagement") != m.get("engagement"):
+            if (m.get("engagement") or {}).get("missed") != "run once":
+                store.set_agent_state(eid, last_at_fire=time.time())
+            lines.append(f"its engagement is now {(m.get('engagement') or {}).get('mode')}: {_first_run(m)}")
+    return lines
 
 
 def _publish_at_confirm(project: Project, store: AgentStore, mid: str, m: dict, change: str, extra: dict) -> list[str | None]:
@@ -236,8 +269,9 @@ def publish_waiting(project: Project, store: AgentStore) -> list[str]:
             _starts(store, lambda d, c=change, k=mid: d[k].update(next=c))
         pid = _publish(project, store, mid, ready, m, change)
         said.append(f"prediction {pid} published for {mid}'s waiting edit{'' if len(ready) == 1 else 's'}, about change {change}"
-                    + (" (a fresh change, announced at its next turn: its start was announced before the series was linked)"
-                       if fresh else ""))
+                    + ((" (a fresh change, announced at its next turn: its start was announced before the series was linked)"
+                        if rec.get("runs", True) else "") if fresh else "")
+                    + ("" if rec.get("runs", True) else f": announce_change with change {change} when its program runs"))
     return said
 
 
@@ -248,7 +282,10 @@ def renew(project: Project, store: AgentStore, ev: dict) -> str | None:
     if ev.get("type") != "orchestra.prediction.judged" or ev.get("verdict") != "interrupted":
         return None
     for mid, rec in starts(store).items():
-        hit = next((p for p in rec.get("published") or [] if p.get("change") == ev.get("correlationid")), None)
+        hit = next((p for p in rec.get("published") or [] if p.get("prediction") == ev.get("causationid")), None) \
+            if ev.get("causationid") else None
+        hit = hit or next((p for p in rec.get("published") or [] if p.get("change") == ev.get("correlationid")
+                           and not p.get("renewed")), None)
         if hit is None:
             continue
         new = intended_api.era_cause(project, ev.get("interrupted_by"))
@@ -257,7 +294,10 @@ def renew(project: Project, store: AgentStore, ev: dict) -> str | None:
                     f"{ev.get('interrupted_by')}), and the change that began that era cannot be read, so it was not renewed: "
                     "say so to the owner")
         m = current(project, mid)
-        start = rec.get("announced") if isinstance(rec.get("announced"), float) else hit.get("at") or time.time()
+        # each entry's horizon counts from its own start: the machine's announced start for the first change's entry, the
+        # entry's own time for a renewed one (its horizon is already what was left at its renewal)
+        announced = rec.get("announced") if isinstance(rec.get("announced"), int | float) else None
+        start = announced if hit.get("change") == rec.get("change") and announced else hit.get("at") or time.time()
         left = start + float(hit.get("horizon_s") or 0) - time.time()
         floor, _ = min_horizon(project, store, m)
         horizon = max(left, floor)
@@ -267,6 +307,9 @@ def renew(project: Project, store: AgentStore, ev: dict) -> str | None:
             return (f"event orchestra.prediction.judged: {mid}'s prediction {hit['prediction']} was interrupted by change {new}; "
                     "none of its edits can be published in the new era (" + "; ".join(w for _, w in waiting) + "): say so")
         pid = _publish(project, store, mid, ready, m, new, horizon_s=horizon)
+        _starts(store, lambda d, k=mid, old=hit["prediction"], new_id=pid: [p.update(renewed=new_id) for p in d[k].get("published")
+                                                                            or [] if p.get("prediction") == old])
+        store.update_prediction(None, prediction=hit["prediction"], judged="interrupted", judged_at=time.time(), renewed_as=pid)
         return (f"event orchestra.prediction.judged: {mid}'s prediction {hit['prediction']} was interrupted by change {new}; "
                 f"its edits were recorded again as prediction {pid}, about that change, for what is left of its horizon: "
                 f"{horizon / 86_400:.3g} days" + (" (raised to what one needs)" if floor > left else "")

@@ -189,11 +189,13 @@ class AgentStore:
                     return name, dict(rec)
         return None
 
-    def update_prediction(self, change: str, **fields: Any) -> dict | None:
+    def update_prediction(self, change: str | None, *, prediction: str | None = None, **fields: Any) -> dict | None:
+        """Update the record of ``change`` (or, given ``prediction``, of that prediction's id: two
+        predictions may be about one change)."""
         def fn(d):
             for st in d["agent_state"].values():
                 for rec in st.get("predictions") or []:
-                    if rec.get("change") == change:
+                    if (rec.get("id") == prediction) if prediction else (rec.get("change") == change):
                         rec.update(fields)
                         return dict(rec)
             return None

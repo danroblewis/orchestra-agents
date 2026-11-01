@@ -90,7 +90,8 @@ function transcriptHead(id, s, d) {
     <div>last output</div><div>${s.last_output_at ? ago((Date.now() / 1000) - s.last_output_at) + " ago" : "—"}</div>
     <div>last turn ended</div><div>${when(s.settled_at)}</div>
     <div>turns</div><div>${d.turns} · ${d.total} messages <span class="muted">· live, refreshes every ${TRANSCRIPT_POLL_MS / 1000}s</span></div><div>session file</div><div class="muted" style="word-break:break-all">${s.file_exists ? esc(s.session_file) : "(created on the first turn)"}</div></div>`;
-  return `<h3>${esc(id)} <span class="chip ${st.cls}" title="${esc(st.title)}"><span class="dot"></span>${esc(st.text)}</span>${agentLink}</h3>
+  const scripted = id === "supervisor" && s.harness === "dummy" ? ' <span class="tag" title="the dummy harness: a script answers, no model">scripted (dummy)</span>' : "";
+  return `<h3>${esc(id)} <span class="chip ${st.cls}" title="${esc(st.title)}"><span class="dot"></span>${esc(st.text)}${st.tag ? `<span class="chip-tag">${esc(st.tag)}</span>` : ""}</span>${scripted}${agentLink}</h3>
     ${id === "supervisor" ? `<details class="started"><summary class="muted">session details</summary>${kv}</details>` : kv}
     ${s.status === "running" && (s.partial_text || s.thinking_chars) ? `<div class="msg assistant inprogress"><div class="r">reply in progress <span class="muted">· not in the transcript until the message completes${s.thinking_chars ? ` · ${Number(s.thinking_chars).toLocaleString()} chars of thinking so far` : ""}</span></div>${s.partial_text ? md(s.partial_text) : '<span class="muted">(thinking; no reply text yet)</span>'}</div>` : ""}`;
 }
@@ -219,7 +220,7 @@ function renderMarker(e) {
   else if (e.type === "agent.corrected") text = `✎ ${md(e.text || "")}`;
   else if (e.type === "session.started") text = `▶ Turn started${e.ticket ? " on " + esc(e.ticket) : ""}.`;
   else text = esc(e.type);
-  return `<div class="msg marker ${e.type}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
+  return `<div class="msg marker ${esc(String(e.type).replace(/\./g, "_"))}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
 }
 // Markers are Orchestra's events for the session; they are merged with the messages by time, newest first.
 function withMarkers(messages, markers, newerThan) {
@@ -337,8 +338,10 @@ function agentStatus(s, now, a) {
   }
   if (a.host_alive === false || !(s && s.alive)) return { cls: "down", text: "down", title: "the agents' host (agents.host, started by orchestra run) is not up" };
   const name = a.name || (s && s.kind);
-  const title = name === "supervisor" ? "waiting for your message" + (a.next_review_at && a.next_review_at > now ? `; next review in ${ago(a.next_review_at - now)}` : "") : a.next_scheduled_at ? `next wake-up in ${ago(a.next_scheduled_at - now)}` : "waiting for an event";
-  return { cls: "resident", text: "resident", title };
+  const wakes = a.next_scheduled_at && a.next_scheduled_at > now ? `wakes in ${ago(a.next_scheduled_at - now)}` : null;
+  const text = name === "supervisor" ? "waiting for you" : wakes || "waiting for an event";
+  const title = name === "supervisor" ? "waiting for your message" + (a.next_review_at && a.next_review_at > now ? `; next review in ${ago(a.next_review_at - now)}` : "") : wakes ? `next wake-up: ${wakes}` : "waiting for an event";
+  return { cls: "resident", text, title, tag: "resident" };
 }
 function runningPhase(s, now) {
   const age = (t) => ago(now - (t || now));
@@ -356,5 +359,5 @@ function runningPhase(s, now) {
 }
 function sessionChip(s, now, a) {
   const p = agentStatus(s, now, a);
-  return `<span class="chip ${p.cls}" title="${esc(p.title)}"><span class="dot"></span>${esc(p.text)}</span>`;
+  return `<span class="chip ${p.cls}" title="${esc(p.title)}"><span class="dot"></span>${esc(p.text)}${p.tag ? `<span class="chip-tag">${esc(p.tag)}</span>` : ""}</span>`;
 }

@@ -23,6 +23,7 @@ task system's instrument."""
 
 import math
 import os
+import re
 import stat
 import subprocess
 import time
@@ -196,7 +197,9 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
     lines = chat(web, "What is going on?")
     assert lines[-1]["type"] == "done" and not lines[-1].get("error")
     assert any(ln["type"] == "tool_start" and ln.get("name") == "project_status" for ln in lines)
-    assert any(ln["type"] == "assistant_end" and ln["text"].startswith("I read the project's status") for ln in lines)
+    said = [ln["text"] for ln in lines if ln["type"] == "assistant_end"]
+    assert any(re.search(r": 4 of its 4 tickets are done\. I am the demo's scripted Supervisor", t) for t in said), said
+    assert not any("(above)" in t or t.lstrip().startswith("{") for t in said), said
 
     # no model ran, and nothing tried the network; the guard was in the agents' own processes
     assert not (logs / "products.log").exists(), (logs / "products.log").read_text()
@@ -263,7 +266,7 @@ def test_what_the_owner_sees(free_demo):
     # one coordinator machine: the Coordinator agent and the task system's dispatch, an instance of it
     [coord] = [m for m in d["machines"] if m["id"] == "coordinator"]
     assert {"ticket.created", "task.released", "gate.rejected", "task.attention_needed", "request.done"} <= set(coord["subscribes"]), coord
-    assert coord["kind"] == "agent ×1, program ×1" and coord["package"] == "agents" and coord["about"].get("harness") == "dummy", coord
+    assert coord["kind"] == "agent ×1, program ×1" and coord["package"] == "agents" and coord["about"] == {"role": "coordinator"}, coord
     assert [i["id"] for i in coord["instances"]] == ["dispatch"]
 
     # what each machine published: dispatch (offers, as the coordinator) adds one offer per ticket from the queue

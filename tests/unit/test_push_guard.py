@@ -5,6 +5,7 @@ bare remote."""
 import os
 import shutil
 import subprocess
+import tomllib
 
 import pytest
 
@@ -13,11 +14,11 @@ from orchestra_agents.config import Config, ConfigError
 
 
 def test_allow_push_setting():
-    assert Config.from_toml("[agents]\nharness = 'dummy'\n").allow_push == []
-    assert Config.from_toml("[agents]\nharness = 'dummy'\nallow_push = ['reviewer']\n").allow_push == ["reviewer"]
+    assert Config.from_raw(tomllib.loads("[agents]\nharness = 'dummy'\n")).allow_push == []
+    assert Config.from_raw(tomllib.loads("[agents]\nharness = 'dummy'\nallow_push = ['reviewer']\n")).allow_push == ["reviewer"]
     for bad in ("'worker'", "[1]", "['']"):
         with pytest.raises(ConfigError, match="allow_push"):
-            Config.from_toml(f"[agents]\nharness = 'dummy'\nallow_push = {bad}\n")
+            Config.from_raw(tomllib.loads(f"[agents]\nharness = 'dummy'\nallow_push = {bad}\n"))
 
 
 def test_who_is_blocked(tmp_path):

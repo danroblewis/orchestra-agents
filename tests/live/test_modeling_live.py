@@ -6,7 +6,7 @@ experiments were removed then.)
 
 It costs money and needs a logged-in ``claude``, so it runs only when asked:
 
-    ORCHESTRA_LIVE_HAIKU=1 uv run python -m pytest -q -s tests/e2e/test_modeling_live.py
+    ORCHESTRA_LIVE_HAIKU=1 uv run python -m pytest -q -s tests/live/test_modeling_live.py
 
 It prints the reply, the tools called, the cost (from Claude Code's own ``result`` events) and the
 transcript's path. Everything else here is the agents' real path: the harness, the MCP server,

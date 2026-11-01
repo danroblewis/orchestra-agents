@@ -40,6 +40,9 @@
     .att-bar { display:none; align-items:center; gap:12px; padding:8px 16px; background:linear-gradient(90deg, rgba(245,158,11,.16), rgba(245,158,11,.05));
       border-bottom:1px solid rgba(245,158,11,.45); color:var(--text, #e6e8ee); font-size:13px }
     .att-bar.on { display:flex }
+    .att-bar.note { background:var(--panel2, #151a24); border-bottom-color:var(--border2, #2a3142) }
+    .att-bar.note b { color:var(--text, #e6e8ee) }
+    .att-bar.note button:not(.att-x):not(.att-down) { background:var(--panel3, #1c2230); border-color:var(--border2, #2a3142); color:var(--text, #e6e8ee) }
     .att-bar b { color:#fbbf24 }
     .att-bar .att-what { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
     .att-bar button { flex:none; padding:4px 12px; border-radius:6px; border:1px solid #f59e0b; background:#f59e0b; color:#1a1205; font-weight:600; cursor:pointer }
@@ -103,10 +106,13 @@
     if (A.message && A.message.kind === "failed") parts.push(`<b>the Supervisor's turn failed</b> ${ago_(A.message.at)} ago: ${e_((A.message.text.split("\n\n")[1] || "").slice(0, 160))}`);
     else if (A.message) parts.push(`<b>the Supervisor wrote to you</b>${A.message.count > 1 ? ` (${A.message.count} messages)` : ""} ${ago_(A.message.at)} ago`);
     const show = parts.length && sig() !== dismissed;
+    // a failure or blocked work is a warning; a message from the Supervisor is only news
+    const warn = A.blocked.length > 0 || (A.message && A.message.kind === "failed");
     bar.classList.toggle("on", !!show);
+    bar.classList.toggle("note", !warn);
     if (show && sig() !== rendered) {
       rendered = sig();
-      bar.innerHTML = `<span>⚠</span><span class="att-what">${parts.join(" · ")}</span>
+      bar.innerHTML = `<span>${warn ? "⚠" : "💬"}</span><span class="att-what">${parts.join(" · ")}</span>
       <button class="${hostUp() ? "" : "att-down"}" onclick="window.SupervisorAttention.open()">${hostUp() ? "Review &amp; answer" : DOWN}</button><button class="att-x" title="hide until something changes" onclick="window.SupervisorAttention.dismiss()">✕</button>`;
     }
     const panel = document.getElementById("att-panel");

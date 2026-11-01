@@ -81,7 +81,7 @@ def test_status_reads_without_a_host(project, capsys):
     store.set_agent_state("coordinator", last_woken=1.0)
     assert main(["--repo", str(project.repo_root), "status"]) == 0
     out = capsys.readouterr().out.splitlines()
-    assert out[0] == "host:    not running" and out[1].startswith("agents:  pi · fills worker, reviewer")
+    assert out[0] == "host:    not running" and out[1].startswith("agents:  dummy · fills worker, reviewer")
     assert any(ln.split()[:2] == ["supervisor", "down"] for ln in out) and any(ln.split()[:2] == ["coordinator", "down"] and "last woken" in ln for ln in out)
     assert out[-1] == "on tickets: 0"
 
@@ -108,3 +108,45 @@ def test_the_command_line_is_a_subcommand_of_orchestra():
     assert not [ep for ep in entry_points(group="console_scripts") if ep.value.startswith("orchestra_agents")]
     out = subprocess.run([sys.executable, "-m", "orchestra", "agents", "--help"], capture_output=True, text=True, check=True).stdout
     assert out.startswith("usage: orchestra agents")
+
+
+def test_a_reply_read_in_the_terminal_chat_is_marked_seen(project, monkeypatch, capsys):
+    import http.server
+    import json
+    import threading
+
+    class Host(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):                                               # /health
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def do_POST(self):                                              # /supervisor: one reply, then done
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps({"type": "assistant_end", "text": "All 4 tickets are done."}).encode() + b"\n")
+            self.wfile.write(json.dumps({"type": "done", "text": "All 4 tickets are done."}).encode() + b"\n")
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Host)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        store = AgentStore(project)
+        store._mutate_runtime(lambda d: d.__setitem__("control", {"port": srv.server_address[1], "pid": 1}))
+        lines = iter(["how is it going?"])
+
+        def typed(prompt=""):
+            try:
+                return next(lines)
+            except StopIteration:
+                raise EOFError from None
+        monkeypatch.setattr("builtins.input", typed)
+        assert not store.runtime().get("supervisor_seen_at")
+        assert main(["--repo", str(project.repo_root), "chat"]) == 0
+        assert "All 4 tickets are done." in capsys.readouterr().out
+        assert store.runtime()["supervisor_seen_at"] > 0                      # read here: no banner on the pages
+    finally:
+        srv.shutdown()
+        srv.server_close()

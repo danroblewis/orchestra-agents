@@ -28,7 +28,6 @@ from .design import MACHINE, plural
 BUSY_PER_DAY = 200          # a machine woken by events more often than this is a candidate for a schedule
 EXPIRING_S = 2 * 3600.0     # a draft instrument this close to expiring unkept is a loose end
 ABSENT_VERSIONS = 3         # an expected part absent from this many discovered versions in a row is a loose end
-DUTY = "refine_map"
 
 
 def _words(s: str) -> set[str]:
@@ -218,12 +217,16 @@ def run(project, store, events: list[dict], force: bool = False) -> dict | None:
     if not layer.get("version") or (layer.get("version") == last.get("version") and not force):
         return None
     shown = set(last.get("shown") or [])
+    skipped = {}
     try:
         absent = _absent(project)
-    except Exception:  # noqa: BLE001 - the model cannot be read now: that check waits
+    except Exception as e:  # noqa: BLE001 - the model cannot be read now: that check waits, and the proposal says so
         absent = []
+        skipped["absent"] = f"the saved model versions could not be read ({type(e).__name__}: {e})"
     proposal = round_of(layer, events, drafts(store), project.config.design_passes, shown,
                         focus=changed_since(layer, last.get("version")), absent=absent)
+    if skipped:
+        proposal["skipped"] = skipped
     proposal["shown"] = sorted(shown | {f["key"] for f in proposal["findings"]})[-300:]
     store.set_agent_state(MACHINE, refinement=proposal)
     return proposal
@@ -233,6 +236,7 @@ def reason(proposal: dict, mark: str) -> str:
     lines = [(f"{mark} The refinement pass over the event map ({plural(proposal['passes'], 'pass', 'passes')}, declared layer "
               f"v{proposal['version']}; a quick heuristic check, no model) proposes, for the owner to confirm or discard:")]
     lines += [f"{i}. (check {f['n']}) {f['text']}: {f['propose']}" for i, f in enumerate(proposal["findings"][:12], 1)]
+    lines += [f"Not checked this round: {check} ({why})." for check, why in (proposal.get("skipped") or {}).items()]
     lines.append("Work it as your refine_map duty says: judge each, then one message to the owner with them, declaring "
                  "nothing until they answer.")
     return "\n".join(lines)

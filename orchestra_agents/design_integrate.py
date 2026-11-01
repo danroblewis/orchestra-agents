@@ -10,8 +10,8 @@ Supervisor's alone, each with its reason and provenance).
   (``.orchestra/machines/<name>/``, where a coding tool or the Coordinator's worker may edit it and
   a pull request lands it), or into the state directory (``<state>/machines/<name>/``) only when
   the owner said the repository must stay clean (``root: state``); its test is run against the
-  kit's fake, and the owner's words and settings are filled into its ``machine.toml`` (after the
-  test, which reads the fake's own world). When the test fails, or the system has no template of
+  kit's fake, and the owner's settings are filled into its ``machine.toml`` (after the test, which
+  reads the fake's own world; their words stay in the integration's record). When the test fails, or the system has no template of
   its own (the generic ``http`` kit), the script is handed to the Coordinator as work
   (``hand_to_coordinator``: a worker adapts it, a review and the gate land it) instead of stopping
   there. A poller's system is declared on the Machines page as
@@ -44,7 +44,7 @@ from . import design_dynamics, design_machines
 from . import integrate_kits as kits
 from . import integrate_schedule as schedule
 from .config import Project
-from .design import MACHINE, OWNER, answer, apply, page_line
+from .design import MACHINE, OWNER, answer, apply
 from .handoff import hand_to_coordinator
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
@@ -67,6 +67,16 @@ def _system(a: dict) -> str:
     if not design_machines.ID.match(s):
         raise StoreError("name the system (jira, slack, pagerduty, chronosphere, jenkins): lower case letters, digits and _")
     return s
+
+
+def _retry(store: AgentStore, name: str) -> None:
+    """An integration whose test could not run (no pytest) is begun again under its name: its
+    scaffold and record go first (nothing else was written for it)."""
+    rec = integrations(store).get(name)
+    if rec and rec.get("state") == "test not run":
+        if rec.get("dir"):
+            shutil.rmtree(rec["dir"], ignore_errors=True)
+        store.update_agent_state(MACHINE, KEY, lambda d: {k: v for k, v in (d or {}).items() if k != name})
 
 
 def _taken(project: Project, store: AgentStore, name: str) -> str | None:
@@ -104,13 +114,13 @@ def _hand_on(store: AgentStore, rec: dict, target: Path, why: str, prov: dict) -
                             "until its test passes, and you are woken with the plan")]
 
 
-def _no_kits(system: str, strategy: str) -> dict:
+def _no_kits(system: str) -> dict:
     return {"ok": True, "integrated": False, "said": [
         (f"the bridges plugin's kits (orchestra_bridges.kits) are not installed in Orchestra's Python, so nothing was "
         f"scaffolded, declared or written for {kits.title(system)}"),
         "the routes (" + kits.INTEGRATING + " §4): with the kits, the owner's coding tool installs the bridges plugin into "
-        "Orchestra's environment and you call integrate_system again; without them, the program is the one-file poller of "
-        "§5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so hand it to the "
+        f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
+        "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so hand it to the "
         "Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the token by its "
         "variable's name, clearance before any read, metadata only)",
         "a store with a Prometheus API needs no kit: strategy source"],
@@ -127,12 +137,12 @@ def _declare(project: Project, store: AgentStore, system: str, name: str, every:
     design_machines.check_machine(m)
     known = mid in (design_machines.intended_api.current(project).get("machines") or {})
     ops = ([] if known else [{"op": "propose_machine", **m, "guessed": []}]) + [{"op": "alias", "machine": mid, "observed": actor}]
-    done = apply(project, store, ops, prov)
+    done = apply(project, ops, prov)
     who = "added by you (from your message)" if prov["author"] == OWNER else "proposed by the Supervisor"
     lines = [(f"machine {mid} ({m['title']}) {'already declared; ' if known else 'declared, programmatic, managed elsewhere, ' + who + '; '}"
              f"heard as {actor} (and its people as person.{system}.<account>)"),
-             page_line(project, "the Machines page draws it dashed, \"unconfirmed\", until its events are heard and the owner "
-                                "confirms it")]
+             ("the Machines page draws it dashed, \"unconfirmed\", until its events are heard and the owner "
+              "confirms it")]
     return done, lines
 
 
@@ -194,6 +204,7 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     if not design_machines.ID.match(name) or (strategy in ("poller", "collect") and name == system):
         raise StoreError(f"{name!r}: the poller's name is lower case letters, digits and _ (2 to 41), and never the system's "
                          f"own name (the system is the machine; the poller only relays it): {system}_poller")
+    _retry(store, name)
     if taken := _taken(project, store, name):
         raise StoreError(f"{taken} already has the name {name}: nothing was written")
     rec = {"system": system, "strategy": strategy, "wants": wants, "clearance": NEEDS, "token_env": None, "at": time.time(),
@@ -201,7 +212,7 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     if strategy == "source":
         return _plan_only(project, store, name, rec, settings, a, prov)
     if not kits.installed():
-        return _no_kits(system, strategy)
+        return _no_kits(system)
     kit = a.get("kit") or kits.kit_for(system, strategy)
     if kit not in kits.kits():
         raise StoreError(f"no kit {kit!r}: the kits are {', '.join(kits.kits())}")
@@ -217,9 +228,9 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
 
 def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict, kit: str, name: str, target: Path,
                 settings: dict) -> dict:
-    system, strategy, base_url, wants = rec["system"], rec["strategy"], rec["base_url"], rec["wants"]
+    system, strategy, base_url = rec["system"], rec["strategy"], rec["base_url"]
     test = kits.run_test(target, name)
-    kits.fill(target, {**({"system": system} if kit == "http" else {}), **settings}, base_url, wants)
+    kits.fill(target, {**({"system": system} if kit == "http" else {}), **settings}, base_url)
     mf = kits.read(target)
     every = str(mf.get("settings", {}).get("every") or "5m")
     events = strategy == "poller" and kit != "promql"
@@ -228,6 +239,14 @@ def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: d
                    f"its test against the kit's fake: {'passed' if test['passed'] else 'NOT passed'} ({test['summary']})"]
     rec.update(name=name, kit=kit, dir=str(target), test=test, base_url=base_url or mf.get("settings", {}).get("base_url"),
                scope=next((k for k in kits.SCOPE_OF.get(kit, ()) if k not in settings), None))
+    if not test["ran"]:
+        rec["state"] = "test not run"
+        _save(store, name, rec)
+        lines.append("nothing was declared or planned: the test is not failing, it could not run. pytest is not installed "
+                     "in Orchestra's Python; the owner's coding tool installs it with Orchestra's dev extra, naming every "
+                     f"plugin it has, as the tool is installed: {kits.REINSTALL}. Then call integrate_system again, the "
+                     "same way, or tell the owner")
+        return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": str(target), "test": test}
     if not test["passed"]:
         rec["state"] = "test failed"
         tail = "; ".join((test.get("tail") or [])[-3:])
@@ -249,11 +268,19 @@ def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: d
         changes += done.get("changes") or []
         lines += said
         mid = system
-    sid, said = _stock(project, store, a, prov)
-    lines += said
-    if sid and mid:
-        lines += _effect(project, store, mid, sid, prov)
-    rec["steps"] = schedule.poller(name, target, every, kits.title(system), events=events, workflows=kits.workflows_installed())
+    try:
+        sid, said = _stock(project, store, a, prov)
+        lines += said
+        if sid and mid:
+            lines += _effect(project, store, mid, sid, prov)
+    except StoreError as e:
+        if not changes:
+            raise
+        ids = ", ".join(c["change"] for c in changes if c.get("change"))
+        raise StoreError(f"{e}. Applied before it in this call, and kept in the declared layer: machine {mid} declared, "
+                         f"heard as bot.{system} ({ids}); integrate_system again finds them, discard takes the machine "
+                         f"back. The poller {name} was not kept and nothing was planned") from None
+    rec["steps"] = schedule.poller(name, target, every, events=events)
     rec.update(state="needs approval", machine=mid, stock=sid)
     _save(store, name, rec)
     extra = {"request": rec["request"]} if rec.get("request") else {}
@@ -321,7 +348,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     if rec.get("dir"):
         target = Path(rec["dir"])
         if settings:
-            kits.fill(target, settings, None, rec["wants"])
+            kits.fill(target, settings, None)
         kits.clear(target, creds, data_class, base_url)
         lines.append(f"{rec['dir']}/machine.toml: clearance \"approved\", data_class {data_class!r}, {named} (by reference "
                      f"only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))

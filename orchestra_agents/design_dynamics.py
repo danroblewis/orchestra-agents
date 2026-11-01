@@ -15,16 +15,16 @@ import re
 import time
 
 from orchestra.config import ConfigError, parse_duration
+from orchestra.sd.intended.ops import ENV_NAME
 
 from . import intended_api
 from .config import Project
-from .design import MACHINE, answer, apply, page_line, plural
+from .design import MACHINE, answer, apply, plural
 from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
 
 OPTION_KINDS = ("existing_series", "script", "scrape", "source", "counters", "simulated")
-ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
 
 
 def _words(s: str) -> set[str]:
@@ -41,13 +41,13 @@ def _declare(project: Project, store: AgentStore, a: dict, prov: dict, part: str
     description = (a.get("description") or "").strip() or None
     op = {"op": f"declare_{part}", "name": name, "unit": a.get("unit") or None, "near": near, "note": prov.get("quote"),
           "guessed": guessed, "description": description}
-    done = apply(project, store, [{k: v for k, v in op.items() if v not in (None, [])}], prov)
+    done = apply(project, [{k: v for k, v in op.items() if v not in (None, [])}], prov)
     eid = done["changes"][0]["id"]
     origin = "added by you (from your message)" if prov["author"] == "owner" else "proposed by the Supervisor"
     placed = ("where you said it belongs" if owner_placed else "placed by the Supervisor") + f" beside {near}" if near else "not placed"
     return answer(project, done, [f"{part} {eid} ({name}) declared: {origin}; {placed}",
-                                  page_line(project, "the Dynamics page draws it in the Expected group as a ghost, \"no series "
-                                                     "yet\", until a series is found for it"),
+                                  ("the Dynamics page draws it in the Expected group as a ghost, \"no series "
+                                   "yet\", until a series is found for it"),
                                   "next: find how to measure it (propose_measurements)"],
                   id=eid, part=part, placed_by_owner=owner_placed)
 
@@ -91,10 +91,10 @@ def set_target(project, store, a, prov):
         raise StoreError("over is the window the target's mean is judged over: 1h, 1d, 7d")
     op = {"op": "set_target", "part": part, ("id" if declared else "key"): eid, "target": cmp, "value": a["value"],
           "over_s": over_s, **({"hi": a["hi"]} if cmp == "within" else {})}
-    done = apply(project, store, [op], prov)
+    done = apply(project, [op], prov)
     hi = f"–{a['hi']}" if cmp == "within" else ""
     return answer(project, done, [f"target on {part} {eid}: {cmp} {a['value']}{hi} (the mean over {a['over']})",
-                                  page_line(project, "the Dynamics page marks it met, missed or unknown")])
+                                  "the Dynamics page marks it met, missed or unknown"])
 
 
 def no_secret(*texts: str) -> None:
@@ -115,7 +115,7 @@ def _option(project: Project, i: int, o: dict) -> tuple[dict, dict]:
         if not (o.get(k) or "").strip():
             raise StoreError(f"option {i + 1}: give its {k} ({'how long a round takes, what it reads, a store’s request rate' if k == 'cost' else k})")
     env = (o.get("bearer_env") or "").strip()
-    if env and not ENV_NAME.match(env):
+    if env and not ENV_NAME.match(env):              # the rule of the layer that keeps it (a poller's token_env is the kits')
         raise StoreError(f"option {i + 1}: bearer_env is the name of an environment variable (WORK_TOKEN), never a value")
     url, command, series = ((o.get(k) or "").strip() for k in ("url", "command", "series"))
     system = (o.get("system") or "").strip().lower()
@@ -193,9 +193,9 @@ def propose_measurements(project, store, a, prov):
         ops.append({"op": "link", "part": part, "id": eid, "found_as": stock})
         if first.get("caveat"):
             prov = {**prov, "reason": f"{prov['reason'].rstrip('.')}. Caveat: {first['caveat']}"}
-    done = apply(project, store, ops, prov)
+    done = apply(project, ops, prov)
     lines = [f"{plural(len(options), 'way')} to measure {eid}, in order: " + "; ".join(f"{o['key']} {o['title']} ({o['kind']})" for o in options),
-             page_line(project, "the Dynamics page shows them in the element's drawer, \"How to measure it\"")]
+             "the Dynamics page shows them in the element's drawer, \"How to measure it\""]
     if waiting := [f"{o['key']} ({why})" for o, (_, why) in zip(options, pairs, strict=True) if o["clearance"] == NEEDS_APPROVAL]:
         lines.append(f"{', '.join(waiting)}: recorded \"needs approval\"; nothing reads or previews it {UNTIL}")
     if linking:
@@ -279,11 +279,11 @@ def _mark(project, store, a, prov, op: str) -> dict:
     key = (a.get("key") or "").strip()
     if part not in ("stock", "flow") or not key:
         raise StoreError("name the discovered part: part (stock or flow) and its key, as read_model or read_design gives it")
-    done = apply(project, store, [{"op": op, "part": part, "key": key}], prov)
+    done = apply(project, [{"op": op, "part": part, "key": key}], prov)
     said = ("marked expected" if op == "expect" else "ignored")
     drawn = ("always drawn, with the pin; a ghost when a version leaves it out" if op == "expect" else
              "it moves to the collapsed \"ignored\" group; nothing is hidden or removed")
-    return answer(project, done, [f"{part} {key} {said}", page_line(project, f"the Dynamics page: {drawn}")])
+    return answer(project, done, [f"{part} {key} {said}", f"the Dynamics page: {drawn}"])
 
 
 def mark_expected(project, store, a, prov):
@@ -313,7 +313,7 @@ def link(project, store, a, prov):
                        and o.get("series") in (found, found.split("{", 1)[0])), None):
         option.update({"caveat": caveat or option.get("caveat")})
         ops.append({"op": "record_measurement", "part": part, "id": eid, "options": measure["options"], "chosen": option["key"]})
-    done = apply(project, store, ops, prov)
+    done = apply(project, ops, prov)
     lines = [(f"{eid} linked to {found}: a manual binding, origin declared, drawn as an assumption until fitted; {found} "
               "keeps its name")]
     if option:
@@ -344,7 +344,7 @@ def unlink(project: Project, store: AgentStore, part: str, eid: str, declared: b
     el = (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
     if not el.get("found_as"):
         raise StoreError(f"{eid} is not linked")
-    done = apply(project, store, [{"op": "link", "part": part, "id": eid, "found_as": ""}], prov)
+    done = apply(project, [{"op": "link", "part": part, "id": eid, "found_as": ""}], prov)
     store.update_agent_state(MACHINE, "declined_links", lambda v: sorted({*(v or []), eid}))
     measure = options_of(project, part, eid)
     if (chosen := measure.get("chosen")) and next((o for o in measure["options"] if o["key"] == chosen

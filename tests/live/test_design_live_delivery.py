@@ -54,7 +54,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from test_design_live import FAKE, FORBIDDEN, costs, find, keep, layer, rediscover, say, wrapper
+from live.live_helpers import FAKE, FORBIDDEN, costs, find, keep, layer, rediscover, say, wrapper
 
 from demo.run import Web, wait_until
 

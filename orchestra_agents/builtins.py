@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from .events import GAVE_UP, INTENT_REQUESTED
 from .events import WORK_PLANNED as PLANNED
 from .events import WORK_REQUESTED as REQUESTED
+from .floor import ATTENTION_NEEDED
 from .protocol import (
     ACCEPTED,
     APPROVED,
@@ -89,7 +90,8 @@ register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
            "design", "workflows", "work", "model", "predict", "patch"),
-    wake_on=(f"{ATTENTION}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}", INTENT_REQUESTED),
+    wake_on=(f"{ATTENTION}:{SUPERVISOR}", f"{ATTENTION_NEEDED}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}",
+             INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
               "the project not set up yet, when the host starts (first_run.py)",
               "its review round, when the round's quick check finds something (review.py)"),
@@ -105,7 +107,7 @@ register(Role(
 register(Role(
     name="coordinator", prompt="coordinator",
     tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model", "work"),
-    wake_on=(f"{ATTENTION}:{COORDINATOR}", f"{REQUESTED}:{COORDINATOR}"),
+    wake_on=(f"{ATTENTION}:{COORDINATOR}", f"{ATTENTION_NEEDED}:{COORDINATOR}", f"{REQUESTED}:{COORDINATOR}"),
     emits=(REQUESTS["create_milestone"], REQUESTS["create_ticket"], PLANNED, REQUESTS["update_ticket"],
            REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"], REQUESTS["set_capacity"],
            "item.requested", "item.fact"),

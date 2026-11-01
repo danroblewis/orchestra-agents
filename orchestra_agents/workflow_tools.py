@@ -167,11 +167,11 @@ def explain_item(project: Project, a: dict) -> dict:
                   **({"outranked": len(v["outranked"])} if v.get("outranked") else {})}
               for k, v in (ex.get("fields") or {}).items()}
     row = next(iter(rec.items(lambda s: s.get("item") == item)), None) or {}     # its index row, while open
-    positions = ex.get("positions") or row.get("at") or {}
+    positions = row.get("at") or {}
     keep = ("step", "pile", "since", "wait", "holder", "rounds", "finished", "outcome", "to")
     at = {w: {k: pos[k] for k in keep if isinstance(pos, dict) and pos.get(k) not in (None, "", [], {})}
           for w, pos in positions.items()}
-    not_counted = list(ex.get("not_counted") or []) + [
+    not_counted = [
         {"workflow": w, **x} if isinstance(x, dict) else {"workflow": w, "fact": x}
         for w, pos in positions.items() if isinstance(pos, dict) for x in pos.get("not_counted") or []]
     timeline = ex.get("timeline") or []

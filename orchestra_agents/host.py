@@ -31,6 +31,7 @@ from . import (
     budget,
     design_confirm,
     design_instruments,
+    floor,
     handoff,
     intended_api,
     parent,
@@ -53,7 +54,7 @@ from .floor_roles import served
 from .floor_runner import FloorRunner
 from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
-from .listening import listens_for
+from .listening import engaged, listens_for
 from .machine_spec import load as load_spec
 from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
 from .org_store import all_agents, all_teams
@@ -110,7 +111,7 @@ class AgentHost:
         self._started_at = time.time()
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
-        self._announced: set[tuple[str, str, str]] = set()   # (source, harness, model) announced in this host's lifetime
+        self._announced: set[tuple[str, tuple[str, ...]]] = set()   # (source, floor roles) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
@@ -408,7 +409,7 @@ class AgentHost:
             tools_via=self.cfg.tools_via, read_only=read_only))
         if not ticket_id:
             self._session_models[role] = model
-        self._announce(source, role, model)        # once it exists: a session that failed to start is no machine
+        self._announce(source, role)               # once it exists: a session that failed to start is no machine
         return proc
 
     def _instance(self, session_id: str, role: str, ticket_id: str = "") -> str:
@@ -433,25 +434,21 @@ class AgentHost:
         if self._slots.pop(session_id, None) is not None:
             self.events.unbind(session_id)
 
-    def _announce(self, source: str, role: str, model: str | None = None) -> None:
+    def _announce(self, source: str, role: str) -> None:
         """An agent instance says what it is when it starts (AGENTS.md: a machine announces its
-        mode and what it listens for): an AI agent, on which harness and model, engaged how. One
-        run on an interval or at a daily time is scheduled; any other resident one is continuous
-        (its session is always up); a per-ticket or other ephemeral one is ad hoc. Once per source
-        in the host's lifetime (``reviewer/1`` is one machine instance however many tickets it
-        reviews), again only when the harness or the model changed."""
-        model = model if model is not None else self.cfg.model
-        key = (source, self.harness.name, model)
+        mode and what it listens for): an AI agent, engaged as ``listening.engaged`` says (the rule
+        its declaration shares), and the Workflows floor roles it answers. Once per source in the
+        host's lifetime (``reviewer/1`` is one machine instance however many tickets it reviews),
+        again when those floor roles change."""
+        floor = sorted(r for r, a in served(self.project).items() if a == role)   # the floor roles it answers (floor_roles.py)
+        key = (source, tuple(floor))
         if key in self._announced:
             return
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        mode = ("scheduled" if agent is not None and (agent.kind == "scheduled" or agent.every or agent.at) else
-                "continuous" if agent is not None and agent.resident else "ad hoc")
-        floor = [r for r, a in served(self.project).items() if a == role]     # the Workflows floor roles it answers (floor_roles.py)
-        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": mode, "listens_for": self._listens_for(agent),
-                                                          "kind": "agent", "role": role, **({"roles": floor} if floor else {}),
-                                                          "harness": self.harness.name, "model": model},
+        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": engaged(agent),
+                                                          "listens_for": self._listens_for(agent), "kind": "agent",
+                                                          "role": role, **({"roles": floor} if floor else {})},
                             source=source)
 
     def _listens_for(self, agent: AgentDef | None) -> list[str]:
@@ -507,7 +504,7 @@ class AgentHost:
             return 0
         for rid, r in rows.items():
             ev = {"type": INTENT_REQUESTED, "source": "owner", "id": rid, "control": r.get("control"),
-                  "change": r.get("change"), "subject": f"{r.get('part')}:{r.get('id')}", "from": r.get("from")}
+                  "change": r.get("change"), "subject": f"{r.get('part')}:{r.get('id')}"}
             if said := design_confirm.wake_reason(ev, self.project):
                 self.store.add_wakeup("supervisor", said)
         if rows:
@@ -517,7 +514,7 @@ class AgentHost:
     def _wake_reason(self, ev: dict) -> str:
         """What a wake-up says about the event that caused it: its type and the fields an agent
         acts on; for a process Orchestra gave up on, which one, how it exited and where its log is."""
-        if said := handoff.wake_reason(ev) or design_confirm.wake_reason(ev, self.project):
+        if said := handoff.wake_reason(ev) or floor.wake_reason(ev) or design_confirm.wake_reason(ev, self.project):
             return said
         if ev["type"] == GAVE_UP:
             name = ev.get("name")
@@ -574,6 +571,8 @@ class AgentHost:
                                last_token_at=None, tool_name=None)
         self._mark("session.started", session=sid, kind=role, ticket=ticket_id)
         self.store.count_turn(role, self._slots.get(sid, role), started=True)
+        if not ticket_id and (agent := self.agents.get(role)) is not None and agent.resident:
+            self.store.set_agent_state(role, last_turn=time.time())     # any turn: a wake-up's or the owner's message
 
     def _session_idle(self, sid: str, text: str, resident: bool = False, release: bool = True) -> None:
         """A turn ended. A per-ticket session's slot is given back here unless ``release`` is

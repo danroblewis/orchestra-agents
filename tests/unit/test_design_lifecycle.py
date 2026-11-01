@@ -73,13 +73,14 @@ def test_a_declared_stock_keeps_what_the_owner_says_it_means(project, store):
     assert layer(project)["stocks"]["features"]["description"] == "what works for a user, end to end"
 
 
-def test_declare_machine_takes_the_kinds_fields_flat_and_the_older_nested_spec(project, store):
+def test_declare_machine_takes_the_kinds_fields_flat_and_no_nested_spec(project, store):
     improver(project, store)
     assert layer(project)["machines"][MID]["spec"] == SPEC
     say(store, "And a second one.", 4)
-    call(project, store, "declare_machine", name="second_one", kind="universal", description="Another", spec=SPEC,
-         steps=["Only this step"], reason=WHY)
-    assert layer(project)["machines"]["second_one"]["spec"] == {**SPEC, "steps": ["Only this step"]}   # the flat one wins
+    with pytest.raises(StoreError, match="spec"):                                    # the older nested form is gone
+        call(project, store, "declare_machine", name="second_one", kind="universal", description="Another", spec=SPEC,
+             reason=WHY)
+    assert "second_one" not in layer(project)["machines"]
 
 
 def test_a_quoted_kind_switch_on_a_confirmed_machine_waits_and_once_confirmed_stops_the_agent(project, store):
@@ -101,8 +102,7 @@ def test_a_quoted_kind_switch_on_a_confirmed_machine_waits_and_once_confirmed_st
     assert any("handed to the Coordinator" in line for line in out["said"])
 
 
-def test_confirming_an_engagement_change_counts_the_schedule_from_the_confirm(project, store, monkeypatch):
-    from orchestra_agents.host import AgentHost
+def test_confirming_an_engagement_change_counts_the_schedule_from_the_confirm(project, store, make_host, monkeypatch):
     improver(project, store, mode="continuous")
     confirm(project, store)
     say(store, "Make it a scheduled task at midnight.", 7)
@@ -116,7 +116,7 @@ def test_confirming_an_engagement_change_counts_the_schedule_from_the_confirm(pr
     out = call(project, store, "confirm", element=FCI, change=change, quote="Confirm the schedule change.", reason=WHY)
     assert store.agent_state(MID)["last_at_fire"] == pytest.approx(later)
     assert any("its engagement is now scheduled: first run at 00:00 America/Los_Angeles" in line for line in out["said"])
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     host._schedule_wakeups(store.runtime()["agent_state"])
     assert not [w for w in store.runtime()["wakeups"] if w["target"] == MID]          # it waits for the next 00:00
@@ -221,7 +221,7 @@ def test_a_machine_managed_elsewhere_publishes_no_change_at_confirm(project, sto
     out = confirm(project, store)
     assert out["prediction"] is None and not predictions(store)
     assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]
-    assert any("kept as an expectation" in line for line in out["said"])
+    assert any("kept as an expectation" in line and "until a change of it is announced (announce_change)" in line for line in out["said"])
 
 
 def test_a_programs_waiting_edit_names_the_change_its_program_announces(project, store):
@@ -240,7 +240,7 @@ def test_a_programs_waiting_edit_names_the_change_its_program_announces(project,
 
 
 
-def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(project, store, drafting):
+def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(project, store):
     features(project, store)
     add(project, store)
     script = project.state_dir / "instruments" / "features.acceptance.sh"
@@ -258,7 +258,7 @@ def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(
     assert len(after) == before + 1 and after[-1]["source"] == "supervisor"
 
 
-def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, drafting):
+def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store):
     features(project, store)
     add(project, store)
     say(store, "Yes, track acceptance tests passing.", 4)
@@ -274,16 +274,7 @@ def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, draf
     assert any("kept" in line and "expect mark" in line for line in said)
 
 
-def test_without_the_draft_flag_an_instrument_is_never_expired_on_a_timer(project, store, monkeypatch):
-    monkeypatch.setattr(design_instruments, "supports_draft", lambda: False)
-    features(project, store)
-    out = add(project, store)
-    assert design_instruments.NO_DRAFT in out["said"] and design_instruments.drafts(store)["features.acceptance"]["until"] is None
-    assert design_instruments.expire(project, store, now=time.time() + 30 * 86_400) == []
-    assert entry(project, "features.acceptance") is not None
-
-
-def test_a_simulated_placeholder_is_never_marked_draft(project, store, drafting):
+def test_a_simulated_placeholder_is_never_marked_draft(project, store):
     features(project, store)
     out = add(project, store, option="b", name="features.sim", script="echo 'features_simulated 3'\n")
     e = entry(project, "features.sim")
@@ -335,6 +326,7 @@ def test_add_instrument_reads_what_the_option_names_from_the_layer(project, stor
 
 
 
+@pytest.mark.real_harness            # reads Claude Code's model name for its price; opens no session
 def test_a_dummy_harness_turn_costs_nothing_and_a_model_turn_its_price(project, monkeypatch):
     monkeypatch.setattr(project.config, "harness", "dummy")
     assert design_machines.turn_usd(project) == 0.0

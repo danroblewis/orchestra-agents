@@ -8,8 +8,7 @@ object is counted, never copied). Once, unbounded, it answered with 360,000 char
 model read none of it (the live design test, A3).
 
 **A known type** is one a machine on the bus speaks: heard (an event of it in the events read),
-or announced (a machine's ``orchestra.machine.started`` names it among what it listens for, or
-what it publishes), or one a declared machine emits, or one declared with ``declare_event``. A
+or announced (a machine's ``orchestra.machine.started`` names it among what it listens for), or one a declared machine emits, or one declared with ``declare_event``. A
 type the merge gate publishes only when a branch fails (``gate.rejected``) is known before the
 first failure, because the machines that wait for it say so when they start."""
 
@@ -60,7 +59,8 @@ def recent(store: AgentStore, n: int = SCAN) -> list[dict]:
 
 
 def _announced_types(e: dict) -> list[str]:
-    return [t for k in ("listens_for", "types", "emits", "publishes") for t in (e.get(k) or []) if isinstance(t, str)]
+    """What an announcement names: the types it listens for (Orchestra reads no other list in it)."""
+    return [t for t in (e.get("listens_for") or []) if isinstance(t, str)]
 
 
 def read_events(store: AgentStore, a: dict) -> dict:

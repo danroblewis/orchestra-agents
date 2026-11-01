@@ -36,9 +36,11 @@ broken without updating the spec and saying so in the commit.
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
    The Workflows floor's names are its machine contract, copied by hand into `floor.py` the same
    way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin for
-   that contract. The one exception (2026-11-01, W7; that plugin's SPEC §10): the Supervisor's
-   workflow tools (`workflow_tools.py`) import its validated writer, loader and record API lazily,
-   as an optional dependency, and say the plugin is not installed when it is not.
+   that contract. The exceptions, each a lazy import of an optional dependency that says the plugin
+   is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
+   W7; that plugin's SPEC §10) import its validated writer, loader and record API; and
+   `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
+   templates and settings, and its `machine.toml` reader).
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the
@@ -65,15 +67,20 @@ broken without updating the spec and saying so in the commit.
    against that role's tool groups (`access.authorize`) before it runs.
 8. **Every harness has a fake** in `tests/e2e/` that speaks its real protocol, and the e2e tests
    run once per harness. Real Claude runs only in the demo, with Haiku, and the demo honours
-   `CLAUDE_BINARY` so a test can stand a fake in. The dummy harness is the exception: it is a
+   `CLAUDE_BINARY` so a test can stand a fake in; and in the three opt-in live tests under
+   `tests/live/`, outside the default test paths, each skipped unless its variable is set:
+   `test_design_live.py` (`ORCHESTRA_LIVE_DESIGN=1`), `test_integrate_live.py` and
+   `test_modeling_live.py` (`ORCHESTRA_LIVE_HAIKU=1`), on Haiku only. The design test's free
+   rehearsal on the fake Claude (`ORCHESTRA_LIVE_DESIGN=rehearse`) also runs in the default paths,
+   as `tests/e2e/test_design_rehearsal_e2e.py`. The dummy harness is the exception: it is a
    product feature with no product behind it, so it has no fake; the e2e tests run on it as it
    ships, with a script for each fake's knob. The Supervisor runs on its machine spec's model,
 Sonnet by default (D20), where the harness takes the name; the other agents on `[agents] model`. A test of anything around the agents (another goal's
    acceptance, the task system's flow, the web) uses the dummy harness, never a model.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
-   `store.py` under its lock; the rest of the state directory (`logs/`, `sessions/`, the prompt
-   each session was started with, `PROJECT.md`, `machines/`) is named in SPEC §7 and written by
-   the host and the harnesses, and `PROJECT.md` is seeded by the first read and written by the
+   `store.py` under its lock; the rest of the state directory is listed in SPEC §7, file by file
+   (with what `integrate_system` writes beside it, in Orchestra's `<state>/machines/`), and written
+   by the host and the harnesses, and `PROJECT.md` is seeded by the first read and written by the
    Supervisor's context tool. `machines/<name>/` holds a confirmed Universal Machine's spec when it
    is not in the repository (machine-design.md §2.1): its `machine.toml`, `role.md`, `role.json`
    and `agent.json`, written by the Supervisor's confirm (`state_machines.py`) and read through
@@ -102,7 +109,8 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     a coding tool or the Coordinator's worker (a failed test or a system with no template is handed
     to the Coordinator), never by the Supervisor, which changes only its `machine.toml` (the owner's
     settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
-    reference: a variable's name or a file's path) and the overlay entries that run it. So the Supervisor
+    reference: a variable's name or a file's path; the scaffolded test reads them from `machine.toml`)
+    and the overlay entries that run it. So the Supervisor
     writes code of its own in exactly two cases: that measurement script, and a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,

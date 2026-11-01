@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import os
 import shutil
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from orchestra.config import ConfigError, home, parse_duration
+from orchestra.config import ConfigError, parse_duration
 from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
 
@@ -80,11 +79,6 @@ class Config:
     base_branch: str = "main"           # from the task system's [project], for the prompts
     ticket_prefix: str = "ORC"
     work: str = "tasks"
-
-    @classmethod
-    def from_toml(cls, text: str) -> Config:
-        """The settings in a TOML text (tests; the project's come from ``from_raw``)."""
-        return cls.from_raw(tomllib.loads(text))
 
     @classmethod
     def from_raw(cls, raw: dict[str, Any]) -> Config:
@@ -161,7 +155,7 @@ class Project:
 
     @property
     def state_dir(self) -> Path:
-        return home() / self.key / "agents"
+        return self.orchestra.state_dir / "agents"
 
     @property
     def runtime_file(self) -> Path:

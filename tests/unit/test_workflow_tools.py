@@ -1,8 +1,8 @@
 """The Supervisor's workflow tools against a fake Workflows plugin (``workflow_tools.plugin``
 replaced): a refusal says every problem and writes nothing, the root is the state directory unless
-the owner's words say the repository (never committed), the loaded definitions and an item's
-explanation are read back trimmed, a missing plugin is said plainly, and only the Supervisor
-writes."""
+the owner's words say the repository (never committed), the loaded definitions are read back, a
+missing plugin is said plainly, and only the Supervisor writes. ``explain_item`` runs on the real
+plugin's record (tests/e2e/test_workflows_e2e.py)."""
 
 import json
 import subprocess
@@ -64,7 +64,6 @@ class FakePlugin:
     def __init__(self):
         self.refuse: list[str] = []
         self.calls: list[tuple] = []
-        self.explained: dict | None = None
         self.define = SimpleNamespace(write=self.write, load=self.load, DefinitionError=DefinitionError)
 
     def problems(self, project, raw):
@@ -92,27 +91,8 @@ class FakePlugin:
                 out.append(Workflow(raw["name"], raw.get("planner", "coordinator"), steps, raw))
         return SimpleNamespace(workflows=out, problems=["x/workflows/broken/workflow.json: no steps"], notes=[])
 
-    def Record(self):
-        return self
-
-    def for_project(self, project):
-        return self
-
-    def explain(self, item):
-        return self.explained if item == "ORC-1" else None
-
-    def item(self, item):
-        return {"item": item, "facts": 3, "first": "t1", "last": "t3", "fields": {"title": {"value": "x", "id": "e1"}},
-                "children": []}
-
-    def items(self, predicate=None):
-        rows = [{"item": "ORC-1", "facts": 3, "fields": {"title": "x"}, "wait": "offered", "closed": [], "requested": {},
-                 "at": {"write_review": {"step": "review", "pile": "review.waiting", "since": "t3", "wait": "offered",
-                                         "rounds": 2, "not_counted": [{"fact": "e9", "why": "not the holder"}]}}}]
-        return [r for r in rows if predicate is None or predicate(r)]
-
     def ns(self):
-        return SimpleNamespace(define=self.define, problems=self.problems, roots=self.roots, Record=self)
+        return SimpleNamespace(define=self.define, problems=self.problems, roots=self.roots)
 
 
 @pytest.fixture
@@ -157,8 +137,40 @@ def test_the_tools_are_the_supervisors_group_and_the_schema_spells_out_the_defin
     props = d["properties"]["definition"]["properties"]
     assert set(props) == {"name", "planner", "starts", "steps", "piles", "lifecycle", "settings"}
     step = props["steps"]["items"]["properties"]
-    assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends"}
+    assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends", "draft"}
     assert set(step["who"]["properties"]) == {"role", "program", "outside", "person", "outbox"}
+    assert props["steps"]["items"]["required"] == ["name"]          # a fan-in or an after step has no who
+
+
+def test_the_text_states_the_plugins_contract():
+    """The words since the vocabulary (S3) and the outbox writes (O1), so the Supervisor writes them."""
+    d = BY_NAME["declare_workflow"]
+    props = d.input_schema["properties"]["definition"]["properties"]
+    step = props["steps"]["items"]["properties"]
+    who, done = step["who"]["description"], step["done_when"]
+    assert "never performs" in who and "awaiting the owner's approval" in who and "sent, rejected or failed" in who
+    assert "never offered" in who and "ORCHESTRA_STEP" in who and "leave who out" in who
+    assert set(step["draft"]["properties"]) == {"kind", "target", "content", "fields", "recipients"}
+    assert step["draft"]["required"] == ["kind"] and "no text template" in step["draft"]["description"]
+    assert "after" in done["properties"] and "{after:" in done["description"] and "no who" in done["description"]
+    assert done["properties"]["distinct"]["enum"] == ["source"] and "counts events" in done["properties"]["count"]["description"]
+    starts = props["starts"]["items"]["properties"]
+    assert "data" in starts and "makes no item" in starts["data"]["description"]
+    for word in ("distinct: source", "person: owner", "outbox: owner", "draft", "after", "depends"):
+        assert word in d.description, word
+    assert "Piles page" not in d.description and "Workflows page" not in d.description
+
+
+def test_the_guide_and_the_coordinator_say_the_outbox_and_the_counts():
+    root = Path(workflow_tools.__file__).resolve().parent
+    guide = (root / "guide.md").read_text()
+    words = guide[guide.index("## Workflows"):guide.index("### Starting a piece of work")]
+    for w in ("never performs it", "awaiting the owner's approval", "`distinct: \"source\"`", "`{\"after\": \"5m\"}`",
+              "`person: owner`", "ORCHESTRA_FIELDS", "has no who", "only the owner's tickets"):
+        assert w in words, w
+    assert "Piles page" not in guide and "Workflows page" not in guide
+    coord = (root / "prompts" / "coordinator.md").read_text()
+    assert "awaiting the owner's approval" in coord and "outbox step's draft" in coord
 
 
 def test_a_definition_is_written_to_the_state_directory_by_default(project, store, fake):
@@ -235,23 +247,6 @@ def test_the_loaded_definitions_are_listed_with_where_and_the_loaders_problems(p
     assert out["problems"] == ["x/workflows/broken/workflow.json: no steps"]
 
 
-def test_an_item_is_explained_trimmed(project, store, fake):
-    fake.explained = {"item": "ORC-1", "facts": 3, "positions": {}, "not_counted": [],
-                      "fields": {"title": {"value": "x", "set_by": {"id": "e1", "source": "tasks", "time": "t1"},
-                                           "outranked": [{"id": "e0"}]}},
-                      "timeline": [{"id": f"e{i}", "type": "t", "source": "s", "time": f"t{i}"} for i in range(30)],
-                      "relations": [], "ended": {}, "requested": {"workflow": "write_review", "by": {"id": "e0"}}}
-    out = call(project, store, "explain_item", item="ORC-1", last=5)
-    assert out["fields"] == {"title": {"value": "x", "set_by": "tasks t1", "outranked": 1}}
-    assert out["positions"] == {"write_review": {"step": "review", "pile": "review.waiting", "since": "t3",
-                                                 "wait": "offered", "rounds": 2}}
-    assert out["not_counted"] == [{"workflow": "write_review", "fact": "e9", "why": "not the holder"}]
-    assert [e["id"] for e in out["last_facts"]] == ["e25", "e26", "e27", "e28", "e29"]
-    assert out["summary"]["open"] is True and out["summary"]["wait"] == "offered" and out["requested"]["workflow"]
-    with pytest.raises(StoreError, match="no item 'ORC-2'"):
-        call(project, store, "explain_item", item="ORC-2")
-
-
 def test_the_open_items_are_listed_as_the_items_page_lists_them(project, store, fake, monkeypatch):
     seen = {}
 
@@ -265,10 +260,13 @@ def test_the_open_items_are_listed_as_the_items_page_lists_them(project, store, 
                   "done": True, "finished": "t0", "outcome": "closed", "fields": {"pull": i}} for i in range(1, 15)]
         return {"workflows": [{"workflow": "delivery_live", "steps": ["write", "sail_check"], "items": rows}], "open": 2}
 
-    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(**vars(fake.ns()), item_list=item_list))
+    record = object()
+    Record = SimpleNamespace(for_project=lambda o: record)
+    monkeypatch.setattr(workflow_tools, "plugin",
+                        lambda: SimpleNamespace(**vars(fake.ns()), Record=Record, item_list=item_list))
     out = call(project, store, "list_items", workflow="delivery_live")
     (w,) = out["workflows"]
-    assert seen["workflow"] == "delivery_live" and seen["record"] is fake and out["open"] == 2
+    assert seen["workflow"] == "delivery_live" and seen["record"] is record and out["open"] == 2
     assert [r["item"] for r in w["open"]] == ["SCRUM-8", "SCRUM-9"]
     assert w["open"][0] == {"item": "SCRUM-8", "step": "sail_check", "pile": "sail_check.waiting", "since": "t1",
                             "wait": {"reason": "waiting for github.pr.labeled SAILED", "by": "github"}, "age_s": 608,
@@ -276,7 +274,7 @@ def test_the_open_items_are_listed_as_the_items_page_lists_them(project, store, 
     assert len(w["closed_recently"]) == workflow_tools.CLOSED_SHOWN and w["closed_recently"][0]["outcome"] == "closed"
     assert "a pull request's number" in out["shown"]
     assert BY_NAME["list_items"].group == "workflows"
-    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(**vars(fake.ns()), item_list=None))
+    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(**vars(fake.ns()), Record=Record, item_list=None))
     with pytest.raises(StoreError, match="no Items list"):
         call(project, store, "list_items")
 

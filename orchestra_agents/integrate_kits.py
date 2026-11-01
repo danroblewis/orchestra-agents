@@ -1,7 +1,6 @@
 """The seam between ``integrate_system`` (``design_integrate.py``) and what Orchestra's
 ``docs/INTEGRATING.md`` builds an integration from: the bridges plugin's kits
-(``orchestra_bridges.kits``: its scaffold, templates and fakes), the Workflows plugin's ``every``,
-and a scaffolded poller's own files.
+(``orchestra_bridges.kits``: its scaffold, templates and fakes) and a scaffolded poller's own files.
 
 - **Which strategy** (INTEGRATING.md §2, in its order of preference): a Prometheus-API store is a
   ``[[sources]]`` entry (``source``); a system with item events is a poller built from a kit
@@ -42,12 +41,15 @@ from .store import StoreError
 
 STRATEGIES = ("source", "poller", "collect")
 ROOTS = {"repository": "repo", "state": "state"}      # integrate_system's word -> the kit scaffold's --root
+# Orchestra's tool with the kits (the bridges extra) and pytest, which runs a scaffolded poller's test (the dev
+# extra); installing the tool again replaces it, so every plugin it had is named again (README, "Use it")
+REINSTALL = ("uv tool install 'orchestra[sd,agents,bridges,dev] @ git+https://github.com/danroblewis/orchestra@main' "
+             "(with tasking or workflows added when the project has them)")
 STORES = ("chronosphere", "prometheus", "mimir", "thanos", "victoriametrics", "cortex")
 KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", **{s: "promql" for s in STORES}}
 SCOPE = {"jql": "which Jira projects to follow (or a JQL filter)", "channels": "which Slack channels to follow (their ids)"}
 SCOPE_OF = {"jira": ("jql",), "slack": ("channels",)}      # what a kit's template only guesses: the owner's to name
 TITLES = {"jira": "Jira", "slack": "Slack", "pagerduty": "PagerDuty", "github": "GitHub", "chronosphere": "Chronosphere"}
-ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
 KEY = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "acme.chronosphere.io")
 CREDENTIAL_VARS = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|_KEY|BEARER|CREDENTIAL)", re.IGNORECASE)
@@ -60,14 +62,6 @@ def installed() -> bool:
     """Whether the bridges plugin's kits are importable in this Python (Orchestra's)."""
     try:
         return importlib.util.find_spec("orchestra_bridges.kits") is not None
-    except ModuleNotFoundError:
-        return False
-
-
-def workflows_installed() -> bool:
-    """Whether the Workflows plugin is installed: a poller then runs as its ``every`` item."""
-    try:
-        return importlib.util.find_spec("orchestra_workflows") is not None
     except ModuleNotFoundError:
         return False
 
@@ -190,8 +184,12 @@ def drop_keys(text: str, table: str, keys: list[str]) -> str:
 
 
 def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None:
+    """The change, written, then read back by the program's own reader (the bridges'
+    ``machinefile.read``): what it refuses is put back as it was."""
+    from orchestra_bridges.kits.machinefile import read as read_machine_file
     path = target / "machine.toml"
-    text = set_keys(set_keys(path.read_text(encoding="utf-8"), None, top), "settings", settings)
+    old = path.read_text(encoding="utf-8")
+    text = set_keys(set_keys(old, None, top), "settings", settings)
     text = drop_keys(text, "settings", [k for k in drop if k not in settings])
     got = tomllib.loads(text)                       # still TOML, and says what was set: refused before it is written otherwise
     if any(k in got.get("settings", {}) for k in drop if k not in settings):
@@ -199,11 +197,28 @@ def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None
     if any(got.get(k) != v for k, v in top.items()) or any(got.get("settings", {}).get(k) != v for k, v in settings.items()):
         raise StoreError(f"{path}: the change did not read back as written; nothing was changed")
     path.write_text(text, encoding="utf-8")
+    try:
+        read_machine_file(path)
+    except ValueError as e:                         # MachineFileError: the program would refuse to start on it
+        path.write_text(old, encoding="utf-8")
+        raise StoreError(f"the poller's own reader refuses the change ({e}); machine.toml was put back as it was") from None
 
 
-def fill(target: Path, settings: dict, base_url: str | None, wants: str) -> None:
-    """The owner's words and settings into the poller's ``machine.toml``; never its clearance."""
-    _edit(target, {"wanted": wants}, {**settings, **({"base_url": base_url} if base_url else {})})
+def env_name_ok(name: str) -> bool:
+    """Whether ``name`` is a token's variable name the reader will take: the bridges' kits' rule
+    (``orchestra_bridges.kits.settings.ENV_NAME``), else, with no kits, Orchestra's own
+    (``[[sources]]``'s ``bearer_env``, ``orchestra.sd.intended.ops.ENV_NAME``)."""
+    try:
+        from orchestra_bridges.kits.settings import ENV_NAME
+    except ImportError:
+        from orchestra.sd.intended.ops import ENV_NAME
+    return bool(ENV_NAME.match(name))
+
+
+def fill(target: Path, settings: dict, base_url: str | None) -> None:
+    """Settings into the poller's ``machine.toml``; never its clearance (the owner's words are the
+    integration record's, ``wants``)."""
+    _edit(target, {}, {**settings, **({"base_url": base_url} if base_url else {})})
 
 
 def clear(target: Path, credentials: dict, data_class: str, base_url: str | None) -> None:
@@ -267,7 +282,7 @@ def credentials(a: dict) -> dict:
         if why := secret_in(f"{k} = {v!r}"):
             raise StoreError(f"{k} looks like a credential itself ({why}): name its variable or its file, never the "
                              "value; nothing was changed")
-        if k.endswith("_env") and not ENV_NAME.match(v):
+        if k.endswith("_env") and not env_name_ok(v):
             raise StoreError(f"{k} is the NAME of an environment variable (JIRA_TOKEN), never a token: ask the owner for it")
         out[k] = v if k.endswith("_env") else _outside_repositories(v, k)
     if not ({"token_env", "token_file"} & set(out)):

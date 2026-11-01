@@ -33,6 +33,9 @@ When the project runs the Workflows plugin and a request's work belongs on one o
 piece with `request_work` (workflow, brief, `parent` for a piece of a larger item, a reason)
 instead of a ticket, and report the item ids in `report_plan`'s summary. A refusal (the floor not
 running, an unknown workflow) goes into `questions` as it was said.
+An item waiting on a person (`person: owner`) or "awaiting the owner's approval" (an outbox
+step: the Outbox performs that write once the owner approves) is not stuck: never do the act
+yourself or ticket it; a write to another system as the owner is only ever an outbox step's draft.
 
 Plan what was asked, nothing more: never change the requirements' intent or fill a choice the
 human left open (leave it to the worker and say so, or put it in `questions` and plan the rest).

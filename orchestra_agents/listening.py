@@ -53,3 +53,14 @@ def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | lis
     if "predict" in groups:
         out |= {JUDGED, *(endings(work) if per_ticket else ())}
     return sorted(out)
+
+
+def engaged(agent) -> str:
+    """How an agent is engaged, the one rule its announcement (host.py) and its declaration (web.py)
+    share: scheduled when it runs on an interval or at a daily time, continuous when its session is
+    always up (resident), else ad hoc (a per-ticket or other ephemeral one)."""
+    if agent is None:
+        return "ad hoc"
+    if getattr(agent, "kind", None) == "scheduled" or agent.every or agent.at:
+        return "scheduled"
+    return "continuous" if agent.resident else "ad hoc"

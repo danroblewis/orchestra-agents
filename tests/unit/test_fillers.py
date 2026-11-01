@@ -41,3 +41,10 @@ def test_a_program_announced_before_the_host_started_and_an_agent_seen_accepting
 def test_nothing_seen_is_said(events):
     assert Fillers(events).lines([]) == ["The AI agents here fill: no task role (`[agents] serves`).",
                                          "No machine has been seen filling a role yet."]
+
+
+def test_an_instance_that_announces_no_kind_is_said_not_announced(events):
+    events.publish("orchestra.machine.started", {"listens_for": ["task.assigned"]}, source="worker/odd")
+    events.publish("task.accepted", {"role": "worker", "instance": "worker/odd"}, source="worker/odd")
+    fillers = Fillers(events)
+    assert "Seen filling the worker role: worker/odd (not announced)." in fillers.lines(["worker"])

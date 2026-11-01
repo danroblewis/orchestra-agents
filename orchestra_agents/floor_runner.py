@@ -1,17 +1,7 @@
-"""The AI agents' side of the Workflows floor (floor.py; orchestra-workflows' machine contract),
-as runner.py is the task system's: for each ``offer.made`` with a role the agents serve here
-(floor_roles.py) it announces the instance, claims the offer, reads the claim back (a loser says
-nothing more and starts no session), runs the agent's turn in the handed worktree with the brief,
-says ``offer.alive`` within ``heartbeat_s`` with what the agent is saying now, and finishes with
-the outcome the agent's exit tool reported, or ``blocked`` with why (the BLOCKED rule). An
-``offer.withdrawn`` naming the offer or its holder kills the turn, and nothing more is said for it.
-
-A turn runs in a session per agent and item (``<agent>-<item>``), so rework that comes back to the
-same instance (``to``) finds the conversation it left; its instance is a numbered slot of the
-agent (``worker/1``, ``triage/1``), given back when the turn ends. Without a worktree among the
-offer's resources the session is in the repository, read only. When the host stops mid-turn
-nothing is finished: the floor takes the offer back when its lease runs out (there is no
-machine-sent release), and offers it again."""
+"""The agents' turns on the Workflows floor (SPEC §3.1), as runner.py is the task system's: for
+each ``offer.made`` with a role the agents serve here (floor_roles.py) it announces the instance,
+claims, reads the claim back, runs the agent's turn in the handed worktree, says ``offer.alive``
+and finishes with the outcome of the agent's exit tool (floor.py)."""
 
 from __future__ import annotations
 
@@ -63,8 +53,8 @@ class FloorRunner:
                     and ev["offer"] not in self.threads:
                 self._offered(ev, roles[ev["role"]], start)
             elif ev.get("type") == floor.WITHDRAWN:
-                for oid, inst in list(self.instances.items()):
-                    if floor.stops(ev, oid, inst):
+                for oid in list(self.instances):
+                    if floor.stops(ev, oid):
                         self.withdrawn[oid] = ev.get("reason") or "withdrawn"
                         proc = self.procs.get(oid)
                         if proc is not None:
@@ -97,11 +87,13 @@ class FloorRunner:
         done = threading.Event()
         report, text, failed, lost = None, "", True, False
         try:
-            host._announce(instance, agent, host.model_of(agent))   # before the claim: the floor reads its roles
+            host._announce(instance, agent)                   # before the claim: the floor reads its roles
             claim = say(floor.CLAIMED)
             if not self._held(o, instance, claim, start):
                 lost = True
                 return                                        # another claim came first, or it was withdrawn: nothing spent
+            if host.stop.is_set():                            # the host is stopping: no session; the lease takes it back
+                return
             path = floor.workspace(o)
             cwd = Path(path) if path else host.project.repo_root
             system, tools = self._session_of(agent)
@@ -152,7 +144,7 @@ class FloorRunner:
         oid = o["offer"]
         end = time.time() + float(o.get("lease_s") or CONFIRM_S)
         while time.time() < end:
-            if oid in self.withdrawn:
+            if oid in self.withdrawn or self.host.stop.is_set():
                 return False
             evs, _ = self.events.after(start)
             ids = [e.get("id") for e in evs]

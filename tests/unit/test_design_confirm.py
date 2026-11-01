@@ -33,7 +33,7 @@ def improver(project, store, mode="scheduled", **over):
     say(store, TURN3, 3)
     eng = {"mode": mode, **({"at": "00:00", "tz": "America/Los_Angeles"} if mode == "scheduled" else {})}
     args = {"name": "Feature Count Improver", "kind": "universal", "description": "Improves how many features get delivered per day",
-            "receives": ["gate.landed"], "emits": ["work.improvement_proposed"], "spec": SPEC, "quote": TURN3, "reason": WHY, **eng}
+            "receives": ["gate.landed"], "emits": ["work.improvement_proposed"], **SPEC, "quote": TURN3, "reason": WHY, **eng}
     call(project, store, "declare_machine", **{**args, **over})
 
 
@@ -94,12 +94,11 @@ def test_the_owners_request_wakes_the_supervisor_which_confirms_and_runs_it_from
     assert design_confirm.announce_start(store, "feature_count_improver") is None       # once
 
 
-def test_the_model_a_confirmed_machine_runs_on_is_its_specs(project, store):
-    from orchestra_agents.host import AgentHost
+def test_the_model_a_confirmed_machine_runs_on_is_its_specs(project, store, make_host):
     improver(project, store)
     say(store, "Confirm it.", 6)
     call(project, store, "confirm", element=FCI, quote="Confirm it.", reason=WHY)
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host.harness.model_for = lambda name: f"model:{name}"
     assert host.model_of("feature_count_improver") == "model:haiku"
 
@@ -146,10 +145,9 @@ def test_a_request_backs_only_the_call_it_names_and_only_once(project, store):
         call(project, store, "discard", element=FCI, request="not-an-event", reason=WHY)
 
 
-def test_a_request_from_anyone_but_the_owner_wakes_nobody(project, store):
-    from orchestra_agents.host import AgentHost
+def test_a_request_from_anyone_but_the_owner_wakes_nobody(project, store, make_host):
     improver(project, store)
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     host._wake_at = store.events.end()
     rid = request(store, "confirm", FCI, source="bot")
@@ -224,10 +222,10 @@ def test_a_refused_confirm_publishes_no_prediction_and_records_no_start(project,
     say(store, "Confirm it.", 6)
     real = design_confirm.apply
 
-    def refuse(project_, store_, ops, prov):
+    def refuse(project_, ops, prov):
         if ops[0]["op"] == "confirm":
             raise StoreError("Orchestra refused op 0: for the test")
-        return real(project_, store_, ops, prov)
+        return real(project_, ops, prov)
     monkeypatch.setattr(design_confirm, "apply", refuse)
     with pytest.raises(StoreError, match="for the test"):
         call(project, store, "confirm", element=FCI, quote="Confirm it.", reason=WHY)
@@ -307,18 +305,16 @@ def test_an_interrupted_prediction_is_renewed_for_the_new_era(project, store):
 
 
 @pytest.mark.parametrize("verdict", ["passed", "no effect"])
-def test_a_verdict_on_a_designed_machines_prediction_wakes_the_supervisor(project, store, verdict):
-    from orchestra_agents.host import AgentHost
+def test_a_verdict_on_a_designed_machines_prediction_wakes_the_supervisor(project, store, make_host, verdict):
     out = confirmed(project, store)
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     host.verdicts.see({"type": "orchestra.prediction.judged", "verdict": verdict, "correlationid": out["change"]})
     woke = [w["reason"] for w in store.runtime()["wakeups"] if w["target"] == "supervisor"]
     assert woke and f"judged: {verdict}" in woke[-1] and FCI in woke[-1]
 
 
-def test_a_daily_machine_confirmed_after_its_time_waits_for_its_next_time(project, store, monkeypatch):
-    from orchestra_agents.host import AgentHost
+def test_a_daily_machine_confirmed_after_its_time_waits_for_its_next_time(project, store, make_host, monkeypatch):
     zone = ZoneInfo("America/Los_Angeles")
     past = datetime.now(zone).replace(hour=0, minute=30, second=0, microsecond=0).timestamp()      # 00:30, after 00:00
     monkeypatch.setattr(time, "time", lambda: past)
@@ -326,7 +322,7 @@ def test_a_daily_machine_confirmed_after_its_time_waits_for_its_next_time(projec
     say(store, "Confirm it.", 6)
     out = call(project, store, "confirm", element=FCI, quote="Confirm it.", reason=WHY)
     assert any("first run at 00:00 America/Los_Angeles, tomorrow" in line for line in out["said"])
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     nxt = (datetime.fromtimestamp(past, zone) + timedelta(days=1)).replace(hour=0, minute=0).timestamp()   # 00:00 there
     for t in (past + 60, nxt - 60):                                    # all day, until just before the next 00:00 there
@@ -338,15 +334,14 @@ def test_a_daily_machine_confirmed_after_its_time_waits_for_its_next_time(projec
     assert [w for w in store.runtime()["wakeups"] if w["target"] == "feature_count_improver"]
 
 
-def test_a_daily_run_missed_while_the_host_was_down_is_skipped(project, store, monkeypatch):
-    from orchestra_agents.host import AgentHost
+def test_a_daily_run_missed_while_the_host_was_down_is_skipped(project, store, make_host, monkeypatch):
     zone = ZoneInfo("America/Los_Angeles")
     midnight = datetime.now(zone).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     monkeypatch.setattr(time, "time", lambda: midnight - 3600)
     improver(project, store, missed="skip")
     say(store, "Confirm it.", 6)
     call(project, store, "confirm", element=FCI, quote="Confirm it.", reason=WHY)
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     monkeypatch.setattr(time, "time", lambda: midnight + 3 * 3600)    # the host was down over 00:00
     host._schedule_wakeups(store.runtime()["agent_state"])
@@ -360,7 +355,7 @@ def test_a_machine_managed_elsewhere_starts_nothing_and_publishes_nothing_here(p
     assert not (state_machines.root(project) / "feature_count_improver").exists()
     assert not (project.state_dir / "drafts" / "feature_count_improver").exists()
     assert any("nothing runs here" in line for line in out["said"]) and out["prediction"] is None
-    assert any("kept as an expectation" in line for line in out["said"])
+    assert any("kept as an expectation" in line and "until a change of it is announced (announce_change)" in line for line in out["said"])
     assert not [e for e in store.events.read(0, 500)[0] if e["type"] == "system.changed"]   # no era begins: nothing changed
     assert not predictions(store)
     m = layer(project)["machines"]["feature_count_improver"]
@@ -408,12 +403,11 @@ def test_the_refinement_pass_runs_after_the_owner_confirms_whatever_the_spec(pro
     assert any(line.startswith("the refinement pass") for line in out["said"])
 
 
-def test_a_confirmed_daily_machine_is_announced_scheduled_and_listed_by_agents_status(project, store, capsys):
+def test_a_confirmed_daily_machine_is_announced_scheduled_and_listed_by_agents_status(project, store, make_host, capsys):
     from orchestra_agents.cli import cmd_status
-    from orchestra_agents.host import AgentHost
     from orchestra_agents.org_views import agents_status
     confirmed(project, store)
-    host = AgentHost(project, store, store.events)
+    host = make_host(store)
     host._refresh_org(store.runtime()["agent_state"])
     host._announce("feature_count_improver", "feature_count_improver")
     ann = [e for e in store.events.read(0, 500)[0] if e["type"] == "orchestra.machine.started"][-1]

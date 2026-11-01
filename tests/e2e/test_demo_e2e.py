@@ -179,10 +179,11 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
     web, target = demo
     plugins = web.get("/api/plugins")
     assert plugins["errors"] == []
-    assert sorted(plugins["pages"], key=lambda p: p["plugin"]) == [{"plugin": "agents", "path": "/agents", "title": "Agents"},
-                                                                    {"plugin": "tasks", "path": "/tickets", "title": "Tickets"}]
-    assert set(plugins["scripts"]) == {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js",
-                                      "/plugins/agents/static/ticket-sessions.js", "/plugins/tasks/static/tasks-boot.js"}
+    ours = [p for p in plugins["pages"] if p["plugin"] in ("agents", "tasks")]       # the dev extra installs other plugins too
+    assert sorted(ours, key=lambda p: p["plugin"]) == [{"plugin": "agents", "path": "/agents", "title": "Agents"},
+                                                       {"plugin": "tasks", "path": "/tickets", "title": "Tickets"}]
+    assert {"/plugins/agents/static/attention.js", "/plugins/agents/static/machine-cards.js",
+            "/plugins/agents/static/ticket-sessions.js", "/plugins/tasks/static/tasks-boot.js"} <= set(plugins["scripts"])
     html = web.text("/agents")
     assert "<title>Agents</title>" in html and "/plugins/agents/static/agents.js" in html
     head = web.text("/").split("</head>")[0]                # each plugin's look, linked on every page
@@ -211,8 +212,9 @@ def test_orchestra_serves_both_plugins_and_observes_the_agents_as_machines(demo)
         # the coordinator is also the task system's dispatch, an instance of it (a program): one machine, both kinds
         kind, instances = ("agent ×1, program ×1", ["dispatch"]) if name == "coordinator" else ("agent", [])
         assert m["package"] == "agents" and m["mode"] == "continuous" and m["kind"] == kind and not m.get("unseen")
-        model = "sonnet" if name == "supervisor" else "haiku"           # the Supervisor runs on its machine spec's model (D20)
-        assert m["about"]["harness"] == "claude_code" and m["about"]["model"] == model and [i["id"] for i in m["instances"]] == instances
+        # the announcement says what is read (the card reads the role); which model each runs on (the Supervisor its
+        # spec's, D20) is the host's (host.model_of, tests/unit/test_design_confirm.py), not announced
+        assert m["about"] == {"role": name} and [i["id"] for i in m["instances"]] == instances
     reviewer = seen["reviewer"]
     assert reviewer["package"] == "agents" and reviewer["mode"] == "ad hoc" and reviewer["kind"] == "agent"
     announced = [e["source"] for e in all_events(web) if e["type"] == "orchestra.machine.started" and e["source"].startswith("reviewer/")]

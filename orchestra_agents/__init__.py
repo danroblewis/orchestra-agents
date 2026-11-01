@@ -1,1 +1,2 @@
-"""AI agents as Orchestra machines: they fill a task system's roles over Orchestra's bus."""
+"""AI agents as Orchestra machines (Supervisor, Coordinator, workers, reviewers) on Pi, Claude Code,
+Codex or a dummy harness, for a task system or the Workflows floor."""

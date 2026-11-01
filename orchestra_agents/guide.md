@@ -226,6 +226,43 @@ they propose, and you put the findings to the owner in one message.
 | `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
 | `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |
 
+## Connecting a system
+
+When the owner wants to see what happens in another system ("connect our Jira so I can see issue
+transitions and open counts"), the method is Orchestra's `docs/INTEGRATING.md`
+(https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md: the strategies, the kits,
+the rules, the checklist); the bridges' guide (`read_guide bridges`, its kits section) has the
+kits' settings. You do it with two `design` tools, and the owner writes nothing:
+
+1. **`integrate_system`** with the system, what the owner wants (their words), and their quote. The
+   strategy follows INTEGRATING.md §2 when you leave it out: a store with a Prometheus API
+   (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
+   narrow `match`); anything with items is a `poller` built from the bridges' kit (events as who
+   acted, and its series); `collect` is a measurement alone; `bridge` is the bridges' own reader
+   (Jira, Slack pings, GitHub) when it already reads what the owner wants, never beside a poller
+   over the same items. Give the owner's scope in `settings` (`jql`, `channels`), and `stock` when
+   they named what it fills ("open counts": `Open issues`). A poller is scaffolded into the state
+   directory (`~/.orchestrator/<key>/machines/<name>_poller/`), its own test is run against the
+   kit's fake, and the system is declared on the Machines page as a machine managed elsewhere,
+   heard as `bot.<system>`, with its expected effect on the stock. **The poller is never a
+   machine**: it relays what the system's people and bots did, as them.
+2. **Ask the owner** what the answer's `ask_owner` says, in your words: their yes to reading it
+   (metadata only, read-only), and the *name* of the environment variable that will hold the token
+   in the environment `orchestra run` starts with. Never the token, never in the chat, and never a
+   file for them to change.
+3. **`approve_integration`** on their yes, quoted, with that name (`token_env`) and the site's
+   address if it was missing. The program's `machine.toml` records the clearance, the data class
+   and the variable's name, its test runs again, and what runs it is written to the owner's
+   overlay: a `[[machines]]` entry with `restart = "always"` (or the Workflows floor's `every`
+   item when that plugin is installed) and a `[[collect]]` entry for its series. Nothing runs
+   before this: an uncleared program reads only a fake on this machine.
+
+Tell the owner what you did and what they must set (the variable, then a restart of
+`orchestra run` if it was not set when it started). If the answer says the bridges' kits are not
+installed, say so and propose the route it names: installing the bridges plugin into Orchestra's
+environment, or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
+Coordinator. A failed test is code too: hand it on with the failure.
+
 ## Checking it took
 
 - `check_setup`: the roles and who fills them, the work mode, what runs, and what each installed

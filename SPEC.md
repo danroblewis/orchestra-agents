@@ -914,6 +914,39 @@ observed rate of what wakes it, and at least what discovery needs to see an era)
 `discard`, and `read_design` (group `observe`: the layer's summary plus each machine's fields and
 each event type's declared and heard publishers and listeners).
 
+**Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
+I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
+the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
+Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone, and `bridge`, the
+bridges' own reader). For `poller` and `collect` it scaffolds the bridges plugin's kit
+(`orchestra_bridges.kits.scaffold`, a dev dependency here, imported only in `integrate_kits`) into
+Orchestra's state directory (`<state>/machines/<name>/`, the kit's `--root state`), runs the
+program's own test against the kit's fake in a child Python with every credential-looking variable
+left out of its environment, and only then fills the owner's words and settings into its
+`machine.toml` (the fake serves the template's world; a `token`, `token_env` or clearance in the
+settings is refused). A poller's system is declared as a machine managed elsewhere (`managed:
+external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
+Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
+when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
+plans nothing. Without the kits nothing is written, and the answer says so and names
+INTEGRATING.md's routes (the bridges plugin installed, or the one-file poller of its §5.2, which is
+code and goes to the Coordinator). `source` and `bridge` write nothing either: the `[[sources]]`
+entry or the `[bridges.<system>]` section is planned. The answer carries `ask_owner`: the owner's
+approval and the NAME of the environment variable for the token, put to them in the chat.
+`approve_integration` takes a verified quote of the owner (refused otherwise), the variable's name
+(`^[A-Z_][A-Z0-9_]{1,63}$`, never a value), the data class (`metadata only` by default) and the
+site's address when the template's placeholder is still there; it writes `clearance = "approved"`,
+`data_class` and `token_env` into `machine.toml` (renaming the template's variable in the
+scaffolded test to match, and running it again), then the plan to the owner's overlay through
+`config_change`: a `[[machines]]` entry with `restart = "always"` (or, with the Workflows plugin
+installed, `workflows.every.<name>` and the `machine.json` it runs the program from) and a
+`[[collect]]` entry for the series, or the `[[sources]]` entry with `auth.bearer_env`, or the
+bridge's section, each announced (`instruments.changed` or `config.changed`). **Nothing runs before
+the approval** (a deviation from the task's wording, which schedules at `integrate_system`): an
+uncleared kit program exits at once, so `orchestra run` would restart it until it gave up. Each
+integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,
+`integrations`, in `runtime.json`.
+
 **Publishing a draft prediction.** An edit names keys (or declared ids, read through their
 `found_as`); the judge reads the era's ids, so each `stock`, `from` and `to` is resolved to the
 current model's id when it is published (`intended_api.resolve`, over the newest saved version

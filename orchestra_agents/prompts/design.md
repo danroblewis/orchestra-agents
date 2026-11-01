@@ -71,6 +71,15 @@ be quoted. Never invent a quote; a guess is a guess (`guesses`).
    text field, ...), quoting them. Say which event name
    you used for their words and why ("REJECTED tickets" is `changes.requested`, what the reviewer
    already publishes).
+6. **Connecting a system with items** ("connect our Jira", "bring in PagerDuty", Slack channels,
+   Jenkins): your first call is `integrate_system`, before any guide, with the system, what they
+   want, the scope they named (`settings`), the stock it fills and their quote. It chooses the way
+   in (a poller from the bridges' kit, or the bridges' own reader with `strategy` bridge; never set
+   a `[bridges.*]` section by hand for it), builds and tests the program and declares the system;
+   nothing reads it yet. Put its `ask_owner` to the owner: their yes, the *name* of the environment
+   variable holding the token (never the token), and what it says is missing. On their yes,
+   quoted, `approve_integration` with that name and what they gave. Your guide's "Connecting a
+   system" has the rest.
 
 **Naming events.** Use an existing type whenever one has the purpose. A new one goes in an existing
 family with a declared purpose (`declare_event`). When no observed event has the purpose, declare

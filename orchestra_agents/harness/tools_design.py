@@ -71,6 +71,18 @@ SPEC_FIELDS = {
 SPEC = {"type": "object", "description": "Older form, kept for one release: the same fields nested. Give them at the top level",
         "properties": SPEC_FIELDS}
 
+INT = {"type": "integer"}
+INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own settings, from the owner's words (only what they "
+                        "said; the kit's defaults stand otherwise). Never a token", "properties": {
+    "jql": S("Jira: the issues in scope (project = OPS), no ORDER BY"), "channels": A("Slack: channel ids (C0123), not names"),
+    "open_statuses": A("PagerDuty: the statuses counted open"), "every": S("How often it polls: 5m (the default)"),
+    "per_minute": INT, "ttl": S("How long a cached answer is served: under every (4m)"),
+    "lookback": S("How far back the first poll reads (1d)"), "thing": S("http kit: what one item is (build)"),
+    "list_path": S("http kit: the list endpoint (/api/builds)"),
+    "match": A("source: the PromQL selectors to read ({__name__=~\"http_requests_total\"})"),
+    "prefix": S("source: the series' prefix (chrono)"), "machine": S("source: the label naming machines (service)"),
+    "max_series": INT, "rate": NUM, "max_requests_per_day": INT}}
+
 DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("declare_stock", "design",
             "Declare a stock the owner expects to accumulate, measured or not yet (\"I'm going to create a Features stock\"). "
@@ -196,6 +208,35 @@ DESIGN_TOOLS: list[ToolDef] = [
             "stock's instruments, leave no file.",
             {"element": ELEMENT, "change": S("A pending change's id, to discard only that"), "request": REQUEST, "quote": QUOTE,
              "reason": REASON}, ("element", "reason")),
+    ToolDef("integrate_system", "design",
+            "The first call when the owner asks to connect an outside system (\"connect our Jira so I can see issue "
+            "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: a poller built from the bridges' kit (events and series), a measurement alone "
+            "(collect), a [[sources]] entry for a Prometheus-API store (source), or the bridges' own reader (bridge). A poller "
+            "is scaffolded into the state directory and tested against the kit's fake, and the system is declared on the "
+            "Machines page as a machine managed elsewhere. Nothing reads the real system until the owner approves: put the "
+            "answer's ask_owner to them, then approve_integration.",
+            {"system": S("The system's name: jira, slack, pagerduty, chronosphere, jenkins"),
+             "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),
+             "strategy": E(["poller", "collect", "source", "bridge"],
+                           "Leave out for INTEGRATING.md's default: source for a Prometheus-API store, poller otherwise"),
+             "name": S("The poller's name (default <system>_poller); never the system's own name"),
+             "kit": E(["jira", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
+             "base_url": S("The system's address (its API's root URL), when the owner gave it"),
+             "settings": INTEGRATION_SETTINGS,
+             "stock": S("The stock the owner expects it to fill, in their words (Open issues): declared, with the system's "
+                        "expected effect"),
+             "unit": S("The stock's unit (issues)"), "quote": QUOTE, "reason": REASON},
+            ("system", "wants", "reason")),
+    ToolDef("approve_integration", "design",
+            "The owner approved reading the system (their yes, quoted) and named the environment variable holding its token: "
+            "the clearance and the variable's name are recorded, and what runs it is written to the owner's overlay, so the "
+            "program reads the real system from then on. Never pass or ask for the token itself.",
+            {"name": S("The integration's name, from integrate_system's answer"),
+             "token_env": S("The NAME of the environment variable holding the token (JIRA_TOKEN), never its value"),
+             "data_class": S("What the owner cleared it for (default: metadata only)"),
+             "base_url": S("The system's address, when it was not given before"),
+             "settings": INTEGRATION_SETTINGS, "quote": QUOTE, "reason": REASON},
+            ("name", "token_env", "quote", "reason")),
     ToolDef("read_design", "observe",
             "The declared layer in one read: every declared and proposed element with its state, link and guessed fields; "
             "each machine's fields; each event type's declared publishers and listeners and who was heard publishing it or "

@@ -202,6 +202,17 @@ def load(project: Project, name: str) -> MachineSpec | None:
     return load_all(project).get(name)
 
 
+def model_of(project: Project, harness, name: str) -> str | None:
+    """The model an agent runs on: its machine spec's (``.orchestra/machines/<name>/``) when the
+    harness takes that name (``Harness.model_for``), else ``[agents] model``. The host and the
+    Agents page both ask this."""
+    try:
+        spec = load(project, name)
+    except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
+        spec = None
+    return (harness.model_for(spec.model) if spec is not None and spec.model else None) or project.config.model
+
+
 def apply(agent, spec: MachineSpec) -> None:
     """The spec's contract on the agent record it belongs to: its duties' wake-ups are the agent's
     too (the core's own are kept: a spec only adds)."""

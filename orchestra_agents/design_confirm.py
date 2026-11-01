@@ -179,8 +179,8 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     else:                                                # nothing changed here: no era begins, nothing is published
         extra.update(change=None, prediction=None)
         if (m.get("expected_effect") or {}).get("edits"):
-            lines.append("its expected effect is kept as an expectation on the declaration: it is not published or judged "
-                         "until a change of it is announced (announce_change)")
+            lines.append("its expected effect stays on the declaration as an expectation, which Orchestra draws beside the "
+                         "model: nothing publishes or judges it, since nothing here changes the machine")
     if here and not runs and extra.get("prediction"):
         lines.append(f"its prediction is judged once its program runs: announce_change with change {change} then")
     lines += _refinement_after(project, store, prov)

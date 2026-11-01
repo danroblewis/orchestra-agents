@@ -158,3 +158,15 @@ def test_the_supervisor_runs_on_its_spec_s_model_when_the_harness_takes_it(host)
     assert host.model_of("supervisor") == "sonnet" and host.model_of("coordinator") == host.cfg.model
     from orchestra_agents.harness.claude_code import ClaudeCodeHarness
     assert ClaudeCodeHarness().model_for("sonnet") == "sonnet" and ClaudeCodeHarness().model_for("gpt-5") is None
+
+
+def test_the_host_and_the_agents_page_choose_the_same_model(host, monkeypatch):
+    from orchestra_agents import web
+    from orchestra_agents.harness.claude_code import ClaudeCodeHarness
+    project = host.project
+    monkeypatch.setattr("orchestra_agents.harness.get_harness", lambda name: ClaudeCodeHarness())
+    host.harness = ClaudeCodeHarness()
+    assert web.supervisor_model(project) == host.model_of("supervisor") == "sonnet"      # the spec's model, taken
+    spec = load_spec(project, "supervisor")
+    monkeypatch.setattr("orchestra_agents.machine_spec.load", lambda p, n: type(spec)(**{**spec.__dict__, "model": None}))
+    assert web.supervisor_model(project) == host.model_of("supervisor") == project.config.model   # no model: [agents] model

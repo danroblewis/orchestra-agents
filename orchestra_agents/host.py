@@ -34,6 +34,7 @@ from . import (
     floor,
     handoff,
     intended_api,
+    machine_spec,
     parent,
     promises,
     prompting,
@@ -272,13 +273,8 @@ class AgentHost:
             self.store.set_agent_state("supervisor", wake_waits=kept + waits)
 
     def model_of(self, name: str) -> str | None:
-        """The model an agent runs on: its machine spec's (``.orchestra/machines/<name>/``) when the
-        harness takes that name (``Harness.model_for``), else ``[agents] model``."""
-        try:
-            spec = load_spec(self.project, name)
-        except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
-            spec = None
-        return (self.harness.model_for(spec.model) if spec is not None and spec.model else None) or self.cfg.model
+        """The model an agent runs on (``machine_spec.model_of``)."""
+        return machine_spec.model_of(self.project, self.harness, name)
 
     def _duty_types(self) -> set[str]:
         """The event types only the Supervisor's own duties listen for (not its fixed core's)."""

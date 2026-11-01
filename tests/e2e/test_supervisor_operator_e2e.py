@@ -94,7 +94,7 @@ def broken(tmp_path, monkeypatch):
     url = f"http://127.0.0.1:{port}"
     procs = start(target, port, env=env)
     # the shell worker started by hand beside Orchestra, as a0953ac's run.py did: no [[machines]]
-    # entry and no --only-commands (instance "shell": the AI workers are worker/1, worker/2)
+    # entry and no --only-commands (instance "shell": the AI workers are worker/1, worker/2, …)
     with (target / "run" / "shell_worker.log").open("ab") as log:
         procs["shell_worker"] = subprocess.Popen([sys.executable, "-m", "tasking.machines.shell_worker", "shell"], cwd=target,
                                                  env={**os.environ, "ORCHESTRA_LOG": str(target / "run" / "shell_worker.log")},

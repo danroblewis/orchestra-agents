@@ -18,7 +18,7 @@ KEEP_DAYS = 14
 
 
 def day(t: float | None = None) -> str:
-    return time.strftime("%Y-%m-%d", time.localtime(t or time.time()))
+    return time.strftime("%Y-%m-%d", time.localtime(time.time() if t is None else t))
 
 
 def spent(store: AgentStore, t: float | None = None) -> dict:

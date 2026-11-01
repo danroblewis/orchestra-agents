@@ -31,7 +31,17 @@ from pathlib import Path
 import pytest
 from conftest import free_port
 from orchestra.web.machines import MachineIndex
-from test_demo_e2e import AGENTS, TASKS, all_events, chat, git, reported_by, settled, states
+from test_demo_e2e import (
+    AGENTS,
+    TASKS,
+    ai_worker,
+    all_events,
+    chat,
+    git,
+    reported_by,
+    settled,
+    states,
+)
 
 from demo.run import Web, make_project, plan, start, stop, wait_for, wait_until, web_token
 
@@ -153,7 +163,7 @@ def test_the_demo_runs_end_to_end_on_dummy_agents_with_no_model_and_no_network(f
 
     # DEMO-4, one round: offered, accepted by a dummy worker, worked with a real commit, reviewed,
     # gated and landed on main, where the collector it wrote now runs
-    assert len(by["DEMO-4"]) == 2 and by["DEMO-4"][0] in ("worker/1", "worker/2") and by["DEMO-4"][1].startswith("reviewer/"), by["DEMO-4"]
+    assert len(by["DEMO-4"]) == 2 and ai_worker(by["DEMO-4"][0]) and by["DEMO-4"][1].startswith("reviewer/"), by["DEMO-4"]
     assert verdicts["DEMO-4"] == ["APPROVED"]
     offered = [e for e in events if e["type"] == "task.assigned" and e["subject"] == "DEMO-4"]
     accepted = [e for e in events if e["type"] == "task.accepted" and e["subject"] == "DEMO-4"]

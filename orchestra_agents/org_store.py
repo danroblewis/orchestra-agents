@@ -45,7 +45,8 @@ class RepoOrgStore:
         self.agents_dir.mkdir(parents=True, exist_ok=True)
         agent.updated_at = now()
         (self.agents_dir / f"{agent.name}.json").write_text(json.dumps(agent.to_dict(), indent=2) + "\n", encoding="utf-8")
-        self.last_commit_note = commit_orchestra_files(self.project, f"agents: agent {agent.name}")
+        self.last_commit_note = commit_orchestra_files(self.project, f"agents: agent {agent.name}",
+                                                       [self.agents_dir / f"{agent.name}.json"])
         return agent
 
     def delete_agent(self, name: str) -> None:
@@ -53,7 +54,7 @@ class RepoOrgStore:
         if not p.exists():
             raise OrgError(f"no agent {name!r}")
         p.unlink()
-        self.last_commit_note = commit_orchestra_files(self.project, f"agents: remove agent {name}")
+        self.last_commit_note = commit_orchestra_files(self.project, f"agents: remove agent {name}", [p])
 
     # teams
     def _team_paths(self, name: str) -> tuple[Path, Path]:
@@ -90,7 +91,8 @@ class RepoOrgStore:
         pj.write_text(json.dumps(team.to_dict(), indent=2) + "\n", encoding="utf-8")
         pm.write_text(responsibilities.rstrip() + "\n", encoding="utf-8")
         self.ensure_space(team)
-        self.last_commit_note = commit_orchestra_files(self.project, f"agents: team {team.name}")
+        self.last_commit_note = commit_orchestra_files(self.project, f"agents: team {team.name}",
+                                                       [pj, pm, self.root / ".gitignore"])
         return team
 
     def delete_team(self, name: str) -> None:
@@ -102,7 +104,7 @@ class RepoOrgStore:
         for p in (pj, pm):
             if p.exists():
                 p.unlink()
-        self.last_commit_note = commit_orchestra_files(self.project, f"agents: remove team {name}")
+        self.last_commit_note = commit_orchestra_files(self.project, f"agents: remove team {name}", [pj, pm])
 
     def ensure_space(self, team: TeamDef) -> Path:
         """The team's working space: created with a tools/ directory, and listed in

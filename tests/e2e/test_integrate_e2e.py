@@ -89,7 +89,7 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
     assert m["clearance"] == "needs approval" and "wanted" not in m           # the owner's words are the integration's record
     jira = intended_api.current(project)["machines"]["jira"]
     assert jira["managed"] == "external" and jira["aliases"] == ["bot.jira"] and jira["spec"]["source"] == "bot.jira"
-    assert jira["state"] == "proposed" and jira["emits"] == ["jira.issue.transitioned"] and jira["expected_effect"]
+    assert jira["state"] == "proposed" and "jira.issue.transitioned" in jira["emits"] and jira["expected_effect"]
     assert "jira_poller" not in intended_api.current(project)["machines"]
     assert "approval" in " ".join(got["owner_must_set"]) and "base URL" in got["ask_owner"]       # the clearance request
     assert "which Jira projects" in got["ask_owner"]

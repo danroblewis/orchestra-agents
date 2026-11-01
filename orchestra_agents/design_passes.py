@@ -28,7 +28,6 @@ from .design import MACHINE, plural
 BUSY_PER_DAY = 200          # a machine woken by events more often than this is a candidate for a schedule
 EXPIRING_S = 2 * 3600.0     # a draft instrument this close to expiring unkept is a loose end
 ABSENT_VERSIONS = 3         # an expected part absent from this many discovered versions in a row is a loose end
-DUTY = "refine_map"
 
 
 def _words(s: str) -> set[str]:

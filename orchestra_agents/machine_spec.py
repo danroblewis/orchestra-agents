@@ -159,18 +159,31 @@ def _state_files(project: Project) -> dict[str, dict[str, str]]:
     return by
 
 
+def scaffolded_poller(files: dict[str, str]) -> bool:
+    """Whether a folder's ``machine.toml`` is the bridges' scaffolded poller (a top-level ``kit``),
+    not an agent's spec: the two share ``machines/<name>/`` and each reads only its own."""
+    try:
+        return "kit" in tomllib.loads(files.get("machine.toml", ""))
+    except tomllib.TOMLDecodeError:
+        return False
+
+
 def load_all(project: Project) -> dict[str, MachineSpec]:
     """Every spec in the project, by machine name: the repository's, and the state directory's
     whose name the repository has not. A spec that does not parse is left out (the agent runs as
-    its record says; ``lint`` says why)."""
+    its record says; ``lint`` says why); a bridges' scaffolded poller (``scaffolded_poller``) is no
+    spec and is skipped."""
     by: dict[str, dict[str, str]] = {}
     for path, text in read_files(project).items():
         rest = path[len(ROOT) + 1:]
         name, _, inner = rest.partition("/")
         if NAME.match(name) and inner:
             by.setdefault(name, {})[inner] = text
+    by = {n: f for n, f in by.items() if not scaffolded_poller(f)}
     roots = dict.fromkeys(by, ROOT)
     for name, files in _state_files(project).items():
+        if scaffolded_poller(files):
+            continue
         if "machine.toml" not in by.get(name, {}):
             by[name], roots[name] = files, str(state_root(project))
     out = {}

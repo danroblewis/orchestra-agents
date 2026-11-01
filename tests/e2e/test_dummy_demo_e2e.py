@@ -263,7 +263,7 @@ def test_what_the_owner_sees(free_demo):
     # one coordinator machine: the Coordinator agent and the task system's dispatch, an instance of it
     [coord] = [m for m in d["machines"] if m["id"] == "coordinator"]
     assert {"ticket.created", "task.released", "gate.rejected", "task.attention_needed", "request.done"} <= set(coord["subscribes"]), coord
-    assert coord["kind"] == "agent ×1, program ×1" and coord["package"] == "agents" and coord["about"].get("harness") == "dummy", coord
+    assert coord["kind"] == "agent ×1, program ×1" and coord["package"] == "agents" and coord["about"] == {"role": "coordinator"}, coord
     assert [i["id"] for i in coord["instances"]] == ["dispatch"]
 
     # what each machine published: dispatch (offers, as the coordinator) adds one offer per ticket from the queue

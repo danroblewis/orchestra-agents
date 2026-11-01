@@ -13,8 +13,8 @@ A change goes to one of two places, the Supervisor's choice (``target``):
 - ``overlay``: the owner's private overlay, outside the repository (Orchestra's SPEC §8.1): their
   own or their company's settings, as identities, channels and templates. Nothing is committed.
 
-Orchestra keeps the file's comments and layout and refuses a change its readers, or the agents'
-``[agents]`` reader (``check``), would say something new against. Nothing that looks like a secret
+Orchestra keeps the file's comments and layout and refuses a change its readers, or any plugin's
+check (the agents' ``web.check`` among them), would say something new against. Nothing that looks like a secret
 is ever added (``secret_shapes``), in either file: the change is announced on the bus, and
 credentials never go in a configuration file; the Supervisor is told to pass one through an
 environment variable or a file the program reads."""
@@ -27,16 +27,13 @@ from collections.abc import Callable
 
 from orchestra.config_edit import Change, ConfigEdit
 from orchestra.overlay import OVERLAY, REPO
-from orchestra.plugins import Plugin
 
-from .config import Config, ConfigError, Project
+from .config import ConfigError, Project
 from .secret_shapes import secret_in
 from .store import StoreError
 
 TARGETS = (REPO, OVERLAY)
-# Orchestra runs every plugin's check, this one's (web.check) included, on every change, when it has
-# Plugin.check; before that the agents' reader is passed with each change.
-PLUGIN_CHECKS = "check" in getattr(Plugin, "__dataclass_fields__", {})
+# Orchestra runs every plugin's check, this one's (web.check) included, on every change.
 AUTHOR = ("Orchestra Supervisor", "supervisor@orchestra.invalid")   # only when the checkout names no committer
 
 Edit = Callable[[ConfigEdit, dict], Change]     # Orchestra's editor, its keyword arguments -> the change
@@ -65,15 +62,6 @@ def why_not_committable(project: Project) -> str | None:
         return (f"{name} has an uncommitted change in the repository root (someone is editing it); the human commits or "
                 "drops it first")
     return None
-
-
-def agents_check(raw: dict) -> list[str]:
-    """What the agents' reader says against a merged configuration (Orchestra checks its own)."""
-    try:
-        Config.from_raw(raw)
-    except (ConfigError, ValueError, TypeError) as e:
-        return [f"[agents]: {e}"]
-    return []
 
 
 def no_secret(before: str, after: str) -> None:
@@ -124,7 +112,7 @@ def change(project: Project, edit: Edit, describe: Callable[[Change], str], reas
         raise StoreError(why)
     ed = project.orchestra.config_edit
     try:
-        c = edit(ed, {"target": target, "check": None if PLUGIN_CHECKS else agents_check, "dry_run": True})
+        c = edit(ed, {"target": target, "dry_run": True})
     except ConfigError as e:
         raise StoreError(str(e)) from e
     what = describe(c)

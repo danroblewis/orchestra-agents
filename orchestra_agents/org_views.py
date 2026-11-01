@@ -161,5 +161,5 @@ def measured_roles(project: Project) -> list[str]:
 
 
 def metrics_text(project: Project, store: AgentStore) -> str:
-    """The agents' measurements as Prometheus text, for the instrument and the plugin's /metrics."""
+    """The agents' measurements as Prometheus text, for the instrument (``orchestra agents metrics``)."""
     return store.metrics_text(measured_roles(project))

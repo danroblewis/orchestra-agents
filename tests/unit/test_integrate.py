@@ -51,7 +51,7 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     assert {p.name for p in d.iterdir()} >= {"machine.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
     m = machine_toml(project)
     assert m["clearance"] == "needs approval" and m["settings"]["jql"] == "project = OPS"
-    assert m["settings"]["base_url"] == "https://jira.acme.test" and m["wanted"] == "issue transitions and open counts"
+    assert m["settings"]["base_url"] == "https://jira.acme.test" and "wanted" not in m   # the owner's words are the record's
     jira = layer(project)["machines"]["jira"]
     assert jira["managed"] == "external" and jira["kind"] == "programmatic" and jira["aliases"] == ["bot.jira"]
     assert jira["emits"] == ["jira.issue.transitioned"] and jira["spec"]["source"] == "bot.jira"
@@ -171,6 +171,7 @@ def test_with_the_workflows_plugin_it_is_the_floors_every_item(project, store, m
     import json
     body = json.loads((project.orchestra.state_dir / "machines" / "jira_poller" / "machine.json").read_text())
     assert body["kind"] == "programmatic" and body["spec"]["command"].endswith("--once")
+    assert body["spec"]["exit"] == {"0": "landed", "1": "error", "2": "blocked"}   # 2: the kits' runner refused
 
 
 def test_integrating_is_the_supervisors_alone(project, store):
@@ -204,7 +205,30 @@ def test_the_bridges_own_reader_is_its_section_written_on_approval(project, stor
     say(store, YES, 2)
     call(project, store, "approve_integration", name="jira", token_env="JIRA_API_TOKEN", quote="Yes, you may read Jira",
          reason=WHY)
-    assert overlay(project)["bridges"]["jira"] == {"api": "https://jira.acme.test", "jql": "project = OPS", "every": "5m"}
+    assert overlay(project)["bridges"]["jira"] == {"api": "https://jira.acme.test", "jql": "project = OPS", "every": "5m",
+                                                   "token_env": "JIRA_API_TOKEN"}      # the reader reads the owner's variable
+
+
+def test_a_bridges_reader_needs_its_scope_and_github_needs_no_address(project, store):
+    say(store, ASK)
+    with pytest.raises(StoreError, match="settings.projects or settings.jql"):
+        call(project, store, "integrate_system", system="jira", strategy="bridge", wants="issue transitions and open counts",
+             base_url="https://jira.acme.test", settings={"every": "5m"}, reason=WHY)
+    with pytest.raises(StoreError, match="settings.repos"):
+        call(project, store, "integrate_system", system="github", strategy="bridge", wants="pull requests and their reviews",
+             reason=WHY)
+    got = call(project, store, "integrate_system", system="github", strategy="bridge", wants="pull requests and their reviews",
+               settings={"repos": ["acme/service"]}, reason=WHY)                                  # api.github.com by default
+    assert got["planned"] == ["[bridges.github]"]
+    assert "reads its own variable" not in got["ask_owner"]
+
+
+def test_a_token_name_the_kits_refuse_is_refused_at_approval(project, store):
+    connect(project, store)
+    say(store, YES, 2)
+    with pytest.raises(StoreError, match="NAME of an environment variable"):
+        call(project, store, "approve_integration", name="jira_poller", token_env="_PD_TOKEN", base_url="https://jira.acme.test",
+             settings={"jql": "project = OPS"}, quote="Yes, you may read Jira", reason=WHY)
 
 
 def test_a_failure_after_the_scaffold_leaves_nothing_behind(project, store, monkeypatch):

@@ -26,7 +26,6 @@ class RepoOrgStore:
         self.root = project.repo_root / ".orchestra"
         self.agents_dir = self.root / "agents"
         self.teams_dir = self.root / "teams"
-        self.spaces_dir = self.root / "spaces"
         self.last_commit_note = ""
 
     # agents
@@ -38,12 +37,6 @@ class RepoOrgStore:
             except (json.JSONDecodeError, TypeError):
                 continue
         return out
-
-    def get_agent(self, name: str) -> AgentDef:
-        p = self.agents_dir / f"{name}.json"
-        if not p.exists():
-            raise OrgError(f"no agent {name!r}")
-        return AgentDef.from_dict(json.loads(p.read_text(encoding="utf-8")))
 
     def save_agent(self, agent: AgentDef, custom_types: set[str] | frozenset[str] = frozenset()) -> AgentDef:
         agent.validate(custom_types)

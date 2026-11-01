@@ -1,29 +1,14 @@
-"""What the agents and the Workflows plugin's floor say to each other on Orchestra's bus (its
-docs/machine-contract.md and SPEC §5.4), beside protocol.py, which is the task system's. The names
-and the claim rule are copied by hand from orchestra-workflows' ``orchestra_workflows/contract.py``;
-nothing is imported from it (tests/unit/test_floor.py checks the copy when it is installed).
-
-- An offer (``offer.made``, from ``<planner>/dispatch`` or a holder passing on) names its ``role``,
-  the ``item`` (the subject of every event of the turn), a ``brief`` (text), the ``resources``
-  handed to it (a ``worktree`` unit's ``handle`` is the workspace), ``heartbeat_s``, ``lease_s``,
-  ``outcomes`` (empty: any) and ``to`` (an instance, for rework; null: any instance of the role).
-- The claim (``offer.claimed``) has the offer id as its causationid; the first claim in bus order
-  after the offer and before any withdrawal holds it (``winner``), and a loser says nothing more.
-- The holder says it is alive (``offer.alive`` with ``text``) at least every ``heartbeat_s`` and
-  ends with ``offer.finished`` and an ``outcome``. **The BLOCKED rule**: work it cannot do, a turn
-  that ended without an outcome among them, finishes ``blocked`` with the reason in ``summary``.
-- ``offer.withdrawn`` naming the offer, or the holder's instance with no other offer, stops the
-  turn; nothing more is published for it.
-
-The agents' exit tools map onto outcomes (``outcome_of``): ``report_outcome`` (an agent of a
-confirmed Universal Machine, machine_spec ``role``) names it; the built-in worker's
-``report_ticket`` is ``ready`` or ``blocked``, the reviewer's ``report_review`` is ``approved`` or
-``rejected``."""
+"""The Workflows floor's names, its claim rule and its withdrawal rule, and how an agent's exit tool
+maps to an offer's outcome. The names and rules are copied by hand from orchestra-workflows'
+``orchestra_workflows/contract.py`` (nothing is imported from it; tests/unit/test_floor.py checks
+the copy, name by name and on a shared table of event sequences). The contract is described once,
+in SPEC §3.1, which points at orchestra-workflows' ``docs/machine-contract.md``."""
 
 from __future__ import annotations
 
 MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN = "offer.made", "offer.claimed", "offer.alive", "offer.finished", "offer.withdrawn"
 LISTENS_FOR = (MADE, WITHDRAWN)          # what the host watches on behalf of an agent that serves a floor role
+ATTENTION_NEEDED = "attention.needed"    # the floor asks a planner (``to``) to look: a guard passed
 BLOCKED = "blocked"
 HEARTBEAT_S = 30.0                       # when an offer names none
 REPORT_TOOL = {"worker": "report_ticket", "reviewer": "report_review"}   # a built-in role's exit tool; any other: report_outcome
@@ -53,9 +38,20 @@ def winner(evs: list[dict], offer: str) -> str | None:
 
 
 def stops(ev: dict, offer: str, instance: str) -> bool:
-    """An ``offer.withdrawn`` that names this offer, or this instance's hold with no other offer."""
-    return ev.get("type") == WITHDRAWN and (ev.get("offer") == offer or ev.get("instance") == instance
-                                            and ev.get("offer") in (None, offer))
+    """An ``offer.withdrawn`` that names this offer (every sender names it; ``instance`` says nothing more)."""
+    return ev.get("type") == WITHDRAWN and ev.get("offer") == offer
+
+
+def wake_reason(ev: dict) -> str | None:
+    """What a planner's wake-up says of the floor's ``attention.needed``; None for any other event."""
+    if ev.get("type") != ATTENTION_NEEDED:
+        return None
+    where = " ".join(f"{k} {ev[k]}" for k in ("workflow", "step") if ev.get(k))
+    bits = [f"guard {ev['guard']}" if ev.get("guard") else "", f"then {ev['then']}" if ev.get("then") else ""]
+    return (f"event {ATTENTION_NEEDED}: the Workflows floor asks the {ev.get('to') or 'planner'} to look"
+            + (f" at {ev.get('subject')}" if ev.get("subject") else "") + (f" ({where})" if where else "")
+            + f": {ev.get('reason') or 'no reason given'}" + "".join(f"; {b}" for b in bits if b)
+            + ". Explain it with explain_item; act through the item's facts or a request, never by editing the record.")
 
 
 def workspace(offer: dict) -> str | None:

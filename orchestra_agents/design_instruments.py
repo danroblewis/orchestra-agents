@@ -17,9 +17,8 @@ proposal 4). Every write, removal and keep is announced as ``instruments.changed
 Supervisor, target the overlay, with its reason).
 
 **Drafts.** The instrument records at once as a draft: its entry carries Orchestra's ``draft =
-true`` and ``expires`` (RFC 3339) when the installed Orchestra's collector spec has them
-(``supports_draft``; Orchestra labels the points ``draft="true"`` and discovery leaves them out
-until the flag is cleared). The Supervisor's own record (``drafts`` in its agent state, updated
+true`` and ``expires`` (RFC 3339) (Orchestra labels the points ``draft="true"`` and discovery leaves
+them out until the flag is cleared). The Supervisor's own record (``drafts`` in its agent state, updated
 under the runtime lock) expires after ``[agents] draft_expiry`` (24 h by default) unless the owner
 keeps it. ``add_instrument`` marks its option chosen at once (the Dynamics page draws a draft as
 recording only on the chosen option); ``keep_instrument`` takes ``draft`` and ``expires`` off the
@@ -58,14 +57,7 @@ from .store import AgentStore, StoreError
 
 MAX_LINES = 100
 FIRST_ROUND_S = 120
-NO_DRAFT = ("this Orchestra cannot mark it draft: it records as an ordinary instrument (discovery reads it now) and is not "
-            "removed on a timer; keep or remove it on the owner's word")
 SIMULATED = "simulated = true, not draft: discovery reads its series like any other, and the Supervisor removes it unless kept"
-
-
-def supports_draft() -> bool:
-    """Whether the installed Orchestra's ``[[collect]]``/``[[scrape]]`` entries take ``draft`` and ``expires``."""
-    return intended_api.draft_flag_supported()
 
 
 def _announce(store: AgentStore, section: str, what: str, reason: str) -> None:
@@ -228,7 +220,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
     simulated = bool(option.get("simulated") or a.get("simulated"))
     if simulated:
         entry["simulated"] = True
-    flagged = supports_draft() and not simulated            # a simulated series is read like any other (§2.2)
+    flagged = not simulated                                 # a simulated series is read like any other (§2.2)
     until = now + project.config.draft_expiry_s if flagged or simulated else None
     if flagged:
         entry.update(draft=True, expires=datetime.fromtimestamp(until, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -270,7 +262,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         lines.append(f"its option {key} was not updated in the declared layer ({unapplied(e)}): read_design shows the "
                      "instrument; the option's record follows at its keep")
     lines += [(f"marked draft (draft = true, expires {entry['expires']}): discovery leaves its series out until it is kept"
-               if flagged else SIMULATED if simulated else NO_DRAFT),
+               if flagged else SIMULATED),
               f"script: {path}" if path else f"{'url' if url else 'command'}: {url or command}",
               ("first points: " + ", ".join(f"{v:g} at {_when(t)}" for t, v in first[-3:]) if first else "no point yet: "
                + ("its first round has not ended" if waited else "no `orchestra run` runs this project now")),

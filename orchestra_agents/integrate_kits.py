@@ -42,8 +42,12 @@ BRIDGES = {"jira": "[bridges.jira] (Data Center or Cloud: issues, changes and co
            "github": "[bridges.github] and [bridges.github_prs] (issues and pull requests, as who acted)"}
 SCOPE = {"jql": "which Jira projects to follow (or a JQL filter)", "channels": "which Slack channels to follow (their ids)"}
 SCOPE_OF = {"jira": ("jql",), "slack": ("channels",)}      # what a kit's template only guesses: the owner's to name
+# what a bridges' reader needs to know what to read (its section's scope keys, any one of them), and
+# the readers that have a default API (the others need the site's address)
+BRIDGE_SCOPE = {"github": ("repos",), "jira": ("projects", "jql")}
+BRIDGE_DEFAULT_API = ("github", "slack")
+BRIDGE_TOKEN = ("jira", "slack")                           # the readers that read a token's variable (GitHub's is gh's login)
 TITLES = {"jira": "Jira", "slack": "Slack", "pagerduty": "PagerDuty", "github": "GitHub", "chronosphere": "Chronosphere"}
-ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
 KEY = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "acme.chronosphere.io")
 CREDENTIAL_VARS = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|_KEY|BEARER|CREDENTIAL)", re.IGNORECASE)
@@ -175,9 +179,21 @@ def _edit(target: Path, top: dict, settings: dict) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def fill(target: Path, settings: dict, base_url: str | None, wants: str) -> None:
-    """The owner's words and settings into the poller's ``machine.toml``; never its clearance."""
-    _edit(target, {"wanted": wants}, {**settings, **({"base_url": base_url} if base_url else {})})
+def env_name_ok(name: str) -> bool:
+    """Whether ``name`` is a token's variable name the reader will take: the bridges' kits' rule
+    (``orchestra_bridges.kits.settings.ENV_NAME``), else, with no kits, Orchestra's own
+    (``[[sources]]``'s ``bearer_env``, ``orchestra.sd.intended.ops.ENV_NAME``)."""
+    try:
+        from orchestra_bridges.kits.settings import ENV_NAME
+    except ImportError:
+        from orchestra.sd.intended.ops import ENV_NAME
+    return bool(ENV_NAME.match(name))
+
+
+def fill(target: Path, settings: dict, base_url: str | None) -> None:
+    """Settings into the poller's ``machine.toml``; never its clearance (the owner's words are the
+    integration record's, ``wants``)."""
+    _edit(target, {}, {**settings, **({"base_url": base_url} if base_url else {})})
 
 
 def clear(target: Path, token_env: str, data_class: str, base_url: str | None) -> None:

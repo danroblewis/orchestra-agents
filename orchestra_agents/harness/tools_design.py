@@ -148,6 +148,35 @@ DESIGN_TOOLS: list[ToolDef] = [
              "quote": QUOTE, "reason": REASON}, ("key", "reason")),
     ToolDef("ignore", "design", "Ignore a discovered suggestion: it moves to the collapsed \"ignored\" group; nothing is hidden.",
             {"part": E(["stock", "flow"]), "key": S("Its key"), "quote": QUOTE, "reason": REASON}, ("key", "reason")),
+    ToolDef("unexpect", "design",
+            "Take a discovered stock's or flow's expected mark off (the owner no longer expects it): drawn as discovery found it.",
+            {"part": E(["stock", "flow"]), "key": S("Its key, as read_design gives it"), "quote": QUOTE, "reason": REASON},
+            ("key", "reason")),
+    ToolDef("unignore", "design",
+            "List an ignored suggestion again (the page's \"to list it again, ask …\"): it leaves the ignored group.",
+            {"part": E(["stock", "flow"]), "key": S("Its key, as read_design gives it"), "quote": QUOTE, "reason": REASON},
+            ("key", "reason")),
+    ToolDef("alias", "design",
+            "Join a declared machine to the name it is heard under on the bus (the Machines panel's \"heard under another "
+            "name? … join them\"): one machine, heard as that source.",
+            {"machine": S("The declared machine's id"), "observed": S("The source it is heard as on the bus (bot.pagerduty)"),
+             "quote": QUOTE, "reason": REASON}, ("machine", "observed", "reason")),
+    ToolDef("propose_attachment", "design",
+            "Propose that an instrument's series measure a declared machine (instruments on machines): declared provenance, "
+            "never a sign it runs. Read the store first (list_metrics) and give the match explicitly; the owner confirms it "
+            "on the Machines page.",
+            {"machine": S("The declared machine's id"), "instrument": S("The instrument whose series measure it (company_prom)"),
+             "prefix": S("Which of its series: a series-name prefix (pg_)"),
+             "labels": A("Which of its series: label=value (job=postgres); a value starting =~ is a regex"),
+             "instance_label": S("The label whose values are its replicas (instance), if any"),
+             "quote": QUOTE, "reason": REASON}, ("machine", "instrument", "reason")),
+    ToolDef("revise_attachment", "design",
+            "Change a proposed or confirmed attachment's instrument, match or instance label (a confirmed one's change waits "
+            "for the owner).",
+            {"attachment": S("The attachment's id, as read_design gives it"), "instrument": S("Another instrument"),
+             "prefix": S("A new series-name prefix"), "labels": A("New label=value matches"),
+             "instance_label": S("The label whose values are its replicas"), "quote": QUOTE, "reason": REASON},
+            ("attachment", "reason")),
     ToolDef("link", "design",
             "A declared stock is a discovered one: the owner says so (\"yes, that's Features\"), or the series you measured it "
             "with is that stock (read_model); yours to call, quoted or as your proposal. A manual binding, origin "

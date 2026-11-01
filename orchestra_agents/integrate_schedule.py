@@ -10,11 +10,13 @@ the repository, nothing committed; INTEGRATING.md §3.1):
 - a store: its ``[[sources]]`` entry, with the token's variable named in ``auth.bearer_env``;
 - a bridge's reader: its ``[bridges.<system>]`` section.
 
-**Written only once the owner approved.** A scaffolded program refuses to read anything but a fake
-on this machine until its ``machine.toml`` says ``clearance = "approved"`` (the kits' compliance
-check): started before, it exits at once, and ``orchestra run`` restarts it until it gives up. A
-``[[sources]]`` entry or a bridge's section is read the moment it is written. So the plan is kept
-with the integration and written by the approval, in one act."""
+**Written only once the owner approved.** A scaffolded program reads nothing but a fake on this
+machine until its ``machine.toml`` says ``clearance = "approved"`` (the kits' compliance check): run
+for good before that, its poller waits and re-reads ``machine.toml``, but its ``[[collect]]``
+measurement would fail every round. A ``[[sources]]`` entry or a bridge's section is read the
+moment it is written. So the plan is kept with the integration and written by the approval, in
+one act; the scaffolded test is not run again (it reads the variable's name and the scope from
+``machine.toml``)."""
 
 from __future__ import annotations
 
@@ -39,7 +41,7 @@ def poller(name: str, target: Path, every: str, title: str, *, events: bool, wor
     steps: list[dict] = []
     if events and workflows:
         body = {"id": name, "kind": "programmatic", "managed": "orchestra", "engagement": {"mode": "ad hoc"},
-                "spec": {"command": f"python {prog} --once", "role": name, "exit": {"0": "landed", "1": "error"}}}
+                "spec": {"command": f"python {prog} --once", "role": name, "exit": {"0": "landed", "1": "error", "2": "blocked"}}}
         steps.append({"how": "set", "key": f"workflows.every.{name}", "file": str(target / "machine.json"), "body": body,
                       "value": {"every": every, "role": name, "brief": f"poll {title} once"}})
     elif events:

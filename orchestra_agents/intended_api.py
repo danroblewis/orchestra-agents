@@ -13,9 +13,8 @@ the proposal's shapes.
   turn, message, quote, reason, request, ops}``, 422 with the refused op's ``index``), ``GET
   /intended`` and ``GET /intended/design``. With its host not running, a call is refused, never
   written anywhere else.
-- **Drawn** where the installed Orchestra ships the page that draws it (``pages``: its Machines
-  page's ``intended-machines.js``, its Dynamics page's ``intended-dynamics.js``), or where its
-  summary says so (``draws``, if it ever has one); otherwise the tools say "kept" and read it back.
+- **Drawn** on Orchestra's Machines page (a machine) and its Dynamics page (a stock, an effect, a
+  flow): the pinned core ships both (``PAGES``).
 - **Keys and names** are Orchestra's own (``orchestra.sd.intended.keys.Keys`` and
   ``names.resolve``), so a draft edit is resolved exactly as Orchestra resolves it.
 - **One deadline per tool call** (``one_call``): after an endpoint timeout, the rest of the call
@@ -31,9 +30,9 @@ import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
-from importlib import resources
 from typing import Protocol
 
+from orchestra.sd.intended.checks import PROVENANCE
 from orchestra.sd.intended.keys import Keys
 from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK  # noqa: F401  (WAITS_LINK: the tools' wording keys on it)
 from orchestra.sd.intended.names import resolve as _core_resolve
@@ -42,9 +41,7 @@ from orchestra.sd.intended.ops import OPTION
 from .config import Project
 from .store import StoreError
 
-PROVENANCE = ("source", "author", "turn", "message", "quote", "reason", "request")
 TIMEOUT_S = 30.0
-PROBE_S = 3.0
 CACHE_S = 30.0
 BACKOFF_S = 300.0
 PAGES = {"Machines": "intended-machines.js", "Dynamics": "intended-dynamics.js"}
@@ -201,60 +198,28 @@ def unpublishable(project: Project, lay: Layer | None = None) -> dict[tuple[str,
     return (lay or layer(project)).unpublishable()
 
 
-def _shipped(asset: str) -> bool:
-    try:
-        return resources.files("orchestra.web").joinpath("static", asset).is_file()
-    except (ModuleNotFoundError, OSError):
-        return False
-
-
 def pages(project: Project) -> set[str]:
-    """The pages that draw the declared layer: what its summary says (``draws``) if it says
-    anything, else the pages the installed Orchestra ships (``PAGES``)."""
-
-    def ask() -> set[str]:
-        try:
-            said = Core(project).design().get("draws")
-        except StoreError:
-            said = None
-        if isinstance(said, list | tuple | set):
-            return {p for p in PAGES if p.lower() in {str(x).lower() for x in said}}
-        return {p for p, asset in PAGES.items() if _shipped(asset)}
-    return _cached(("pages", str(project.state_dir)), ask)
+    """The pages that draw the declared layer: both of the pinned core's."""
+    return set(PAGES)
 
 
 def drawn(project: Project, page: str | None = None) -> bool:
     """Whether a page (``page``: that one) draws the declared layer."""
-    got = pages(project)
-    return page in got if page else bool(got)
+    return page in PAGES if page else True
 
 
 def where(project: Project) -> str:
     """Where a declaration is kept, for the tools' answers (``kept_in``)."""
-    if got := pages(project):
-        return f"Orchestra's declared layer: the {' and '.join(sorted(got))} page{'s draw' if len(got) > 1 else ' draws'} it"
-    return "Orchestra's declared layer (no page draws it in this Orchestra): kept, and read_design reads it back"
+    return f"Orchestra's declared layer: the {' and '.join(sorted(PAGES))} pages draw it"
 
 
 OPTION_FIELDS = frozenset(OPTION)      # what the layer keeps on a measurement option (with C8: system, series, url, command, bearer_env)
 
 
-def draft_flag_supported() -> bool:
-    """Whether ``[[collect]]``/``[[scrape]]`` entries take ``draft`` and ``expires``."""
-    try:
-        from orchestra.collect.spec import Collector
-    except ImportError:
-        return False
-    return {"draft", "expires"} <= set(getattr(Collector, "__dataclass_fields__", {}))
-
-
 def min_era_s(cfg) -> float:
     """What discovery needs of a new era: its minimum steps on its grid, or the share of its window
     a stock must cover, whichever is longer."""
-    try:
-        from orchestra.sd.discover import MIN_COVER, MIN_STEPS
-    except ImportError:
-        MIN_COVER, MIN_STEPS = 0.5, 5
+    from orchestra.sd.discover import MIN_COVER, MIN_STEPS
     return max(MIN_STEPS * cfg.discovery_step, MIN_COVER * cfg.discovery_window)
 
 
@@ -267,10 +232,7 @@ def era_cause(project: Project, era: str | None) -> str | None:
     """The id of the event that began era ``era`` (a prediction is about that change), or None."""
     if not era:
         return None
-    try:
-        from orchestra.sd.eras import recorded
-    except ImportError:
-        return None
+    from orchestra.sd.eras import recorded
     return next((e.cause for e in recorded(_models(project)) if e.id == era), None)
 
 

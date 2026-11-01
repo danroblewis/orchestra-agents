@@ -302,14 +302,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """``orchestra agents ARGV...``: Orchestra calls this with the arguments after ``agents``
-    (``python -m orchestra_agents`` with ``sys.argv[1:]``)."""
+    """``orchestra agents ARGV...``: Orchestra calls this with the arguments after ``agents``."""
     args = build_parser().parse_args(argv)
     return args.fn(args)
 
 
 main.help = "AI agents as Orchestra machines: their host, the Supervisor chat, sessions, roles"   # `orchestra --help`
 
-
-if __name__ == "__main__":
-    sys.exit(main())

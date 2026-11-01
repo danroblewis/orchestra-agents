@@ -66,13 +66,6 @@ def store(project):
     return s
 
 
-@pytest.fixture
-def drafting(monkeypatch):
-    """The installed Orchestra takes the draft flag (an Orchestra that does not ignores the keys it
-    does not know), so a draft instrument expires as it does with the flag."""
-    from orchestra_agents import design_instruments
-    monkeypatch.setattr(design_instruments, "supports_draft", lambda: True)
-
 
 def say(store, message: str, n: int = 1) -> None:
     """The owner's message begins a Supervisor turn (host._turn_began)."""

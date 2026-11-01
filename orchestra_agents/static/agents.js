@@ -219,7 +219,7 @@ function renderMarker(e) {
   else if (e.type === "agent.corrected") text = `✎ ${md(e.text || "")}`;
   else if (e.type === "session.started") text = `▶ Turn started${e.ticket ? " on " + esc(e.ticket) : ""}.`;
   else text = esc(e.type);
-  return `<div class="msg marker ${e.type}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
+  return `<div class="msg marker ${esc(String(e.type).replace(/\./g, "_"))}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
 }
 // Markers are Orchestra's events for the session; they are merged with the messages by time, newest first.
 function withMarkers(messages, markers, newerThan) {

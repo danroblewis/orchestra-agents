@@ -51,10 +51,10 @@ def test_the_first_claim_after_the_offer_and_before_a_withdrawal_holds_it():
     assert floor.winner([made, ev("offer.claimed", "worker/1", offer="other")], "I1.work.aa") is None
 
 
-def test_a_withdrawal_stops_the_offer_or_its_holder():
+def test_a_withdrawal_stops_the_offer_it_names():
     assert floor.stops(ev("offer.withdrawn", "dispatch"), "I1.work.aa", "worker/1")
-    assert floor.stops(ev("offer.withdrawn", "worker", offer=None, instance="worker/1"), "I1.work.aa", "worker/1")
-    assert not floor.stops(ev("offer.withdrawn", "worker", offer=None, instance="worker/2"), "I1.work.aa", "worker/1")
+    assert floor.stops(ev("offer.withdrawn", "worker", instance="worker/1"), "I1.work.aa", "worker/1")
+    assert not floor.stops(ev("offer.withdrawn", "worker", offer=None, instance="worker/1"), "I1.work.aa", "worker/1")
     assert not floor.stops(ev("offer.withdrawn", "dispatch", offer="I2.work.bb"), "I1.work.aa", "worker/1")
 
 
@@ -131,11 +131,35 @@ def test_report_outcome_is_checked_against_the_offer_the_session_holds(project):
     assert store.pop_report("I1.work.aa") == {"outcome": "triaged", "summary": "a bug"}
 
 
+# event sequences both readings must agree on: (offer.made's to, then (type, source, data) in bus order)
+TABLE = [
+    (None, [("offer.claimed", "worker/2", {}), ("offer.claimed", "worker/1", {})]),
+    (None, [("offer.withdrawn", "coordinator/dispatch", {}), ("offer.claimed", "worker/1", {})]),
+    ("worker/3", [("offer.claimed", "worker/1", {}), ("offer.claimed", "worker/3", {})]),
+    (None, [("offer.claimed", "worker/1", {"offer": "other"})]),
+    (None, [("offer.alive", "worker/1", {}), ("offer.claimed", "worker/4", {}), ("offer.withdrawn", "worker", {"instance": "worker/4"})]),
+    (None, []),
+]
+STOPS = [("offer.withdrawn", {"offer": "I1.work.aa"}), ("offer.withdrawn", {"offer": "I1.work.aa", "instance": "worker/2"}),
+         ("offer.withdrawn", {"offer": "I2.work.bb", "instance": "worker/1"}), ("offer.made", {"offer": "I1.work.aa"})]
+
+
 def test_the_copied_names_match_the_workflows_contract():
     contract = pytest.importorskip("orchestra_workflows.contract")
     assert (floor.MADE, floor.CLAIMED, floor.ALIVE, floor.FINISHED, floor.WITHDRAWN, floor.BLOCKED) == (
         contract.MADE, contract.CLAIMED, contract.ALIVE, contract.FINISHED, contract.WITHDRAWN, contract.BLOCKED)
     assert tuple(contract.LISTENS_FOR) == floor.LISTENS_FOR
+    acts = pytest.importorskip("orchestra_workflows.floor.acts")
+    assert floor.ATTENTION_NEEDED == acts.ATTENTION                       # the floor's attention event
+    oid = "I1.work.aa"
+    for to, seq in TABLE:                                                 # the claim rule, read both ways
+        made = {"offer": oid, "role": "worker", "item": "I1", "to": to}
+        envelopes = [{"type": "offer.made", "source": "coordinator/dispatch", "data": made}] + [
+            {"type": t, "source": s, "data": {"offer": oid, **d}} for t, s, d in seq]
+        flat = [{"type": e["type"], "source": e["source"], **e["data"]} for e in envelopes]
+        assert floor.winner(flat, oid) == contract.winner(envelopes, oid), (to, seq)
+    for t, d in STOPS:                                                    # the withdrawal rule, read both ways
+        assert floor.stops({"type": t, **d}, oid, "worker/1") == contract.stops({"type": t, "data": d}, oid, "worker/1"), d
 
 
 def a_host(project, harness):
@@ -160,3 +184,22 @@ def test_a_turn_with_no_outcome_finishes_blocked_and_rework_for_another_machine_
     assert "without reporting an outcome" in fin["data"]["summary"] and "I did something." in fin["data"]["summary"]
     assert len(host.harness.sessions[0].prompts) == 2 and host.harness.sessions[0].prompts[1].startswith("You stopped without")
     assert not floor_.of(other, "offer.claimed") and host._slots == {}
+
+
+def test_the_floor_s_attention_wakes_the_planner_it_names(project):
+    from orchestra_agents.host import AgentHost
+    store = AgentStore(project)
+    host = AgentHost(project, store, store.events)
+    host._refresh_org(store.runtime()["agent_state"])
+    host._wake_at = store.events.end()
+    store.events.publish(floor.ATTENTION_NEEDED, {"to": "coordinator", "reason": "review passed its within",
+                                                  "workflow": "loop", "step": "review", "guard": "within"},
+                         source="coordinator/dispatch", subject="I1")
+    host._wake_on_events()
+    woke = {w["target"]: w["reason"] for w in store.runtime()["wakeups"]}
+    assert "coordinator" in woke and "supervisor" not in woke
+    assert "the Workflows floor asks the coordinator to look at I1 (workflow loop step review)" in woke["coordinator"]
+    assert "guard within" in woke["coordinator"]
+    store.events.publish(floor.ATTENTION_NEEDED, {"to": "supervisor", "reason": "x"}, source="coordinator/dispatch", subject="I2")
+    host._wake_on_events()
+    assert any(w["target"] == "supervisor" and "attention.needed" in w["reason"] for w in store.runtime()["wakeups"])

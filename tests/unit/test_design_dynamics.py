@@ -106,36 +106,11 @@ def test_a_declared_stock_records_the_owner_the_quote_the_turn_and_who_placed_it
     assert "proposed by the Supervisor" in out["said"][0]
 
 
-def test_no_answer_points_at_a_page_while_no_page_draws_the_layer(project, store, monkeypatch):
-    monkeypatch.setattr(intended_api, "_shipped", lambda asset: False)       # an Orchestra without the pages that draw it
-    outs = [features(project, store), options(project, store), add(project, store)]
-    for o in outs:
-        assert not any(page in line for line in o["said"] for page in ("Dynamics page", "Machines page")), o["said"]
-        assert not any("read_design" in line for line in o["said"])               # where it is kept is kept_in's alone
-        assert "no page draws it" in o["kept_in"]
-    assert all("(s)" not in line for o in outs for line in o["said"])
-    assert any("4 ways to measure features" in line for line in outs[1]["said"])
-
-
-def test_a_page_is_named_once_orchestra_says_one_draws_the_layer(project, store, monkeypatch):
-    monkeypatch.setattr(intended_api, "pages", lambda p: {"Dynamics"})
+def test_every_answer_names_both_pages_that_draw_the_layer(project, store):
     out = features(project, store)
-    assert any("Dynamics page" in line for line in out["said"]) and "the Dynamics page draws it" in out["kept_in"]
-    say(store, "Make a machine too.", 2)
-    out = call(project, store, "declare_machine", name="m_one", kind="universal", description="Does one thing", reason=WHY)
-    assert not any("Machines page" in line for line in out["said"])          # the Machines page is not drawn in this one
-
-
-def test_the_pages_that_draw_the_layer_are_the_ones_the_installed_orchestra_ships(project, monkeypatch):
-    shipped = {"intended-machines.js", "intended-dynamics.js"}
-    monkeypatch.setattr(intended_api, "_shipped", lambda asset: asset in shipped)
     assert intended_api.pages(project) == {"Machines", "Dynamics"} and intended_api.drawn(project, "Machines")
-    intended_api._cache.clear()
-    shipped.discard("intended-machines.js")
-    assert intended_api.pages(project) == {"Dynamics"} and not intended_api.drawn(project, "Machines")
-    intended_api._cache.clear()
-    monkeypatch.undo()
-    assert intended_api.pages(project) == {p for p, a in intended_api.PAGES.items() if intended_api._shipped(a)}
+    assert out["kept_in"] == "Orchestra's declared layer: the Dynamics and Machines pages draw it"
+    assert any("Dynamics page" in line for line in out["said"])
 
 
 def test_options_are_recorded_in_order_and_a_company_system_needs_approval(project, store):
@@ -257,7 +232,7 @@ def test_an_existing_series_is_an_option_with_no_instrument_and_no_binding(proje
     assert not project.orchestra.config.raw.get("collect")
 
 
-def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store, drafting):
+def test_add_instrument_writes_the_script_to_the_state_dir_and_its_entry_to_the_overlay_as_one_act(project, store):
     features(project, store)
     options(project, store)
     before = git(project.repo_root, "rev-parse", "HEAD")
@@ -316,7 +291,7 @@ def test_keeping_an_instrument_needs_the_owners_words_or_their_expect_mark(proje
     call(project, store, "keep_instrument", name="features.acceptance", reason="the owner marked its series expected")
     assert design_instruments.drafts(store)["features.acceptance"]["kept"]
     kinds = [(e.get("change") or "")[:6] for e in store.events.read(0, 500)[0] if e["type"] == "instruments.changed"]
-    assert kinds.count("kept f") == (1 if design_instruments.supports_draft() else 0)
+    assert kinds.count("kept f") == 1
 
 
 def test_add_instrument_refuses_a_long_script_a_secret_and_a_failing_trial_writing_nothing(project, store):
@@ -347,7 +322,7 @@ def test_repo_tries_the_script_then_hands_it_to_the_coordinator_and_writes_nothi
     assert "acceptance_tests_passing" in req[-1]["requirements"]
 
 
-def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store, drafting):
+def test_a_kept_draft_stays_an_unkept_one_expires_with_its_script_and_entry(project, store):
     features(project, store)
     options(project, store)
     add(project, store, every="15m")
@@ -377,7 +352,7 @@ def test_removing_the_chosen_option_clears_chosen(project, store):
     assert layer(project)["stocks"]["features"]["measure"]["chosen"] is None
 
 
-def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch, drafting):
+def test_expiry_goes_on_past_a_draft_it_cannot_remove_and_an_entry_already_gone(project, store, monkeypatch):
     features(project, store)
     options(project, store)
     add(project, store)

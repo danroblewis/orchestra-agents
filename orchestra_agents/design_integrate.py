@@ -133,8 +133,6 @@ def _ask(system: str, kit_env: str | None, strategy: str, base_url_missing: bool
         parts.append(f"{t}'s address (its API's base URL)")
     if scope:
         parts.append(f"{kits.SCOPE[scope]} ({scope})")
-    if strategy == "bridge":
-        parts[1] += " (the bridges' reader reads its own variable or token file: its guide names them)"
     return "; ".join(parts) + "."
 
 
@@ -177,9 +175,9 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
 
 def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict, kit: str, name: str, target: Path,
                 settings: dict) -> dict:
-    system, strategy, base_url, wants = rec["system"], rec["strategy"], rec["base_url"], rec["wants"]
+    system, strategy, base_url = rec["system"], rec["strategy"], rec["base_url"]
     test = kits.run_test(target, name)
-    kits.fill(target, {**({"system": system} if kit == "http" else {}), **settings}, base_url, wants)
+    kits.fill(target, {**({"system": system} if kit == "http" else {}), **settings}, base_url)
     mf = kits.read(target)
     every = str(mf.get("settings", {}).get("every") or "5m")
     events = strategy == "poller" and kit != "promql"
@@ -212,7 +210,7 @@ def _scaffolded(project: Project, store: AgentStore, a: dict, prov: dict, rec: d
 
 def _plan_only(project: Project, store: AgentStore, name: str, rec: dict, settings: dict, a: dict, prov: dict) -> dict:
     system, strategy = rec["system"], rec["strategy"]
-    if not rec["base_url"]:
+    if not rec["base_url"] and not (strategy == "bridge" and system in kits.BRIDGE_DEFAULT_API):
         raise StoreError(f"base_url: the {'store' if strategy == 'source' else 'site'}'s address is needed to plan it")
     lines: list = []
     if strategy == "source":
@@ -224,7 +222,11 @@ def _plan_only(project: Project, store: AgentStore, name: str, rec: dict, settin
     else:
         if system not in kits.BRIDGES:
             raise StoreError(f"the bridges have no reader for {system}: they read {', '.join(kits.BRIDGES)}; use strategy poller")
-        rec["steps"] = schedule.bridge(system, {"api": rec["base_url"], **settings})
+        scope = kits.BRIDGE_SCOPE.get(system, ())
+        if scope and not any(settings.get(k) for k in scope):
+            raise StoreError(f"settings.{' or settings.'.join(scope)}: what the {kits.title(system)} reader follows is the "
+                             "owner's to name (ask them); nothing was planned")
+        rec["steps"] = schedule.bridge(system, {**({"api": rec["base_url"]} if rec["base_url"] else {}), **settings})
         lines.append(f"planned the bridges' reader {kits.BRIDGES[system]}; never run a poller over the same items too")
     sid, said = _stock(project, store, a, prov)
     rec.update(name=name, state="needs approval", stock=sid)
@@ -261,7 +263,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     if rec.get("state") not in ("needs approval", "approved"):
         raise StoreError(f"{name} is {rec.get('state')}: only an integration whose test passed is approved")
     token_env = (a.get("token_env") or "").strip()
-    if not kits.ENV_NAME.match(token_env):
+    if not kits.env_name_ok(token_env):
         raise StoreError("token_env is the NAME of an environment variable (JIRA_TOKEN), never a token: ask the owner for it")
     data_class = (a.get("data_class") or DATA_CLASS).strip()
     base_url = (a.get("base_url") or "").strip() or rec.get("base_url")
@@ -277,19 +279,19 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     if rec.get("dir"):
         target = Path(rec["dir"])
         if settings:
-            kits.fill(target, settings, None, rec["wants"])
+            kits.fill(target, settings, None)
         kits.clear(target, token_env, data_class, base_url)
         lines.append(f"{rec['dir']}/machine.toml: clearance \"approved\", data_class {data_class!r}, token_env {token_env} "
                      f"(the name only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))
         lines.append("its test ran against the kit's fake before your settings (it sets the template's variable and reads "
                      "the fake's own world); its first poll, in its log, says whether it reads the real system")
     steps = schedule.with_token(rec["steps"], token_env)
+    if rec["strategy"] == "bridge" and rec["system"] in kits.BRIDGE_TOKEN:      # the reader reads this variable
+        steps = [{**s, "value": {**s["value"], "token_env": token_env}} if s.get("key") == f"bridges.{rec['system']}" else s
+                 for s in steps]
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]
     lines += schedule.write(project, store, steps, prov["reason"])
-    if rec["strategy"] == "bridge":
-        lines.append(f"the bridges' reader takes its token from its own variable or token_file (read_guide bridges, "
-                     f"{rec['system']}), not from {token_env} unless that is its name: check it before saying it reads")
     rec.update(state="approved", clearance="approved", token_env=token_env, data_class=data_class, base_url=base_url,
                approved={"at": time.time(), "quote": prov.get("quote"), "turn": prov.get("turn")}, steps=steps)
     _save(store, name, rec)

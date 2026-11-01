@@ -269,10 +269,11 @@ kits' settings. You do it with two `design` tools, and the owner writes nothing:
    file for them to change.
 3. **`approve_integration`** on their yes, quoted, with that name (`token_env`) and the site's
    address if it was missing. The program's `machine.toml` records the clearance, the data class
-   and the variable's name, its test runs again, and what runs it is written to the owner's
-   overlay: a `[[machines]]` entry with `restart = "always"` (or the Workflows floor's `every`
-   item when that plugin is installed) and a `[[collect]]` entry for its series. Nothing runs
-   before this: an uncleared program reads only a fake on this machine.
+   and the variable's name (its test reads them from there), and what runs it is written to the
+   owner's overlay: a `[[machines]]` entry with `restart = "always"` (or the Workflows floor's
+   `every` item when that plugin is installed) and a `[[collect]]` entry for its series. They are
+   written at the approval, not before: an uncleared poller only waits, reading nothing, but its
+   measurement would fail every round.
 
 Tell the owner what you did and what they must set (the variable, then a restart of
 `orchestra run` if it was not set when it started). If the answer says the bridges' kits are not

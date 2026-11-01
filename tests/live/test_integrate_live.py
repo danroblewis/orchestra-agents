@@ -7,7 +7,7 @@ site is a placeholder host and the variable is never set.
 
 It costs money and needs a logged-in ``claude``, so it runs only when asked:
 
-    ORCHESTRA_LIVE_HAIKU=1 uv run python -m pytest -q -s tests/e2e/test_integrate_live.py
+    ORCHESTRA_LIVE_HAIKU=1 uv run python -m pytest -q -s tests/live/test_integrate_live.py
 
 It prints each reply, the tools called and the cost (from Claude Code's own ``result`` events)."""
 

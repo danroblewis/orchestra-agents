@@ -19,6 +19,7 @@ from design_fixtures import core_endpoint
 from fake_tasks import FakeTasks
 from test_design_e2e import answers, git
 
+from orchestra_agents import integrate_kits as kits
 from orchestra_agents import intended_api
 from orchestra_agents.events import Events
 from orchestra_agents.host import AgentHost
@@ -87,7 +88,7 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
     assert got["integration"] == "jira_poller" and got["dir"] == str(d)
     assert got["test"]["passed"] is True and "passed" in got["test"]["summary"], got["test"]       # against FakeJira, for real
     m = tomllib.loads((d / "machine.toml").read_text())
-    assert m["clearance"] == "needs approval" and m["wanted"] == "issue transitions and open counts"
+    assert m["clearance"] == "needs approval" and "wanted" not in m           # the owner's words are the integration's record
     jira = intended_api.current(project)["machines"]["jira"]
     assert jira["managed"] == "external" and jira["aliases"] == ["bot.jira"] and jira["spec"]["source"] == "bot.jira"
     assert jira["state"] == "proposed" and jira["emits"] == ["jira.issue.transitioned"] and jira["expected_effect"]
@@ -95,9 +96,11 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
     assert "approval" in " ".join(got["owner_must_set"]) and "base URL" in got["ask_owner"]       # the clearance request
     assert "which Jira projects" in got["ask_owner"]
     assert "environment variable" in got["ask_owner"] and "never the token" in got["ask_owner"]
-    assert "[[machines]] jira_poller, restart always" in got["planned"]
+    floor = kits.workflows_installed()                       # with the Workflows plugin installed it runs as its every item
+    assert ("[workflows.every.jira_poller] every 5m (the Workflows floor runs it once per interval)" if floor
+            else "[[machines]] jira_poller, restart always") in got["planned"]
     project.reload_config()
-    assert not project.orchestra.config.raw.get("machines")                                        # not before the yes
+    assert not project.orchestra.config.raw.get("machines") and not project.orchestra.config.raw.get("workflows")   # not before the yes
 
     turn2 = say(YES, [{"tool": "approve_integration", "args": {
         "name": "jira_poller", "token_env": "JIRA_TOKEN", "base_url": "https://jira.acme.test", "settings": {"jql": "project = OPS"},
@@ -108,8 +111,12 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
     assert m["settings"]["base_url"] == "https://jira.acme.test" and m["settings"]["jql"] == "project = OPS"
     project.reload_config()
     raw = project.orchestra.config.raw
-    entry = next(e for e in raw["machines"] if e["name"] == "jira_poller")
-    assert entry["restart"] == "always" and str(d / "jira_poller.py") in entry["command"]
+    if floor:
+        assert raw["workflows"]["every"]["jira_poller"]["role"] == "jira_poller" and not raw.get("machines")
+        assert str(d / "jira_poller.py") in json.loads((d / "machine.json").read_text())["spec"]["command"]
+    else:
+        entry = next(e for e in raw["machines"] if e["name"] == "jira_poller")
+        assert entry["restart"] == "always" and str(d / "jira_poller.py") in entry["command"]
     assert next(e for e in raw["collect"] if e["name"] == "jira_poller")["command"].endswith("measure")
     assert "machines" not in tomllib.loads((repo / "orchestra.toml").read_text())                  # the overlay, not the repo
     assert git(repo, "rev-parse", "HEAD") == head                                                  # nothing committed

@@ -18,7 +18,7 @@ measurements reach Orchestra through the instrument `agents.turns`), and **UI ad
 machines on Orchestra's Machines page are the configured agents (`supervisor`, `coordinator`,
 `worker/1`, ...), never the plugin.
 
-How it works, with diagrams, the tools and the protocols: [ARCHITECTURE.md](ARCHITECTURE.md).
+How it works, the tools and the protocols: [SPEC.md](SPEC.md).
 
 The agents change no ticket themselves and manage no branches: every ticket change is a request
 on the bus that the task system applies, and the task system prepares the workspace. The two
@@ -164,8 +164,8 @@ call the agents' tools, wait or fail:
     steps = [{ tool = "report_review", args = { verdict = "REJECTED", summary = "Not yet.", feedback = "1. Add a test." } }]
 
 The tools go through the same calls as a model's, so a test on dummy agents tests everything but
-the model. The format: SPEC.md section 6, ARCHITECTURE.md "The dummy harness and its scripts",
-and `demo/dummy.toml` as a worked example.
+the model. The format: SPEC.md §6 (the dummy harness, its **Dummy** entry), and `demo/dummy.toml`
+as a worked example.
 
 ## Tests
 
@@ -175,14 +175,18 @@ and `demo/dummy.toml` as a worked example.
 The Supervisor's workflow tools (`declare_workflow`, `list_workflows`, `explain_item`) need the
 Workflows plugin, `orchestra-workflows`, which is an optional dependency named in no extra and no
 lock: installed beside the agents, the tools use it; without it they say it is not installed. Their
-unit tests use a fake plugin; `tests/e2e/test_workflows_e2e.py` runs on the real one and is skipped
-without it (`uv pip install -e ~/orchestra-workflows` after `uv sync`, which removes it).
+unit tests use a fake plugin; `tests/e2e/test_workflows_e2e.py` runs on the real one, which the
+`dev` extra installs (as it installs the task system and the bridges).
 
 The design tools' tests run on Orchestra's own declared layer (`orchestra.sd.intended`), served
 in process through its host's events endpoint; `uv.lock` names the Orchestra commit they ran on.
 
 Every e2e test uses the fakes in `tests/e2e/` (one per harness, speaking the product's real
-protocol) or the dummy harness; nothing in the tests calls a model. `tests/e2e/test_dummy_demo_e2e.py`
+protocol) or the dummy harness; nothing in the default test paths calls a model. Three opt-in live
+tests under `tests/live/` do, on Haiku only, each skipped unless its variable is set:
+`ORCHESTRA_LIVE_DESIGN=1 uv run python -m pytest -q -s tests/live/test_design_live.py`, and
+`ORCHESTRA_LIVE_HAIKU=1` for `tests/live/test_integrate_live.py` and
+`tests/live/test_modeling_live.py`. `tests/e2e/test_dummy_demo_e2e.py`
 runs the whole demo on dummy agents with no API key and no network. Its
 `test_what_the_owner_sees` lands twelve tickets, five of them rejected once (a rule appended to
 the target's `dummy.toml`), and checks what the owner would see: `task_scheduler` is in no

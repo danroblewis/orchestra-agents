@@ -45,7 +45,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from orchestra.config import home, project_key
+from orchestra.config import load_project as load_orchestra_project
 
 HERE = Path(__file__).resolve().parent
 PYTHON = sys.executable
@@ -149,7 +149,7 @@ def make_project(target: Path, dummy: bool = False, tools_via: str | None = None
     subprocess.run([*git, "init", "-q", "-b", "main"], cwd=target, check=True)
     subprocess.run([*git, "add", "-A"], cwd=target, check=True)
     subprocess.run([*git, "commit", "-q", "-m", "the agents' demo"], cwd=target, check=True)
-    state = home() / project_key(target)
+    state = load_orchestra_project(target).state_dir
     if state.exists():
         shutil.rmtree(state)
         print(f"removed the state a previous run left in {state}", flush=True)
@@ -305,7 +305,7 @@ def main() -> None:
         wait_for(web, procs)
         print(f"\nThe demo runs at {url}\n  log in:   {web.login_link('/agents')}\n  project:  {target}\n  tickets:  {url}/tickets\n  agents:   {url}/agents\n"
               f"  machines: {url}/machines\n  core:     {url}/core (what orchestra run keeps running, with their logs)\n"
-              f"  logs:     {target / 'run'}/*.log, {home() / project_key(target) / 'logs' / 'machines'}/*.log\n"
+              f"  logs:     {target / 'run'}/*.log, {load_orchestra_project(target).logs_dir / 'machines'}/*.log\n"
               "Ctrl-C stops everything.\nThe tickets:", flush=True)
         plan(target)
         while running():

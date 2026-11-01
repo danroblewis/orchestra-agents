@@ -240,7 +240,7 @@ def test_a_programs_waiting_edit_names_the_change_its_program_announces(project,
 
 
 
-def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(project, store, drafting):
+def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(project, store):
     features(project, store)
     add(project, store)
     script = project.state_dir / "instruments" / "features.acceptance.sh"
@@ -258,7 +258,7 @@ def test_the_hosts_expiry_removes_and_announces_with_a_store_that_has_no_source(
     assert len(after) == before + 1 and after[-1]["source"] == "supervisor"
 
 
-def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, drafting):
+def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store):
     features(project, store)
     add(project, store)
     say(store, "Yes, track acceptance tests passing.", 4)
@@ -274,16 +274,7 @@ def test_the_owners_expect_mark_keeps_a_draft_at_its_expiry(project, store, draf
     assert any("kept" in line and "expect mark" in line for line in said)
 
 
-def test_without_the_draft_flag_an_instrument_is_never_expired_on_a_timer(project, store, monkeypatch):
-    monkeypatch.setattr(design_instruments, "supports_draft", lambda: False)
-    features(project, store)
-    out = add(project, store)
-    assert design_instruments.NO_DRAFT in out["said"] and design_instruments.drafts(store)["features.acceptance"]["until"] is None
-    assert design_instruments.expire(project, store, now=time.time() + 30 * 86_400) == []
-    assert entry(project, "features.acceptance") is not None
-
-
-def test_a_simulated_placeholder_is_never_marked_draft(project, store, drafting):
+def test_a_simulated_placeholder_is_never_marked_draft(project, store):
     features(project, store)
     out = add(project, store, option="b", name="features.sim", script="echo 'features_simulated 3'\n")
     e = entry(project, "features.sim")

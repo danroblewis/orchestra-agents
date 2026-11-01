@@ -7,13 +7,13 @@ the repository, nothing committed; INTEGRATING.md §3.1):
   ``machine.json`` beside the scaffold that the plugin runs it from, INTEGRATING.md §5.5); and the
   ``[[collect]]`` entry that stores its measurement;
 - a measurement alone: the ``[[collect]]`` entry;
-- a store: its ``[[sources]]`` entry, with the token's variable named in ``auth.bearer_env``;
-- a bridge's reader: its ``[bridges.<system>]`` section.
+- a store: its ``[[sources]]`` entry, with the token named in ``auth.bearer_env`` (a variable) or
+  ``auth.bearer_file`` (a file outside any repository).
 
 **Written only once the owner approved.** A scaffolded program refuses to read anything but a fake
 on this machine until its ``machine.toml`` says ``clearance = "approved"`` (the kits' compliance
 check): started before, it exits at once, and ``orchestra run`` restarts it until it gives up. A
-``[[sources]]`` entry or a bridge's section is read the moment it is written. So the plan is kept
+``[[sources]]`` entry is read the moment it is written. So the plan is kept
 with the integration and written by the approval, in one act."""
 
 from __future__ import annotations
@@ -54,10 +54,6 @@ def source(entry: dict) -> list[dict]:
     return [{"how": "entry", "section": "sources", "entry": entry}]
 
 
-def bridge(system: str, section: dict) -> list[dict]:
-    return [{"how": "set", "key": f"bridges.{system}", "value": section}]
-
-
 def describe(step: dict) -> str:
     if step["how"] == "entry":
         e = step["entry"]
@@ -68,12 +64,14 @@ def describe(step: dict) -> str:
     return f"[{step['key']}]"
 
 
-def with_token(steps: list[dict], token_env: str) -> list[dict]:
-    """A store's entry with the token's variable named (``auth.bearer_env``): the name, never a value."""
+def with_token(steps: list[dict], creds: dict) -> list[dict]:
+    """A store's entry with the token named (``auth.bearer_env``, else ``auth.bearer_file``): a
+    variable's name or a file's path, never a value."""
+    auth = {"bearer_env": creds["token_env"]} if creds.get("token_env") else {"bearer_file": creds["token_file"]}
     out = []
     for s in steps:
         if s["how"] == "entry" and s["section"] == "sources":
-            s = {**s, "entry": {**s["entry"], "auth": {"bearer_env": token_env}}}
+            s = {**s, "entry": {**s["entry"], "auth": auth}}
         out.append(s)
     return out
 

@@ -248,37 +248,59 @@ they propose, and you put the findings to the owner in one message.
 When the owner wants to see what happens in another system ("connect our Jira so I can see issue
 transitions and open counts"), the method is Orchestra's `docs/INTEGRATING.md`
 (https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md: the strategies, the kits,
-the rules, the checklist); the bridges' guide (`read_guide bridges`, its kits section) has the
-kits' settings. You do it with two `design` tools, and the owner writes nothing:
+the rules, the checklist). **The bridges are a library** (the owner, 2026-11-01: "a library or
+framework so that AI agents within my repo could write scripts in the target repo to do the
+metrics and event collection"): kits (a cached, rate-limited, read-only client; a poller with its
+cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
+themselves. **Every collector is a script in the owner's repository**, at
+`.orchestra/machines/<name>/` (its `machine.toml`, `<name>.py`, `test_<name>.py` against the kit's
+fake, and an `AGENTS.md` with the kit's rules for whoever edits it), landed by a pull request like
+any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
+says their repository must stay clean (`root: state`). The kits stay read-only: a write to the
+system (a label, a transition, a Slack post) is an Outbox draft the owner's approval settings
+govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
 
 1. **`integrate_system`** with the system, what the owner wants (their words), and their quote. The
    strategy follows INTEGRATING.md §2 when you leave it out: a store with a Prometheus API
    (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
-   narrow `match`); anything with items is a `poller` built from the bridges' kit (events as who
-   acted, and its series); `collect` is a measurement alone; `bridge` is the bridges' own reader
-   (Jira, Slack pings, GitHub) when it already reads what the owner wants, never beside a poller
-   over the same items. Give the owner's scope in `settings` (`jql`, `channels`), and `stock` when
-   they named what it fills ("open counts": `Open issues`). A poller is scaffolded into the state
-   directory (`~/.orchestrator/<key>/machines/<name>_poller/`), its own test is run against the
-   kit's fake, and the system is declared on the Machines page as a machine managed elsewhere,
-   heard as `bot.<system>`, with its expected effect on the stock. **The poller is never a
-   machine**: it relays what the system's people and bots did, as them.
+   narrow `match`); anything with items is a `poller` built from a kit (events as who acted, and
+   its series); `collect` is a measurement alone. Give the owner's scope in `settings` (`jql`,
+   `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The
+   script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   system is declared on the Machines page as a machine managed elsewhere, heard as
+   `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
+   relays what the system's people and bots did, as them. The answer names the directory: tell
+   the owner a coding tool (theirs, or the Coordinator's worker) may now edit the script there.
+   **When the test fails, or the kits have no template for the system** (Jenkins: the generic
+   `http` kit's guess), the answer has already handed the script to the Coordinator as work
+   (`request`): a worker adapts it until its test passes, and a review and the gate land it. You
+   never stop there and never write the code yourself; tell the owner it is handed on.
 2. **Ask the owner** what the answer's `ask_owner` says, in your words: their yes to reading it
-   (metadata only, read-only), and the *name* of the environment variable that will hold the token
-   in the environment `orchestra run` starts with. Never the token, never in the chat, and never a
-   file for them to change.
-3. **`approve_integration`** on their yes, quoted, with that name (`token_env`) and the site's
-   address if it was missing. The program's `machine.toml` records the clearance, the data class
-   and the variable's name, its test runs again, and what runs it is written to the owner's
+   (metadata only, read-only), and *where* the token is: an environment variable's name (in the
+   environment `orchestra run` starts with) or a `chmod 600` file outside any repository
+   (`~/.config/orchestra-bridges/jira-token`). Jira Cloud (an `atlassian.net` site) logs in with the
+   account's email and the token together, so ask where the email is too. Never the token, never
+   in the chat, and never a file for them to change.
+3. **`approve_integration`** on their yes, quoted, with what they named: `token_env` or
+   `token_file`, and `user_env` or `user_file` for the account (Jira Cloud), plus the site's
+   address if it was missing. These are references, never values: a path inside a repository or
+   a value that looks like a credential is refused. The script's `machine.toml` records the
+   clearance, the data class and those references, and what runs it is written to the owner's
    overlay: a `[[machines]]` entry with `restart = "always"` (or the Workflows floor's `every`
-   item when that plugin is installed) and a `[[collect]]` entry for its series. Nothing runs
-   before this: an uncleared program reads only a fake on this machine.
+   item when that plugin is installed) and a `[[collect]]` entry for its series (a store's
+   `[[sources]]` entry takes `auth.bearer_env` or `auth.bearer_file`). Nothing runs before this: an
+   uncleared program reads only a fake on this machine. If the answer says the script does not
+   log in with an account yet (the Jira template speaks Data Center), hand that change to the
+   Coordinator before saying it reads.
 
-Tell the owner what you did and what they must set (the variable, then a restart of
-`orchestra run` if it was not set when it started). If the answer says the bridges' kits are not
-installed, say so and propose the route it names: installing the bridges plugin into Orchestra's
-environment, or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
-Coordinator. A failed test is code too: hand it on with the failure.
+**What the human decides, and nothing else:** whether the system may be read (their quoted yes,
+and the data class), where its credentials are (a variable's name or a file's path; they put the
+token there themselves), whether the repository must stay clean (`root: state`), and each write to
+the system (the Outbox's approval). Tell them what you did and what they must set (the answer's
+`owner_must_set`: a variable, then a restart of `orchestra run` if it was not set when it started;
+or a file, `chmod 600`). If the answer says the bridges' kits are not installed, say so and propose
+the route it names: installing the bridges plugin into Orchestra's environment, or the one-file
+poller of INTEGRATING.md §5.2, which is code and goes to the Coordinator (`hand_to_coordinator`).
 
 ## Workflows
 

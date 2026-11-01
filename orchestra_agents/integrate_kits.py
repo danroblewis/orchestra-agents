@@ -6,15 +6,21 @@ and a scaffolded poller's own files.
 - **Which strategy** (INTEGRATING.md §2, in its order of preference): a Prometheus-API store is a
   ``[[sources]]`` entry (``source``); a system with item events is a poller built from a kit
   (``poller``, which also measures); one measurement alone is the kit's ``measure`` as a
-  ``[[collect]]`` (``collect``); the bridges' own reader where one exists (``bridge``). The
-  Supervisor chooses; ``choose`` is the default when it does not.
+  ``[[collect]]`` (``collect``). The Supervisor chooses; ``choose`` is the default when it does
+  not. The bridges are a library (the owner, 2026-11-01: "a library or framework so that AI agents
+  within my repo ... could write scripts in the target repo"): every collector is a script built
+  from a kit, never a reader inside the bridges plugin.
 - **The kits are another plugin's**, imported here only, lazily: without them ``installed`` is
   False and nothing is scaffolded (the tool proposes the no-kit route instead).
-- **A scaffolded poller's files** live in Orchestra's state directory,
-  ``~/.orchestrator/<key>/machines/<name>/`` (the kit's ``--root state``): its ``machine.toml`` is
-  the program's own file, never Orchestra's configuration, so it is edited here line by line
-  (``set_keys``, comments kept): the owner's settings (``fill``) and, on the owner's word, the clearance and the
-  NAME of the token's variable (``clear``). Never a token: ``token`` keys are refused.
+- **A scaffolded poller's files** live in the owner's repository, ``.orchestra/machines/<name>/``
+  (the kit's ``--root repo``; the agents' machine specs are read from there too, and one whose
+  name is no agent is ignored), where a coding tool or the Coordinator's worker edits them and a
+  pull request lands them; in Orchestra's state directory, ``~/.orchestrator/<key>/machines/<name>/``
+  (``--root state``), only when the owner says the repository must stay clean (``ROOTS``). Its
+  ``machine.toml`` is the program's own file, never Orchestra's configuration, so it is edited here
+  line by line (``set_keys``, comments kept): the owner's settings (``fill``) and, on the owner's
+  word, the clearance and the credentials BY REFERENCE (``clear``: a variable's name or a file's
+  path, for the token and for an HTTP Basic account). Never a token: ``token`` keys are refused.
 - **Its test** runs against the kit's fake in a child Python (Orchestra's, with the kits), with the
   environment's credential-looking variables left out, so a real token can never reach it."""
 
@@ -34,12 +40,10 @@ from .config import Project
 from .secret_shapes import secret_in
 from .store import StoreError
 
-STRATEGIES = ("source", "poller", "collect", "bridge")
+STRATEGIES = ("source", "poller", "collect")
+ROOTS = {"repository": "repo", "state": "state"}      # integrate_system's word -> the kit scaffold's --root
 STORES = ("chronosphere", "prometheus", "mimir", "thanos", "victoriametrics", "cortex")
 KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", **{s: "promql" for s in STORES}}
-BRIDGES = {"jira": "[bridges.jira] (Data Center or Cloud: issues, changes and comments, as who did them, and counts by status)",
-           "slack": "[bridges.slack] (pings to the owner: mentions and DMs, and whether they were answered)",
-           "github": "[bridges.github] and [bridges.github_prs] (issues and pull requests, as who acted)"}
 SCOPE = {"jql": "which Jira projects to follow (or a JQL filter)", "channels": "which Slack channels to follow (their ids)"}
 SCOPE_OF = {"jira": ("jql",), "slack": ("channels",)}      # what a kit's template only guesses: the owner's to name
 TITLES = {"jira": "Jira", "slack": "Slack", "pagerduty": "PagerDuty", "github": "GitHub", "chronosphere": "Chronosphere"}
@@ -47,6 +51,7 @@ ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
 KEY = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "acme.chronosphere.io")
 CREDENTIAL_VARS = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|_KEY|BEARER|CREDENTIAL)", re.IGNORECASE)
+CREDENTIAL_KEYS = ("token", "token_env", "token_file", "user_env", "user_file")   # the kits' [settings] credentials
 TEST_TIMEOUT_S = 300
 INTEGRATING = "Orchestra's docs/INTEGRATING.md (https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md)"
 
@@ -86,11 +91,18 @@ def kits() -> tuple[str, ...]:
     return tuple(sorted(s.KINDS))
 
 
-def scaffold(project: Project, kit: str, name: str) -> Path:
-    """The kit's poller written into the state directory (``--root state``); its directory."""
+def templated(kit: str) -> bool:
+    """Whether the kit is the system's own template (``http`` is the generic one: its code is a
+    guess at an API no kit knows, to be adapted)."""
+    return kit != "http"
+
+
+def scaffold(project: Project, kit: str, name: str, root: str = "repository") -> Path:
+    """The kit's poller written into the repository (``--root repo``) or, when the owner keeps it
+    clean, the state directory (``--root state``); its directory."""
     from orchestra_bridges.kits import scaffold as s
     try:
-        return s.scaffold(kit, name, s.root_dir(project.orchestra, "state"))
+        return s.scaffold(kit, name, s.root_dir(project.orchestra, ROOTS[root]))
     except (s.ScaffoldError, OSError) as e:
         raise StoreError(f"scaffold: {e}") from None
 
@@ -118,7 +130,7 @@ def check_settings(settings: dict) -> dict:
     for k, v in settings.items():
         if not KEY.match(str(k)):
             raise StoreError(f"settings: {k!r} is not a setting's name (lower case, digits, _)")
-        if k in ("token", "token_env", "token_file", "clearance", "data_class") or "token" in k or "secret" in k:
+        if k in CREDENTIAL_KEYS or k in ("clearance", "data_class") or "token" in k or "secret" in k:
             raise StoreError(f"settings: {k} is not set here: the token's variable and the clearance are the owner's, at "
                              "approve_integration; a token is never written anywhere")
         ok = isinstance(v, str | int | float | bool) or (isinstance(v, list) and all(isinstance(x, str | int | float) for x in v))
@@ -166,10 +178,24 @@ def set_keys(text: str, table: str | None, values: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _edit(target: Path, top: dict, settings: dict) -> None:
+def drop_keys(text: str, table: str, keys: list[str]) -> str:
+    """``text`` without the lines that set ``keys`` in ``table`` (a commented-out line is kept)."""
+    lines = text.splitlines()
+    start = next((i + 1 for i, ln in enumerate(lines) if re.match(rf"^\s*\[{re.escape(table)}\]\s*(#.*)?$", ln)), None)
+    if start is None:
+        return text
+    end = next((i for i in range(start, len(lines)) if re.match(r"^\s*\[", lines[i])), len(lines))
+    gone = {i for i in range(start, end) if any(re.match(rf"^\s*{re.escape(k)}\s*=", lines[i]) for k in keys)}
+    return "\n".join(ln for i, ln in enumerate(lines) if i not in gone) + "\n"
+
+
+def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None:
     path = target / "machine.toml"
     text = set_keys(set_keys(path.read_text(encoding="utf-8"), None, top), "settings", settings)
+    text = drop_keys(text, "settings", [k for k in drop if k not in settings])
     got = tomllib.loads(text)                       # still TOML, and says what was set: refused before it is written otherwise
+    if any(k in got.get("settings", {}) for k in drop if k not in settings):
+        raise StoreError(f"{path}: the change did not read back as written; nothing was changed")
     if any(got.get(k) != v for k, v in top.items()) or any(got.get("settings", {}).get(k) != v for k, v in settings.items()):
         raise StoreError(f"{path}: the change did not read back as written; nothing was changed")
     path.write_text(text, encoding="utf-8")
@@ -180,11 +206,14 @@ def fill(target: Path, settings: dict, base_url: str | None, wants: str) -> None
     _edit(target, {"wanted": wants}, {**settings, **({"base_url": base_url} if base_url else {})})
 
 
-def clear(target: Path, token_env: str, data_class: str, base_url: str | None) -> None:
+def clear(target: Path, credentials: dict, data_class: str, base_url: str | None) -> None:
     """The owner's approval into ``machine.toml``: ``clearance = "approved"``, the data class, and
-    the NAME of the variable that holds the token."""
+    the credentials by reference (``credentials``: some of ``CREDENTIAL_KEYS`` but ``token``, a
+    variable's name or a file's path each). A credential the owner did not name is dropped, so the
+    template's guess (its ``token_env``) never shadows the file they named."""
     _edit(target, {"clearance": "approved", "data_class": data_class},
-          {"token_env": token_env, **({"base_url": base_url} if base_url else {})})
+          {**credentials, **({"base_url": base_url} if base_url else {})},
+          drop=[k for k in CREDENTIAL_KEYS[1:] if k not in credentials])
 
 
 def test_env() -> dict[str, str]:
@@ -211,3 +240,45 @@ def run_test(target: Path, name: str, timeout_s: float = TEST_TIMEOUT_S) -> dict
     if p.returncode != 0:
         out["tail"] = lines[-15:]
     return out
+
+
+def _outside_repositories(path: str, what: str) -> str:
+    p = Path(path).expanduser()
+    if not p.is_absolute():
+        raise StoreError(f"{what} is a file's full path (~/.config/orchestra-bridges/jira-token), not {path!r}")
+    for d in [p.parent, *p.parent.parents]:
+        if (d / ".git").exists():
+            raise StoreError(f"{what}: {path} is inside the repository at {d}: a credential's file lives outside any "
+                             "repository (~/.config/orchestra-bridges/, chmod 600); nothing was changed")
+    return path
+
+
+def credentials(a: dict) -> dict:
+    """The owner's credentials for the program, by reference only: the token's variable
+    (``token_env``) or file (``token_file``), and for HTTP Basic (Jira Cloud: the account's email)
+    the account's variable (``user_env``) or file (``user_file``), the kits' own names. Never a
+    value: a name that is not a variable's, a path inside a repository, or anything that looks
+    like a secret is refused."""
+    got = {k: (a.get(k) or "").strip() for k in ("token_env", "token_file", "user_env", "user_file")}
+    out = {}
+    for k, v in got.items():
+        if not v:
+            continue
+        if why := secret_in(f"{k} = {v!r}"):
+            raise StoreError(f"{k} looks like a credential itself ({why}): name its variable or its file, never the "
+                             "value; nothing was changed")
+        if k.endswith("_env") and not ENV_NAME.match(v):
+            raise StoreError(f"{k} is the NAME of an environment variable (JIRA_TOKEN), never a token: ask the owner for it")
+        out[k] = v if k.endswith("_env") else _outside_repositories(v, k)
+    if not ({"token_env", "token_file"} & set(out)):
+        raise StoreError("name where the token is: token_env, the NAME of an environment variable (JIRA_TOKEN), or "
+                         "token_file, a chmod 600 file outside any repository; never the token: ask the owner for it")
+    return out
+
+
+def file_state(path: str) -> str:
+    """Whether a credential's file is there and private, never its content."""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        return "not there yet"
+    return "there, chmod 600" if (p.stat().st_mode & 0o077) == 0 else "there, but readable by others (chmod 600 it)"

@@ -94,10 +94,12 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
     One the owner wants in the repository still goes through the Coordinator. A poller scaffolded
     from the bridges plugin's kit (`integrate_system`, since 2026-11-01, task I3) is the kit's code,
-    not the Supervisor's: written to Orchestra's state directory (`machines/<name>/`), never
-    committed, the Supervisor changes only its `machine.toml` (the owner's settings; on the owner's
-    quoted yes, `approve_integration`, the clearance and the token variable's name, which it renames
-    in the scaffolded test too) and the overlay entries that run it. So the Supervisor
+    not the Supervisor's: written to the owner's repository (`.orchestra/machines/<name>/`, landed by
+    a pull request; the state directory only when the owner keeps the repository clean), adapted by
+    a coding tool or the Coordinator's worker (a failed test or a system with no template is handed
+    to the Coordinator), never by the Supervisor, which changes only its `machine.toml` (the owner's
+    settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
+    reference: a variable's name or a file's path) and the overlay entries that run it. So the Supervisor
     writes code of its own in exactly two cases: that measurement script, and a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,

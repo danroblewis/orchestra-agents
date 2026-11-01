@@ -33,6 +33,7 @@ from . import (
     design_instruments,
     floor,
     handoff,
+    handoff_overdue,
     intended_api,
     machine_spec,
     parent,
@@ -234,6 +235,8 @@ class AgentHost:
         except Exception as e:  # noqa: BLE001 - a broken probe never stops the host
             log(f"probes: {e!r}")
         self._schedule_wakeups(states)
+        for why in handoff_overdue.wake(self.store, limit=handoff_overdue.deadline(self.cfg)):
+            self.store.add_wakeup("supervisor", why)
         self._wake_on_events()
         self.verdicts.tick()
         self._expire_drafts()
@@ -772,6 +775,7 @@ class AgentHost:
         if target == "supervisor":
             self._turn_began(None)
             facts, began = self.facts.before(snap)
+            facts += handoff_overdue.facts_line(self.store, began, handoff_overdue.deadline(self.cfg))
             task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))

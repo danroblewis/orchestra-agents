@@ -180,7 +180,9 @@ system (`list_tickets`), then publishes `work.planned` {request, to: supervisor,
 tickets [{id, title}], questions, by} as the Coordinator, its causation the hand-off. That wakes the
 Supervisor (`work.planned:supervisor`), which tells the human; the tickets a plan names are followed
 until they end (`landings.py`), so the Supervisor also tells the human when they are done. The
-hand-offs are kept in the Supervisor's agent state (`handoffs`, the last 30).
+hand-offs are kept in the Supervisor's agent state (`handoffs`, the last 30). One the Coordinator
+has not planned 30 minutes on (or `[agents] coordinator_every`, when longer) wakes the Supervisor
+once, and its wake-ups' facts list such hand-offs by request id (`handoff_overdue.py`).
 
 **Attention**: the task system asks a planner to look at something with `task.attention_needed`
 (`to`: supervisor or coordinator, the reason, the ticket), from the machine whose work is stuck

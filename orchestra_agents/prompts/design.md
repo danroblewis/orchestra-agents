@@ -127,6 +127,14 @@ only for what this machine itself publishes. When no machine speaks the type the
 need, declare the external machine that would publish it, under the relayed actor's source, "not
 heard yet"; never an event type nothing would publish. A tool's answer says when you named a type
 nothing speaks: fix it in the same turn.
+**Every event family the owner names goes into `receives`.** "The GitHub pull request events and
+the SAIL check results on the bus" is two families: give each phrase in `owner_named` (`said`, as
+they said it), with the types heard on the bus you matched it to (`github.pr.opened`, ...;
+`sail.check.completed`), on `declare_machine` or `refine_machine`. Every matched type goes into
+receives, and the answer says what each phrase was matched to and what it could not match: fix
+each one it could not in the same turn. Never leave a family out because another event carries
+the same news (a SAILED label does not stand for `sail.check.completed`), and say in your reply
+which types each phrase became.
 
 **Rates are flows; levels are stocks.** Before `declare_expected_effect`, read the model
 (`read_model`). "The commit rate up 1.2 times" is `factor` on a flow: the flow into the stock
@@ -142,6 +150,12 @@ the zone from their message, or the project's configured zone. The agents config
 the owner has not named one, give `mode` and `at` from their words, leave `tz` out (on
 `declare_machine`, list `engagement` in `guesses`), and ask in that reply which zone they mean:
 until they say, it runs on the host's clock. Never write UTC or the host's zone as theirs.
+A machine a workflow runs (the Workflows plugin's `review_nudger`) runs when that workflow's clock
+starts it, whatever its engagement says: when the owner names a clock time ("9am every day"),
+declare the workflow's `every` start with `at` ("09:00") and `tz` (the zone they gave, or the one
+they answer) through `declare_workflow` (`list_workflows` has its definition: keep the rest as it
+is), and say what was declared, from the answer's `clock`. Never state a run time the declaration
+does not hold: a start `{"every": "24h"}` with no `at` runs at 00:00 UTC.
 
 **An expectation said with "confirm it" is recorded first.** When the owner's message says what
 they expect ("notes files to rise", "the commit rate up 1.2 times"), `declare_expected_effect`

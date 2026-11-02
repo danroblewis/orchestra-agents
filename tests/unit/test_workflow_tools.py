@@ -330,3 +330,52 @@ def test_a_drafts_kind_is_one_the_owner_configures_never_an_example_that_exists_
     step = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["steps"]["items"]["properties"]
     kind = step["draft"]["properties"]["kind"]["description"]
     assert "[outbox.kinds]" in kind and "sail.label" not in kind and "review.ping" not in kind
+
+
+def test_an_every_start_takes_at_and_tz_and_the_answer_says_the_clock(project, store, fake):
+    """T2b s10: '9am every day' was claimed while the workflow started every 24h at 00:00 UTC."""
+    starts = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["starts"]
+    props = starts["items"]["properties"]
+    assert {"every", "at", "tz"} <= set(props) and "HH:MM" in props["at"]["description"]
+    assert "00:00 UTC" in props["at"]["description"] and "America/Los_Angeles" in props["tz"]["description"]
+    words = pytest.importorskip("orchestra_workflows.define.words")
+    assert {"every", "at", "tz"} == words.START_EVERY_KEYS                    # the schema offers what the plugin takes
+    timed = {**DEF, "starts": [{"every": "24h", "at": "09:00", "tz": "America/Los_Angeles"}]}
+    out = call(project, store, "declare_workflow", definition=timed, reason=WHY)
+    assert out["clock"] == "every 24h at 09:00 America/Los_Angeles: say this run time, and no other"
+    assert workflow_tools.clock_words([{"every": "24h"}]).startswith("every 24h, counted from 00:00 UTC")
+    assert "the project's local zone" in workflow_tools.clock_words([{"every": "24h", "at": "09:00"}])
+    assert workflow_tools.clock_words([{"request": True}]) is None
+    [w] = call(project, store, "list_workflows")["workflows"]
+    assert w["clock"] == "every 24h at 09:00 America/Los_Angeles"
+
+
+def test_the_items_at_a_step_waiting_outside_are_listed_for_an_incident(project, store, fake, monkeypatch):
+    """T2b s14: an incident on PSVC003 (SAIL's runners) was told as no delivery impact while an item
+    waited at sail_check. The plugin serves no setting naming a step's service: the items waiting on
+    an outside system are listed by step, and the note says an incident there may hold them."""
+    call(project, store, "declare_workflow", reason=WHY, definition={**DEF, "name": "delivery_live", "steps": [
+        {"name": "write", "who": {"role": "worker"}}, {"name": "sail_check", "who": {"outside": "github"}}]})
+
+    def item_list(record, defs, now, workflow=None):
+        rows = [{"item": "delivery_live-fd37ed", "step": "sail_check", "wait": {"reason": "waiting on github", "by": "github"},
+                 "fields": {"key": "SCRUM-22", "pull": 20}},
+                {"item": "SCRUM-23", "step": "write", "wait": {"reason": "offered", "by": "worker"}},
+                {"item": "SCRUM-21", "last_step": "close_ticket", "closed": True, "step": "sail_check"}]
+        return {"workflows": [{"workflow": "delivery_live", "steps": ["write", "sail_check"], "items": rows}], "open": 2}
+
+    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(
+        **vars(fake.ns()), Record=SimpleNamespace(for_project=lambda o: object()), item_list=item_list))
+    out = call(project, store, "list_items")
+    assert out["waiting_outside"] == [{"workflow": "delivery_live", "step": "sail_check", "system": "github",
+                                       "items": [{"item": "delivery_live-fd37ed", "fields": {"key": "SCRUM-22", "pull": 20}}]}]
+    assert "holds the items at that step: name them" in out["outside_note"]
+    assert "never say an incident leaves them unaffected" in out["outside_note"]
+
+
+def test_the_alert_line_names_the_items_an_incident_may_hold(project):
+    from orchestra_agents import prompting
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "an incident on a service a step waits on holds the items at that step: name them" in text
+    assert "never say the work is unaffected while an item waits at such a step" in text

@@ -244,3 +244,72 @@ def test_the_owners_factor_is_recorded_as_a_waiting_draft_with_no_model(project,
     effect = layer(project)["machines"]["notes_improver"]["expected_effect"]
     assert effect["edits"] == [{"flow": "SAILED per day", "factor": 1.2}]
     design_asked.check_expectation_recorded(store, layer(project)["machines"]["notes_improver"])
+
+
+NUDGER_WORDS = ("Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, "
+                "it reminds the reviewer. It should listen for the GitHub pull request events and the SAIL check results "
+                "on the bus. Make it a scheduled task for 9am every day.")
+
+
+def plugin_nudger(project):
+    intended_api.layer(project).apply(
+        [{"op": "propose_machine", "id": "review_nudger", "title": "review_nudger", "kind": "programmatic",
+          "description": "Named by workflow review_nudger: the program review_nudger.", "receives": ["offer.made"],
+          "engagement": {"mode": "ad hoc"}}],
+        {"author": "workflows", "source": "workflow review_nudger", "reason": "the definition of workflow review_nudger"})
+
+
+def test_every_family_the_owner_names_goes_into_receives_and_the_answer_says_each_match(project, store):
+    """T2b s10: "the SAIL check results on the bus" was left out of the nudger's receives (a SAILED
+    label was taken to carry it) although sail.check.completed was heard from sail."""
+    plugin_nudger(project)
+    store.events.publish("github.pr.opened", {"pr": 18}, source="person.github.dan")
+    store.events.publish("github.pr.labeled", {"pr": 18, "label": "SAILED"}, source="person.github.dan")
+    store.events.publish("sail.check.completed", {"pr": 18, "conclusion": "failure"}, source="sail")
+    say(store, NUDGER_WORDS, 1)
+    out = call(project, store, "refine_machine", name="review_nudger", quote="listen for the GitHub pull request events",
+               owner_named=[{"said": "the GitHub pull request events", "types": ["github.pr.opened", "github.pr.labeled"]},
+                            {"said": "the SAIL check results on the bus"}], reason=WHY)
+    said = " ".join(out["said"])
+    assert "the owner's words matched, in receives: 'the GitHub pull request events' -> github.pr.opened, github.pr.labeled" in said
+    assert "could not match: 'the SAIL check results on the bus' names sail, heard as sail.check.completed" in said
+    assert set(layer(project)["machines"]["review_nudger"]["receives"]) == {"offer.made", "github.pr.opened", "github.pr.labeled"}
+    out = call(project, store, "refine_machine", name="review_nudger", quote="the SAIL check results on the bus",
+               owner_named=[{"said": "the SAIL check results on the bus", "types": ["sail.check.completed"]}], reason=WHY)
+    assert "'the SAIL check results on the bus' -> sail.check.completed" in " ".join(out["said"])
+    assert "could not match" not in " ".join(out["said"])
+    assert "sail.check.completed" in layer(project)["machines"]["review_nudger"]["receives"]
+
+
+def test_a_named_type_nothing_speaks_is_said_and_not_added(project, store):
+    say(store, TURN3, 3)
+    out = machine(project, store, "notes_improver", quote=TURN3,
+                  owner_named=[{"said": "the merge gate's landings", "types": ["gate.landed_ok"]}])
+    assert "'the merge gate's landings': gate.landed_ok not heard on the bus or announced" in " ".join(out["said"])
+    assert layer(project)["machines"]["notes_improver"]["receives"] == ["session.settled"]
+
+
+def test_scheduling_a_machine_a_workflow_runs_says_its_run_time_is_the_workflows(project, store):
+    """T2b s10: the nudger's engagement said 09:00 while its workflow started every 24h at 00:00 UTC,
+    and the Supervisor told the owner it ran at 09:00."""
+    plugin_nudger(project)
+    say(store, NUDGER_WORDS, 1)
+    out = call(project, store, "refine_machine", name="review_nudger", quote="Make it a scheduled task for 9am every day",
+               mode="scheduled", at="09:00", reason=WHY)
+    said = " ".join(out["said"])
+    assert "review_nudger is run by workflow review_nudger" in said and "changes no run time" in said
+    assert "declare that start with at and tz (declare_workflow)" in said
+
+
+def test_the_design_prompt_puts_every_named_family_in_receives_and_the_clock_on_the_workflow(project):
+    from orchestra_agents import prompting
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "**Every event family the owner names goes into `receives`.**" in text
+    assert "give each phrase in `owner_named`" in text and "a SAILED label does not stand for `sail.check.completed`" in text
+    assert "declare the workflow's `every` start with `at` (\"09:00\") and `tz`" in text
+    assert "Never state a run time the declaration does not hold" in text
+    schema = {t.name: t.input_schema for t in DESIGN_TOOLS}
+    for name in ("declare_machine", "refine_machine"):
+        named = schema[name]["properties"]["owner_named"]
+        assert named["items"]["required"] == ["said"] and "the SAIL check results" in named["description"]

@@ -35,7 +35,7 @@ from .floor_roles import served
 from .harness import read_transcript
 from .listening import engaged, listens_for
 from .measures import FINISHED, STARTED, WORKING
-from .org import EVENT_HELP, effective_tools
+from .org import EVENT_HELP, effective_tools, needs_task_system
 from .org_store import all_agents, all_teams
 from .org_views import agents_status, residents_of, session_alive
 from .roles import all_roles
@@ -124,12 +124,14 @@ def declared(project) -> list[Declared]:
     """The agents, for Orchestra's Machines page before they run: the resident and custom agents,
     and the per-ticket roles the agents serve (a role another machine fills is that machine's, not
     declared here), each with what it listens for (listening.py), as it announces itself. The host
-    that runs them is no machine and is not declared."""
+    that runs them is no machine and is not declared, and neither is a built-in agent that is never
+    started without the task system (the Coordinator: ``needs_task_system``), so a Workflows-only
+    project's Machines page shows no placeholder of it (T2b s01)."""
     work, roles, teams = project.config.work, all_roles(project), all_teams(project)
     floor = set(served(project).values())
     return [Declared(a.name, "agent", engaged(a),
                      listens_for(a, work, effective_tools(a, roles, teams), floor=a.name in floor))
-            for a in all_agents(project).values()]
+            for a in all_agents(project).values() if not needs_task_system(a)]
 
 
 def current(project: Project) -> Project:

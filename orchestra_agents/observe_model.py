@@ -64,10 +64,17 @@ def get_model(project: Project) -> dict:
     """The current model: its stocks and the series each is, its flows with their ends, current
     equation (and its origin: fitted, discovered or declared) and the machine attributed to it,
     and what the last discovery left out and why."""
-    view = model_view(project.orchestra)
+    from .modeling import NO_MODEL, NOT_READ, WAITS
+    try:
+        view = model_view(project.orchestra)
+    except Exception as e:  # noqa: BLE001 - a model that cannot be read is said so, never as no model
+        text = NOT_READ.format(status=500, error=str(e).strip() or type(e).__name__)
+        return {"ok": False, "model": "not read", "error": text}
     if not view.get("ok"):
-        from .modeling import NO_MODEL, WAITS
-        why = view.get("text") or (NO_MODEL if "no model" in str(view.get("error") or "") else view.get("error"))
+        if not view.get("text") and "no model" not in str(view.get("error") or ""):
+            text = NOT_READ.format(status=view.get("status") or 404, error=view.get("error") or "no answer")
+            return {"ok": False, "model": "not read", "error": text}
+        why = view.get("text") or NO_MODEL
         return {"ok": True, "model": None, "why": why, "waits": WAITS, "discovery": view.get("discovery")}
     m = view["model"]
     d = m.get("discovery") or {}

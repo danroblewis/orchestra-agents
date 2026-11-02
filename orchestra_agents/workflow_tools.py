@@ -95,9 +95,25 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
         out["next"] = (f"The file is in the checkout, uncommitted ({_rel(o, written.path)}): nothing here commits it. Hand "
                        "it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull request, and tell "
                        "the owner it applies now in this checkout only.")
+    if runs := clock_words(definition.get("starts")):
+        out["clock"] = runs + ": say this run time, and no other"
     if written.notes:
         out["lacks"] = "What the project still lacks for it is in notes: nothing is offered for such a step until it is there."
     return out
+
+
+def clock_words(starts) -> str | None:
+    """When a workflow's clock starts its items, in words, from its ``every`` start as declared
+    (the plugin counts slots from 00:00 UTC with no ``at``, from ``at`` in ``tz`` with one, in the
+    project's local zone when ``tz`` is unset): the run time a reply may state, and no other."""
+    every = next((s for s in starts or [] if isinstance(s, dict) and "every" in s), None)
+    if every is None:
+        return None
+    if not every.get("at") and not every.get("tz"):
+        return (f"every {every['every']}, counted from 00:00 UTC (no time of day declared: with a time the owner "
+                "named, declare at and tz)")
+    zone = every.get("tz") or f"the project's local zone ({time.strftime('%Z')}, no tz declared)"
+    return f"every {every['every']} at {every.get('at') or '00:00'} {zone}"
 
 
 def _rel(o, path) -> str:
@@ -138,8 +154,9 @@ def list_workflows(project: Project, a: dict) -> dict:
                 if raw.get(k):
                     step[k] = raw[k]
             steps.append(step)
+        runs = clock_words(w.raw.get("starts"))
         workflows.append({"name": w.name, "where": where(w.name), "planner": w.planner,
-                          "starts": w.raw.get("starts") or [], "steps": steps})
+                          "starts": w.raw.get("starts") or [], **({"clock": runs} if runs else {}), "steps": steps})
     return {"ok": True, "workflows": workflows, "problems": list(defs.problems), "notes": list(defs.notes),
             "shown": "The Items page (/items) shows their items; the Dynamics page shows their piles as stocks."}
 
@@ -226,6 +243,37 @@ def _row(r: dict) -> dict:
     return out | ({"fields": fields} if fields else {})
 
 
+OUTSIDE_NOTE = ("waiting_outside: the open items at a step that waits on an outside system (CI, a review, SAIL), by step "
+                "and system. An incident on a service such a step waits on holds the items at that step: name them. The "
+                "Workflows plugin serves no setting naming the service a step's system runs on, so never say an incident "
+                "leaves them unaffected: name them as the items it may hold")
+
+
+def _outside_steps(defs) -> dict[tuple[str, str], str]:
+    """(workflow, step) -> the outside system the step waits on, from the loaded definitions."""
+    out = {}
+    for w in getattr(defs, "workflows", None) or []:
+        for st in w.steps:
+            actor = getattr(st, "actor", None)
+            if getattr(actor, "kind", None) == "outside":
+                out[(w.name, st.name)] = actor.name
+    return out
+
+
+def _waiting_outside(workflow: str | None, rows: list[dict], systems: dict[tuple[str, str], str]) -> list[dict]:
+    """The open items at each step that waits on an outside system: the step's actor, or the wait's
+    own kind and by when the definition is not loaded."""
+    by: dict[tuple[str, str], list[dict]] = {}
+    for r in rows:
+        wait = r.get("wait") if isinstance(r.get("wait"), dict) else {}
+        system = systems.get((workflow, r.get("step"))) or (wait.get("by") if wait.get("kind") == "outside" else None)
+        if not system or not r.get("step"):
+            continue
+        fields = _row(r).get("fields") or {}
+        by.setdefault((r["step"], system), []).append({"item": r.get("item"), **({"fields": fields} if fields else {})})
+    return [{"workflow": workflow, "step": step, "system": system, "items": items} for (step, system), items in by.items()]
+
+
 def list_items(project: Project, a: dict) -> dict:
     p = _plugin()
     if getattr(p, "item_list", None) is None:
@@ -234,8 +282,10 @@ def list_items(project: Project, a: dict) -> dict:
     project.reload_config()
     o = project.orchestra
     workflow = str(a.get("workflow") or "").strip() or None
-    got = p.item_list(p.Record.for_project(o), p.define.load(o), time.time(), workflow=workflow)
-    out = []
+    defs = p.define.load(o)
+    got = p.item_list(p.Record.for_project(o), defs, time.time(), workflow=workflow)
+    systems = _outside_steps(defs)
+    out, outside = [], []
     for w in got.get("workflows") or []:
         rows = w.get("items") or []
         live = [_row(r) for r in rows if not r.get("closed")]
@@ -243,7 +293,10 @@ def list_items(project: Project, a: dict) -> dict:
         out.append({"workflow": w.get("workflow"), "steps": w.get("steps"), "open": live[:OPEN_SHOWN],
                     "closed_recently": done[:CLOSED_SHOWN],
                     **({"more_open": len(live) - OPEN_SHOWN} if len(live) > OPEN_SHOWN else {})})
-    return {"ok": True, "open": got.get("open"), "workflows": out, "problems": got.get("problems") or [],
+        outside += _waiting_outside(w.get("workflow"), [r for r in rows if not r.get("closed")], systems)
+    return {"ok": True, "open": got.get("open"), "workflows": out, "waiting_outside": outside,
+            "problems": got.get("problems") or [],
+            "outside_note": OUTSIDE_NOTE,
             "shown": "The Items page (/items) lists the same; explain_item says why one item is where it is, fact by fact. "
                      "An item whose wait names the owner (an approval, attention) needs them; one waiting long on an "
                      "outside system (CI, a review, a check) is stuck there: say which, with its fields (a ticket's key, "

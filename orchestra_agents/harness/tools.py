@@ -322,9 +322,11 @@ TOOLS: list[ToolDef] = [
              "around": S("A time (ISO or unix seconds): the turns nearest it; default the latest"),
              "turns": I("How many turns, default 2, at most 6")}),
     ToolDef("list_machines", "observe",
-            "Every machine on the bus as the Machines page has it: its kind, how it is engaged, whether it is active, and the "
+            "Every machine on the bus as the Machines page has it: its kind, how it is engaged, how it is heard (state), and the "
             "notes it announced about itself (disabled with its reason first, then fake, stand_in, writes, ...). The "
-            "disabled ones are listed apart: they do no work until what they name is fixed."),
+            "disabled ones are listed apart: they do no work until what they name is fixed. An ad hoc machine is 'last heard "
+            "<when>; acts when offered work', never quiet; gone_quiet is the core's mark on a continuous or scheduled one, and "
+            "the only sign that a machine stopped."),
     ToolDef("read_outbox", "observe",
             "The Outbox's drafts as its approval page has them: those waiting for the owner, and the latest sent, rejected "
             "or failed, each with its kind, target, drafter and how it was approved (the owner, by their person id, or the "

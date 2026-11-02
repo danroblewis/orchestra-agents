@@ -97,14 +97,20 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
     "planner": S("The role that is told when an item needs attention (default: the settings' planner, coordinator)"),
     "starts": {"type": "array", "description": "What starts an item: [{\"request\": true}] (an item.requested naming "
                "it), [{\"event\": \"jira.issue.assigned\", \"data\": {\"assignee\": {\"setting\": \"owner\"}}}] (an "
-               "event, only when its data fields match), or [{\"every\": \"1h\"}] (one item per interval)",
+               "event, only when its data fields match), [{\"every\": \"1h\"}] (one item per interval, counted from "
+               "00:00 UTC), or [{\"every\": \"24h\", \"at\": \"09:00\", \"tz\": \"America/Los_Angeles\"}] (each day at "
+               "a time of day in a zone: the time the owner named, in the zone they gave or answer)",
                "items": {"type": "object", "properties": {
                    "request": B("true: a request naming the workflow starts it"),
                    "event": S("An event type that starts an item"),
                    "data": {"type": "object", "description": "With event: fields of its data that must equal a value or "
                             "a setting, or the event makes no item (only tickets assigned to the owner: {\"assignee\": "
                             "{\"setting\": \"owner\"}})"},
-                   "every": DURATION}}},
+                   "every": DURATION,
+                   "at": S("With every: the time of day its slots are counted from, HH:MM (09:00), the time the owner "
+                           "named; left out, the slots count from 00:00 UTC"),
+                   "tz": S("With every and at: the zone of at (America/Los_Angeles, UTC), the one the owner gave or "
+                           "answered; left out, the project's local zone")}}},
     "steps": {"type": "array", "items": STEP, "description": "The steps in order; the first is where an item starts"},
     "piles": {"type": "array", "description": "Declared piles beyond each step's own (<step>.waiting, <step>.held)",
               "items": {"type": "object", "properties": {
@@ -140,7 +146,9 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "long it has been there (age_s), how often it was reworked, and its fields (a ticket's key, a pull request's "
             "number); then the recently closed, with their last step and outcome. An item's end is item.closed (the floor "
             "publishes it when a workflow's item reaches the end of every workflow it entered): a closed item is never "
-            "waiting. What to read first when the owner asks what is stuck or what needs them.",
+            "waiting. waiting_outside lists the open items at each step that waits on an outside system (CI, a review, "
+            "SAIL): the ones an incident on that system's service holds. What to read first when the owner asks what is "
+            "stuck or what needs them, and after an alert.",
             {"workflow": S("Only this workflow's items (leave out: every workflow)")}),
     ToolDef("explain_item", "workflows",
             "Why an item is where it is: its summary, each field with the fact that set it, its position in each workflow "

@@ -191,3 +191,18 @@ def test_recording_a_factor_says_what_judging_it_needs(project):
     from orchestra_agents.org import built_in_agents
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "the flow fitted in both eras" in text and "about 200 a side for ×1.2" in text
+
+
+def test_what_changed_since_tells_every_class_in_order_and_names_what_the_read_missed(project):
+    """T2b s16: the rejection and its triage were left out, and "no stocks yet" was said while
+    discovery had found three."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "read `read_events` with `since` (the time, or `24h`) and `order` oldest" in text
+    for word in ("tickets (created, assigned, closed)", "pull requests opened and merged", "checks",
+                 "(SAIL, REJECTED and SAILED, each with its pull request)", "triage (its verdict)",
+                 "incidents opened and resolved", "(`outbox.sent`)", "items started (`item.requested`",
+                 "closed (`item.closed`)", "`orchestra.model.changed`"):
+        assert word in text, word
+    assert "A rejection and its triage are told, never folded into \"reworked\"" in text
+    assert "Name each class the read did not cover" in text and "never \"no stocks\"" in text

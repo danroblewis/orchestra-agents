@@ -281,6 +281,43 @@ def test_the_open_items_are_listed_as_the_items_page_lists_them(project, store, 
         call(project, store, "list_items")
 
 
+REVIEW_FOR = [{"event": "github.pr.approved", "via": "done_when"},
+              {"event": "github.pr.changes_requested", "via": "on", "to": "write"},
+              {"event": "github.pr.commented", "via": "on", "data": {"state": "commented"}, "to": "sail"}]
+
+
+def test_a_wait_says_every_exit_in_words_and_the_fact_it_entered_on():
+    w = workflow_tools.wait_of({"reason": "waiting on github", "fact": "f1", "entered_on": "f1", "by": "github",
+                                "until": None, "kind": "outside", "for": REVIEW_FOR})
+    assert w == {"reason": "waiting on github", "by": "github", "kind": "outside", "entered_on": "f1",
+                 "ends_on": "until github.pr.approved, or github.pr.changes_requested (to write), or "
+                            "github.pr.commented with state = commented (to sail)"}
+    assert "guard" not in json.dumps(w) and "fact" not in w
+    assert workflow_tools.wait_of({"reason": "never offered", "fact": "f0"}) == {"reason": "never offered",
+                                                                                "entered_on": "f0"}   # an older plugin's
+    assert workflow_tools.wait_of({"for": [{"when": "60 s have passed", "via": "on", "to": None}]})["ends_on"] == \
+        "until 60 s have passed (to the end)"
+    assert workflow_tools.wait_of(None) is None
+
+
+def test_a_closed_item_is_never_waiting(project, store, fake, monkeypatch):
+    def item_list(record, defs, now, workflow=None):
+        live = {"item": "SCRUM-20", "step": "review", "pile": "review.waiting",
+                "wait": {"reason": "waiting on github", "fact": "f2", "entered_on": "f2", "for": REVIEW_FOR}}
+        done = {"item": "SCRUM-17", "last_step": "sail", "pile": "<end>", "closed": True, "outcome": "sent",
+                "wait": {"reason": "stale", "fact": "f1"}}
+        return {"workflows": [{"workflow": "delivery_live", "steps": ["review"], "items": [live, done]}], "open": 1}
+
+    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(
+        **vars(fake.ns()), Record=SimpleNamespace(for_project=lambda o: object()), item_list=item_list))
+    (w,) = call(project, store, "list_items")["workflows"]
+    assert w["open"][0]["wait"]["ends_on"].startswith("until github.pr.approved, or ")
+    assert w["closed_recently"] == [{"item": "SCRUM-17", "pile": "<end>", "last_step": "sail", "outcome": "sent"}]
+    out = call(project, store, "list_items")
+    assert "item.closed" in out["shown"] and "never waiting" in out["shown"]
+    assert "item.closed" in BY_NAME["list_items"].description and "item.closed" in BY_NAME["read_events"].description
+
+
 def test_without_the_plugin_each_tool_says_it_is_not_installed(project, store, monkeypatch):
     monkeypatch.setattr(workflow_tools, "plugin", lambda: None)
     for tool, args in (("declare_workflow", {"definition": DEF, "reason": WHY}), ("list_workflows", {}),

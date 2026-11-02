@@ -19,6 +19,7 @@ validated writer, its loader and its record's read API, the one exception to AGE
 
 from __future__ import annotations
 
+import json
 import time
 from importlib import import_module
 from types import SimpleNamespace
@@ -171,6 +172,9 @@ def explain_item(project: Project, a: dict) -> dict:
     keep = ("step", "pile", "since", "wait", "holder", "rounds", "finished", "outcome", "to")
     at = {w: {k: pos[k] for k in keep if isinstance(pos, dict) and pos.get(k) not in (None, "", [], {})}
           for w, pos in positions.items()}
+    for pos in at.values():
+        if pos.get("wait"):
+            pos["wait"] = wait_of(pos["wait"])
     not_counted = [
         {"workflow": w, **x} if isinstance(x, dict) else {"workflow": w, "fact": x}
         for w, pos in positions.items() if isinstance(pos, dict) for x in pos.get("not_counted") or []]
@@ -188,8 +192,36 @@ ROW_KEYS = ("item", "title", "step", "pile", "held", "wait", "holder", "since", 
             "finished", "outcome")
 
 
+def _exit(x: dict) -> str:
+    """One exit of a wait (the plugin's ``for``) in words: "github.pr.commented with state = commented
+    (to sail)"."""
+    data = ", ".join(f"{k} = {v if isinstance(v, str) else json.dumps(v)}" for k, v in (x.get("data") or {}).items())
+    to = f" (to {'the end' if x.get('to') is None else x['to']})" if x.get("via") == "on" else ""
+    return f"{x.get('event') or x.get('when') or '?'}{' of a child' if x.get('of') else ''}{f' with {data}' if data else ''}{to}"
+
+
+def wait_of(w) -> dict | None:
+    """A wait as the tools show it: its reason, by and until, the fact it entered on (``entered_on``;
+    ``fact`` from a plugin that serves only the old name) and what ends it, in words ("until
+    github.pr.approved, or github.pr.commented with state = commented (to sail)"): the plugin's
+    ``for``, so a review a stand-in's comment also ends is never told as waiting for an approval alone."""
+    if not isinstance(w, dict):
+        return None
+    out = {k: w[k] for k in ("reason", "by", "until", "kind") if w.get(k) not in (None, "", [], {})}
+    if w.get("entered_on") or w.get("fact"):
+        out["entered_on"] = w.get("entered_on") or w.get("fact")
+    exits = [x for x in w.get("for") or [] if isinstance(x, dict)]
+    if exits:
+        out["ends_on"] = "until " + ", or ".join(_exit(x) for x in exits)
+    return out or None
+
+
 def _row(r: dict) -> dict:
     out = {k: r[k] for k in ROW_KEYS if r.get(k) not in (None, "", [], {}, False, 0)}
+    if r.get("closed"):                                   # an item.closed is the end: nothing waits on it
+        out.pop("wait", None)
+    elif out.get("wait"):
+        out["wait"] = wait_of(out["wait"])
     fields = {k: v for k, v in (r.get("fields") or {}).items() if isinstance(v, str | int | float) and len(str(v)) <= 200}
     return out | ({"fields": fields} if fields else {})
 
@@ -215,7 +247,10 @@ def list_items(project: Project, a: dict) -> dict:
             "shown": "The Items page (/items) lists the same; explain_item says why one item is where it is, fact by fact. "
                      "An item whose wait names the owner (an approval, attention) needs them; one waiting long on an "
                      "outside system (CI, a review, a check) is stuck there: say which, with its fields (a ticket's key, "
-                     "a pull request's number)."}
+                     "a pull request's number). A wait's ends_on is every event that ends it, as the workflow declares: "
+                     "name them all, never one as the only way on. An item is ended by item.closed (on the bus, in "
+                     "read_events; the floor's for a workflow's item names the workflow, its last_step and outcome): a "
+                     "closed item is in closed_recently, never waiting, and nothing waits on it."}
 
 
 def _summary(row: dict, snap: dict) -> dict:
@@ -223,7 +258,7 @@ def _summary(row: dict, snap: dict) -> dict:
     got = {"item": snap.get("item"), "open": bool(row), "facts": snap.get("facts"), "first": snap.get("first"),
            "last": snap.get("last"), "closed": row.get("closed") or sorted(snap.get("ended") or {}),
            "requested": row.get("requested") or {k: v for k, v in (snap.get("requested") or {}).items() if k != "id"},
-           "wait": row.get("wait"), "holder": row.get("holder"), "children": snap.get("children")}
+           "wait": wait_of(row.get("wait")), "holder": row.get("holder"), "children": snap.get("children")}
     return {k: v for k, v in got.items() if v not in (None, "", [], {}) or k == "open"}
 
 

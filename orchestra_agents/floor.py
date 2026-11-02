@@ -8,6 +8,11 @@ from __future__ import annotations
 MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN = "offer.made", "offer.claimed", "offer.alive", "offer.finished", "offer.withdrawn"
 LISTENS_FOR = (MADE, WITHDRAWN)          # what the host watches on behalf of an agent that serves a floor role
 ATTENTION_NEEDED = "attention.needed"    # the floor asks a planner (``to``) to look: a guard passed
+CLOSED = "item.closed"                   # an item's end, by anyone; nothing waits on a closed item
+CLOSED_BY_FLOOR = ("reason", "outcome", "workflow", "last_step")
+"""What the floor's own ``item.closed`` carries (as ``<planner>/dispatch``, ``reason: finished``): when a
+role-only item's one step finishes, the turn's ``outcome``; when a workflow's item reaches the end of
+every workflow it entered, also that ``workflow`` and its ``last_step`` (the step it left for the end)."""
 BLOCKED = "blocked"
 HEARTBEAT_S = 30.0                       # when an offer names none
 REPORT_TOOL = {"worker": "report_ticket", "reviewer": "report_review"}   # a built-in role's exit tool; any other: report_outcome
@@ -42,15 +47,18 @@ def stops(ev: dict, offer: str) -> bool:
 
 
 def wake_reason(ev: dict) -> str | None:
-    """What a planner's wake-up says of the floor's ``attention.needed``; None for any other event."""
+    """What a planner's wake-up says of the floor's ``attention.needed``; None for any other event.
+    The guard's key is left out: it names the limit that passed, never what the item waits for
+    (T3: a planner read a CI guard's key as the cause). What ends the wait is the item's to read."""
     if ev.get("type") != ATTENTION_NEEDED:
         return None
     where = " ".join(f"{k} {ev[k]}" for k in ("workflow", "step") if ev.get(k))
-    bits = [f"guard {ev['guard']}" if ev.get("guard") else "", f"then {ev['then']}" if ev.get("then") else ""]
+    then = f"; then it moves to {ev['then']}" if ev.get("then") else ""
     return (f"event {ATTENTION_NEEDED}: the Workflows floor asks the {ev.get('to') or 'planner'} to look"
             + (f" at {ev.get('subject')}" if ev.get("subject") else "") + (f" ({where})" if where else "")
-            + f": {ev.get('reason') or 'no reason given'}" + "".join(f"; {b}" for b in bits if b)
-            + ". Explain it with explain_item; act through the item's facts or a request, never by editing the record.")
+            + f": {ev.get('reason') or 'no reason given'}{then}"
+            + ". explain_item says what it waits for and what ends the wait; act through the item's facts or a "
+              "request, never by editing the record.")
 
 
 def workspace(offer: dict) -> str | None:

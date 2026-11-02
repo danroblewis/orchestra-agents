@@ -90,6 +90,9 @@ INT = {"type": "integer"}
 INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own settings, from the owner's words (only what they "
                         "said; the kit's defaults stand otherwise). Never a token", "properties": {
     "jql": S("Jira: the issues in scope (project = OPS), no ORDER BY"), "channels": A("Slack: channel ids (C0123), not names"),
+    "flavour": E(["datacenter", "cloud", "auto"], "Jira: datacenter (Jira Data Center or Server: REST API v2, a "
+                  "personal access token sent as Bearer), cloud (REST API v3, an API token with the account's email), or "
+                  "auto (the default: cloud on *.atlassian.net, else datacenter)"),
     "open_statuses": A("PagerDuty: the statuses counted open"), "every": S("How often it polls: 5m (the default)"),
     "per_minute": INT, "ttl": S("How long a cached answer is served: under every (4m)"),
     "lookback": S("How far back the first poll reads (1d)"), "thing": S("http kit: what one item is (build)"),
@@ -277,6 +280,9 @@ DESIGN_TOOLS: list[ToolDef] = [
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
             "owner's repository (.orchestra/machines/<name>/, uncommitted: a coding tool may edit it, the owner commits it), "
             "tested against the kit's fake, and the system is declared on the Machines page as a machine managed elsewhere. "
+            "The kits speak the systems a company runs, with no code changed: Jira Data Center (settings flavour "
+            "datacenter: REST API v2, a personal access token sent as Bearer) as well as Cloud, and GitHub Enterprise "
+            "(base_url https://<host>/api/v3) as well as github.com. "
             "A failed test, or a system with no template of its own, is [[tasking]]handed to the Coordinator as work (its ticket lands "
             "the script); call again with the same name once the worker's test passes[[/tasking]][[no-tasking]]not handed on here: code work is not handed on here; say so[[/no-tasking]]. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
@@ -288,7 +294,8 @@ DESIGN_TOOLS: list[ToolDef] = [
              "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
                        "when the owner said their repository must stay clean"),
              "kit": E(["jira", "github", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
-             "base_url": S("The system's address (its API's root URL), when the owner gave it"),
+             "base_url": S("The system's address (its API's root URL), when the owner gave it: a Jira Data Center host "
+                           "(https://jira.acme.com), or GitHub Enterprise's API, https://<host>/api/v3"),
              "settings": INTEGRATION_SETTINGS,
              "stock": S("The stock the owner expects it to fill, in their words (Open issues): declared, with the system's "
                         "expected effect"),

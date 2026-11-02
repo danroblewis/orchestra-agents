@@ -272,8 +272,12 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The kits
    have templates for Jira, GitHub, Slack and PagerDuty (and `promql` for a metrics store); Jira's
    publishes `jira.issue.assigned` for any assignee (a workflow's start filters on its data) and
-   speaks Data Center or Cloud (`[settings] flavour`: `auto` picks Cloud on `*.atlassian.net`; a
-   Cloud site on its own domain says `cloud`). The script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   speaks **Jira Data Center** as well as Cloud: `flavour = "datacenter"` in its settings is REST API
+   v2 with a personal access token sent as Bearer (`auto`, the default, picks Cloud on
+   `*.atlassian.net` and Data Center elsewhere; a Cloud site on its own domain says `cloud`). The
+   GitHub kit reads **GitHub Enterprise** with `base_url = "https://<host>/api/v3"` (github.com's is
+   `https://api.github.com`). Neither needs a change to the code: "connect our Jira Data Center and
+   GitHub Enterprise" is two `integrate_system` calls with those settings, never a handoff. The script is scaffolded into the repository, its own test is run against the kit's fake, and the
    system is declared on the Machines page as a machine managed elsewhere, heard as
    `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
    relays what the system's people and bots did, as them. The answer names the directory: tell

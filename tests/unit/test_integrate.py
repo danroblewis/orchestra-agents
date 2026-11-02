@@ -528,3 +528,31 @@ def test_every_kit_the_bridges_have_is_offered_and_github_is_its_own():
     offered = DESIGN["integrate_system"].input_schema["properties"]["kit"]["enum"]
     assert set(offered) == set(integrate_kits.kits())                                 # the enum drifts from the bridges never
     assert integrate_kits.KIT_OF["github"] == "github" and integrate_kits.kit_for("github", "poller") == "github"
+
+
+def test_jira_data_center_and_github_enterprise_are_settings_never_code(project, store):
+    """R3 g (O1, O2): "connect our Jira Data Center and GitHub Enterprise" is answered with the
+    kits' settings (bridges' templates/jira/poller.toml flavour, templates/github/poller.toml
+    base_url), never "would need changes to the code"."""
+    from pathlib import Path
+
+    from orchestra_agents.harness.tools import BY_NAME
+    text = BY_NAME["integrate_system"].description
+    assert "Jira Data Center (settings flavour datacenter: REST API v2, a personal access token sent as Bearer)" in text
+    assert "GitHub Enterprise (base_url https://<host>/api/v3)" in text and "no code changed" in text
+    props = BY_NAME["integrate_system"].input_schema["properties"]
+    assert "datacenter" in props["settings"]["properties"]["flavour"]["enum"] and "/api/v3" in props["base_url"]["description"]
+    guide = " ".join((Path(design_integrate.__file__).parent / "guide.md").read_text().split())
+    assert 'speaks **Jira Data Center** as well as Cloud: `flavour = "datacenter"`' in guide
+    assert "personal access token sent as Bearer" in guide and '`base_url = "https://<host>/api/v3"`' in guide
+    assert "would need changes" not in guide and "would need changes" not in text
+
+    got = connect(project, store, base_url="https://jira.acme.test", settings={"jql": "project = OPS", "flavour": "datacenter"})
+    assert machine_toml(project)["settings"]["flavour"] == "datacenter" and not asked(store)
+    assert "hand_to_coordinator" not in str(got)
+    say(store, "Connect our GitHub Enterprise so I can see pull requests, repository acme/service", 2)
+    call(project, store, "integrate_system", system="github", wants="pull requests", settings={"repo": "acme/service"},
+         base_url="https://ghe.acme.test/api/v3", quote="Connect our GitHub Enterprise so I can see pull requests",
+         reason=WHY)
+    assert machine_toml(project, "github_poller")["settings"]["base_url"] == "https://ghe.acme.test/api/v3"
+    assert not asked(store)

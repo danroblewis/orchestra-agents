@@ -13,7 +13,8 @@ type the merge gate publishes only when a branch fails (``gate.rejected``) is kn
 first failure, because the machines that wait for it say so when they start.
 
 With ``since`` it also answers the window's ``tally`` (``event_tally``): each class of event
-counted, for "what changed since"."""
+counted, for "what changed since", and the ``model`` line (``modeling.model_line``: the state line
+read_model gives), so the answer has the model from its first call (T2d s16)."""
 
 from __future__ import annotations
 
@@ -107,7 +108,7 @@ def since_of(v, now: float | None = None) -> float:
     return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
 
 
-def read_events(store: AgentStore, a: dict) -> dict:
+def read_events(store: AgentStore, a: dict, project=None) -> dict:
     minutes = int(a.get("minutes") or 60)
     wanted = _matcher(a.get("types"))
     types = bool(a.get("types"))
@@ -138,6 +139,9 @@ def read_events(store: AgentStore, a: dict) -> dict:
              else f"the newest {len(shown)} of {len(picked)}, newest first")
     more = (" (read on with since set to the last one's ts)" if oldest and len(picked) > len(shown) else "")
     counted = {"tally": tally(picked), "tally_note": TALLY_NOTE} if a.get("since") not in (None, "") else {}
+    if counted and project is not None:
+        from .modeling import model_line
+        counted["model"] = model_line(project)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

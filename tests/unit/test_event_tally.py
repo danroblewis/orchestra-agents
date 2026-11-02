@@ -1,13 +1,14 @@
 """T2c step 16: "what changed since yesterday?" said "two were merged" of three pull requests, said
 the idle Outbox "will not send", and left out the triage verdict and the model. read_events with
 since now counts each class over the window (tally), and the prompt says to copy it, to call an
-idle Outbox "nothing waiting", and to end with read_model's state."""
+idle Outbox "nothing waiting", and to end with the model's state. T2d step 16: the answer skipped
+read_model, so read_events with since carries the model line itself."""
 
 from datetime import UTC, datetime
 
 from design_fixtures import call
 
-from orchestra_agents import bus_reads, event_tally, prompting
+from orchestra_agents import bus_reads, event_tally, modeling, prompting
 from orchestra_agents.org import built_in_agents
 
 pytest_plugins = ["design_fixtures"]
@@ -95,5 +96,34 @@ def test_the_prompt_copies_the_tally_says_an_idle_outbox_waits_and_ends_with_the
         assert "Every number and name comes from the answer's `tally`" in text and "never count the events yourself" in text
         assert ('An Outbox with no drafts waiting is idle: say "nothing waiting", never that it will not send or is down'
                 in text)
-        assert "End the answer with the model's state from `read_model`, called in this turn: its `state`" in text
+        assert "End the answer with the model's state: the answer's last line is that read's `model` line" in text
         assert "its triage verdict (`tally`'s `triage`)" in text
+
+
+class Reads:
+    def __init__(self, got):
+        self.got = got
+
+    def model(self, version=None, raw=False):
+        if isinstance(self.got, Exception):
+            raise self.got
+        return {"model": self.got}
+
+
+def test_read_events_since_carries_the_model_line_read_model_gives(project, store, monkeypatch):
+    from orchestra.sd.reads import ReadError
+    monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: DAY)
+    v4 = {"version": "v4", "stocks": [{"id": "a", "hidden": True}, {"id": "b", "hidden": True}], "flows": [{"id": f"f{i}"} for i in range(5)]}
+    monkeypatch.setattr(modeling, "reads", lambda project: Reads(v4))
+    out = call(project, store, "read_events", since="2026-11-02T04:00:00Z", order="oldest")
+    assert out["model"] == "the model (v4) has 2 stocks and 5 flows"
+    assert out["model"] == call(project, store, "read_model")["state"]     # the same line read_model gives
+    gone = ReadError("no model", 404)
+    gone.text = "No model yet: discovery looked at 12 series and kept none. It left out 12 of them: too short."
+    monkeypatch.setattr(modeling, "reads", lambda project: Reads(gone))
+    assert call(project, store, "read_events", since="1d")["model"] == "No model yet: discovery looked at 12 series and kept none."
+    monkeypatch.setattr(modeling, "reads", lambda project: Reads(ReadError("boom", 500)))
+    assert call(project, store, "read_events", since="1d")["model"] == "the model could not be read (500)"
+    monkeypatch.setattr(modeling, "reads", lambda project: Reads(RuntimeError("down")))
+    assert call(project, store, "read_events", since="1d")["model"] == "the model could not be read (RuntimeError)"
+    assert "model" not in call(project, store, "read_events", minutes=60)       # only with since

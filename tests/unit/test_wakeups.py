@@ -138,7 +138,7 @@ def test_shutdown_reports_every_open_assignment_as_failed(project, tmp_path):
     assert all(s["status"] == "idle" and s["pid"] is None for s in store.sessions())
 
 
-def test_a_session_that_fails_to_start_keeps_no_slot_and_announces_no_machine(project, tmp_path):
+def test_a_session_that_fails_to_start_keeps_no_slot(project, tmp_path):
     class NoHarness(FakeHarness):
         def start(self, spec):
             raise RuntimeError("no such binary")
@@ -153,7 +153,10 @@ def test_a_session_that_fails_to_start_keeps_no_slot_and_announces_no_machine(pr
     assert [(e["assignment"], e["source"], e["failed"]) for e in reported] == [("a1", "worker/1", True), ("a2", "worker/1", True)]
     assert "no such binary" in reported[0]["text"]
     assert host._slots == {} and events._bound == {}
-    assert not [e for e in evs if e["type"] == "orchestra.machine.started"]     # a session that never opened is no machine
+    # the instance claims and reports on the bus, so it is a machine: announced once, before its first claim, as the floor's
+    started = [i for i, e in enumerate(evs) if e["type"] == "orchestra.machine.started"]
+    assert [evs[i]["source"] for i in started] == ["worker/1"]
+    assert started[0] < next(i for i, e in enumerate(evs) if e["type"] == "task.accepted")
 
 
 def test_a_rotated_ticket_session_starts_its_turn_once(project, tmp_path):

@@ -358,7 +358,10 @@ def owner(w: dict | None, clock: Clock) -> str:
         for a in q:
             said = a.get("owner_said_next")
             when = clock.at(a["asked_at"]) if isinstance(a.get("asked_at"), int | float) else "?"
-            parts.append(f"I asked at {when}: \"{' '.join(a.get('questions') or [])}\"; " +
+            asked = a.get("question") or ""
+            if a.get("choices"):
+                asked += " " + " ".join(f"{n}. {c}" for n, c in enumerate(a["choices"], 1))
+            parts.append(f"I asked at {when}: \"{asked}\"; " +
                          (f"what you said next: \"{said['message']}\"" if said and not said.get("this_turn")
                           else "your message now is the first since" if said else "you have not answered yet"))
     if nothing and not parts:

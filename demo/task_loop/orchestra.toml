@@ -1,0 +1,66 @@
+# The live demo's task loop (demo/run_task_loop.py): the Workflows plugin's first example, write →
+# review → gate on scripted machines (examples/task_loop/ in orchestra-workflows, copied here at
+# fb2b107a), with the agents' dummy Supervisor on the Agents page and no task system. The demo
+# copies this folder into a fresh git repository whose origin holds the base `main`; `orchestra
+# run` starts everything below and the plugin's own processes and instruments (the floor, the
+# program host that runs the merge gate, the piles). The coordinator (coordinator/1) is the demo's
+# own loop, asking for a batch of items every few minutes.
+
+[events]
+url = "file"
+
+[metrics]
+url = "file"
+
+[discovery]
+window = "60m"
+step = "5s"
+every = "5m"
+
+[workflows]
+tick = "1s"
+heartbeat = "2s"
+lease = "30s"
+return_after = "60s"
+
+[workflows.roles.worker]
+capacity = 2
+
+[workflows.roles.reviewer]
+capacity = 1
+
+[workflows.roles.merge_gate]
+capacity = 1
+
+[workflows.piles]
+every = "2s"
+
+# The scripted machines (no model, no network), written against the plugin's machine contract.
+# A turn takes long enough (20 s writing, 8 s reviewing) that the piles are seen across several of
+# discovery's 5 s steps. The script: task-03's first three reviews are rejected (its fourth entry
+# into review passes the rounds guard, which tells the coordinator once); task-06's first write
+# breaks the tests, so the gate fails it and the rework fixes it. Every later item goes straight
+# through.
+[[machines]]
+name = "worker-1"
+command = "python -m orchestra_workflows.machines.scripted_worker --instance worker/1 --mode continuous --pass-to reviewer --next-step review --work-s 20 --break task-06"
+
+[[machines]]
+name = "worker-2"
+command = "python -m orchestra_workflows.machines.scripted_worker --instance worker/2 --mode continuous --pass-to reviewer --next-step review --work-s 20 --break task-06"
+
+[[machines]]
+name = "reviewer-1"
+command = "python -m orchestra_workflows.machines.scripted_reviewer --instance reviewer/1 --mode continuous --pass-to merge_gate --next-step gate --reject-item task-03=3 --work-s 8"
+
+# The domain series: commits on main, measured from the repository (never from the bus).
+[[collect]]
+name = "base"
+command = "sh .orchestra/instruments/base_commits.sh main"
+every = "10s"
+
+# ---- the agents (orchestra-agents): the dummy Supervisor answers the Agents page ----
+
+[agents]
+harness = "dummy"        # scripted agents: no model, no cost
+serves = []              # no agent takes the floor's offers: the scripted machines do the work

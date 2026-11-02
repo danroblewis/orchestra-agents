@@ -1,0 +1,12 @@
+{
+  "id": "merge_gate",
+  "kind": "programmatic",
+  "managed": "orchestra",
+  "engagement": {"mode": "ad hoc"},
+  "spec": {
+    "command": ["sh", ".orchestra/machines/merge_gate/gate.sh", "main", "sh test.sh"],
+    "role": "merge_gate",
+    "exit": {"1": "failed", "2": "conflict"},
+    "timeout": "5m"
+  }
+}

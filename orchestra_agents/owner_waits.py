@@ -5,6 +5,9 @@ go-ahead the Supervisor itself asked for on the 09:00 schedule were left out):
 - ``machines``: each machine whose announcement says it is disabled, with what it says it needs
   (``list_machines``' ``disabled``: the card's words, passed on as said);
 - ``outbox``: each Outbox draft waiting for the owner's approval (``outbox_read.fetch``);
+- ``changes``: each pending change on a declared machine, waiting for the owner's confirm on the
+  Machines page (the declared layer's ``pending``: its id and the fields it sets, adds or removes;
+  T2g s16: the Review Nudger's zone, c8.0, was only hedged);
 - ``questions``: what the Supervisor asked in its last messages to the human (its transcript's last
   turns, ``session_turns``), each with what the owner said next, so a question the next message
   does not answer is named as still waiting. Nothing here judges whether it was answered.
@@ -94,8 +97,31 @@ def outbox(project) -> list[dict] | str:
     return [outbox_read.row(d) for d in st.get("waiting") or []]
 
 
+def _field(k: str, v) -> str:
+    if isinstance(v, dict):
+        inner = ", ".join(f"{a} {b}" for a, b in v.items() if isinstance(b, str | int | float | bool))
+        return f"{k} ({inner})" if inner else k
+    return f"{k} {v}" if isinstance(v, str | int | float | bool) else k
+
+
+def changes(project) -> list[dict] | str:
+    from . import intended_api
+    try:
+        lay = intended_api.current(project)
+    except Exception as e:  # noqa: BLE001 - a layer that cannot be read is said so, never as nothing waiting
+        return f"not read ({type(e).__name__})"
+    out = []
+    for mid, m in sorted((lay.get("machines") or {}).items()):
+        for p in (m or {}).get("pending") or []:
+            what = [f"{op} {', '.join(_field(k, v) for k, v in sorted(p[op].items()))}"
+                    for op in ("set", "add", "remove") if isinstance(p.get(op), dict) and p[op]]
+            out.append({"machine": mid, "change": p.get("change"), "what": "; ".join(what) or "no fields"})
+    return out
+
+
 NOTE = ("what waits on the owner now: machines, each disabled machine and what its announcement says it needs from the "
-        "owner; outbox, each draft waiting for the owner's approval on the Outbox page; questions, what you asked in your "
+        "owner; outbox, each draft waiting for the owner's approval on the Outbox page; changes, each pending change on a "
+        "declared machine waiting for the owner's confirm; questions, what you asked in your "
         "last messages to the owner, each with what the owner said next (this_turn: the message you are answering now): "
         "a question that message does not answer still waits on the owner. A part that says 'not read' was not read: "
         "say so, never that nothing waits")
@@ -106,4 +132,5 @@ def waiting_on_owner(project, store: AgentStore) -> dict:
         asked: list[dict] | str = questions(store)
     except Exception as e:  # noqa: BLE001 - a transcript that cannot be read is said so
         asked = f"not read ({type(e).__name__})"
-    return {"machines": machines(store), "outbox": outbox(project), "questions": asked, "note": NOTE}
+    return {"machines": machines(store), "outbox": outbox(project), "changes": changes(project), "questions": asked,
+            "note": NOTE}

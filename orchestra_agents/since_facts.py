@@ -5,7 +5,7 @@ the whole time, and the prediction's state was left out):
 - ``outbox``: the Outbox as its state API has it (``outbox_read.fetch``): "running; N sent, M
   waiting", or "not installed", or what the read said when it did not answer;
 - ``predictions``: each prediction from the core's predictions API (``modeling.reads``): its id,
-  and what it waits for or its verdict.
+  what it expects (``SAILED x1.2``), and what it waits for or its verdict.
 
 Neither raises: a read that fails is said so, never guessed."""
 
@@ -49,4 +49,18 @@ def predictions(project: Project) -> list[dict] | str:
         got = reads(project).predictions()["predictions"]
     except Exception as e:  # noqa: BLE001 - a failed read is said so, never as no predictions
         return f"not read ({getattr(e, 'status', None) or type(e).__name__})"
-    return [{"id": p.get("id"), "by": p.get("source"), "about": p.get("subject"), "state": _state(p)} for p in got]
+    return [{"id": p.get("id"), "by": p.get("source"), "about": p.get("subject"),
+             **({"expects": x} if (x := expects(p)) else {}), "state": _state(p)} for p in got]
+
+
+def expects(p: dict) -> str:
+    """What a prediction expects, in words: ``SAILED x1.2`` for a factor on a flow."""
+    out = []
+    for x in p.get("expect") or []:
+        if not isinstance(x, dict):
+            continue
+        if x.get("factor") is not None:
+            out.append(f"{x.get('flow')} x{x['factor']}")
+        else:
+            out.append(" ".join(str(v) for k, v in x.items() if k != "kind" and v is not None))
+    return ", ".join(out)

@@ -16,7 +16,7 @@
   name is no agent is ignored), uncommitted: a coding tool may edit them and the owner commits them, or the
   Coordinator's ticket lands them (``integrate_handoff``); in Orchestra's state directory, ``~/.orchestrator/<key>/machines/<name>/``
   (``--root state``), only when the owner says the repository must stay clean (``ROOTS``). Its
-  ``machine.toml`` is the program's own file, never Orchestra's configuration, so it is edited here
+  ``poller.toml`` is the program's own file, never Orchestra's configuration, so it is edited here
   line by line (``set_keys``, comments kept): the owner's settings (``fill``) and, on the owner's
   word, the clearance and the credentials BY REFERENCE (``clear``: a variable's name or a file's
   path, for the token and for an HTTP Basic account). Never a token: ``token`` keys are refused.
@@ -101,12 +101,19 @@ def scaffold(project: Project, kit: str, name: str, root: str = "repository") ->
         raise StoreError(f"scaffold: {e}") from None
 
 
+def settings_file(target: Path) -> Path:
+    """The poller's settings file in ``target``, as the bridges' own reader finds it
+    (``machinefile.locate``): its ``poller.toml``, else a legacy ``machine.toml`` that is a poller's."""
+    from orchestra_bridges.kits.machinefile import locate
+    return locate(target)
+
+
 def read(target: Path) -> dict:
-    return tomllib.loads((target / "machine.toml").read_text(encoding="utf-8"))
+    return tomllib.loads(settings_file(target).read_text(encoding="utf-8"))
 
 
 def publishes(target: Path) -> list[str]:
-    """The event types the poller's ``machine.toml`` says it publishes (a template's placeholder left out)."""
+    """The event types the poller's ``poller.toml`` says it publishes (a template's placeholder left out)."""
     types = [str(p.get("type") or "") for p in read(target).get("publishes") or []]
     return [t for t in types if re.fullmatch(r"[a-z][a-z0-9_]*(\.[a-z0-9_]+)+", t)]
 
@@ -151,7 +158,7 @@ def set_keys(text: str, table: str | None, values: dict) -> str:
     """``text`` with each key of ``values`` set in ``table`` (None: the top level), line by line:
     a key's line replaced (its end-of-line comment, which described the old value, goes), a new key
     added at the end of the table; every other line, comments included, kept as it was. The
-    program's own ``machine.toml`` is edited this way; Orchestra's configuration never is (rule 12)."""
+    program's own ``poller.toml`` is edited this way; Orchestra's configuration never is (rule 12)."""
     lines = text.splitlines()
     head = re.compile(r"^\s*\[")
     start = 0 if table is None else next(
@@ -187,7 +194,7 @@ def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None
     """The change, written, then read back by the program's own reader (the bridges'
     ``machinefile.read``): what it refuses is put back as it was."""
     from orchestra_bridges.kits.machinefile import read as read_machine_file
-    path = target / "machine.toml"
+    path = settings_file(target)
     old = path.read_text(encoding="utf-8")
     text = set_keys(set_keys(old, None, top), "settings", settings)
     text = drop_keys(text, "settings", [k for k in drop if k not in settings])
@@ -201,7 +208,7 @@ def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None
         read_machine_file(path)
     except ValueError as e:                         # MachineFileError: the program would refuse to start on it
         path.write_text(old, encoding="utf-8")
-        raise StoreError(f"the poller's own reader refuses the change ({e}); machine.toml was put back as it was") from None
+        raise StoreError(f"the poller's own reader refuses the change ({e}); {path.name} was put back as it was") from None
 
 
 def env_name_ok(name: str) -> bool:
@@ -216,13 +223,13 @@ def env_name_ok(name: str) -> bool:
 
 
 def fill(target: Path, settings: dict, base_url: str | None) -> None:
-    """Settings into the poller's ``machine.toml``; never its clearance (the owner's words are the
+    """Settings into the poller's ``poller.toml``; never its clearance (the owner's words are the
     integration record's, ``wants``)."""
     _edit(target, {}, {**settings, **({"base_url": base_url} if base_url else {})})
 
 
 def clear(target: Path, credentials: dict, data_class: str, base_url: str | None) -> None:
-    """The owner's approval into ``machine.toml``: ``clearance = "approved"``, the data class, and
+    """The owner's approval into ``poller.toml``: ``clearance = "approved"``, the data class, and
     the credentials by reference (``credentials``: some of ``CREDENTIAL_KEYS`` but ``token``, a
     variable's name or a file's path each). A credential the owner did not name is dropped, so the
     template's guess (its ``token_env``) never shadows the file they named."""

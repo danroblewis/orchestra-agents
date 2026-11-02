@@ -297,7 +297,7 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("approve_integration", "design",
             "The owner approved reading the system (their yes, quoted) and said where its token is: the clearance and the "
             "credentials, by reference only (a variable's name or a file's path, never a value), are recorded in the "
-            "script's machine.toml, and what runs it is written to the owner's overlay, so the program reads the real system "
+            "script's poller.toml, and what runs it is written to the owner's overlay, so the program reads the real system "
             "from then on. Jira Cloud also needs the account's email (user_env or user_file). Never pass or ask for the "
             "token itself.",
             {"name": S("The integration's name, from integrate_system's answer"),

@@ -95,10 +95,10 @@ def test_a_scaffold_handed_to_the_coordinator_lands_on_main_and_is_approved_ther
     wait_until("the Coordinator's ticket", lambda: settled(web), timeout_s=240)
     assert set(states(web).values()) == {"DONE"}, states(web)
     landed = git(target, "ls-tree", "-r", "--name-only", "main")
-    assert f"{rel}/jenkins_poller.py" in landed and f"{rel}/machine.toml" in landed
+    assert f"{rel}/jenkins_poller.py" in landed and f"{rel}/poller.toml" in landed
     assert (target / rel / "jenkins_poller.py").is_file()                               # the checkout followed main
 
     reply = said(chat(web, "Yes, you may read Jenkins, metadata only, the token is in JENKINS_TOKEN"))
     assert "clearance approved" in reply, reply
-    assert tomllib.loads((target / rel / "machine.toml").read_text())["clearance"] == "approved"
+    assert tomllib.loads((target / rel / "poller.toml").read_text())["clearance"] == "approved"
     assert not draft.exists()

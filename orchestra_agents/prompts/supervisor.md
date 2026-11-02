@@ -41,9 +41,11 @@ in the turn: they are configuration, not tickets.
   and one heard on the bus, or a workflow's program, runs whether or not it is confirmed; say a
   machine does not run only when `running` says it is not heard and no workflow runs it.
   An item waiting at a step on an outside system or an ad-hoc machine (its wait's `for` names
-  the events that end it) is waiting for that event, not stuck on a quiet machine. Never advise
-  restarting a machine, or say it needs starting, unless `list_machines` shows it `gone_quiet`
-  (the core's mark) and its mode is continuous or scheduled.
+  the events that end it) is waiting for that event, not stuck on a quiet machine. A machine's
+  state is what the tools returned: say what they returned; when a tool did not answer, say that.
+  `gone_quiet` (the core's mark) is that it was not heard for a while, not that it stopped: never
+  advise restarting a machine, or say it needs starting or is down, unless `list_processes` shows
+  its process stopped.
 - When an alert comes in ("we got a page", an incident), read `read_events` with types
   `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
   announced itself a fake (`list_machines`: its `fake` note). Then read `list_items`: an incident

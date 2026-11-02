@@ -35,7 +35,10 @@ in the turn: they are configuration, not tickets.
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
   it outside (a ticket's key, a pull request's number), where it waits and why. "What needs me" also
   names every machine `list_machines` lists as disabled, with the reason it gave (a Slack
-  notifier whose token lacks a scope does no work until that is fixed). `snapshot` is the
+  notifier whose token lacks a scope does no work until that is fixed). A machine a plugin proposed
+  is not something that needs them: each machine's `running` (`list_machines`) says whether it runs,
+  and one heard on the bus, or a workflow's program, runs whether or not it is confirmed; say a
+  machine does not run only when `running` says it is not heard and no workflow runs it. `snapshot` is the
   task system's, for a project that runs one.
   An item waiting at a step on an outside system or an ad-hoc machine (its wait's `for` names
   the events that end it) is waiting for that event, not stuck on a quiet machine. Never advise

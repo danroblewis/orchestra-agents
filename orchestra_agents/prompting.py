@@ -15,6 +15,7 @@ from .org import EVENT_TYPES, team_chain, tools_path
 from .org_store import RepoOrgStore, all_teams
 from .protocol import TERMINAL
 from .roles import TOOL_GROUPS, RepoRoleStore, all_roles
+from .tasking_text import gate
 
 
 class TicketView:
@@ -131,8 +132,9 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     """The system prompt an agent is started with: its roles' prompts, then its team's
     responsibilities and those of the teams above it, then where it works (its space, its tools
     and its teams' path grants, which are instructions here and enforced nowhere). Built-in
-    agents outside a custom team get exactly their role prompt."""
-    return _core(agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent)
+    agents outside a custom team get exactly their role prompt. What holds only with the task
+    system installed is kept or dropped as it is (``tasking_text.gate``)."""
+    return gate(_core(agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent))
 
 
 def _core(agent) -> str:

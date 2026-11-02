@@ -139,14 +139,14 @@ DESIGN_TOOLS: list[ToolDef] = [
             "its [[collect]] or [[scrape]] entry goes in the owner's private overlay, one act. Refused over 100 lines, with "
             "what looks like a secret, for an option that needs approval or reaches another host, or when the trial fails "
             "(with its output); nothing is written then. It records as a draft that expires in 24 h unless the owner keeps it "
-            "(keep_instrument). where: repo tries it, then hands it to the Coordinator for .orchestra/instruments/<name>.sh.",
+            "(keep_instrument). where: repo tries it, then [[tasking]]hands it to the Coordinator for .orchestra/instruments/<name>.sh[[/tasking]][[no-tasking]]is refused: code work is not handed on here; say so[[/no-tasking]].",
             {"element": ELEMENT, "option": S("The option's key from propose_measurements (a, b, ...)"),
              "name": S("The instrument's name: letters, digits, . _ - (features.acceptance)"),
              "script": S("The script's text (sh unless it starts with #!), printing Prometheus text: name value per line"),
              "command": S("Only the command the option proposed, if it proposed one"),
              "url": S("Only the URL the option proposed, if it proposed one"), "every": S("How often: 15m, 60s"),
              "simulated": B("A simulated placeholder (its entry carries simulated = true)"),
-             "where": E(["state", "repo"], "state (default): written here; repo: through the Coordinator, on the owner's say-so"),
+             "where": E(["state", "repo"], "state (default): written here; repo: [[tasking]]through the Coordinator, on the owner's say-so[[/tasking]][[no-tasking]]not handed on here (no task system); use state[[/no-tasking]]"),
              "wait_s": {"type": "integer", "description": "Wait up to this long (at most 120) for its first round"},
              "quote": QUOTE, "reason": REASON}, ("element", "option", "name", "reason")),
     ToolDef("keep_instrument", "design",
@@ -242,7 +242,7 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("switch_kind", "design",
             "The Universal | Programmatic switch, on the owner's click (request) or their words (quote): the kind changes "
             "and the spec is kept (to Programmatic, the Universal description is the program's specification). On a "
-            "confirmed machine switched to Programmatic, its agent stops and the program goes to the Coordinator.",
+            "confirmed machine switched to Programmatic, its agent stops[[tasking]] and the program goes to the Coordinator[[/tasking]][[no-tasking]]; the program is not handed on here: say so[[/no-tasking]].",
             {"name": S("The machine"), "request": REQUEST, "quote": QUOTE, "reason": REASON}, ("name", "reason")),
     ToolDef("declare_event", "design",
             "Declare an event type's purpose (a new type in an existing family, when no observed one has the purpose). "
@@ -275,8 +275,8 @@ DESIGN_TOOLS: list[ToolDef] = [
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
             "owner's repository (.orchestra/machines/<name>/, uncommitted: a coding tool may edit it, the owner commits it), "
             "tested against the kit's fake, and the system is declared on the Machines page as a machine managed elsewhere. "
-            "A failed test, or a system with no template of its own, is handed to the Coordinator as work (its ticket lands "
-            "the script); call again with the same name once the worker's test passes. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
+            "A failed test, or a system with no template of its own, is [[tasking]]handed to the Coordinator as work (its ticket lands "
+            "the script); call again with the same name once the worker's test passes[[/tasking]][[no-tasking]]not handed on here: code work is not handed on here; say so[[/no-tasking]]. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
             {"system": S("The system's name: jira, github, slack, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),

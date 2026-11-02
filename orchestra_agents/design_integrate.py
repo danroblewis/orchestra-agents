@@ -50,6 +50,7 @@ from .config import Project
 from .design import MACHINE, OWNER, answer, apply
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
+from .tasking_text import gate
 
 KEY = "integrations"
 NEEDS = "needs approval"
@@ -97,9 +98,10 @@ def _no_kits(system: str) -> dict:
         f"scaffolded, declared or written for {kits.title(system)}"),
         "the routes (" + kits.INTEGRATING + " §4): with the kits, the owner's coding tool installs the bridges plugin into "
         f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
-        "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so hand it to the "
-        "Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the token by its "
-        "variable's name, clearance before any read, metadata only)",
+        "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so " + gate(
+            "[[tasking]]hand it to the Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the "
+            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[no-tasking]]it is not handed "
+            "on here (no task system): say so[[/no-tasking]]"),
         "a store with a Prometheus API needs no kit: strategy source"],
         "next": f"tell the owner the kits are missing and which route you propose for {kits.title(system)}"}
 
@@ -403,8 +405,9 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
                      "the fake's own world); its first poll, in its log, says whether it reads the real system")
         if {"user_env", "user_file"} & set(creds) and "basic" not in (target / f"{name}.py").read_text(encoding="utf-8").casefold():
             lines.append(f"{name}.py does not log in with an account and a token yet (HTTP Basic, auth_format \"Basic "
-                         "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so hand "
-                         "it to the Coordinator (hand_to_coordinator) before saying it reads")
+                         "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so "
+                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[no-tasking]]say it "
+                                "is not handed on here (code work)[[/no-tasking]] before saying it reads"))
     steps = schedule.with_token(rec["steps"], creds)
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]

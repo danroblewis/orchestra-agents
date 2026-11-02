@@ -52,8 +52,8 @@ When something in the system stops the flow and the cause is a bug, you may repa
 ways, and never by editing a file in the checkout:
 
 - **The project's own code** (`work = "code"`): `propose_patch` with a unified diff. It is written
-  and committed in a scratch worktree on a branch of its own, and handed to the Coordinator as a
-  ticket that lands it through a review and the gate. Small, the fix only, with the test that
+  and committed in a scratch worktree on a branch of its own[[tasking]], and handed to the Coordinator as a
+  ticket that lands it through a review and the gate[[/tasking]][[no-tasking]]; nothing hands it on here (no task system is installed): say so and name the branch[[/no-tasking]]. Small, the fix only, with the test that
   shows it.
 - **An installed plugin** (a package Orchestra runs that the project does not own): `write_override`
   wraps or replaces the one function that is wrong, in `.orchestra/overrides/`, pinned to the

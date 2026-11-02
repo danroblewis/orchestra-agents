@@ -104,9 +104,13 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
         try:
             m = x.model(a.get("version"), raw=raw)["model"]
         except ReadError as e:
-            if (said := no_model(e)) is None:
-                raise
+            if getattr(e, "status", 404) != 404 or (said := no_model(e)) is None:
+                return not_read(getattr(e, "status", None) or 400, e)
             return answer(said, model=None, **({"reason": e.reason} if isinstance(getattr(e, "reason", None), dict) else {}))
+        except (ImportError, StoreError):
+            raise
+        except Exception as e:  # noqa: BLE001 - a model that cannot be read is said so, never as no model
+            return not_read(500, e)
         return answer(T.model_lines(m), {"model": m} if raw else None)
     if command == "read_series":
         return read_series(x, a)
@@ -133,6 +137,19 @@ NO_MODEL = ("no model yet; the Dynamics page lists the series looked at and why 
             "collected, and discovery saves a model once a counter has enough events")
 WAITS = ("an expectation recorded meanwhile (declare_expected_effect) is kept as a draft: a factor waits for discovery to find "
          "its flow, a level for its stock, and is judged only then")
+
+
+NOT_READ = ("the model could not be read ({status}): {error}. A failed read, not an empty model: never say from it that "
+            "there is no model or no stocks; read_events with types orchestra.model.changed says what discovery saved, and "
+            "say the read failed")
+
+
+def not_read(status, e: Exception) -> dict:
+    """What read_model says when the read failed for any reason other than there being no model
+    (T2b s16: the model API answered 500 while discovery had found three stocks, and the reply
+    said "no stocks yet")."""
+    text = NOT_READ.format(status=status, error=str(e).strip() or type(e).__name__)
+    return {"ok": False, "summary": [text], "error": text, "model": "not read", "status": status}
 
 
 def no_model(e: Exception) -> list[str] | None:

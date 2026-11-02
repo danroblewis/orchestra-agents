@@ -275,5 +275,33 @@ def test_read_model_with_no_model_says_why_in_the_cores_words_or_where_to_look(p
     assert "metrics are being collected" in said and "no metrics" not in said and "waits for discovery" in said
 
     monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(ReadError("version 9 is not saved", 404)))
-    with pytest.raises(StoreError, match="version 9"):
-        call(project, "supervisor", "read_model")
+    out = call(project, "supervisor", "read_model")
+    assert out["ok"] is False and out["summary"][0].startswith("the model could not be read (404): version 9 is not saved")
+
+
+@pytest.mark.parametrize(("error", "status"), [
+    (ValueError("Out of range float values are not JSON compliant: inf"), 500), ("read", 503)])
+def test_read_model_that_fails_says_it_could_not_be_read_never_no_stocks(project, monkeypatch, error, status):
+    """T2b s16: the model API answered 500 (an aic of inf) while discovery had found three stocks;
+    the reply said "no stocks yet"."""
+    from orchestra.sd.reads import ReadError
+    e = ReadError("the model store did not answer", status) if error == "read" else error
+    monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(e))
+    out = call(project, "supervisor", "read_model")
+    said = out["summary"][0]
+    assert out["ok"] is False and out["status"] == status and said.startswith(f"the model could not be read ({status}): ")
+    assert "never say from it that there is no model or no stocks" in said and out["model"] == "not read"
+
+
+def test_get_model_that_fails_says_it_could_not_be_read(project, monkeypatch):
+    from orchestra_agents import observe_model
+
+    def broken(o):
+        raise ValueError("Out of range float values are not JSON compliant: inf")
+    monkeypatch.setattr(observe_model, "model_view", broken)
+    out = observe_model.get_model(project)
+    assert out["ok"] is False and out["error"].startswith("the model could not be read (500): Out of range float")
+    monkeypatch.setattr(observe_model, "model_view", lambda o: {"ok": False, "error": "no saved version of era e2"})
+    out = observe_model.get_model(project)
+    assert out["ok"] is False and out["error"].startswith("the model could not be read (404): no saved version of era e2")
+    assert "no stocks" not in out["error"].split(":")[0]

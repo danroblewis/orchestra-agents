@@ -25,10 +25,12 @@ def test_context_document_is_sent_once_until_it_changes(project):
     store = AgentStore(project)
     snap = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {}, "assignments": []}   # what tooling.snapshot gives when no task system answers
     first = agents.supervisor_context(snap, [], project, store)
+    assert first.startswith("[Orchestra: now ")                               # the clock comes first, with any notice
+    first = first.split("\n\n", 1)[1]
     assert first.startswith("[Orchestra: project context]") and "## Objectives" in first
     assert agents.supervisor_context(snap, [], project, store) == ""          # "yes, go ahead" arrives as itself
     agents.write_context(project, "# Project context\n\n## Objectives\n- ship it\n")
-    again = agents.supervisor_context(snap, [], project, store)
+    again = agents.supervisor_context(snap, [], project, store).split("\n\n", 1)[1]
     assert again.startswith("[Orchestra: project context, updated]") and "ship it" in again
     assert agents.supervisor_context(snap, [], project, store) == ""
     # events still arrive, as a digest
@@ -36,7 +38,7 @@ def test_context_document_is_sent_once_until_it_changes(project):
     out = agents.supervisor_context(snap, evs, project, store)
     assert "[Orchestra: project context" not in out and "task.reported ticket=T-1" in out
     # without a store (the CLI's temporary session) the document is always included
-    assert agents.supervisor_context(snap, [], project).startswith("[Orchestra: project context]")
+    assert agents.supervisor_context(snap, [], project).split("\n\n", 1)[1].startswith("[Orchestra: project context]")
 
 
 def test_execution_health_reads_the_snapshot_as_the_task_system_sends_it():
@@ -77,7 +79,7 @@ def test_the_digest_stays_short_however_busy_the_bus_was(project):
     store = AgentStore(project)
     agents.supervisor_context(snap, [], project, store)                     # the context document, seen once
     out = agents.supervisor_context(snap, evs, project, store)
-    lines = out.strip().splitlines()
+    lines = out.strip().splitlines()[2:]                                    # after the clock and its blank line
     assert lines[0].startswith("[Orchestra: 564 events since your last turn: task.working=500, task.accepted=50, task.attention_needed=13")
     named = [ln for ln in lines if ln.startswith("- ")]
     assert len(named) == agents.DIGEST_EVENTS and named[-1] == "- orchestra.process.gave_up name=telemetry"

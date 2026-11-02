@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 from conftest import agents_project
-from tasking.config import init_project
 
+from orchestra_agents import installed
 from orchestra_agents.config import Project
 from orchestra_agents.events import Events
 from orchestra_agents.harness import read_transcript
@@ -40,6 +40,7 @@ FAKES = {"pi": Path(__file__).parent / "fake_pi.py", "claude_code": Path(__file_
          "codex": Path(__file__).parent / "fake_codex.py"}
 BINARY_ENV = {"pi": "PI_BINARY", "claude_code": "CLAUDE_BINARY", "codex": "CODEX_BINARY"}
 SETTLED = ("DONE", "BLOCKED", "CANCELLED")
+pytestmark = pytest.mark.skipif(not installed.tasking(), reason="needs the retired task system (orchestra-tasking, the dev extra)")
 
 
 def git(*args, cwd):
@@ -140,6 +141,7 @@ def make_env(tmp_path, monkeypatch, harness: str, tools_via: str | None = None):
     (repo / "README.md").write_text("# e2e\n")
     git("add", "-A", cwd=repo)
     git("commit", "-qm", "init", cwd=repo)
+    from tasking.config import init_project  # the task system, installed (pytestmark)
     init_project(repo, prefix="E2E", unit_command="test -f README.md")      # the repository's orchestra.toml, as `orchestra tasks init` writes it
     toml = repo / "orchestra.toml"
     text = toml.read_text().replace('work = "tasks"', 'work = "code"')      # the code path: a branch per ticket, the gate

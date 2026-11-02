@@ -127,6 +127,7 @@ class AgentRunner:
         cause = {"causationid": a["id"]} if a.get("id") else {}
         say = lambda kind, **data: self.events.publish(kind, {"assignment": aid, "ticket": tid, "role": role, **data},
                                                        source=instance, subject=tid, **cause)
+        host._announce(instance, role)                        # before the claim: what it listens for is known first
         claim = say(ACCEPTED, instance=instance)
         done = threading.Event()
         report, text, failed, commit, lost, passed = None, "", True, None, False, False

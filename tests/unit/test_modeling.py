@@ -238,3 +238,42 @@ def test_every_modeling_tool_has_its_operation(project):
     for name in modeling.COMMANDS:
         assert BY_NAME[name].group in ("model", "predict"), name
     assert {t.name for t in tools_for(["model", "predict"])} == set(modeling.COMMANDS)
+
+
+class _NoModelReads:
+    """A model read that has no model, as the core raises it: with its paragraph (``NoModel``,
+    a ReadError carrying .text and .reason) or, from a core before it, the bare message."""
+
+    def __init__(self, error):
+        self.error = error
+
+    def model(self, version=None, raw=False):
+        raise self.error
+
+
+def test_read_model_with_no_model_says_why_in_the_cores_words_or_where_to_look(project, monkeypatch):
+    from orchestra.sd.reads import ReadError
+
+    class NoModel(ReadError):
+        def __init__(self):
+            super().__init__("no model", 404)
+            self.text = ("152 series looked at; 149 left out as constant. Too few events: at most 3 per counter, 5 "
+                         "needed.")
+            self.reason = {"looked_at": 152}
+
+    monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(NoModel()))
+    out = call(project, "supervisor", "read_model")
+    assert out["ok"] and out["model"] is None
+    assert out["summary"][0].startswith("152 series looked at") and "5 needed" in out["summary"][0]
+    assert "waits for discovery" in out["summary"][1]
+
+    bare = ReadError("there is no model yet: the host discovers it from the metrics (orchestra run)", 404)
+    monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(bare))
+    out = call(project, "supervisor", "read_model")
+    said = " ".join(out["summary"])
+    assert "no model yet" in said and "the Dynamics page lists the series looked at" in said
+    assert "metrics are being collected" in said and "no metrics" not in said and "waits for discovery" in said
+
+    monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(ReadError("version 9 is not saved", 404)))
+    with pytest.raises(StoreError, match="version 9"):
+        call(project, "supervisor", "read_model")

@@ -106,9 +106,10 @@ INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own sett
     "since": S("How far back the first poll catches up (14d: the sprint so far)"),
     "authors": A("GitHub: the logins whose pull requests to follow"), "org": S("GitHub: the organisation searched"),
     "projects": A("GitHub: the Jira project keys a branch or title names (PAY)"),
-    "cadence": {"type": "object", "additionalProperties": {"type": "string"},
-                "description": "Slack: a channel read less often than every poll, by its id, to its own interval "
-                               "({\"C0123\": \"30m\"}); the others are read each poll"},
+    "cadence": {"type": "array", "description": "Slack: a channel read less often than every poll, its own interval; "
+                "the others are read each poll", "items": {"type": "object", "properties": {
+                    "channel": S("The channel's id (C0123)"), "every": S("Its interval (30m)")},
+                    "required": ["channel", "every"]}},
     "max_backoff": S("Slack: the longest a channel answered 429 waits (1h)"),
     "selectors": A("promql: the allowlist schema looks within, each naming the team's part of the store "
                    "({namespace=\"payments\"}), never the whole store"),
@@ -117,8 +118,10 @@ INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own sett
                 "items": {"type": "object", "properties": {
                     "name": S("The series' name (payments_requests)"), "query": S("The PromQL, instant"),
                     "help": S("What it measures, in a sentence")}, "required": ["name", "query"]}},
-    "aliases": {"type": "object", "additionalProperties": {"type": "string"},
-                "description": "promql: the store's label to the project's name for it ({\"k8s_cluster\": \"cluster\"})"}}}
+    "aliases": {"type": "array", "description": "promql: a store's label renamed to the project's name for it",
+                "items": {"type": "object", "properties": {"label": S("The store's label (k8s_cluster)"),
+                                                           "as": S("The project's name for it (cluster)")},
+                          "required": ["label", "as"]}}}}
 
 DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("declare_stock", "design",

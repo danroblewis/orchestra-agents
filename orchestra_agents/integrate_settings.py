@@ -27,6 +27,9 @@ SUBKEY = re.compile(r"^[A-Za-z0-9_-]{1,64}$")       # a key inside a table setti
 METRIC = re.compile(r"^[a-zA-Z_:][a-zA-Z0-9_:]{0,120}$")
 CHANNEL = re.compile(r"^[CG][A-Z0-9]{2,30}$")
 QUERY_KEYS = ("name", "query", "help")
+# a table setting the tool's schema gives as rows (a schema types every object's keys, and these keys are
+# the owner's: channel ids, label names): each row's key field and value field
+ROWS = {"cadence": ("channel", "every"), "aliases": ("label", "as")}
 SHAPES = ("a string, a number, true/false, a list of them, a table of them ({ C0123 = \"30m\" }) or a list of such "
           "tables ([{ name, query, help }])")
 
@@ -102,6 +105,20 @@ def _kit_rules(k: str, v) -> None:
         _duration(k, v)
 
 
+def _from_rows(k: str, v):
+    """A table setting given as rows (``[{"channel": "C0123", "every": "30m"}]``) as the kit's table
+    (``{ C0123 = "30m" }``); a table, or anything else, as it was."""
+    if k not in ROWS or not isinstance(v, list):
+        return v
+    key, value = ROWS[k]
+    out = {}
+    for row in v:
+        if not (isinstance(row, dict) and set(row) == {key, value} and isinstance(row[key], str)):
+            raise StoreError(f"settings: {k} is a list of {{{key}, {value}}} (or a table of {key} to {value})")
+        out[row[key]] = row[value]
+    return out
+
+
 def check_settings(settings: dict) -> dict:
     """The owner's settings for the program, checked: plain keys, the shapes a kit takes
     (``_shape_ok``), what a kit's own settings mean (``_kit_rules``), no credential anywhere in them."""
@@ -115,6 +132,7 @@ def check_settings(settings: dict) -> dict:
         if k in CREDENTIAL_KEYS or k in ("clearance", "data_class") or "token" in k or "secret" in k:
             raise StoreError(f"settings: {k} is not set here: the token's variable and the clearance are the owner's, at "
                              "approve_integration; a token is never written anywhere")
+        v = _from_rows(k, v)
         if not _shape_ok(v):
             raise StoreError(f"settings: {k} is {SHAPES}")
         inner = [x for t in (v if isinstance(v, list) else [v]) if isinstance(t, dict) for x in t]

@@ -51,6 +51,13 @@ def test_a_channels_cadence_is_an_inline_table(tmp_path):
     assert settings_of(target)["cadence"] == {}
 
 
+def test_the_tools_rows_are_the_kits_tables():
+    got = kits.check_settings({"cadence": [{"channel": "C0INC", "every": "30m"}], "aliases": [{"label": "k8s_cluster", "as": "cluster"}]})
+    assert got == {"cadence": {"C0INC": "30m"}, "aliases": {"k8s_cluster": "cluster"}}
+    with pytest.raises(StoreError, match="a list of {channel, every}"):
+        kits.check_settings({"cadence": [{"channel": "C0INC"}]})
+
+
 @pytest.mark.parametrize("settings, match", [
     ({"queries": [{"name": "x", "query": "up", "token": "abc"}]}, "credential is never a setting"),
     ({"queries": [{"name": "x", "query": "up", "token_file": "/tmp/t"}]}, "credential is never a setting"),

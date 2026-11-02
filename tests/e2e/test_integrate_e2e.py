@@ -4,7 +4,7 @@ tools_via = "bash"`, the session's shell). The first turn scaffolds a poller fro
 kit into the state directory, runs its own test against the kit's FakeJira (for real, in a child
 Python), declares Jira on the Machines page as a machine managed elsewhere heard as `bot.jira`, and
 asks the owner for the approval and the token's variable name. The second turn is the owner's yes:
-the clearance and the name go into the poller's machine.toml and its `[[machines]]` and
+the clearance and the name go into the poller's poller.toml and its `[[machines]]` and
 `[[collect]]` entries into the owner's overlay. No real system is read and no token exists."""
 
 import json
@@ -85,7 +85,7 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
     d = project.orchestra.repo_root / ".orchestra" / "machines" / "jira_poller"
     assert got["integration"] == "jira_poller" and got["dir"] == str(d)
     assert got["test"]["passed"] is True and "passed" in got["test"]["summary"], got["test"]       # against FakeJira, for real
-    m = tomllib.loads((d / "machine.toml").read_text())
+    m = tomllib.loads((d / "poller.toml").read_text())
     assert m["clearance"] == "needs approval" and "wanted" not in m           # the owner's words are the integration's record
     jira = intended_api.current(project)["machines"]["jira"]
     assert jira["managed"] == "external" and jira["aliases"] == ["bot.jira"] and jira["spec"]["source"] == "bot.jira"
@@ -102,7 +102,7 @@ def test_connect_our_jira_yields_a_declared_tested_poller_scheduled_on_the_owner
         "name": "jira_poller", "token_env": "JIRA_TOKEN", "base_url": "https://jira.acme.test", "settings": {"jql": "project = OPS"},
         "quote": "Yes, you may read Jira, metadata only", "reason": WHY}}])
     assert turn2[0]["clearance"] == "approved" and turn2[0]["token_env"] == "JIRA_TOKEN"
-    m = tomllib.loads((d / "machine.toml").read_text())
+    m = tomllib.loads((d / "poller.toml").read_text())
     assert m["clearance"] == "approved" and m["settings"]["token_env"] == "JIRA_TOKEN"
     assert m["settings"]["base_url"] == "https://jira.acme.test" and m["settings"]["jql"] == "project = OPS"
     project.reload_config()

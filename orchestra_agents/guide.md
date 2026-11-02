@@ -289,8 +289,9 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    with such a collector is measured by it (`collect`) unless you say `source`.
    **What you can set** (`settings`, the kit's own names, only what the owner said): Jira's `jql`,
    `users`, `sprint_field`, `since`, `flavour`; GitHub's `authors`, `org`, `projects`; Slack's
-   `channels`, `every`, a channel's own `cadence` (`{"C0123": "30m"}`) and `max_backoff`; the promql
-   kit's `selectors` (each naming the team's part of the store, never the whole of it), `aliases`,
+   `channels`, `every`, a channel's own `cadence` (`[{"channel": "C0123", "every": "30m"}]`) and
+   `max_backoff`; the promql kit's `selectors` (each naming the team's part of the store, never the
+   whole of it), `aliases` (`[{"label": "k8s_cluster", "as": "cluster"}]`),
    `max_series` and `queries`, the allowlist of named PromQL queries it measures
    (`[{"name": "payments_errors", "query": "sum by (service) (...)", "help": "..."}]`, replacing
    the template's), chosen from what its `schema` command lists; and `every`, `per_minute`, `ttl`

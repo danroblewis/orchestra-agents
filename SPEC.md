@@ -1013,7 +1013,8 @@ worktree. `approve_integration` then says whether the system's actors (`bot.<sys
 when not yet, how to confirm it after the first poll (`next`).
 **The settings' shapes** (`integrate_settings.py`: `check_settings`, `set_keys`): a string, number, boolean, a list of
 them, a table of them (written inline: the Slack kit's per-channel `cadence`, the promql kit's
-`aliases`) or a list of such tables (written as `[[settings.<key>]]` blocks replacing the old ones:
+`aliases`; the tool's schema gives them as rows, `{channel, every}` and `{label, as}`, since it types every
+object's keys) or a list of such tables (written as `[[settings.<key>]]` blocks replacing the old ones:
 the promql kit's `queries`). Each key and value is checked as before (no credential's key at any
 depth, nothing shaped like a secret), and the kits' own meanings too: each query a series' `name`
 and its PromQL `query` (and `help`), names unique; each of `selectors` and `match` bounded by the

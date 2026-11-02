@@ -150,7 +150,7 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return {"ok": True, "message": "The supervisor will be woken with your note."}
 
     if command == "read_events":
-        return bus_reads.read_events(store, a)
+        return bus_reads.read_events(store, a, project)
     if command == "list_machines":
         return machines_read.list_machines(store, a)
     if command == "read_outbox":

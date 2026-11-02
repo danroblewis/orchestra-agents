@@ -10,12 +10,17 @@ of the phrase's family it did not name.
 
 A phrase's family is the longest type prefix whose every word is in the phrase (``github.pr`` in
 "the GitHub pull request events", "pull request" read as ``pr``; ``sail.check`` in "the SAIL check
-results"). The family only names what the answer says; nothing is added from it."""
+results"). The family only names what the answer says; nothing is added from it.
+
+The Workflows floor's protocol types (``floor.PROTOCOL``: ``offer.made``, ``offer.withdrawn``, …) are
+the plugin's, never the owner's: a phrase never adds or drops one, and the answer lists those a
+machine receives apart (``protocol_line``), allowed whether or not heard (T2d s10)."""
 
 from __future__ import annotations
 
 import re
 
+from .floor import PROTOCOL
 from .store import AgentStore, StoreError
 
 WORD = re.compile(r"[a-z0-9_]+")
@@ -76,6 +81,7 @@ def resolve(project, store: AgentStore, named, but: str | None = None) -> tuple[
     heard = {t for t, how in known.items() if how.startswith("heard")}
     types, matched, missed, dropped = [], [], [], set()
     for said, given in entries:
+        given = [t for t in given if t not in PROTOCOL]              # the plugin's: never added or dropped here
         ok = [t for t in given if t in heard]
         types += [t for t in ok if t not in types]
         fam = family(said, [*known, *given])
@@ -84,14 +90,14 @@ def resolve(project, store: AgentStore, named, but: str | None = None) -> tuple[
         def under(t: str, prefix=prefix) -> bool:
             return prefix is not None and t.startswith(prefix)
         plausible = list(dict.fromkeys([*(t for t in given if t not in heard),
-                                        *(t for t in sorted(known) if under(t) and t not in heard)]))
+                                        *(t for t in sorted(known) if under(t) and t not in heard and t not in PROTOCOL)]))
         dropped |= set(plausible)
         if ok:
             matched.append(f"'{said}' -> {', '.join(ok)}")
         if plausible:
             missed.append(f"'{said}': {', '.join(plausible)} never heard on the bus (plausible, but only announced, "
                           "declared or guessed): left out of receives")
-        if fam and (other := [t for t in sorted(heard) if under(t) and t not in ok]):
+        if fam and (other := [t for t in sorted(heard) if under(t) and t not in ok and t not in PROTOCOL]):
             missed.append(f"'{said}' names {fam}, heard as {', '.join(other)}: "
                           + ("none is in its types; add" if not ok else "not in its types; add") + " each it means to "
                           "owner_named's types, in this turn (another event carrying the same news does not stand for it)")
@@ -103,3 +109,10 @@ def resolve(project, store: AgentStore, named, but: str | None = None) -> tuple[
     if missed:
         lines.append("could not match: " + "; ".join(missed))
     return types, lines, dropped
+
+
+def protocol_line(receives) -> str | None:
+    """The floor's protocol types a machine receives, said apart from the owner's: the plugin's."""
+    got = [t for t in receives or [] if t in PROTOCOL]
+    return (f"the floor's protocol (the plugin's), not yours: {', '.join(got)}, in receives whether or not heard yet; "
+            "the owner's words neither add nor drop them") if got else None

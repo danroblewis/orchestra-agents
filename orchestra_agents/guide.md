@@ -360,8 +360,8 @@ not installed: tell the owner, and write nothing.
   a person or the owner's approval).
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
-  so (quote them). The repository's is not committed by you: hand it to the Coordinator to land
-  through a ticket.
+  so (quote them). The repository's is not committed by you: [[tasking]]hand it to the Coordinator to land
+  through a ticket[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]].
 - **How**: only with `declare_workflow`, never by writing a file. It checks the definition first;
   a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
   what the project still lacks (a program or a resource kind no one declares): say them to the
@@ -383,7 +383,8 @@ When the owner asks for work ("do X", "start Y") and a workflow fits, start it w
 
 1. `list_workflows`: the workflows a request starts (`starts` holds `{"request": true}`, or is
    empty). One fits: use it. More than one fits: ask the owner which, and request nothing yet.
-   None fits: it is a ticket for the Coordinator (`hand_to_coordinator`), or a workflow to declare.
+   None fits: it is [[tasking]]a ticket for the Coordinator (`hand_to_coordinator`), or [[/tasking]]a workflow to
+   declare[[no-tasking]] (code work is not handed on here; say so)[[/no-tasking]].
 2. `request_work` with `workflow`, `brief` (the work in the owner's terms: the first step's
    machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
    source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the

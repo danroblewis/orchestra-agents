@@ -24,6 +24,7 @@ change."""
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -169,6 +170,27 @@ def no_model(e: Exception) -> list[str] | None:
     if not text and "no model" not in str(e):
         return None
     return [text or NO_MODEL, WAITS]
+
+
+def model_line(project: Project) -> str:
+    """The model's state in the line read_model gives (``model_state``), or the first sentence of its
+    no-model text, or that it could not be read (with the status): ``read_events`` with ``since``
+    carries it, so "what changed since" has it from its first call (T2d s16: the answer skipped the
+    second call, read_model, and gave no model state). Never raises."""
+    try:
+        from orchestra.sd.reads import ReadError
+    except ImportError:
+        return "the model could not be read (no simulation extra)"
+    try:
+        return model_state(reads(project).model(None)["model"])
+    except ReadError as e:
+        status = getattr(e, "status", None) or 400
+        if status == 404 and (said := no_model(e)) is not None:
+            head = (getattr(e, "reason", None) or {}).get("headline") if isinstance(getattr(e, "reason", None), dict) else None
+            return head or re.split(r"(?<=\.)\s", said[0].strip(), maxsplit=1)[0]
+        return f"the model could not be read ({status})"
+    except Exception as e:  # noqa: BLE001 - a failed read is said so, never as no model
+        return f"the model could not be read ({getattr(e, 'status', None) or type(e).__name__})"
 
 
 def read_series(x, a: dict) -> dict:

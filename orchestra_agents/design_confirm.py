@@ -40,7 +40,7 @@ import time
 import uuid
 from datetime import datetime
 
-from . import design_asked, intended_api, machines_running, state_machines
+from . import design_asked, design_named, intended_api, machines_running, state_machines
 from .clock import next_at, zone
 from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, plural
@@ -162,6 +162,8 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
                                                                              else ", \"declared · never heard\"")]
     if seen is not None or eid in programs:
         lines.append(f"{eid}: {machines_running.running(eid, m, seen, programs)}")
+    if proto := design_named.protocol_line(m.get("receives")):
+        lines.append(proto)
     extra: dict = {"change": change}
     if runs:
         dst = state_machines.write(project, m, reads_of(project, store, m))

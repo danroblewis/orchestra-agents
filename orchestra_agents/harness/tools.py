@@ -166,7 +166,9 @@ TOOLS: list[ToolDef] = [
             "oldest, the first after since, in order), at most limit, each with its short fields. An item.closed is an "
             "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after. With since, "
             "tally counts each class over the whole window (issues opened and closed, pull requests opened and merged, checks, labels by "
-            "name, triage verdicts, incidents, the Outbox's drafts, approvals and sends, items, model changes): copy it.",
+            "name, triage verdicts, incidents, the Outbox's drafts, approvals and sends, items, model changes): copy it; "
+            "and model is the model's state now, the line read_model gives (its stocks and flows counted, or why there is "
+            "none, or that it could not be read).",
             {"minutes": I("How far back, default 60 (since overrides it)"),
              "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
              "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),

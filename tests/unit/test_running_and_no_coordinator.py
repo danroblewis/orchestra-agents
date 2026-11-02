@@ -107,10 +107,19 @@ def test_the_prompt_says_a_proposal_may_run(project):
     assert "its program still needs writing" in text
 
 
-def test_without_the_task_system_no_text_names_a_coordinator(project, no_tasking):
+def test_without_the_task_system_no_text_names_a_coordinator(project, store, no_tasking):
+    """T2d s13: after request_work failed, "I did not send the request another way, such as through
+    the Coordinator": the agents guide's Workflows section (its "start the task loop" example) still
+    sent a request no workflow fits to the Coordinator."""
     prompt = prompting.agent_prompt(project, built_in_agents()["supervisor"])
     tools = " ".join(str(t.to_dict()) for t in tools_for(ROLES["supervisor"].tools))
-    for text in (prompt, tools):
+    flows = call(project, store, "read_guide", name="agents", section="Workflows")["text"]
+    start = call(project, store, "read_guide", name="agents", section="Starting a piece of work")["text"]
+    assert "request_work" in start and "start the task loop" in start and "a workflow to declare" in " ".join(start.split())
+    whole = call(project, store, "read_guide", name="agents")["text"]
+    assert "[[" not in whole.replace("[[machines]]", "").replace("[[collect]]", "").replace("[[scrape]]", "").replace(
+        "[[sources]]", "")
+    for text in (prompt, tools, flows):
         assert "coordinator" not in text.lower()
         assert "[[tasking]]" not in text and "[[no-tasking]]" not in text and "[[/" not in text
     assert "code work is not handed on here; say so" in " ".join(prompt.split())
@@ -123,6 +132,13 @@ def test_with_the_task_system_the_coordinator_is_named(project, monkeypatch):
     assert "hand it to the Coordinator" in " ".join(prompt.split())
     assert "code work is not handed on here" not in prompt and not re.search(r"\[\[/?(no-)?tasking\]\]", prompt)
     assert "the Coordinator is" in tools["propose_patch"].description and "[[" not in tools["propose_patch"].description
+
+
+def test_with_the_task_system_the_guide_sends_unfitting_work_to_the_coordinator(project, store, monkeypatch):
+    monkeypatch.setattr(installed, "tasking", lambda: True)
+    start = " ".join(call(project, store, "read_guide", name="agents", section="Starting a piece of work")["text"].split())
+    assert "it is a ticket for the Coordinator (`hand_to_coordinator`), or a workflow to declare." in start
+    assert "not handed on here" not in start
 
 
 def test_gate_keeps_one_side():

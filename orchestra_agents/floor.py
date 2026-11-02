@@ -9,6 +9,10 @@ MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN = "offer.made", "offer.claimed", "offe
 LISTENS_FOR = (MADE, WITHDRAWN)          # what the host watches on behalf of an agent that serves a floor role
 ATTENTION_NEEDED = "attention.needed"    # the floor asks a planner (``to``) to look: a guard passed
 CLOSED = "item.closed"                   # an item's end, by anyone; nothing waits on a closed item
+PROTOCOL = (MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN, ATTENTION_NEEDED, CLOSED)
+"""The floor's protocol types, as this copy names them: the plugin's, never the owner's. A machine the
+Workflows plugin proposed carries them in its receives whether or not each was heard yet (T2d s10:
+``offer.withdrawn``, on no bus that day); the owner's words never add or drop one (design_named.py)."""
 CLOSED_BY_FLOOR = ("reason", "outcome", "workflow", "last_step")
 """What the floor's own ``item.closed`` carries (as ``<planner>/dispatch``, ``reason: finished``): when a
 role-only item's one step finishes, the turn's ``outcome``; when a workflow's item reaches the end of

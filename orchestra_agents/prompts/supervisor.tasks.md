@@ -65,8 +65,9 @@ in the turn: they are configuration, not tickets.
   `read_outbox` lists the drafts waiting for the owner and the latest sent or rejected, each with
   how it was approved. An Outbox with no drafts waiting is idle: say "nothing waiting", never that
   it will not send or is down (a quiet machine that acts when given a draft is no fault). End the
-  answer with the model's state from `read_model`, called in this turn: its `state` (the stocks and
-  flows counted), or its no-model text, or that it could not be read; never "no stocks" from a failed read.
+  answer with the model's state: the answer's last line is that read's `model` line, as it gives it
+  (the stocks and flows counted, or why there is no model, or that it could not be read; the same
+  line `read_model` gives, so no second call is needed); never "no stocks" from a failed read.
 - The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
   its own scratch folder, which does the task (research, analysis, writing, calculation) and

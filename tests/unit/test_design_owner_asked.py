@@ -271,8 +271,9 @@ def test_every_family_the_owner_names_goes_into_receives_and_the_answer_says_eac
                owner_named=[{"said": "the GitHub pull request events", "types": ["github.pr.opened", "github.pr.labeled"]},
                             {"said": "the SAIL check results on the bus"}], reason=WHY)
     said = " ".join(out["said"])
-    assert "the owner's words matched, in receives: 'the GitHub pull request events' -> github.pr.opened, github.pr.labeled" in said
-    assert "could not match: 'the SAIL check results on the bus' names sail, heard as sail.check.completed" in said
+    assert ("the owner's words matched, in receives (heard on the bus): 'the GitHub pull request events' -> "
+            "github.pr.opened, github.pr.labeled") in said
+    assert "could not match: 'the SAIL check results on the bus' names sail.check, heard as sail.check.completed" in said
     assert set(layer(project)["machines"]["review_nudger"]["receives"]) == {"offer.made", "github.pr.opened", "github.pr.labeled"}
     out = call(project, store, "refine_machine", name="review_nudger", quote="the SAIL check results on the bus",
                owner_named=[{"said": "the SAIL check results on the bus", "types": ["sail.check.completed"]}], reason=WHY)
@@ -285,7 +286,7 @@ def test_a_named_type_nothing_speaks_is_said_and_not_added(project, store):
     say(store, TURN3, 3)
     out = machine(project, store, "notes_improver", quote=TURN3,
                   owner_named=[{"said": "the merge gate's landings", "types": ["gate.landed_ok"]}])
-    assert "'the merge gate's landings': gate.landed_ok not heard on the bus or announced" in " ".join(out["said"])
+    assert "'the merge gate's landings': gate.landed_ok never heard on the bus" in " ".join(out["said"])
     assert layer(project)["machines"]["notes_improver"]["receives"] == ["session.settled"]
 
 

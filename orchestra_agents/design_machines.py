@@ -331,11 +331,11 @@ def proposed_elsewhere(project: Project, mid: str, title: str) -> None:
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id(a)
     kind = a.get("kind")
-    named, named_lines = design_named.resolve(project, store, a.get("owner_named"), mid)
+    named, named_lines, dropped = design_named.resolve(project, store, a.get("owner_named"), mid)
     m = {"id": mid, "title": (a.get("title") or "").strip() or mid.replace("_", " ").title(),
          "description": (a.get("description") or "").strip(), "tags": list(a.get("tags") or []), "kind": kind,
          "managed": a.get("managed") or "orchestra", "engagement": engagement(a),
-         "receives": list(dict.fromkeys([*(a.get("receives") or []), *named])), "emits": list(a.get("emits") or []),
+         "receives": list(dict.fromkeys([*(t for t in a.get("receives") or [] if t not in dropped), *named])), "emits": list(a.get("emits") or []),
          "reads": list(a.get("reads") or []), "spec": {k: v for k, v in spec_of(a).items() if v not in (None, "", [])}}
     if kind not in ("universal", "programmatic"):
         raise StoreError("kind is universal (an abstract machine, described by its steps) or programmatic (a program)")
@@ -449,7 +449,9 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                          "declaration is quoted or proposed")
     if a.get("remove_receives") and any(a.get(k) for k in ("mode", "at", "tz", "missed")):
         raise StoreError(SCHEDULE_KEEPS)
-    named, named_lines = design_named.resolve(project, store, a.get("owner_named"), mid)
+    named, named_lines, dropped = design_named.resolve(project, store, a.get("owner_named"), mid)
+    if dropped and a.get("add_receives"):                # a type the owner's words name is in receives only once heard
+        a = {**a, "add_receives": [t for t in a["add_receives"] if t not in dropped]}
     if extra := [t for t in named if t not in (m.get("receives") or []) and t not in (a.get("add_receives") or [])]:
         a = {**a, "add_receives": [*(a.get("add_receives") or []), *extra]}
     after = json.loads(json.dumps(m))

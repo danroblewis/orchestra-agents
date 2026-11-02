@@ -195,6 +195,23 @@ def check_stock(web: Web, tools: list[str]) -> tuple[bool, str, dict]:
     return True, "", ev
 
 
+NUDGER_FAMILIES = ("github.pr.", "sail.check.")      # "the GitHub pull request events and the SAIL check results"
+
+
+def receives_problem(receives: list[str], heard: set[str], families: tuple[str, ...] = NUDGER_FAMILIES) -> str:
+    """Why the nudger's receives fail the owner's words, or "": every type heard on the bus, and for
+    each family the owner named exactly the heard types of it (T2c s10: github.pr.approved and
+    github.pr.changes_requested, never heard, were in). Also the unit tests' oracle
+    (tests/unit/test_named_heard_only.py)."""
+    if not receives or set(receives) - heard:
+        return f"receives {receives}: {sorted(set(receives) - heard)} not heard on the bus"
+    for fam in families:
+        got, want = {t for t in receives if t.startswith(fam)}, {t for t in heard if t.startswith(fam)}
+        if not got or got != want:
+            return f"receives {receives}: the {fam}* types are {sorted(got)}, the heard ones {sorted(want)}"
+    return ""
+
+
 def check_nudger(web: Web, run: Run, before: set[str]) -> tuple[bool, str, dict]:
     mid, m = find(layer(web).get("machines"), r"nudger")
     heard = run.types()
@@ -213,10 +230,8 @@ def check_nudger(web: Web, run: Run, before: set[str]) -> tuple[bool, str, dict]
         return False, "no machine named like Review Nudger", ev
     if others := [k for k in layer(web).get("machines") or {} if k != mid and k not in before]:
         return False, f"declared more than the one asked for: {others}", ev
-    if not receives or set(receives) - heard:
-        return False, f"receives {receives}: {sorted(set(receives) - heard)} not heard on the bus", ev
-    if not any(t.startswith("github.pr.") for t in receives) or not any(t.startswith("sail.check.") for t in receives):
-        return False, f"receives {receives}: no github.pr.* or no sail.check.*", ev
+    if why := receives_problem(receives, heard):
+        return False, why, ev
     e = m.get("engagement") or {}
     if e.get("mode") != "scheduled" or e.get("at") not in ("09:00", "9:00"):
         return False, f"engagement is {e}", ev

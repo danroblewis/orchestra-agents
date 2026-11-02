@@ -35,9 +35,10 @@ EMITS_D = ("Event types it publishes: one heard or announced (read_events), or o
            "never an invented name")
 OWNER_NAMED = {"type": "array", "description": (
     "Every event family the owner's words name (\"the GitHub pull request events\", \"the SAIL check results on the bus\"), "
-    "each with the types you matched it to from read_events' by_type: every one goes into receives, and the answer says "
-    "what each phrase was matched to and what could not be. Never leave a phrase out because another event carries the "
-    "same news"), "items": {"type": "object", "properties": {
+    "each with the types you matched it to from read_events' by_type (heard on the bus): every heard one goes into "
+    "receives; one never heard (only announced, declared, or a guess from the family) is left out, also from receives "
+    "and add_receives, and the answer names it. The answer says what each phrase was matched to and what could not be. "
+    "Never leave a phrase out because another event carries the same news"), "items": {"type": "object", "properties": {
         "said": S("The owner's words naming the events, as they said them: the SAIL check results"),
         "types": A("The event types heard on the bus you matched them to: sail.check.completed")}, "required": ["said"]}}
 MISSED = E(["skip", "run once"], "For scheduled: a run missed while the host was down is skipped or run once")

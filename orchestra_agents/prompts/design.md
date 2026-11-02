@@ -130,7 +130,10 @@ nothing speaks: fix it in the same turn.
 **Every event family the owner names goes into `receives`.** "The GitHub pull request events and
 the SAIL check results on the bus" is two families: give each phrase in `owner_named` (`said`, as
 they said it), with the types heard on the bus you matched it to (`github.pr.opened`, ...;
-`sail.check.completed`), on `declare_machine` or `refine_machine`. Every matched type goes into
+`sail.check.completed`), on `declare_machine` or `refine_machine`. Only types in `read_events`'
+`by_type` (heard) go there: never one that is only announced, declared or a guess from the family
+(`github.pr.approved` when no review was ever approved here); the tool leaves such a type out and
+says it was not on the bus: tell the owner so, by name. Every matched type goes into
 receives, and the answer says what each phrase was matched to and what it could not match: fix
 each one it could not in the same turn. Never leave a family out because another event carries
 the same news (a SAILED label does not stand for `sail.check.completed`), and say in your reply

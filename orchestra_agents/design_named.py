@@ -1,13 +1,16 @@
 """The events the owner's words name (``owner_named`` on ``declare_machine`` and
 ``refine_machine``): each phrase as they said it ("the SAIL check results"), with the event types
-the Supervisor matched it to. Every matched type goes into the machine's receives; the answer says
-what each phrase was matched to and what could not be. A phrase that names a family heard on the
-bus (``sail`` in "the SAIL check results", heard as ``sail.check.completed``) and has none of its
-types is said as not matched, with the family's types: the T2b walkthrough's Supervisor left the
-SAIL results out of the nudger's receives because another event (a SAILED label) carried the news.
+the Supervisor matched it to. Only a type **heard on the bus** (an event of it read) goes into the
+machine's receives: a type only announced, declared or emitted by a declared machine is plausible
+but never on the bus, and is left out and said so. The T2c walkthrough's Supervisor gave "the
+GitHub pull request events" ``github.pr.approved`` and ``github.pr.changes_requested``, which the
+Workflows plugin's proposals name but the stand-in reviewer never published. The answer says which
+heard types each phrase became, which plausible types were not on the bus, and which heard types
+of the phrase's family it did not name.
 
-A family is a type's first word (``sail`` of ``sail.check.completed``), matched as a whole word of
-the phrase. Nothing else is guessed."""
+A phrase's family is the longest type prefix whose every word is in the phrase (``github.pr`` in
+"the GitHub pull request events", "pull request" read as ``pr``; ``sail.check`` in "the SAIL check
+results"). The family only names what the answer says; nothing is added from it."""
 
 from __future__ import annotations
 
@@ -35,34 +38,68 @@ def _entries(named) -> list[tuple[str, list[str]]]:
     return out
 
 
-def resolve(project, store: AgentStore, named, but: str | None = None) -> tuple[list[str], list[str]]:
-    """The known types the phrases were matched to (for receives), and the answer's lines: what
-    each phrase was matched to, and what could not be."""
+ALIASES = {("pull", "request"): "pr", ("pull", "requests"): "pr", ("prs",): "pr"}
+
+
+def words_of(said: str) -> set[str]:
+    """The phrase's words, a plural also as its singular, and the aliases its words make."""
+    ws = WORD.findall(said.lower())
+    out = set(ws) | {w[:-1] for w in ws if len(w) > 3 and w.endswith("s")}
+    for i in range(len(ws)):
+        for k, v in ALIASES.items():
+            if tuple(ws[i:i + len(k)]) == k:
+                out.add(v)
+    return out
+
+
+def family(said: str, types) -> str | None:
+    """The longest prefix of a known type whose every segment is a word of the phrase."""
+    words, best = words_of(said), None
+    for t in types:
+        segs = t.split(".")
+        k = 0
+        while k < len(segs) - 1 and segs[k] in words:
+            k += 1
+        if k and (best is None or k > best.count(".") + 1):
+            best = ".".join(segs[:k])
+    return best
+
+
+def resolve(project, store: AgentStore, named, but: str | None = None) -> tuple[list[str], list[str], set[str]]:
+    """The heard types the phrases were matched to (for receives), the answer's lines, and the
+    types left out (named, or of a phrase's family, and not heard on the bus): never in receives."""
     from .bus_reads import known_types
     entries = _entries(named)
     if not entries:
-        return [], []
+        return [], [], set()
     known = known_types(project, store, but)
-    families: dict[str, list[str]] = {}
-    for t in sorted(known):
-        families.setdefault(t.split(".")[0], []).append(t)
-    types, matched, missed = [], [], []
+    heard = {t for t, how in known.items() if how.startswith("heard")}
+    types, matched, missed, dropped = [], [], [], set()
     for said, given in entries:
-        ok = [t for t in given if t in known]
+        ok = [t for t in given if t in heard]
         types += [t for t in ok if t not in types]
+        fam = family(said, [*known, *given])
+        prefix = f"{fam}." if fam else None
+
+        def under(t: str, prefix=prefix) -> bool:
+            return prefix is not None and t.startswith(prefix)
+        plausible = list(dict.fromkeys([*(t for t in given if t not in heard),
+                                        *(t for t in sorted(known) if under(t) and t not in heard)]))
+        dropped |= set(plausible)
         if ok:
             matched.append(f"'{said}' -> {', '.join(ok)}")
-        if bad := [t for t in given if t not in known]:
-            missed.append(f"'{said}': {', '.join(bad)} not heard on the bus or announced (read_events' by_type)")
-        words = set(WORD.findall(said.lower()))
-        for fam in sorted(f for f in families if f in words and not any(t.split(".")[0] == f for t in ok)):
-            missed.append(f"'{said}' names {fam}, heard as {', '.join(families[fam])}: none is in its types; add the one "
-                          "it means to receives, in this turn (another event carrying the same news does not stand for it)")
-        if not ok and not bad and not any(f in words for f in families):
+        if plausible:
+            missed.append(f"'{said}': {', '.join(plausible)} never heard on the bus (plausible, but only announced, "
+                          "declared or guessed): left out of receives")
+        if fam and (other := [t for t in sorted(heard) if under(t) and t not in ok]):
+            missed.append(f"'{said}' names {fam}, heard as {', '.join(other)}: "
+                          + ("none is in its types; add" if not ok else "not in its types; add") + " each it means to "
+                          "owner_named's types, in this turn (another event carrying the same news does not stand for it)")
+        if not ok and not plausible and not fam:
             missed.append(f"'{said}': no type matched; read_events lists the types heard, or ask the owner which they mean")
     lines = []
     if matched:
-        lines.append("the owner's words matched, in receives: " + "; ".join(matched))
+        lines.append("the owner's words matched, in receives (heard on the bus): " + "; ".join(matched))
     if missed:
         lines.append("could not match: " + "; ".join(missed))
-    return types, lines
+    return types, lines, dropped

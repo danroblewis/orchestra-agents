@@ -102,6 +102,34 @@ def test_read_events_is_capped_newest_first_and_summarised_by_type(project, stor
     assert call(project, store, "read_events", limit=500)["shown"] == 61
 
 
+def test_read_events_takes_prefixes_a_since_and_the_oldest_first(project, store, monkeypatch):
+    """T2 s13 and s16: an alert read as pagerduty.*, and "what changed since 22:40" told in order
+    from then, which newest-first with a limit missed (it began at 23:05:57 and lost REJECTED at 22:47)."""
+    from datetime import UTC, datetime
+    at = lambda hm: datetime(2026, 11, 1, int(hm[:2]), int(hm[3:]), tzinfo=UTC).isoformat()
+    evs = [{"type": "pagerduty.incident.triggered", "ts": at("22:30"), "source": "bot.pagerduty_fake", "incident": "PINC001"},
+           {"type": "github.pr.opened", "ts": at("22:41"), "source": "github"},
+           {"type": "changes.requested", "ts": at("22:47"), "source": "reviewer_stand_in"},
+           {"type": "pagerduty.incident.acknowledged", "ts": at("22:50"), "source": "person.pagerduty_fake.puser01"},
+           {"type": "outbox.sent", "ts": at("23:01"), "source": "outbox"},
+           {"type": "pagerdutyx.other", "ts": at("23:02"), "source": "elsewhere"},
+           {"type": "session.started", "ts": at("23:03"), "source": "supervisor"}]
+    monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: evs)
+    out = call(project, store, "read_events", types=["pagerduty."], since="2026-11-01T22:00:00Z")
+    assert [e["type"] for e in out["events"]] == ["pagerduty.incident.acknowledged", "pagerduty.incident.triggered"]
+    assert call(project, store, "read_events", types=["pagerduty.*"], since="2026-11-01T22:00:00Z")["count"] == 2
+    out = call(project, store, "read_events", since="2026-11-01T22:40:00Z", order="oldest", limit=3)
+    assert [e["type"] for e in out["events"]] == ["github.pr.opened", "changes.requested", "pagerduty.incident.acknowledged"]
+    assert out["count"] == 5 and "in the order they happened" in out["note"] and "read on" in out["note"]
+    assert out["since"].startswith("2026-11-01T22:40")
+    now = datetime(2026, 11, 1, 23, 10, tzinfo=UTC).timestamp()
+    assert bus_reads.since_of("30m", now) == now - 1800 and bus_reads.since_of("2h", now) == now - 7200
+    with pytest.raises(StoreError, match="since: an ISO time"):
+        call(project, store, "read_events", since="yesterday-ish")
+    with pytest.raises(StoreError, match="order is newest"):
+        call(project, store, "read_events", order="sideways")
+
+
 def test_an_announced_type_is_known_and_an_invented_one_is_named_in_the_answer(project, store):
     store.events.publish("gate.landed", {}, source="merge_gate")
     store.events.publish("orchestra.machine.started", {"listens_for": ["gate.rejected", "changes.requested"]}, source="coordinator")

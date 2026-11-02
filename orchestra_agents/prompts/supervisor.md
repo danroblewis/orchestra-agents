@@ -29,6 +29,13 @@ in the turn: they are configuration, not tickets.
   workflows, read `list_items` first (every open item, its step, why it waits and on whom), then
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
   it outside (a ticket's key, a pull request's number), where it waits and why.
+- When an alert comes in ("we got a page", an incident), read `read_events` with types
+  `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
+  announced itself a fake.
+- When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
+  with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
+  happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says
+  there are more.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 
-from .store import AgentStore
+from .store import AgentStore, StoreError
 
 DEFAULT_LIMIT, MAX_LIMIT = 20, 100
 SCAN = 20_000                           # the newest events read for the summary and the known types
@@ -63,11 +63,54 @@ def _announced_types(e: dict) -> list[str]:
     return [t for t in (e.get("listens_for") or []) if isinstance(t, str)]
 
 
+def _matcher(types):
+    """Whether a type is asked for: an exact type, or a prefix ending in ``.`` (``pagerduty.``, also
+    written ``pagerduty.*``) for every type under it; no types asks for all."""
+    exact, prefixes = set(), []
+    for t in types or []:
+        t = str(t).strip()
+        if t.endswith(".*"):
+            t = t[:-1]
+        if t.endswith("."):
+            prefixes.append(t)
+        elif t:
+            exact.add(t)
+    if not exact and not prefixes:
+        return lambda ty: True
+    return lambda ty: isinstance(ty, str) and (ty in exact or any(ty.startswith(p) for p in prefixes))
+
+
+RELATIVE = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def since_of(v, now: float | None = None) -> float:
+    """``since`` as unix seconds: an ISO time (``2026-11-01T22:40:00Z``, a zone or UTC), unix
+    seconds, or a time back from now (``30m``, ``2h``, ``1d``, ``90s``)."""
+    now = time.time() if now is None else now
+    if isinstance(v, int | float):
+        return float(v)
+    text = str(v).strip()
+    if text and text[-1].lower() in RELATIVE and text[:-1].replace(".", "", 1).isdigit():
+        return now - float(text[:-1]) * RELATIVE[text[-1].lower()]
+    if text.replace(".", "", 1).isdigit():
+        return float(text)
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        raise StoreError(f"since: an ISO time (2026-11-01T22:40:00Z), unix seconds, or a time back such as 30m, 2h or 1d; "
+                         f"not {v!r}") from None
+    return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).timestamp()
+
+
 def read_events(store: AgentStore, a: dict) -> dict:
     minutes = int(a.get("minutes") or 60)
-    types = set(a.get("types") or [])
+    wanted = _matcher(a.get("types"))
+    types = bool(a.get("types"))
     limit = max(1, min(int(a.get("limit") or DEFAULT_LIMIT), MAX_LIMIT))
-    since = time.time() - minutes * 60
+    oldest = str(a.get("order") or "newest").strip().lower() == "oldest"
+    if a.get("order") and str(a["order"]).strip().lower() not in ("oldest", "newest"):
+        raise StoreError("order is newest (the default: the newest first) or oldest (from since on, in the order they happened)")
+    start = since_of(a["since"]) if a.get("since") not in (None, "") else time.time() - minutes * 60
     picked, by_type, announced = [], {}, {}
     for e in recent(store):
         ty = e.get("type")
@@ -75,7 +118,7 @@ def read_events(store: AgentStore, a: dict) -> dict:
             for t in _announced_types(e):
                 announced.setdefault(t, set()).add(str(e.get("source") or ""))
         ts = _ts(e)
-        if ts is None or ts < since or ty in HIDDEN or (types and ty not in types):
+        if ts is None or ts < start or ty in HIDDEN or not wanted(ty):
             continue
         picked.append(e)
         row = by_type.setdefault(ty, {"type": ty, "count": 0, "sources": set(), "last": None})
@@ -83,13 +126,17 @@ def read_events(store: AgentStore, a: dict) -> dict:
         row["sources"].add(str(e.get("source") or ""))
         row["last"] = e.get("ts")
     summary = sorted(({**r, "sources": sorted(r["sources"])} for r in by_type.values()), key=lambda r: -r["count"])
-    quiet = {t: sorted(s) for t, s in sorted(announced.items()) if t not in by_type and (not types or t in types)}
-    newest = [brief(e) for e in reversed(picked[-limit:])]
-    return {"ok": True, "count": len(picked), "minutes": minutes, "by_type": summary,
+    quiet = {t: sorted(s) for t, s in sorted(announced.items()) if t not in by_type and (not types or wanted(t))}
+    shown = [brief(e) for e in picked[:limit]] if oldest else [brief(e) for e in reversed(picked[-limit:])]
+    window = {"since": datetime.fromtimestamp(start, UTC).isoformat()} if a.get("since") not in (None, "") else {"minutes": minutes}
+    which = (f"the oldest {len(shown)} of {len(picked)}, in the order they happened" if oldest
+             else f"the newest {len(shown)} of {len(picked)}, newest first")
+    more = (" (read on with since set to the last one's ts)" if oldest and len(picked) > len(shown) else "")
+    return {"ok": True, "count": len(picked), **window, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
-            "events": newest, "shown": len(newest),
-            "note": (f"the newest {len(newest)} of {len(picked)}, newest first (limit {limit}, at most {MAX_LIMIT}); by_type counts "
-                     "them all. A type in announced_not_heard is known: a machine announced it, so it may be named")}
+            "events": shown, "shown": len(shown),
+            "note": (f"{which} (limit {limit}, at most {MAX_LIMIT}){more}; by_type counts them all. A type in "
+                     "announced_not_heard is known: a machine announced it, so it may be named")}
 
 
 def known_types(project, store: AgentStore, but: str | None = None) -> dict[str, str]:

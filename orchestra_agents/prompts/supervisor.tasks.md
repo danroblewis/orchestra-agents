@@ -32,6 +32,13 @@ in the turn: they are configuration, not tickets.
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
   it outside (a ticket's key, a pull request's number), where it waits and why. `snapshot` is the
   task system's, for a project that runs one.
+- When an alert comes in ("we got a page", an incident), read `read_events` with types
+  `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
+  announced itself a fake.
+- When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
+  with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
+  happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says
+  there are more.
 - The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
   its own scratch folder, which does the task (research, analysis, writing, calculation) and

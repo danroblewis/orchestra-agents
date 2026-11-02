@@ -145,12 +145,56 @@ NOT_READ = ("the model could not be read ({status}): {error}. A failed read, not
             "say the read failed")
 
 
+def version_of(m: dict) -> int | str | None:
+    """The saved version a model read is, or is the latest discovery after: its label's ``version``,
+    else its ``current_version`` (never the label itself: T2f s16 printed the dict)."""
+    lab = m.get("label")
+    if isinstance(lab, dict):
+        return lab.get("version") if lab.get("version") is not None else lab.get("current_version")
+    return lab or m.get("version")
+
+
+def _v(version) -> str:
+    return f"v{version}" if isinstance(version, int) else str(version)
+
+
+def counted(m: dict) -> str:
+    stocks, flows = len(m.get("stocks") or []), len(m.get("flows") or [])
+    return f"{stocks} stock{'s' * (stocks != 1)} and {flows} flow{'s' * (flows != 1)}"
+
+
 def model_state(m: dict) -> str:
     """The model's state in a line, for the end of an answer: its version, stocks and flows counted."""
-    stocks, flows = len(m.get("stocks") or []), len(m.get("flows") or [])
-    version = m.get("label") or m.get("version")
-    return (f"the model{f' ({version})' if version else ''} has {stocks} stock{'s' * (stocks != 1)} and "
-            f"{flows} flow{'s' * (flows != 1)}")
+    version = version_of(m)
+    return f"the model{f' ({_v(version)})' if version is not None else ''} has {counted(m)}"
+
+
+def origin(note: str | None) -> str:
+    """Who saved a version, from its recorded note. Orchestra's store saves a discovered version only
+    from discovery (``orchestra.sd.rediscover``: "discovered: the structure changed", "era e2 began:
+    its prior", "the last model of …"); a declaration is the declared layer (``dN``) and never makes one."""
+    note = (note or "").strip()
+    if note.lower().startswith("declared"):
+        return f"declared ({note})"
+    return "discovery" + (f" ({note})" if note else "")
+
+
+def changed_line(m: dict, versions: list[dict], since: float | None = None) -> str:
+    """The model line with who changed the model and when, from the version's own record: "model v5,
+    changed by discovery at <time> (<note>); it has 3 stocks and 6 flows" (T2f s16 gave the Review
+    Nudger declaration as the cause of a change discovery made)."""
+    version = version_of(m)
+    rec = next((v for v in versions if v.get("version") == version), None)
+    if rec is None:
+        lab = m.get("label") if isinstance(m.get("label"), dict) else {}
+        at = lab.get("latest_discovery_at")
+        head = (f"model: the latest discovery, at {T.when(at)}, not saved as a version yet" if at
+                else f"model{f' {_v(version)}' if version is not None else ''}: its version's record was not read")
+        return f"{head}; it has {counted(m)}"
+    saved = rec.get("saved_at")
+    before = since is not None and saved is not None and saved < since
+    how = "unchanged since then; last changed" if before else "changed"
+    return f"model {_v(version)}, {how} by {origin(rec.get('note'))} at {T.when(saved)}; it has {counted(m)}"
 
 
 def not_read(status, e: Exception) -> dict:
@@ -172,17 +216,19 @@ def no_model(e: Exception) -> list[str] | None:
     return [text or NO_MODEL, WAITS]
 
 
-def model_line(project: Project) -> str:
-    """The model's state in the line read_model gives (``model_state``), or the first sentence of its
-    no-model text, or that it could not be read (with the status): ``read_events`` with ``since``
-    carries it, so "what changed since" has it from its first call (T2d s16: the answer skipped the
-    second call, read_model, and gave no model state). Never raises."""
+def model_line(project: Project, since: float | None = None) -> str:
+    """The model's state with who changed it and when (``changed_line``: the version's recorded
+    origin, said unchanged when it was saved before ``since``), or the first sentence of its no-model
+    text, or that it could not be read (with the status): ``read_events`` with ``since`` carries it,
+    so "what changed since" has it from its first call (T2d s16: the answer skipped the second call,
+    read_model, and gave no model state). Never raises."""
     try:
         from orchestra.sd.reads import ReadError
     except ImportError:
         return "the model could not be read (no simulation extra)"
     try:
-        return model_state(reads(project).model(None)["model"])
+        x = reads(project)
+        m = x.model(None)["model"]
     except ReadError as e:
         status = getattr(e, "status", None) or 400
         if status == 404 and (said := no_model(e)) is not None:
@@ -191,6 +237,11 @@ def model_line(project: Project) -> str:
         return f"the model could not be read ({status})"
     except Exception as e:  # noqa: BLE001 - a failed read is said so, never as no model
         return f"the model could not be read ({getattr(e, 'status', None) or type(e).__name__})"
+    try:
+        versions = x.versions().get("versions") or []
+    except Exception:  # noqa: BLE001 - the line says the record was not read, never a cause
+        versions = []
+    return changed_line(m, versions, since)
 
 
 def read_series(x, a: dict) -> dict:

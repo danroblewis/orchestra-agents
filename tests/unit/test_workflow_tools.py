@@ -221,6 +221,19 @@ def test_the_repository_needs_the_owners_words_and_is_never_committed(project, s
     assert "?? .orchestra/" in git(project.repo_root, "status", "--porcelain")
 
 
+def test_a_write_the_plugin_sent_to_the_repositorys_copy_is_said_as_the_repositorys(project, store, fake, monkeypatch):
+    """T2f s10: the state directory's copy was shadowed by the repository's; the plugin now writes
+    the copy that is read and says which (Written.root), and the answer says it is uncommitted."""
+    def to_repository(project, definition, root="state"):
+        path = project.repo_root / ".orchestra" / "workflows" / definition["name"] / "workflow.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(definition))
+        return SimpleNamespace(path=path, root="repository", notes=["written to the repository's copy, not the state directory"])
+    monkeypatch.setattr(fake.define, "write", to_repository)
+    out = call(project, store, "declare_workflow", definition=DEF, reason=WHY)
+    assert out["root"] == "repository" and out["committed"] is False and "hand_to_coordinator" in out["next"]
+
+
 def test_only_the_supervisor_declares(project, store, fake):
     with pytest.raises(StoreError, match="needs the 'workflows' tool group"):
         call(project, store, "declare_workflow", role="coordinator", definition=DEF, reason=WHY)

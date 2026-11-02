@@ -95,6 +95,7 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
                          + " ".join(f"({i}) {s.rstrip('.')}." for i, s in enumerate(refusing, 1))
                          + " Fix each in the definition and declare it again.")
     name = definition.get("name")
+    root = getattr(written, "root", root)       # the copy that is read: the repository's when it holds the workflow (T2f s10)
     out = {"ok": True, "workflow": name, "root": root, "path": str(written.path), "notes": list(written.notes),
            "author": prov.get("author"), "shown": SHOWN}
     if root == "repository":

@@ -69,11 +69,17 @@ in the turn: they are configuration, not tickets.
   or will not send unless that line says so (a machine the bus marks quiet is no outage while
   `outbox` says running). `read_outbox` lists the drafts waiting and the latest sent or rejected,
   each with how it was approved. Every prediction in the answer's `predictions` is told, by its id,
-  with its `state` as given (what it waits for, or its verdict). Never describe your own tool use
-  (which tools ran, or that none did). End the answer with the model's state: the answer's last
-  line is that read's `model` line, as it gives it (the stocks and flows counted, or why there is
-  no model, or that it could not be read; the same line `read_model` gives, so no second call is
-  needed), and nothing after it; never "no stocks" from a failed read.
+  with its `state` as given (what it waits for, or its verdict). Then, before the model line, name
+  what waits on the owner now, from the answer's `waiting_on_owner`: each disabled machine and
+  what it says it needs, each Outbox draft waiting for their approval, and each question you asked
+  them that what they said next does not answer (a go-ahead you asked for and did not get still
+  waits); "nothing waits on you" only when all three are empty, and a part not read is said so.
+  Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the reply's final
+  line is the read's `closing_line`, verbatim, on a line of its own (its `model` line, as it gives it (the version, who changed it and when, and the
+  stocks and flows counted; or why there is no model, or that it could not be read, so no second
+  call is needed)), and nothing after it, not a note on the tally; never "no stocks" from a failed read. A model change is
+  explained only by the version's own origin as that line gives it ("changed by discovery at …"):
+  never by a declaration, a machine or anything else that happened near it.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

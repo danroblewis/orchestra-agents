@@ -29,6 +29,7 @@ from orchestra.tokens import owner_only
 from . import (
     access,
     budget,
+    closing_line,
     design,
     design_confirm,
     design_instruments,
@@ -680,6 +681,7 @@ class AgentHost:
 
         res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
         res = self._checked(res, began, message, emit)
+        res = self._closed(res, began, emit)
         budget.record(self.store, res.cost_usd, initiative=False)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
@@ -749,6 +751,17 @@ class AgentHost:
         if emit is not None:
             emit({"type": "assistant_end", "text": fix})
         return TurnResult(text=f"{res.text.rstrip()}\n\n{fix}", cost_usd=res.cost_usd)
+
+    def _closed(self, res: TurnResult, began: float, emit=None) -> TurnResult:
+        """A reply after a ``read_events`` with ``since`` this turn ends on its ``closing_line``
+        (closing_line.py): when it does not, Orchestra appends the line (T2f s16)."""
+        line = None if res.error or res.timed_out else closing_line.due(self.store, began)
+        if line is None or closing_line.ends_on(res.text, line):
+            return res
+        log("supervisor: the reply did not end on the closing line; appended")
+        if emit is not None:
+            emit({"type": "assistant_end", "text": line})
+        return TurnResult(text=f"{res.text.rstrip()}\n\n{line}", cost_usd=res.cost_usd)
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)

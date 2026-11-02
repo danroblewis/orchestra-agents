@@ -33,6 +33,7 @@ from . import (
     modeling,
     observe,
     observe_model,
+    outbox_read,
     patching,
     prompting,
     request_work,
@@ -152,6 +153,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return bus_reads.read_events(store, a)
     if command == "list_machines":
         return machines_read.list_machines(store, a)
+    if command == "read_outbox":
+        return outbox_read.read_outbox(project, a)
 
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)

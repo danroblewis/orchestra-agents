@@ -37,7 +37,8 @@ in the turn: they are configuration, not tickets.
 - When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
   with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
   happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says
-  there are more.
+  there are more. `read_outbox` lists the drafts waiting for the owner and the latest sent or
+  rejected, each with how it was approved.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

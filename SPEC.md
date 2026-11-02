@@ -804,7 +804,8 @@ server reads one), `list_metrics` (the project's store, as the Core page's catal
 `snapshot` (the task system's query, offered only with the task system installed), `read_events`
 (types or prefixes, `since`, newest or oldest first), and `list_machines` (Orchestra's machines view
 over the bus: each machine's kind, engagement and announced notes, `disabled` first,
-`machines_read.py`). All of it reads through Orchestra as a library; nothing is written.
+`machines_read.py`), and `read_outbox` (the outbox plugin's state API through Orchestra's web server:
+the drafts waiting, sent and rejected, with how each was approved; `outbox_read.py`). All of it reads through Orchestra as a library; nothing is written.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),

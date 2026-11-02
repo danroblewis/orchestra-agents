@@ -324,6 +324,10 @@ TOOLS: list[ToolDef] = [
             "Every machine on the bus as the Machines page has it: its kind, how it is engaged, whether it is active, and the "
             "notes it announced about itself (disabled with its reason first, then fake, stand_in, writes, ...). The "
             "disabled ones are listed apart: they do no work until what they name is fixed."),
+    ToolDef("read_outbox", "observe",
+            "The Outbox's drafts as its approval page has them: those waiting for the owner, and the latest sent, rejected "
+            "or failed, each with its kind, target, drafter and how it was approved (the owner, by their person id, or the "
+            "kind's policy). Read only: the owner approves on the Outbox page."),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment. A workflow's items are not here: list_items."),

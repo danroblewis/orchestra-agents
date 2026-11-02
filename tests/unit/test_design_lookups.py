@@ -238,3 +238,29 @@ def test_list_machines_reads_the_bus_as_the_machines_page_does(project, store):
                                                         "disabled": "no token"}, source="slack_notify")
     out = call(project, store, "list_machines")
     assert out["disabled"] == ["slack_notify: no token"]
+
+
+def test_read_outbox_lists_waiting_sent_and_rejected_with_how_each_was_approved(project, store, monkeypatch):
+    from orchestra_agents import outbox_read
+    state = {"ok": True, "configured": True, "running": True, "owner": "person.dan",
+             "kinds": [{"name": "live.nudge", "approval": "always", "unedited_streak": 3}],
+             "waiting": [{"id": "d1", "kind": "live.nudge", "state": "drafted", "target": {"pr": 15}, "drafter": "review_nudger/1",
+                          "content": "x" * 400, "held": None}],
+             "recent": [{"id": "d0", "kind": "github.label", "state": "sent", "target": {"pr": 14}, "drafter": "sail",
+                         "approved_by": "owner", "approver": "person.dan", "edited": False, "sent_at": 2.0},
+                        {"id": "d9", "kind": "jira.transition", "state": "rejected", "target": {"issue": "SCRUM-3"},
+                         "drafter": "worker/1", "approved_by": None, "approver": "person.dan", "reason": "wrong_target"}]}
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: state)
+    out = call(project, store, "read_outbox")
+    assert out["summary"][0] == "1 waiting; of the latest 2 decided: 1 sent, 1 rejected, 0 failed"
+    [w] = out["waiting"]
+    assert w["how"] == "waiting for the owner" and w["content"].endswith("(400 chars)") and w["target"] == {"pr": 15}
+    sent, rejected = out["recent"]
+    assert sent["how"] == "approved by the owner (person.dan), unedited"
+    assert rejected["how"] == "rejected by the owner (person.dan): wrong_target"
+    assert out["kinds"] == [{"name": "live.nudge", "approval": "always", "unedited_streak": 3}]
+
+
+def test_read_outbox_without_the_web_server_says_where_else_to_look(project, store):
+    with pytest.raises(StoreError, match="web server is not running.*types outbox"):
+        call(project, store, "read_outbox")

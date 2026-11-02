@@ -40,7 +40,8 @@ in the turn: they are configuration, not tickets.
 - When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
   with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
   happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says
-  there are more.
+  there are more. `read_outbox` lists the drafts waiting for the owner and the latest sent or
+  rejected, each with how it was approved.
 - The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
   its own scratch folder, which does the task (research, analysis, writing, calculation) and

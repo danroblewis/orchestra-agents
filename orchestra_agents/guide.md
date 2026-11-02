@@ -199,7 +199,8 @@ a file. Follow it top to bottom:
    (<https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md>): choose its strategy
    there; the declaration is yours (its §5.6).
 3. **Machines.** Read the map (`read_design`, `read_events`, `read_model`), then `declare_machine`:
-   a dashed, "unconfirmed" node; nothing runs. Refine it as the owner talks (`refine_machine`,
+   a dashed, "unconfirmed" node; nothing runs (a machine a plugin proposed may already run: heard on
+   the bus, or a workflow's program; `list_machines`' `running` says which). Refine it as the owner talks (`refine_machine`,
    `declare_event`, `switch_kind`), and give it an expected effect (`declare_expected_effect`).
    What it watches, or reads at each run (a scheduled one too), is event types in `receives`
    (`add_receives`), never only words in its steps or uses; only types a machine speaks: heard on

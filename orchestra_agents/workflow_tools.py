@@ -27,6 +27,7 @@ from types import SimpleNamespace
 from . import design
 from .config import Project
 from .store import AgentStore, StoreError
+from .tasking_text import gate
 
 ROOTS = ("state", "repository")
 MISSING = ("the Workflows plugin (orchestra-workflows) is not installed in the environment the agents run in, so there "
@@ -92,9 +93,10 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
            "author": prov.get("author"), "shown": SHOWN}
     if root == "repository":
         out["committed"] = False
-        out["next"] = (f"The file is in the checkout, uncommitted ({_rel(o, written.path)}): nothing here commits it. Hand "
-                       "it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull request, and tell "
-                       "the owner it applies now in this checkout only.")
+        out["next"] = gate(f"The file is in the checkout, uncommitted ({_rel(o, written.path)}): nothing here commits it. "
+                           "[[tasking]]Hand it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull "
+                           "request, and tell[[/tasking]][[no-tasking]]Code work is not handed on here: tell the owner it is "
+                           "theirs to commit, and tell[[/no-tasking]] the owner it applies now in this checkout only.")
     if runs := clock_words(definition.get("starts")):
         out["clock"] = runs + ": say this run time, and no other"
     if written.notes:

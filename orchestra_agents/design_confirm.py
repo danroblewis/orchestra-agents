@@ -40,11 +40,11 @@ import time
 import uuid
 from datetime import datetime
 
-from . import design_asked, intended_api, state_machines
+from . import design_asked, intended_api, machines_running, state_machines
 from .clock import next_at, zone
 from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, plural
-from .design_dynamics import resolve
+from .design_dynamics import last_seen, resolve
 from .design_machines import (
     apply_kind,
     current,
@@ -57,6 +57,7 @@ from .design_machines import (
     waiting_line,
 )
 from .store import AgentStore, StoreError
+from .tasking_text import gate
 
 PARTS = ("stock", "effect", "flow", "machine", "attachment")
 
@@ -156,7 +157,11 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     change = uuid.uuid4().hex                            # the id of the system.changed its first turn will publish
     done = apply(project, [{"op": "confirm", "part": "machine", "id": eid}], prov)
     m = current(project, eid)
-    lines = [f"machine {eid} confirmed", "the Machines page draws it solid, \"declared · never heard\""]
+    programs, seen = machines_running.workflow_programs(project), last_seen(store).get(eid)
+    lines = [f"machine {eid} confirmed", "the Machines page draws it solid" + ("" if seen is not None or eid in programs
+                                                                             else ", \"declared · never heard\"")]
+    if seen is not None or eid in programs:
+        lines.append(f"{eid}: {machines_running.running(eid, m, seen, programs)}")
     extra: dict = {"change": change}
     if runs:
         dst = state_machines.write(project, m, reads_of(project, store, m))
@@ -166,9 +171,13 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         lines.append(f"its spec, role and agent records are at {dst}, on {state_machines.runs_on(project)}; "
                      f"{_first_run(m)}. Nothing was committed, and the host runs it from there")
         extra["spec"] = str(dst)
+    elif here and eid in programs:
+        lines.append("its program is the workflow's: the Workflows plugin's program host runs it when the step is offered "
+                     "(not a launcher process, so list_processes does not list it); nothing is to be written")
     elif here:
-        lines.append("next: the program is a worker's to write (hand_to_coordinator) unless it exists; when it does, "
-                     "set_machine adds its [[machines]] entry, in the overlay")
+        lines.append(gate("next: the program is a worker's to write ([[tasking]]hand_to_coordinator[[/tasking]][[no-tasking]]"
+                          "code work is not handed on here; say so[[/no-tasking]]) unless it exists; when it does, "
+                          "set_machine adds its [[machines]] entry, in the overlay"))
     else:
         lines.append("nothing runs here: the declaration waits to be heard on the bus or measured")
     if here:

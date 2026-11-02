@@ -13,13 +13,15 @@ host, not followed by an event of the machine), else "last heard <when>". A mach
 as not active is not called quiet here: the T2b walkthrough's Supervisor called a stand-in the
 harness was holding "quiet" and told the owner to restart it.
 
-What the page adds from elsewhere (the declared layer, counted traffic) is not here: read_design
-has the declared machines. Nothing is written."""
+What the page adds from elsewhere (counted traffic, the declared envelope) is not here: read_design
+has the declared machines. A machine the declared layer holds is said ``declared`` (who proposed or
+confirmed it) and ``running`` (``machines_running``): heard on the bus, or a workflow's program. Nothing is written."""
 
 from __future__ import annotations
 
 import time
 
+from . import machines_running
 from .bus_reads import _ts, recent
 from .store import AgentStore
 
@@ -96,16 +98,25 @@ def list_machines(store: AgentStore, a: dict | None = None) -> dict:
     rows = [m for m in v.get("machines") or [] if not m.get("bootstrap")]
     marks = quiet_marks(store)
     states = [state(m, marks.get(m["id"])) for m in rows]
+    programs = machines_running.workflow_programs(store.project)
+    runs = {m["id"]: machines_running.running(m["id"], m.get("intent"), m.get("last_seen"), programs)
+            for m in rows if m.get("intent") or m["id"] in programs}
     machines = [{"id": m["id"], "kind": m.get("kind"), "mode": m.get("mode"), "state": heard, "gone_quiet": gone,
+                 **({"declared": machines_running.by_whom(m["intent"])} if m.get("intent") else {}),
+                 **({"running": runs[m["id"]]} if m["id"] in runs else {}),
                  "package": m.get("package"), "name": m.get("name"), "notes": notes(m.get("about")),
                  "last_seen": m.get("last_seen")} for m, (heard, gone) in zip(rows, states, strict=True)]
     disabled = [f"{m['id']}: {m['notes']['disabled']}" for m in machines if m["notes"].get("disabled")]
     fakes = [f"{m['id']}: {m['notes']['fake']}" for m in machines if m["notes"].get("fake")]
-    summary = [line(m, heard) for m, (heard, _) in zip(rows, states, strict=True)]
+    summary = [line(m, heard) + (f"; {runs[m['id']]}" if m["id"] in runs else "")
+               for m, (heard, _) in zip(rows, states, strict=True)]
     if disabled:
         summary.insert(0, "disabled (needs the owner): " + "; ".join(disabled))
     return {"ok": True, "summary": summary, "machines": machines, "disabled": disabled, "fakes": fakes,
             "note": ("notes are what each machine announced about itself (orchestra.machine.started), passed on as said; "
                      "a disabled machine does no work until what it names is fixed; state is how it is heard: an ad hoc machine "
                      "acts when it is offered work, so its silence is no fault; only gone_quiet (the core's mark, on a "
-                     "continuous or scheduled machine) means it stopped being heard, and only then may it need restarting")}
+                     "continuous or scheduled machine) means it stopped being heard, and only then may it need restarting; "
+                     "running says whether a declared machine runs: one heard on the bus is running, and a program a "
+                     "workflow's step names runs as that workflow's program, confirmed or not (unconfirmed is the declared "
+                     "layer's state, never a switch that stops it)")}

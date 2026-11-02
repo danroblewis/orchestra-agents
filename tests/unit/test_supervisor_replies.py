@@ -204,5 +204,5 @@ def test_what_changed_since_tells_every_class_in_order_and_names_what_the_read_m
                  "incidents opened and resolved", "(`outbox.sent`)", "items started (`item.requested`",
                  "closed (`item.closed`)", "`orchestra.model.changed`"):
         assert word in text, word
-    assert "A rejection and its triage are told, never folded into \"reworked\"" in text
-    assert "Name each class the read did not cover" in text and "never \"no stocks\"" in text
+    assert "A rejection and its triage verdict (`tally`'s `triage`) are told, never folded into \"reworked\"" in text
+    assert "Name each class the read did not cover" in text and "never \"no stocks\" from a failed read" in text

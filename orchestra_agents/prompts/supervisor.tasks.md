@@ -35,7 +35,10 @@ in the turn: they are configuration, not tickets.
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
   it outside (a ticket's key, a pull request's number), where it waits and why. "What needs me" also
   names every machine `list_machines` lists as disabled, with the reason it gave (a Slack
-  notifier whose token lacks a scope does no work until that is fixed). `snapshot` is the
+  notifier whose token lacks a scope does no work until that is fixed). A machine a plugin proposed
+  is not something that needs them: each machine's `running` (`list_machines`) says whether it runs,
+  and one heard on the bus, or a workflow's program, runs whether or not it is confirmed; say a
+  machine does not run only when `running` says it is not heard and no workflow runs it. `snapshot` is the
   task system's, for a project that runs one.
   An item waiting at a step on an outside system or an ad-hoc machine (its wait's `for` names
   the events that end it) is waiting for that event, not stuck on a quiet machine. Never advise
@@ -55,11 +58,15 @@ in the turn: they are configuration, not tickets.
   (SAIL, REJECTED and SAILED, each with its pull request), triage (its verdict), incidents opened
   and resolved, the Outbox's sends (`outbox.sent`), items started (`item.requested`, the owner's
   from the chat said so) and closed (`item.closed`), and model changes (`orchestra.model.changed`:
-  what it added). A rejection and its triage are told, never folded into "reworked". Name each
-  class the read did not cover (the window, the limit, a type left out) rather than skipping it.
+  what it added). Every number and name comes from the answer's `tally` (each class counted over
+  the whole window, each pull request and ticket once): copy them, never count the events yourself.
+  A rejection and its triage verdict (`tally`'s `triage`) are told, never folded into "reworked".
+  Name each class the read did not cover (the window, the limit, a type left out) rather than skipping it.
   `read_outbox` lists the drafts waiting for the owner and the latest sent or rejected, each with
-  how it was approved. Say the model's state only from `read_model` in this turn; when it could
-  not be read, say so, never "no stocks".
+  how it was approved. An Outbox with no drafts waiting is idle: say "nothing waiting", never that
+  it will not send or is down (a quiet machine that acts when given a draft is no fault). End the
+  answer with the model's state from `read_model`, called in this turn: its `state` (the stocks and
+  flows counted), or its no-model text, or that it could not be read; never "no stocks" from a failed read.
 - The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
   its own scratch folder, which does the task (research, analysis, writing, calculation) and

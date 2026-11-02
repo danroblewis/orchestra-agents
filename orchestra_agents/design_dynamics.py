@@ -17,7 +17,7 @@ import time
 from orchestra.config import ConfigError, parse_duration
 from orchestra.sd.intended.ops import ENV_NAME
 
-from . import intended_api
+from . import intended_api, machines_running
 from .config import Project
 from .design import MACHINE, answer, apply, plural
 from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
@@ -382,15 +382,28 @@ def _event_edges(project: Project, store: AgentStore, layer: dict) -> dict:
     return out
 
 
+def last_seen(store: AgentStore) -> dict[str, float]:
+    """When the bus last heard each machine, as the Machines page has it (``list_machines``' view)."""
+    from .machines_read import view
+    try:
+        rows = view(store).get("machines") or []
+    except Exception:  # noqa: BLE001 - without the view no machine is said heard, which is never "running"
+        return {}
+    return {m["id"]: m["last_seen"] for m in rows if m.get("id") and m.get("last_seen") is not None}
+
+
 def read_design(project: Project, store: AgentStore, a: dict) -> dict:
     from .design_instruments import drafts
     from .design_passes import last_proposal
     lay = intended_api.layer(project)
     out = lay.design()
     layer = lay.read()["layer"]
+    programs, seen = machines_running.workflow_programs(project), last_seen(store)
     machines = {mid: {k: m.get(k) for k in ("state", "title", "description", "kind", "managed", "engagement", "receives",
                                             "emits", "reads", "spec", "guessed", "pending", "expected_effect", "latest")}
                 for mid, m in (layer.get("machines") or {}).items()}
+    for mid, m in machines.items():
+        m["running"] = machines_running.running(mid, layer["machines"][mid], seen.get(mid), programs)
     return {"ok": True, **out, "machines": machines, "events": _event_edges(project, store, layer),
             "instruments": drafts(store), "refinement": last_proposal(store), "kept_in": intended_api.where(project)}
 

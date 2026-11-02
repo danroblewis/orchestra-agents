@@ -52,6 +52,7 @@ from .design_dynamics import no_secret, options_of, resolve
 from .secret_shapes import secret_in
 from .setup_tools import INSTRUMENTS_CHANGED
 from .store import AgentStore, StoreError
+from .tasking_text import gate
 
 MAX_LINES = 100
 FIRST_ROUND_S = 120
@@ -88,7 +89,7 @@ def check_script(text: str) -> list[str]:
     lines = text.splitlines()
     if len(lines) > MAX_LINES:
         raise StoreError(f"the script is {len(lines)} lines; one the Supervisor writes is at most {MAX_LINES} (anything longer is "
-                         "code: hand it to the Coordinator)")
+                         "code: " + gate("[[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]not handed on here; say so[[/no-tasking]])"))
     for n, line in enumerate(lines, 1):
         if why := secret_in(line):
             raise StoreError(f"line {n} looks like it holds a secret ({why}); a credential is named only by its environment "

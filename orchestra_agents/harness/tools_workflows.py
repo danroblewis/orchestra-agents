@@ -94,7 +94,7 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
               "expressions or scripts: anything that needs logic is a machine)", "properties": {
     "name": S("The workflow's name: lowercase letters, digits, _ and - (task_loop); its folder's name"),
     "about": S("One sentence: what the workflow is for and what a request's brief selects (at most 400 characters)"),
-    "planner": S("The role that is told when an item needs attention (default: the settings' planner, coordinator)"),
+    "planner": S("The role that is told when an item needs attention (default: the settings' planner[[tasking]], coordinator[[/tasking]])"),
     "starts": {"type": "array", "description": "What starts an item: [{\"request\": true}] (an item.requested naming "
                "it), [{\"event\": \"jira.issue.assigned\", \"data\": {\"assignee\": {\"setting\": \"owner\"}}}] (an "
                "event, only when its data fields match), [{\"every\": \"1h\"}] (one item per interval, counted from "
@@ -158,7 +158,7 @@ WORKFLOW_TOOLS: list[ToolDef] = [
     ToolDef("request_work", "work",
             "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
             "with the fields, if any). The Supervisor asks only for the owner: quote their words, and the request goes "
-            "out as theirs (source owner); the Coordinator's is its own, as the planner. Refused, nothing published: "
+            "out as theirs (source owner)[[tasking]]; the Coordinator's is its own, as the planner[[/tasking]]. Refused, nothing published: "
             "an unknown workflow or one a request does not start (list_workflows), an id already used, or the floor "
             "not running. Answers the item's id, the Items page link and how to follow it (explain_item).",
             {"workflow": S("The workflow's name, as list_workflows shows it (task_loop)"),
@@ -169,6 +169,6 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "item": S("The new item's id (leave out: <workflow>-<6 hex>)"),
              "quote": S("The Supervisor's: the owner's own words asking for this work, from their message this turn, "
                         "exactly, at least three words (or their whole message). Required of the Supervisor; never "
-                        "invent one. The Coordinator leaves it out"),
+                        "invent one.[[tasking]] The Coordinator leaves it out[[/tasking]]"),
              "reason": REASON}, ("workflow", "brief", "reason")),
 ]

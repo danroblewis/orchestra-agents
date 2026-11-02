@@ -7,7 +7,7 @@ gets is decided by tool *groups* (``RoleDef.tools``), never per tool."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ..protocol import STATES as _STATES
 
@@ -164,7 +164,9 @@ TOOLS: list[ToolDef] = [
             "by_type counts every type in the window (sources, last seen); announced_not_heard lists the types machines announced "
             "they listen for that no event carried yet (they are known: name them); events are the newest first (or, with order "
             "oldest, the first after since, in order), at most limit, each with its short fields. An item.closed is an "
-            "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after.",
+            "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after. With since, "
+            "tally counts each class over the whole window (issues opened and closed, pull requests opened and merged, checks, labels by "
+            "name, triage verdicts, incidents, the Outbox's drafts, approvals and sends, items, model changes): copy it.",
             {"minutes": I("How far back, default 60 (since overrides it)"),
              "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
              "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),
@@ -207,7 +209,7 @@ TOOLS: list[ToolDef] = [
             "a wake_on event). The team may be one you create next.",
             {"name": S("lowercase_with_underscores"), "roles": A("Role names, at least one"), "team": S("Team name, or empty for none"),
              "kind": S("continuous | scheduled | ad_hoc"), "session": S("resident | ephemeral"),
-             "wake_on": A("Event types, optionally filtered: 'gate.landed', 'task.reported:BLOCKED', 'task.attention_needed:coordinator'"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
+             "wake_on": A("Event types, optionally filtered: 'gate.landed', 'task.reported:BLOCKED'[[tasking]], 'task.attention_needed:coordinator'[[/tasking]]"), "every": S("e.g. 30m, 6h, 1d"), "at": S("HH:MM"),
              "description": S("One line: what this agent is for"), **DESIGNED_ROOT},
             ("name", "roles", "kind")),
     ToolDef("update_agent", "roles", "Change a custom agent's roles, team, kind, schedule, or session policy.",
@@ -318,7 +320,7 @@ TOOLS: list[ToolDef] = [
     ToolDef("read_transcript", "observe",
             "An agent's transcript, trimmed to the turns you ask for: what it was told, what it called and what it said. By "
             "agent (its latest session) or by session id, around a time.",
-            {"agent": S("The agent (supervisor, coordinator, worker, ...)"), "session": S("Or a session id (worker-ORC-3)"),
+            {"agent": S("The agent (supervisor, [[tasking]]coordinator, [[/tasking]]worker, ...)"), "session": S("Or a session id (worker-ORC-3)"),
              "around": S("A time (ISO or unix seconds): the turns nearest it; default the latest"),
              "turns": I("How many turns, default 2, at most 6")}),
     ToolDef("list_machines", "observe",
@@ -360,7 +362,7 @@ TOOLS: list[ToolDef] = [
              "timeout": S("How long it may take, e.g. 300s"), "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("command", "reason")),
     ToolDef("set_capacity_limit", "setup",
             "Set the most tickets offered at once to workers and to reviewers ([tasks] workers, reviewers): the ceiling "
-            "under which the Coordinator's set_capacity dial moves.",
+            "under which[[tasking]] the Coordinator's[[/tasking]] set_capacity dial moves.",
             {"workers": I(), "reviewers": I(), "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("reason",)),
     ToolDef("set_machine", "setup",
             "Add or change a program Orchestra keeps running ([[machines]]): a command in the repository. Orchestra starts "
@@ -488,8 +490,9 @@ TOOLS: list[ToolDef] = [
     # patch: self-healing, the Supervisor's alone (patching.py, upstream.py)
     ToolDef("propose_patch", "patch",
             "Repair a bug in the project's own code (work = code): your unified diff is applied and committed in a scratch "
-            "worktree on a branch of its own (supervisor/patch-<name>), never in the checkout, and the Coordinator is "
-            "handed a ticket to land that commit through a review and the gate, whose tests run on it.",
+            "worktree on a branch of its own (supervisor/patch-<name>), never in the checkout[[tasking]], and the Coordinator is "
+            "handed a ticket to land that commit through a review and the gate, whose tests run on it[[/tasking]][[no-tasking]]; nothing hands the branch on "
+            "here (no task system): say so and name it[[/no-tasking]].",
             {"name": S("lowercase_name for the patch"), "diff": S("A unified diff against the base branch (git apply)"),
              "why": S("What broke and why, with the evidence (the log line, the event)"),
              "test": S("How it is shown fixed: the test the diff adds or the command to run"),
@@ -536,6 +539,8 @@ def task_system(tool: ToolDef) -> bool:
 
 def tools_for(groups: list[str] | tuple[str, ...] | set[str]) -> list[ToolDef]:
     from .. import installed
+    from ..tasking_text import gate, gate_schema
     g = set(groups)
     tasking = installed.tasking()
-    return [t for t in TOOLS if t.group in g and (tasking or not task_system(t))]
+    return [replace(t, description=gate(t.description, tasking), properties=gate_schema(t.properties, tasking))
+            for t in TOOLS if t.group in g and (tasking or not task_system(t))]

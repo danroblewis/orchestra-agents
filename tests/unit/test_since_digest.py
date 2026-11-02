@@ -114,3 +114,19 @@ def test_a_question_asked_is_told_with_what_the_owner_said_next():
     text = since_digest.owner(w, since_digest.Clock("UTC", NOW))
     assert "I asked at 13:24: \"Shall I write it?\"; what you said next: \"Remind the reviewer.\"" in text
     assert "I asked at 13:33: \"Confirm it?\"; your message now is the first since" in text
+
+
+def test_the_prompt_replies_with_the_digest_as_returned_and_never_guesses_a_cause(project, monkeypatch):
+    """T2g s16 (the digest), and s08 and s15: "the stand-in may have stopped", "the incident may be
+    holding SAIL", each a hedged wrong guess."""
+    from orchestra_agents import installed, prompting
+    from orchestra_agents.org import built_in_agents
+    for on in (False, True):
+        monkeypatch.setattr(installed, "tasking", lambda on=on: on)
+        text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+        assert ("call `read_events` once, with `since` (the time, or `24h`), and reply with its `digest` exactly as "
+                "returned: no rewording, no additions, no omissions, then nothing") in text
+        assert "its last line is the read's `closing_line`, the model line" in text
+        assert "copy them, never count the events yourself" not in text          # the old rule is gone
+        assert ("Never guess at a cause: when the tools do not say why something happened or waits, say \"the tools "
+                "do not say why\", never a likely cause, a hypothesis or what something \"may\" be doing") in text

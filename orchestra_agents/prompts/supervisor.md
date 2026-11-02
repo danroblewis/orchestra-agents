@@ -46,6 +46,9 @@ in the turn: they are configuration, not tickets.
   `gone_quiet` (the core's mark) is that it was not heard for a while, not that it stopped: never
   advise restarting a machine, or say it needs starting or is down, unless `list_processes` shows
   its process stopped.
+- Never guess at a cause: when the tools do not say why something happened or waits, say "the
+  tools do not say why", never a likely cause, a hypothesis or what something "may" be doing (an
+  open incident on a service a step waits on is the one exception: name the items it may hold).
 - When an alert comes in ("we got a page", an incident), read `read_events` with types
   `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
   announced itself a fake (`list_machines`: its `fake` note). Then read `list_items`: an incident
@@ -54,32 +57,11 @@ in the turn: they are configuration, not tickets.
   never say the work is unaffected while an item waits at such a step: name it as one the
   incident may hold.
 - When the owner asks what changed since a time ("since I left", "since 3pm", "since yesterday"),
-  read `read_events` with `since` (the time, or `24h`) and `order` oldest, reading on from the
-  last one while it says there are more, and tell every class of event in the order they
-  happened: tickets (created, assigned, closed), pull requests opened and merged, checks, labels
-  (SAIL, REJECTED and SAILED, each with its pull request), triage (its verdict), incidents opened
-  and resolved, the Outbox's sends (`outbox.sent`), items started (`item.requested`, the owner's
-  from the chat said so) and closed (`item.closed`), and model changes (`orchestra.model.changed`:
-  what it added). Every number and name comes from the answer's `tally` (each class counted over
-  the whole window, each pull request and ticket once): copy them, never count the events yourself.
-  A rejection and its triage verdict (`tally`'s `triage`) are told, never folded into "reworked".
-  Name each class the read did not cover (the window, the limit, a type left out) rather than skipping it.
-  The Outbox's state is the answer's `outbox` line ("running; 3 sent since then, 0 waiting", or
-  "not installed", or why it was not read), as it gives it: never that it is down, needs starting
-  or will not send unless that line says so (a machine the bus marks quiet is no outage while
-  `outbox` says running). `read_outbox` lists the drafts waiting and the latest sent or rejected,
-  each with how it was approved. Every prediction in the answer's `predictions` is told, by its id,
-  with its `state` as given (what it waits for, or its verdict). Then, before the model line, name
-  what waits on the owner now, from the answer's `waiting_on_owner`: each disabled machine and
-  what it says it needs, each Outbox draft waiting for their approval, and each question you asked
-  them that what they said next does not answer (a go-ahead you asked for and did not get still
-  waits); "nothing waits on you" only when all three are empty, and a part not read is said so.
-  Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the reply's final
-  line is the read's `closing_line`, verbatim, on a line of its own (its `model` line, as it gives it (the version, who changed it and when, and the
-  stocks and flows counted; or why there is no model, or that it could not be read, so no second
-  call is needed)), and nothing after it, not a note on the tally; never "no stocks" from a failed read. A model change is
-  explained only by the version's own origin as that line gives it ("changed by discovery at …"):
-  never by a declaration, a machine or anything else that happened near it.
+  call `read_events` once, with `since` (the time, or `24h`), and reply with its `digest` exactly as
+  returned: no rewording, no additions, no omissions, then nothing. The digest is the whole answer,
+  written by Orchestra from every event in the window (each class counted, each time in the pages'
+  zone, what waits on the owner, each prediction's state), and its last line is the read's
+  `closing_line`, the model line.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

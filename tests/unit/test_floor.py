@@ -4,6 +4,7 @@ tool (``report_outcome``, tooling.py): the mapping from what an agent reports to
 offer finishes with, and who holds an offer by the bus's order."""
 
 import subprocess
+from pathlib import Path
 
 import pytest
 from conftest import agents_project
@@ -151,6 +152,7 @@ def test_the_copied_names_match_the_workflows_contract():
     assert tuple(contract.LISTENS_FOR) == floor.LISTENS_FOR
     acts = pytest.importorskip("orchestra_workflows.floor.acts")
     assert floor.ATTENTION_NEEDED == acts.ATTENTION                       # the floor's attention event
+    assert floor.CLOSED == acts.CLOSED                                    # an item's end
     oid = "I1.work.aa"
     for to, seq in TABLE:                                                 # the claim rule, read both ways
         made = {"offer": oid, "role": "worker", "item": "I1", "to": to}
@@ -160,6 +162,18 @@ def test_the_copied_names_match_the_workflows_contract():
         assert floor.winner(flat, oid) == contract.winner(envelopes, oid), (to, seq)
     for t, d in STOPS:                                                    # the withdrawal rule, read both ways
         assert floor.stops({"type": t, **d}, oid) == contract.stops({"type": t, "data": d}, oid, "worker/1"), d
+
+
+CONTRACT_DOC = Path.home() / "orchestra-workflows" / "docs" / "machine-contract.md"
+
+
+@pytest.mark.skipif(not CONTRACT_DOC.exists(), reason="the Workflows plugin's repository is not beside this one")
+def test_the_copied_item_closed_is_the_one_the_contract_document_describes():
+    row = next(line for line in CONTRACT_DOC.read_text().splitlines() if line.startswith(f"| `{floor.CLOSED}`"))
+    for said in ("<planner>/dispatch", "the end of every workflow it entered", "reason: finished", "`workflow`",
+                 "`last_step`", "`outcome`", "Nothing waits on a closed item"):
+        assert said in row, said
+    assert all(f"`{k}`" in row for k in floor.CLOSED_BY_FLOOR), row
 
 
 def a_host(project, harness):
@@ -218,7 +232,8 @@ def test_the_floor_s_attention_wakes_the_planner_it_names(project, request):
     woke = {w["target"]: w["reason"] for w in store.runtime()["wakeups"]}
     assert "coordinator" in woke and "supervisor" not in woke
     assert "the Workflows floor asks the coordinator to look at I1 (workflow loop step review)" in woke["coordinator"]
-    assert "guard within" in woke["coordinator"]
+    assert "guard" not in woke["coordinator"].split(": ", 1)[1].replace("review passed its within", "")
+    assert "explain_item says what it waits for and what ends the wait" in woke["coordinator"]
     store.events.publish(floor.ATTENTION_NEEDED, {"to": "supervisor", "reason": "x"}, source="coordinator/dispatch", subject="I2")
     host._wake_on_events()
     assert any(w["target"] == "supervisor" and "attention.needed" in w["reason"] for w in store.runtime()["wakeups"])

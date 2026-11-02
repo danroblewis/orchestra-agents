@@ -111,7 +111,9 @@ def test_the_machine_s_agent_holds_report_outcome_and_listens_for_offers(project
     assert access.granted_groups(project, "triage") is None                 # no such agent yet
     universal_machine(project)
     assert "report_outcome" in access.granted_groups(project, "triage")
-    assert "report_outcome" not in access.granted_groups(project, "worker")
+    # the built-in worker serves the floor here (serves = ["worker", "reviewer"]): it holds report_outcome
+    # for an offer whose outcomes report_ticket does not report (floor.report_tool); never otherwise
+    assert ("report_outcome" in access.granted_groups(project, "worker")) is ("worker" in project.config.serves)
     worker = built_in_agents()["worker"]
     assert {"offer.made", "offer.withdrawn"} <= set(listens_for(worker, "code", floor=True))
     assert "offer.made" not in listens_for(worker, "code")
@@ -125,7 +127,7 @@ def test_report_outcome_is_checked_against_the_offer_the_session_holds(project):
     store.set_session("triage-I1", kind="triage", offer="I1.work.aa", offer_outcomes=["triaged"])
     with pytest.raises(StoreError, match="one of triaged or blocked"):
         tooling.handle(project, store, "report_outcome", {"outcome": "fixed", "summary": "x"}, role="triage", ticket_env="I1.work.aa")
-    with pytest.raises(StoreError, match="refused report_outcome"):
+    with pytest.raises(StoreError, match="holds none"):          # the triage session's offer is not the worker's
         tooling.handle(project, store, "report_outcome", {"outcome": "ready", "summary": "x"}, role="worker", ticket_env="I1.work.aa")
     assert tooling.handle(project, store, "report_outcome", {"outcome": "triaged", "summary": "a bug"}, role="triage",
                           ticket_env="I1.work.aa")["ok"]
@@ -237,3 +239,28 @@ def test_the_floor_s_attention_wakes_the_planner_it_names(project, request):
     store.events.publish(floor.ATTENTION_NEEDED, {"to": "supervisor", "reason": "x"}, source="coordinator/dispatch", subject="I2")
     host._wake_on_events()
     assert any(w["target"] == "supervisor" and "attention.needed" in w["reason"] for w in store.runtime()["wakeups"])
+
+
+def test_the_built_in_exit_tool_only_when_the_offer_has_its_outcomes():
+    """R3 e (09:41Z "a 'task' is a type of 'item'"): a worker's step whose outcomes are not ready is
+    given report_outcome with those outcomes, never report_ticket folded into blocked."""
+    assert floor.report_tool("worker", ["ready", "blocked"]) == "report_ticket"
+    assert floor.report_tool("worker", []) == "report_ticket"                       # any outcome goes on
+    assert floor.report_tool("worker", ["drafted", "skipped"]) == "report_outcome"
+    assert floor.report_tool("reviewer", ["approved", "rejected"]) == "report_review"
+    assert floor.report_tool("reviewer", ["approved"]) == "report_outcome"
+    assert floor.report_tool("triage", ["triaged"]) == "report_outcome"
+    task, _ = floor.task_text({"item": "I1", "offer": "I1.w.1", "outcomes": ["drafted", "skipped"]}, "worker", None)
+    assert "`report_outcome` with `outcome` one of `drafted`, `skipped` or `blocked`" in task and "report_ticket" not in task
+    assert floor.outcome_of({"outcome": "drafted", "summary": "ok"}, ["drafted", "skipped"]) == ("drafted", "ok")
+
+
+def test_a_worker_session_on_such_an_offer_holds_report_outcome_not_report_ticket(project):
+    from types import SimpleNamespace
+
+    from orchestra_agents.floor_runner import FloorRunner
+    me = SimpleNamespace(host=SimpleNamespace(project=project))
+    _, tools = FloorRunner._session_of(me, "worker", {"outcomes": ["drafted", "skipped"]})
+    assert "report_outcome" in tools and "report_ticket" not in tools
+    _, tools = FloorRunner._session_of(me, "worker", {"outcomes": ["ready", "blocked"]})
+    assert "report_ticket" in tools and "report_outcome" not in tools

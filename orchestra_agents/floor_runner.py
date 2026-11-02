@@ -96,7 +96,7 @@ class FloorRunner:
                 return
             path = floor.workspace(o)
             cwd = Path(path) if path else host.project.repo_root
-            system, tools = self._session_of(agent)
+            system, tools = self._session_of(agent, o)
             task, nudge = floor.task_text(o, agent, path)
             every = float(o.get("heartbeat_s") or floor.HEARTBEAT_S)
             heartbeat(host, sid, done, lambda: oid in self.withdrawn, every, lambda t: say(floor.ALIVE, text=t or "working"))
@@ -125,13 +125,17 @@ class FloorRunner:
                     host.log(f"{oid}: could not finish: {e!r}")
             host._release(sid)
 
-    def _session_of(self, agent: str) -> tuple[str, tuple[str, ...]]:
-        """The system prompt and tool groups: a built-in role's own, or the agent's (its roles, its
-        team, its machine spec) with the floor's exit tool."""
+    def _session_of(self, agent: str, offer: dict | None = None) -> tuple[str, tuple[str, ...]]:
+        """The system prompt and tool groups: a built-in role's own (its exit tool swapped for
+        ``report_outcome`` when the offer's outcomes are not the ones it reports, floor.report_tool),
+        or the agent's (its roles, its team, its machine spec) with the floor's exit tool."""
         host = self.host
         if agent in BUILTIN:
             spec = BUILTIN[agent]
-            return prompting.role_prompt(host.project, spec.prompt), tuple(spec.tools)
+            tools = tuple(spec.tools)
+            if floor.report_tool(agent, (offer or {}).get("outcomes")) == floor.OUTCOME_TOOL:
+                tools = tuple(t for t in tools if t not in floor.REPORT_TOOL.values()) + (floor.OUTCOME_TOOL,)
+            return prompting.role_prompt(host.project, spec.prompt), tools
         a = host.agents.get(agent) or all_agents(host.project)[agent]
         roles, teams = host.role_defs or all_roles(host.project), host.teams or all_teams(host.project)
         groups = effective_tools(a, roles, teams)

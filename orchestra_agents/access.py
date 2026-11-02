@@ -83,10 +83,11 @@ def granted_groups(project: Project, role: str) -> tuple[str, ...] | None:
         ag = built_in_agents()[role]
     if ag is None:
         return None
+    from .floor_roles import extra_groups
+
     groups = effective_tools(ag, all_roles(project), all_teams(project))
-    if not ag.builtin:                       # a confirmed Universal Machine's agent: its floor exit tool (floor_roles.py)
-        from .floor_roles import extra_groups
-        groups += tuple(g for g in extra_groups(project, role) if g not in groups)
+    # an agent serving a floor role: its floor exit tool (floor_roles.py)
+    groups += tuple(g for g in extra_groups(project, role) if g not in groups)
     return groups
 
 

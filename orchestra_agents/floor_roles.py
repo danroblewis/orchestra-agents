@@ -44,5 +44,8 @@ def floor_role(project: Project, agent: str) -> str | None:
 
 
 def extra_groups(project: Project, agent: str) -> tuple[str, ...]:
-    """The tool groups serving a floor role adds to an agent's own: its exit tool."""
-    return (OUTCOME_TOOL,) if floor_role(project, agent) else ()
+    """The tool groups serving a floor role adds to an agent's own: its exit tool. A built-in worker
+    or reviewer serving the floor holds it too, for an offer whose outcomes its own tool does not
+    report (floor.report_tool); ``report_outcome`` answers only a session holding an offer."""
+    builtin = agent in PER_TICKET_ROLES and agent in (project.config.serves or [])
+    return (OUTCOME_TOOL,) if builtin or floor_role(project, agent) else ()

@@ -110,7 +110,8 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
                    "at": S("With every: the time of day its slots are counted from, HH:MM (09:00), the time the owner "
                            "named; left out, the slots count from 00:00 UTC"),
                    "tz": S("With every and at: the zone of at (America/Los_Angeles, UTC), the one the owner gave or "
-                           "answered; left out, the project's local zone")}}},
+                           "answered (their \"this machine's clock\", \"local\" or \"here\" as they said it: set to the host's "
+                           "zone by name); left out, the project's local zone")}}},
     "steps": {"type": "array", "items": STEP, "description": "The steps in order; the first is where an item starts"},
     "piles": {"type": "array", "description": "Declared piles beyond each step's own (<step>.waiting, <step>.held)",
               "items": {"type": "object", "properties": {

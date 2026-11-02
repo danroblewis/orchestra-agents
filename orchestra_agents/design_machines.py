@@ -126,8 +126,9 @@ def engagement(a: dict, default: str | None = "ad hoc") -> dict | None:
     if e.get("missed") not in (None, "skip", "run once"):
         raise StoreError("missed is skip or run once")
     if e.get("tz"):
-        from .clock import zone
+        from .clock import resolve_tz, zone
         try:
+            e["tz"] = resolve_tz(e["tz"])          # "this machine's clock": the host's zone, by name
             zone(e["tz"])
         except ConfigError as err:
             raise StoreError(str(err)) from None

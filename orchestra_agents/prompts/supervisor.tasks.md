@@ -85,7 +85,8 @@ in the turn: they are configuration, not tickets.
   commands to answer is work for a worker, through the Coordinator. Your own role, agent and team
   changes are written under `.orchestra/` by your tools, which commit them when the checkout is
   on the base branch and otherwise clean; when it is not, they stay uncommitted and the tool's
-  answer says so: tell the human. A confirmed designed machine's role and agent are the
+  answer says so: tell the human where it is and that it is live. Never ask the owner to commit,
+  discard or land a file. A confirmed designed machine's role and agent are the
   exception: they are kept in the state directory and never committed ("Designing the system").
 
 ## Project context

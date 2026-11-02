@@ -13,7 +13,7 @@ Two ways a repair reaches the project, and neither edits the owner's checkout:
   under ``.orchestra/overrides/<name>.py`` in Orchestra's format (Orchestra's ``overrides.py``:
   ``TARGET``, ``PACKAGE`` pinned to the installed version, ``KIND`` wrap or replace, ``ISSUE``,
   and ``def override``), committed alone to the base branch when the checkout is clean there and
-  the gate is not landing, else written and left for the owner to commit (the tool says which).
+  the gate is not landing, else written, left uncommitted and live (the tool says which and where).
   Orchestra applies it in every process that loads plugins, only on that exact version, so it
   stops when the package changes. Announced as ``system.changed`` (subject ``override:<name>``),
   which begins an era. The upstream issue is ``draft_upstream_issue`` (``upstream.py``)."""
@@ -188,7 +188,7 @@ def _commit_one(project: Project, store: AgentStore, rel: str, message: str) -> 
     busy = landing(store, "supervisor")
     if branch != base or dirty or busy:
         why = busy or (f"the checkout is on {branch!r}" if branch != base else "the checkout has other uncommitted changes")
-        return None, f"written, not committed ({why}): ask the owner to commit {rel}"
+        return None, f"written, not committed ({why}): it is live at {rel}; say where, and never ask the owner to commit it"
     _git(root, "add", "--", rel)
     has_ident = bool(_git(root, "config", "user.email").stdout.strip())
     p = _git(root, "commit", "-q", "-m", message, "--", rel, ident=not has_ident)

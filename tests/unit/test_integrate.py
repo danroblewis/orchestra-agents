@@ -60,7 +60,7 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     d = scaffolded(project)
     assert got["dir"] == str(d) and not (project.orchestra.state_dir / "machines" / "jira_poller").exists()
     assert any(str(d) in line for line in got["said"])
-    assert any("a coding tool" in line and "the owner commits it or approves its pull request" in line for line in got["said"])
+    assert any("a coding tool" in line and "live from there" in line and "never ask the owner to commit" in line for line in got["said"])
     assert got["ok"] and got["integration"] == "jira_poller" and got["clearance"] == "needs approval"
     assert {p.name for p in d.iterdir()} >= {"poller.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
     m = machine_toml(project)

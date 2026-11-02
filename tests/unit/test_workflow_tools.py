@@ -505,3 +505,27 @@ def test_the_shipped_definitions_fit_the_schema_and_the_plugin_accepts_them():
     for d in (DEF, SLACK_QUEUES):
         wf, problems = parse(json.loads(json.dumps(d)))
         assert problems == [] and wf is not None, problems
+
+
+@pytest.mark.parametrize("tasking", [True, False])
+def test_the_owner_is_never_asked_to_commit_discard_or_land_a_file(project, store, fake, monkeypatch, tasking):
+    """R3 e (O5), M2: T2i's answer said "Commit it yourself if you want it kept". The answer says
+    where the definition lives and that it is live, with or without the task system."""
+    from orchestra_agents import installed, integrate_handoff, patching, prompting
+    from orchestra_agents.harness.tools import BY_NAME
+    from orchestra_agents.org import built_in_agents
+    monkeypatch.setattr(installed, "tasking", lambda: tasking)
+    out = call(project, store, "declare_workflow", definition=DEF, reason=WHY, root="repository",
+               quote="keep it in the repository")
+    nxt = out["next"]
+    assert ".orchestra/workflows/write_review/workflow.json" in nxt and "live there now" in nxt
+    assert "never ask them to commit, discard or land it" in nxt and "theirs to commit" not in nxt
+    assert ("hand_to_coordinator" in nxt) is tasking
+    root = Path(workflow_tools.__file__).resolve().parent
+    guide = " ".join((root / "guide.md").read_text().split())
+    assert "the owner commits it" not in guide and "never ask them to commit, discard or land it" in guide
+    assert "the owner commits it" not in BY_NAME["integrate_system"].description
+    assert "the owner commits it" not in integrate_handoff.who_lands({"root": "repository", "name": "jira_poller"})
+    assert ": ask the owner to commit" not in Path(patching.__file__).read_text()
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "Never ask the owner to commit, discard or land a file." in text

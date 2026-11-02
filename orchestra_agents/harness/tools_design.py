@@ -278,7 +278,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
             "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
-            "owner's repository (.orchestra/machines/<name>/, uncommitted: a coding tool may edit it, the owner commits it), "
+            "owner's repository (.orchestra/machines/<name>/, uncommitted and live from there: a coding tool may edit it; never ask the owner to commit it), "
             "tested against the kit's fake, and the system is declared on the Machines page as a machine managed elsewhere. "
             "The kits speak the systems a company runs, with no code changed: Jira Data Center (settings flavour "
             "datacenter: REST API v2, a personal access token sent as Bearer) as well as Cloud, and GitHub Enterprise "

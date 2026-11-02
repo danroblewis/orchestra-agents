@@ -16,7 +16,7 @@ import json
 import os
 from collections.abc import Mapping
 
-from .tools import BY_NAME, TOOLS, ToolDef, tools_for
+from .tools import TOOLS, ToolDef, tools_for
 
 
 def groups_of(env: Mapping[str, str]) -> list[str] | None:
@@ -34,9 +34,10 @@ class Caller:
         self._store = None
 
     def tool(self, name: str) -> ToolDef:
-        """The tool of that name this session is offered, or a LookupError saying which it has."""
-        tool = BY_NAME.get(name)
-        if tool is None or tool not in self.tools:
+        """The tool of that name this session is offered (as offered: its text gated), or a LookupError.
+        Matched by name: ``tools_for`` returns copies whose text is gated, which never equal ``BY_NAME``'s."""
+        tool = next((t for t in self.tools if t.name == name), None)
+        if tool is None:
             raise LookupError(f"unknown tool {name}")
         return tool
 

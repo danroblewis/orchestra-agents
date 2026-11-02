@@ -106,7 +106,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
         except ReadError as e:
             if (said := no_model(e)) is None:
                 raise
-            return answer(said, model=None)
+            return answer(said, model=None, **({"reason": e.reason} if isinstance(getattr(e, "reason", None), dict) else {}))
         return answer(T.model_lines(m), {"model": m} if raw else None)
     if command == "read_series":
         return read_series(x, a)

@@ -265,7 +265,7 @@ def test_read_model_with_no_model_says_why_in_the_cores_words_or_where_to_look(p
     out = call(project, "supervisor", "read_model")
     assert out["ok"] and out["model"] is None
     assert out["summary"][0].startswith("152 series looked at") and "5 needed" in out["summary"][0]
-    assert "waits for discovery" in out["summary"][1]
+    assert "waits for discovery" in out["summary"][1] and out["reason"] == {"looked_at": 152}
 
     bare = ReadError("there is no model yet: the host discovers it from the metrics (orchestra run)", 404)
     monkeypatch.setattr(modeling, "reads", lambda project: _NoModelReads(bare))

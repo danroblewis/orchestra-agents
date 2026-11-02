@@ -230,7 +230,50 @@ def test_list_machines_names_each_machines_mode_kind_and_notes_disabled_first(pr
     slack = next(m for m in out["machines"] if m["id"] == "slack_notify")
     assert list(slack["notes"]) == ["disabled", "writes"] and slack["mode"] == "continuous" and slack["kind"] == "program"
     assert "orchestra" not in {m["id"] for m in out["machines"]}
-    assert "review_nudger (program, scheduled, quiet); roles: ['review_nudger']" in out["summary"]
+    assert "review_nudger (program, scheduled, not heard yet); roles: ['review_nudger']" in out["summary"]
+    assert not any("quiet" in x for x in out["summary"])
+
+
+def test_list_machines_calls_no_machine_quiet_the_core_did_not_mark(project, store, monkeypatch):
+    """T2b s08, s09, s14: the stand-in the harness held (ad hoc) read "quiet", and the Supervisor
+    told the owner to have it restarted. Ad hoc acts when offered work; only the core's
+    orchestra.machine.quiet makes a continuous or scheduled machine gone quiet."""
+    from orchestra_agents import machines_read
+    answer = {"ok": True, "machines": [
+        {"id": "reviewer_stand_in", "kind": "program", "mode": "ad hoc", "active": False, "last_seen": 1000.0, "about": {}},
+        {"id": "sail", "kind": "program", "mode": "continuous", "active": False, "last_seen": 1000.0, "about": {}},
+        {"id": "outbox", "kind": "program", "mode": "continuous", "active": False, "last_seen": 1000.0, "about": {}},
+        {"id": "worker", "kind": "program", "mode": "continuous", "active": False, "last_seen": 3000.0, "about": {}},
+        {"id": "supervisor", "kind": "agent", "mode": "continuous", "active": True, "last_seen": 3000.0, "about": {}}]}
+    monkeypatch.setattr(machines_read, "view", lambda store: answer)
+    monkeypatch.setattr(machines_read, "quiet_marks", lambda store: {"outbox": 2000.0, "worker": 2000.0})
+    out = call(project, store, "list_machines")
+    by = {m["id"]: m for m in out["machines"]}
+    stand_in = by["reviewer_stand_in"]
+    assert stand_in["state"].startswith("last heard ") and stand_in["state"].endswith("; acts when offered work")
+    assert not stand_in["gone_quiet"] and "quiet" not in stand_in["state"]
+    assert by["sail"]["state"].startswith("last heard ") and not by["sail"]["gone_quiet"]      # not marked: no flag
+    assert by["outbox"]["gone_quiet"] and by["outbox"]["state"].startswith("gone quiet (Orchestra marked it at ")
+    assert not by["worker"]["gone_quiet"]                     # heard again after the mark
+    assert by["supervisor"]["state"] == "active"
+    assert [x for x in out["summary"] if "quiet" in x] == [next(x for x in out["summary"] if x.startswith("outbox"))]
+    assert "only gone_quiet" in out["note"]
+
+
+def test_quiet_marks_are_the_cores_events(project, store):
+    from orchestra_agents import machines_read
+    store.events.publish("orchestra.machine.quiet", {"machine": "outbox", "instance": None, "mode": "continuous"},
+                         source="orchestra-host", subject="outbox")
+    assert set(machines_read.quiet_marks(store)) == {"outbox"}
+
+
+def test_the_stuck_line_never_advises_a_restart_the_core_did_not_mark(project):
+    from orchestra_agents import prompting
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "is waiting for that event, not stuck on a quiet machine" in text
+    assert ("Never advise restarting a machine, or say it needs starting, unless `list_machines` shows it `gone_quiet` "
+            "(the core's mark) and its mode is continuous or scheduled") in text
 
 
 def test_list_machines_reads_the_bus_as_the_machines_page_does(project, store):

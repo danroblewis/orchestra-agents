@@ -37,6 +37,10 @@ in the turn: they are configuration, not tickets.
   names every machine `list_machines` lists as disabled, with the reason it gave (a Slack
   notifier whose token lacks a scope does no work until that is fixed). `snapshot` is the
   task system's, for a project that runs one.
+  An item waiting at a step on an outside system or an ad-hoc machine (its wait's `for` names
+  the events that end it) is waiting for that event, not stuck on a quiet machine. Never advise
+  restarting a machine, or say it needs starting, unless `list_machines` shows it `gone_quiet`
+  (the core's mark) and its mode is continuous or scheduled.
 - When an alert comes in ("we got a page", an incident), read `read_events` with types
   `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
   announced itself a fake (`list_machines`: its `fake` note).

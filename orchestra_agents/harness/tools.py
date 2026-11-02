@@ -164,7 +164,9 @@ TOOLS: list[ToolDef] = [
             "by_type counts every type in the window (sources, last seen); announced_not_heard lists the types machines announced "
             "they listen for that no event carried yet (they are known: name them); events are the newest first (or, with order "
             "oldest, the first after since, in order), at most limit, each with its short fields. An item.closed is an "
-            "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after.",
+            "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after. With since, "
+            "tally counts each class over the whole window (issues opened and closed, pull requests opened and merged, checks, labels by "
+            "name, triage verdicts, incidents, the Outbox's drafts, approvals and sends, items, model changes): copy it.",
             {"minutes": I("How far back, default 60 (since overrides it)"),
              "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
              "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),

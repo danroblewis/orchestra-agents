@@ -111,7 +111,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
             raise
         except Exception as e:  # noqa: BLE001 - a model that cannot be read is said so, never as no model
             return not_read(500, e)
-        return answer(T.model_lines(m), {"model": m} if raw else None)
+        return answer(T.model_lines(m), {"model": m} if raw else None, state=model_state(m))
     if command == "read_series":
         return read_series(x, a)
     if command == "read_eras":
@@ -142,6 +142,14 @@ WAITS = ("an expectation recorded meanwhile (declare_expected_effect) is kept as
 NOT_READ = ("the model could not be read ({status}): {error}. A failed read, not an empty model: never say from it that "
             "there is no model or no stocks; read_events with types orchestra.model.changed says what discovery saved, and "
             "say the read failed")
+
+
+def model_state(m: dict) -> str:
+    """The model's state in a line, for the end of an answer: its version, stocks and flows counted."""
+    stocks, flows = len(m.get("stocks") or []), len(m.get("flows") or [])
+    version = m.get("label") or m.get("version")
+    return (f"the model{f' ({version})' if version else ''} has {stocks} stock{'s' * (stocks != 1)} and "
+            f"{flows} flow{'s' * (flows != 1)}")
 
 
 def not_read(status, e: Exception) -> dict:

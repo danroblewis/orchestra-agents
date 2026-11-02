@@ -123,7 +123,7 @@ def test_the_groups_are_granted_as_each_role_needs_them_and_enforced(project):
 def test_the_model_reads_as_a_summary_and_whole_on_request(project):
     out = call(project, "worker", "read_model", ticket="T-1")
     s = text(out)
-    assert "rates are per minute" in s and set(out) == {"ok", "summary"}
+    assert "rates are per minute" in s and set(out) == {"ok", "summary", "state"}
     assert "  drain (ready -> outside) = k * ready [k=0.3]; fitted on 500 events, ±4%" in out["summary"]
     assert "  arrive (outside -> queue) = c [c=3]; fitted on 500 events, ±4%" in out["summary"]
     raw = call(project, "worker", "read_model", ticket="T-1", raw=True)
@@ -305,3 +305,12 @@ def test_get_model_that_fails_says_it_could_not_be_read(project, monkeypatch):
     out = observe_model.get_model(project)
     assert out["ok"] is False and out["error"].startswith("the model could not be read (404): no saved version of era e2")
     assert "no stocks" not in out["error"].split(":")[0]
+
+
+def test_read_model_says_its_state_in_a_line(project):
+    """T2c s16: "what changed since" left the model out; its answer ends with this line."""
+    import re
+    out = call(project, "supervisor", "read_model")
+    m = chain()
+    assert out["state"].startswith("the model")
+    assert re.search(rf"has {len(m.stocks)} stocks? and {len(m.flows)} flows?$", out["state"])

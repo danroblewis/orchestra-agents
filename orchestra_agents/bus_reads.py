@@ -10,13 +10,18 @@ model read none of it (the live design test, A3).
 **A known type** is one a machine on the bus speaks: heard (an event of it in the events read),
 or announced (a machine's ``orchestra.machine.started`` names it among what it listens for), or one a declared machine emits, or one declared with ``declare_event``. A
 type the merge gate publishes only when a branch fails (``gate.rejected``) is known before the
-first failure, because the machines that wait for it say so when they start."""
+first failure, because the machines that wait for it say so when they start.
+
+With ``since`` it also answers the window's ``tally`` (``event_tally``): each class of event
+counted, for "what changed since"."""
 
 from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
 
+from .event_tally import NOTE as TALLY_NOTE
+from .event_tally import tally
 from .store import AgentStore, StoreError
 
 DEFAULT_LIMIT, MAX_LIMIT = 20, 100
@@ -132,7 +137,8 @@ def read_events(store: AgentStore, a: dict) -> dict:
     which = (f"the oldest {len(shown)} of {len(picked)}, in the order they happened" if oldest
              else f"the newest {len(shown)} of {len(picked)}, newest first")
     more = (" (read on with since set to the last one's ts)" if oldest and len(picked) > len(shown) else "")
-    return {"ok": True, "count": len(picked), **window, "by_type": summary,
+    counted = {"tally": tally(picked), "tally_note": TALLY_NOTE} if a.get("since") not in (None, "") else {}
+    return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),
             "note": (f"{which} (limit {limit}, at most {MAX_LIMIT}){more}; by_type counts them all. A type in "

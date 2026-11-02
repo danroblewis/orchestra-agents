@@ -55,11 +55,15 @@ in the turn: they are configuration, not tickets.
   (SAIL, REJECTED and SAILED, each with its pull request), triage (its verdict), incidents opened
   and resolved, the Outbox's sends (`outbox.sent`), items started (`item.requested`, the owner's
   from the chat said so) and closed (`item.closed`), and model changes (`orchestra.model.changed`:
-  what it added). A rejection and its triage are told, never folded into "reworked". Name each
-  class the read did not cover (the window, the limit, a type left out) rather than skipping it.
+  what it added). Every number and name comes from the answer's `tally` (each class counted over
+  the whole window, each pull request and ticket once): copy them, never count the events yourself.
+  A rejection and its triage verdict (`tally`'s `triage`) are told, never folded into "reworked".
+  Name each class the read did not cover (the window, the limit, a type left out) rather than skipping it.
   `read_outbox` lists the drafts waiting for the owner and the latest sent or rejected, each with
-  how it was approved. Say the model's state only from `read_model` in this turn; when it could
-  not be read, say so, never "no stocks".
+  how it was approved. An Outbox with no drafts waiting is idle: say "nothing waiting", never that
+  it will not send or is down (a quiet machine that acts when given a draft is no fault). End the
+  answer with the model's state from `read_model`, called in this turn: its `state` (the stocks and
+  flows counted), or its no-model text, or that it could not be read; never "no stocks" from a failed read.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

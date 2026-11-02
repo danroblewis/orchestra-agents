@@ -10,6 +10,14 @@ from .tools import A, B, I, S, ToolDef
 from .tools_design import QUOTE, REASON, E
 
 DURATION = S("A duration: 30m, 2h, 1d")
+WITHIN = {"description": (
+    "How long the item may stay at the step: a duration (\"2h\"); a setting holding one ({\"setting\": "
+    "\"check_within\"}); or the setting named by a field of the event that entered the step ({\"setting\": "
+    "{\"data\": \"channel_name\"}}: each channel its own reply policy, one setting per channel)"),
+    "anyOf": [DURATION, {"type": "object", "properties": {"setting": {"anyOf": [
+        S("The setting's name"), {"type": "object", "properties": {"data": S("The entering event's data field that "
+                                                                             "names the setting")},
+                                  "required": ["data"]}]}}, "required": ["setting"]}]}
 EVENT_PROPS = {
     "event": S("The event type about the item (offer.finished, github.pr.opened)"),
     "of": E(["children"], "children: the event is about one of the item's children, not the item"),
@@ -83,7 +91,7 @@ STEP = {"type": "object", "description": "One stage the item goes through", "pro
         "\"write\"} (a move back is rework: offered to whoever did that step). Leave out: any outcome goes to the next "
         "step")},
     "guards": {"type": "object", "description": "Limits: past one, attention for the planner, or a move to a step",
-               "properties": {"within": DURATION, "rounds": I("At most this many entries into the step (review rounds)"),
+               "properties": {"within": WITHIN, "rounds": I("At most this many entries into the step (review rounds)"),
                               "then": S("attention (default), or the step to move the item to")}},
     "on": {"type": "array", "items": ON, "description": "Moves on an event or a metric condition, whenever it happens"},
     "depends": {"type": "object", "description": "Not offered until each item this one depends on (item.related "
@@ -145,7 +153,8 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),
     ToolDef("list_items", "workflows",
             "The open items of every workflow, as the Items page lists them, oldest first: each with its step and pile, "
-            "why it waits and on whom (its wait: reason, by, until, and ends_on: every event that ends it), its holder, how "
+            "why it waits and on whom (its wait: reason, why (an attention's own cause, to report as it says), by, until, "
+            "and ends_on: every event that ends it), its holder, how "
             "long it has been there (age_s), how often it was reworked, and its fields (a ticket's key, a pull request's "
             "number); then the recently closed, with their last step and outcome. An item's end is item.closed (the floor "
             "publishes it when a workflow's item reaches the end of every workflow it entered): a closed item is never "

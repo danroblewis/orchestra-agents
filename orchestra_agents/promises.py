@@ -7,7 +7,9 @@ It is a heuristic over the reply's sentences, kept narrow so it does not cost a 
 - a promise of a later action ("I'll", "I will", "I'm going to", "Let me") counts unless the
   sentence ties it to something that will happen ("when", "once", "if", "after", "as soon as",
   "tell me", "let me know"): "tell me the city and I'll update DEMO-6" waits on the human, and
-  "I'll tell you when it lands" is kept by the landing wake-up (landings.py); and a promise to tell
+  "I'll tell you when it lands" is kept by the landing wake-up (landings.py); a promise right after
+  a question to the human waits on their answer ("Which do you want? I'll set it up.": R3 e O10,
+  one paid follow-up turn each at T2i s01, s14 and s15); and a promise to tell
   the human later ("I will tell you the plan") counts as kept in a turn that called a tool whose
   answer schedules that wake-up (``WAKES``: a hand-off, whose plan wakes it);
 - a claim that something was done ("I've updated", "I asked") counts only in a turn that made no
@@ -30,13 +32,16 @@ _DONE = re.compile(r"\bI(?:'ve| have)? (?:just )?(updated|created|cancelled|canc
 def unkept(text: str, tools: list[str]) -> str | None:
     """The first sentence of ``text`` that claims an action not taken in this turn (whose tool
     calls were ``tools``, by name), or None."""
-    woken = any(t in WAKES for t in tools)
+    woken, asked = any(t in WAKES for t in tools), False
     for m in _SENTENCES.finditer(text or ""):
         s = m.group(0).strip()
-        if _LATER.search(s) and not _TIED.search(s) and not (woken and _TELL.search(s)):
+        if not s:
+            continue
+        if _LATER.search(s) and not _TIED.search(s) and not asked and not (woken and _TELL.search(s)):
             return s
         if not tools and _DONE.search(s):
             return s
+        asked = s.endswith("?")
     return None
 
 

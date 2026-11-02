@@ -258,8 +258,9 @@ metrics and event collection"): kits (a cached, rate-limited, read-only client; 
 cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
 themselves. **Every collector is a script in the owner's repository**, at
 `.orchestra/machines/<name>/` (its `poller.toml`, `<name>.py`, `test_<name>.py` against the kit's
-fake, and an `AGENTS.md` with the kit's rules for whoever edits it), uncommitted: the owner commits
-it or approves its pull request, like any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
+fake, and an `AGENTS.md` with the kit's rules for whoever edits it), uncommitted and live from there.
+Tell the owner where it is and that it runs; never ask them to commit, discard or land it (it lands
+like any other code, through a pull request); the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
 says their repository must stay clean (`root: state`). The kits stay read-only: a write to the
 system (a label, a transition, a Slack post) is an Outbox draft the owner's approval settings
 govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
@@ -272,8 +273,12 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    `channels`), and `stock` when they named what it fills ("open counts": `Open issues`). The kits
    have templates for Jira, GitHub, Slack and PagerDuty (and `promql` for a metrics store); Jira's
    publishes `jira.issue.assigned` for any assignee (a workflow's start filters on its data) and
-   speaks Data Center or Cloud (`[settings] flavour`: `auto` picks Cloud on `*.atlassian.net`; a
-   Cloud site on its own domain says `cloud`). The script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   speaks **Jira Data Center** as well as Cloud: `flavour = "datacenter"` in its settings is REST API
+   v2 with a personal access token sent as Bearer (`auto`, the default, picks Cloud on
+   `*.atlassian.net` and Data Center elsewhere; a Cloud site on its own domain says `cloud`). The
+   GitHub kit reads **GitHub Enterprise** with `base_url = "https://<host>/api/v3"` (github.com's is
+   `https://api.github.com`). Neither needs a change to the code: "connect our Jira Data Center and
+   GitHub Enterprise" is two `integrate_system` calls with those settings, never a handoff. The script is scaffolded into the repository, its own test is run against the kit's fake, and the
    system is declared on the Machines page as a machine managed elsewhere, heard as
    `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
    relays what the system's people and bots did, as them. The answer names the directory: tell
@@ -350,7 +355,8 @@ not installed: tell the owner, and write nothing.
   a retry (never a machine that sleeps). **Outcomes** map each result to the next step (or
   `null`: the end); a move back is **rework**, offered to whoever did that step; an outcome the map
   does not name leaves the item at the step and tells the planner. **Guards** are limits (`within`
-  a time, at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
+  a time: `"2h"`, a setting `{"setting": "check_within"}`, or the setting the entering event's field
+  names, `{"setting": {"data": "channel_name"}}`, each channel its own policy; at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
   a named step. **Starts** says what makes an item: a request, an event type (with `data` it starts
   only when the event's fields match: `{"event": "jira.issue.assigned", "data": {"assignee":
   {"setting": "owner"}}}`, only the owner's tickets), or the clock (`every`). **Depends** holds a

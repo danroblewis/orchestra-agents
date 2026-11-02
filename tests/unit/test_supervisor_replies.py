@@ -191,3 +191,12 @@ def test_recording_a_factor_says_what_judging_it_needs(project):
     from orchestra_agents.org import built_in_agents
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "the flow fitted in both eras" in text and "about 200 a side for ×1.2" in text
+
+
+def test_a_promise_right_after_a_question_waits_on_the_answer():
+    """R3 e (O10): "Which do you want? I'll set it up." cost a follow-up turn at T2i s01, s14, s15."""
+    from orchestra_agents.promises import unkept
+    assert unkept("Two ways: a poller or a source. Which do you want? I'll set it up.", []) is None
+    assert unkept("Shall I write it to the repository?\nI'll keep it in the state directory otherwise.", []) is None
+    assert unkept("Which do you want? Fine. I'll set it up.", []) == "I'll set it up."     # only right after
+    assert unkept("I'll set it up. Which do you want?", []) == "I'll set it up."           # a question after: no

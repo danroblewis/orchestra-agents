@@ -61,6 +61,7 @@ def paragraph(digest: str, head: str) -> str:
 
 
 def test_the_digest_tells_t2g_s16_as_it_happened(project, store, monkeypatch):
+    monkeypatch.setattr(since_digest, "LIMIT", 10_000)                 # every list named in full (the cap: below)
     out = t2g(project, store, monkeypatch)
     d = out["digest"]
     assert d.startswith("Since Sun 1 Nov 05:34 (all times PST, America/Los_Angeles):")
@@ -130,3 +131,71 @@ def test_the_prompt_replies_with_the_digest_as_returned_and_never_guesses_a_caus
         assert "copy them, never count the events yourself" not in text          # the old rule is gone
         assert ("Never guess at a cause: when the tools do not say why something happened or waits, say \"the tools "
                 "do not say why\", never a likely cause, a hypothesis or what something \"may\" be doing") in text
+
+
+def ev(ty: str, at: float, subject: str, **data) -> dict:
+    return {"type": ty, "ts": datetime.fromtimestamp(at).astimezone().isoformat(), "subject": subject,
+            "source": "x", "data": data}
+
+
+def board(days: int = 3, tickets: int = 24) -> list[dict]:
+    """A sprint board's days: each ticket created, assigned, its pull request opened, labelled,
+    checked, merged and labelled again, then Done; no anomaly among them."""
+    out, start = [], NOW - days * 86400
+    for i in range(tickets):
+        t, key, n = start + i * (days * 86400 / tickets), f"SCRUM-{100 + i}", 200 + i
+        out += [ev("jira.issue.created", t, key, status="To Do"), ev("jira.issue.assigned", t + 5, key),
+                ev("github.pr.opened", t + 300, key, number=n), ev("github.pr.labeled", t + 600, key, number=n, label="SAIL"),
+                ev("sail.check.completed", t + 900, key, number=n, outcome="success"),
+                ev("github.pr.merged", t + 1200, key, number=n),
+                ev("github.pr.labeled", t + 1203, key, number=n, label="SAILED"),
+                ev("jira.issue.transitioned", t + 1500, key, to="Done"), ev("offer.finished", t + 1500, key)]
+    return out
+
+
+WAIT = {"machines": [], "outbox": [], "changes": [], "questions": []}
+
+
+def test_three_days_of_the_board_read_at_a_glance_and_keep_their_counts():
+    """R3 (b O6, e O4): s16 ran 3,825 characters for three tickets; "very many jira tickets"."""
+    d = since_digest.digest(board(), NOW - 3 * 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M")
+    assert len(d) <= since_digest.LIMIT
+    assert "Look first" not in d                                     # nothing wrong, nothing flagged
+    tickets = paragraph(d, "Tickets:")
+    assert "24 opened:" in tickets and "24 closed (Done):" in tickets and "… and 19 more." in tickets
+    assert "24 merged:" in paragraph(d, "Pull requests:")
+    t2g_day = since_digest.digest(DAY, NOW - 86400, NOW, "America/Los_Angeles", waiting=WAIT, preds=[], model="M")
+    assert len(t2g_day) <= since_digest.LIMIT and "3 closed (Done): SCRUM-36 at 04:56, SCRUM-35 at 05:07, … and 1 more" in t2g_day
+
+
+def test_a_small_window_names_everything():
+    few = board(days=1, tickets=2)
+    d = since_digest.digest(few, NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M")
+    assert "more" not in d and "SCRUM-100" in d and "SCRUM-101" in d
+
+
+def test_the_anomalies_come_first():
+    """R3 b (O1-O3): a Done ticket's new pull request, REJECTED on a merged one, attention hours
+    old, an item still waiting on a pull request closed unmerged: flagged before the counts."""
+    t = NOW - 4 * 3600
+    events = board(days=1, tickets=2) + [
+        ev("jira.issue.created", t, "SCRUM-42", status="Done"),                 # a replay of a Done ticket
+        ev("github.pr.opened", t + 60, "SCRUM-42", number=47),
+        ev("offer.made", t + 61, "SCRUM-42", step="write"),
+        ev("github.pr.labeled", NOW - 1800, "SCRUM-100", number=200, label="REJECTED"),   # merged a day ago
+        ev("attention.needed", t, "SCRUM-7", reason="not past step ci within 30 min"),
+        ev("attention.needed", NOW - 600, "SCRUM-8", reason="fresh"),
+        ev("attention.needed", t, "SCRUM-9", reason="closed since"), ev("item.closed", t + 60, "SCRUM-9"),
+        ev("github.pr.opened", t, "SCRUM-7", number=43), ev("github.pr.closed", t + 120, "SCRUM-7", number=43),
+    ]
+    d = since_digest.digest(events, NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M")
+    paras = d.split("\n\n")
+    look = paras[1]
+    assert look.startswith("Look first: new work on a ticket already Done: SCRUM-42 (Done at ")
+    assert "#47 opened at" in look and "1 offer" in look
+    assert "a label on a merged pull request: REJECTED on #200 (SCRUM-100) at" in look
+    assert "SAILED" not in look                                    # put on seconds after the merge: not this
+    assert "attention over an hour old, the item open: SCRUM-7 (#43) since" in look
+    assert "SCRUM-8" not in look and "SCRUM-9" not in look
+    assert "an open item whose pull request closed unmerged: SCRUM-7 (#43) on #43 (closed at" in look
+    assert paras[2].startswith("Tickets:")

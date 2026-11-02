@@ -21,6 +21,17 @@ BLOCKED = "blocked"
 HEARTBEAT_S = 30.0                       # when an offer names none
 REPORT_TOOL = {"worker": "report_ticket", "reviewer": "report_review"}   # a built-in role's exit tool; any other: report_outcome
 OUTCOME_TOOL = "report_outcome"
+SAYS = {"report_ticket": {"ready"}, "report_review": {"approved", "rejected"}}   # the outcomes each built-in tool reports
+
+
+def report_tool(role: str, outcomes: list[str] | None) -> str:
+    """The exit tool an offer's turn is given: the built-in role's own only when the offer's
+    outcomes include every outcome that tool reports (``report_ticket`` needs ``ready``), or name
+    none; otherwise ``report_outcome`` with the offer's own outcomes, so a step whose outcomes are
+    ``drafted``/``skipped`` is never folded into ``blocked`` (R3 e: a "task" is a type of "item")."""
+    tool = REPORT_TOOL.get(role, OUTCOME_TOOL)
+    allowed = {str(o) for o in outcomes or []}
+    return tool if tool == OUTCOME_TOOL or not allowed or SAYS[tool] <= allowed else OUTCOME_TOOL
 
 
 def for_role(ev: dict, role: str) -> bool:
@@ -100,7 +111,7 @@ def outcome_of(report: dict | None, outcomes: list[str] | None) -> tuple[str, st
 def task_text(offer: dict, role: str, path: str | None) -> tuple[str, str]:
     """The turn's prompt and the nudge when the agent stopped without its outcome."""
     allowed = [str(o) for o in offer.get("outcomes") or []]
-    tool = REPORT_TOOL.get(role, OUTCOME_TOOL)
+    tool = report_tool(role, allowed)
     if tool == "report_ticket":
         how = ("call `report_ticket`: READY_FOR_REVIEW when your work is done (committed, if you were handed a worktree), "
                "otherwise BLOCKED with the reason.")

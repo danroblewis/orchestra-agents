@@ -11,7 +11,8 @@ validated writer, its loader and its record's read API, the one exception to AGE
   through the plugin's ``define.write``: by default to the state directory; to the repository's
   ``.orchestra/`` only with the owner's quoted words, and then it is **not committed** (at work the
   base branch is protected, and the plugin's writer leaves landing it to a pull request): the answer
-  says so, and the Supervisor hands it to the Coordinator to land through a ticket.
+  says so and that it is live, and the Supervisor hands it to the Coordinator to land through a ticket
+  (never asking the owner to commit, discard or land it).
   An ``every`` start's ``tz`` given as the owner answered the zone question ("this machine's
   clock", "local", "here") is written as the host's zone's IANA name, and the answer's ``zone`` says so.
 - ``list_workflows``, ``list_items`` and ``explain_item`` only read. ``list_items`` is the Items
@@ -100,10 +101,10 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
            "author": prov.get("author"), "shown": SHOWN}
     if root == "repository":
         out["committed"] = False
-        out["next"] = gate(f"The file is in the checkout, uncommitted ({_rel(o, written.path)}): nothing here commits it. "
+        out["next"] = gate(f"The file is in the checkout, uncommitted ({_rel(o, written.path)}), and live there now. "
                            "[[tasking]]Hand it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull "
-                           "request, and tell[[/tasking]][[no-tasking]]Code work is not handed on here: tell the owner it is "
-                           "theirs to commit, and tell[[/no-tasking]] the owner it applies now in this checkout only.")
+                           "request. [[/tasking]]Tell the owner where it is and that it applies now in this checkout; never "
+                           "ask them to commit, discard or land it.")
     if runs := clock_words(definition.get("starts")):
         out["clock"] = runs + ": say this run time, and no other"
     if local:
@@ -251,13 +252,15 @@ def _exit(x: dict) -> str:
 
 
 def wait_of(w) -> dict | None:
-    """A wait as the tools show it: its reason, by and until, the fact it entered on (``entered_on``;
+    """A wait as the tools show it: its reason, its ``why`` (an attention wait's own cause, the
+    ``attention.needed``'s reason, from the plugin's walk: "not past step ci of delivery_live within
+    30 min"), by and until, the fact it entered on (``entered_on``;
     ``fact`` from a plugin that serves only the old name) and what ends it, in words ("until
     github.pr.approved, or github.pr.commented with state = commented (to sail)"): the plugin's
     ``for``, so a review a stand-in's comment also ends is never told as waiting for an approval alone."""
     if not isinstance(w, dict):
         return None
-    out = {k: w[k] for k in ("reason", "by", "until", "kind") if w.get(k) not in (None, "", [], {})}
+    out = {k: w[k] for k in ("reason", "why", "by", "until", "kind") if w.get(k) not in (None, "", [], {})}
     if w.get("entered_on") or w.get("fact"):
         out["entered_on"] = w.get("entered_on") or w.get("fact")
     exits = [x for x in w.get("for") or [] if isinstance(x, dict)]

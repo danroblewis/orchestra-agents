@@ -12,7 +12,7 @@ from orchestra_agents.org import AgentDef
 from orchestra_agents.org_store import RepoOrgStore
 from orchestra_agents.roles import RepoRoleStore, RoleDef
 
-UNTRACKED = (".orchestra/workflows/x/workflow.json", ".orchestra/machines/jira_poller/machine.toml",
+UNTRACKED = (".orchestra/workflows/x/workflow.json", ".orchestra/machines/jira_poller/poller.toml",
              ".orchestra/machines/jira_poller/jira_poller.py")
 
 

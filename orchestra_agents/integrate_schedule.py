@@ -10,12 +10,12 @@ the repository, nothing committed; INTEGRATING.md §3.1):
   ``auth.bearer_file`` (a file outside any repository).
 
 **Written only once the owner approved.** A scaffolded program reads nothing but a fake on this
-machine until its ``machine.toml`` says ``clearance = "approved"`` (the kits' compliance check): run
-for good before that, its poller waits and re-reads ``machine.toml``, but its ``[[collect]]``
+machine until its ``poller.toml`` says ``clearance = "approved"`` (the kits' compliance check): run
+for good before that, its poller waits and re-reads ``poller.toml``, but its ``[[collect]]``
 measurement would fail every round. A ``[[sources]]`` entry is read the moment it is
 written. So the plan is kept with the integration and written by the approval, in
 one act; the scaffolded test is not run again (it reads the variable's name and the scope from
-``machine.toml``)."""
+``poller.toml``)."""
 
 from __future__ import annotations
 

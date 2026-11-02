@@ -28,7 +28,7 @@ from .design import MACHINE
 from .handoff import hand_to_coordinator
 from .store import AgentStore, StoreError
 
-SCAFFOLD_FILES = ("machine.toml", "{name}.py", "test_{name}.py", "AGENTS.md")
+SCAFFOLD_FILES = ("poller.toml", "{name}.py", "test_{name}.py", "AGENTS.md")
 CACHES = (".pytest_cache", "__pycache__")
 
 
@@ -84,7 +84,7 @@ def landed(rec: dict) -> bool:
     if not lands:
         return True
     where = Path(lands)
-    if not ((where / "machine.toml").is_file() and (where / f"{rec['name']}.py").is_file()):
+    if not (kits.settings_file(where).is_file() and (where / f"{rec['name']}.py").is_file()):
         return False
     if rec.get("dir") != lands:
         shutil.rmtree(rec["dir"], ignore_errors=True)
@@ -120,10 +120,10 @@ def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, li
         test, lands = f"{src}/test_{name}.py", "the files stay in that directory (outside the repository, as the owner asked)."
     req = hand_to_coordinator(store, {"requirements": (
         f"Make the collector {name} for {t} work: {why}. It is a script scaffolded from the bridges plugin's {rec['kit']} kit "
-        f"at {src} ({name}.py, its machine.toml, test_{name}.py against the kit's fake, and AGENTS.md, which holds the kit's "
+        f"at {src} ({name}.py, its poller.toml, test_{name}.py against the kit's fake, and AGENTS.md, which holds the kit's "
         f"rules). The owner wants: {rec['wants']}. {where} Make it work against {t}'s real API. Keep AGENTS.md's rules: read "
         "only, metadata only, the token by reference (a variable's name or a file outside any repository), never "
-        "clearance or credentials in the code (machine.toml's clearance and credentials are the owner's, written by the "
+        "clearance or credentials in the code (poller.toml's clearance and credentials are the owner's, written by the "
         "Supervisor's approve_integration), and writes to the system only through the Outbox. Acceptance: "
         f"`python -m pytest {test} -q` passes, and {lands}"),
         "context": prov["reason"]}, MACHINE)

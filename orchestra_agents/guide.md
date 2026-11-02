@@ -257,7 +257,7 @@ framework so that AI agents within my repo could write scripts in the target rep
 metrics and event collection"): kits (a cached, rate-limited, read-only client; a poller with its
 cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
 themselves. **Every collector is a script in the owner's repository**, at
-`.orchestra/machines/<name>/` (its `machine.toml`, `<name>.py`, `test_<name>.py` against the kit's
+`.orchestra/machines/<name>/` (its `poller.toml`, `<name>.py`, `test_<name>.py` against the kit's
 fake, and an `AGENTS.md` with the kit's rules for whoever edits it), uncommitted: the owner commits
 it or approves its pull request, like any other code; the state directory (`~/.orchestrator/<key>/machines/<name>/`) only when the owner
 says their repository must stay clean (`root: state`). The kits stay read-only: a write to the
@@ -295,7 +295,7 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
 3. **`approve_integration`** on their yes, quoted, with what they named: `token_env` or
    `token_file`, and `user_env` or `user_file` for the account (Jira Cloud), plus the site's
    address if it was missing. These are references, never values: a path inside a repository or
-   a value that looks like a credential is refused. The script's `machine.toml` records the
+   a value that looks like a credential is refused. The script's `poller.toml` records the
    clearance, the data class and those references (its test reads them from there), and what runs
    it is written to the owner's overlay: a `[[machines]]` entry with `restart = "always"` (a
    process Orchestra keeps running, never a machine) and a `[[collect]]` entry for its series (a

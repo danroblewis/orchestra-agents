@@ -10,7 +10,7 @@ Supervisor's alone, each with its reason and provenance).
   (``.orchestra/machines/<name>/``, uncommitted: a coding tool may edit it, and the owner commits it
   or approves its pull request), or into the state directory (``<state>/machines/<name>/``) only
   when the owner said the repository must stay clean (``root: state``); its test is run against the
-  kit's fake, and the owner's settings are filled into its ``machine.toml`` (after the test, which
+  kit's fake, and the owner's settings are filled into its ``poller.toml`` (after the test, which
   reads the fake's own world; their words stay in the integration's record). When the test fails,
   or the system has no template of its own (the generic ``http`` kit), the script is handed to the
   Coordinator as work (``integrate_handoff``: moved out of the checkout first, so the worker
@@ -23,13 +23,13 @@ Supervisor's alone, each with its reason and provenance).
   nothing is written and the answer proposes INTEGRATING.md's no-kit route;
 - **source**: a ``[[sources]]`` entry for a Prometheus-API store, planned (no code).
 
-Nothing reads the real system yet: the program's ``machine.toml`` stays ``clearance = "needs
+Nothing reads the real system yet: the program's ``poller.toml`` stays ``clearance = "needs
 approval"`` and what runs it is only planned (``integrate_schedule``). The answer carries the
 question the Supervisor puts to the owner in the chat (``ask_owner``): their approval, and where the
 token is (a variable's NAME or a file's path), never the token.
 
 ``approve_integration`` is the owner's alone (a quote of their words this turn, ``author: owner``):
-it records the clearance, the data class and the credentials by reference in ``machine.toml``
+it records the clearance, the data class and the credentials by reference in ``poller.toml``
 (``token_env`` or ``token_file``, and ``user_env``/``user_file`` for an HTTP Basic account such as
 Jira Cloud's email; ``integrate_kits.credentials``), or the store's ``auth.bearer_env`` or
 ``bearer_file``, then writes the plan to the overlay, so the program then reads the real system. The record of each integration is the Supervisor's state (``integrations``)."""
@@ -245,8 +245,8 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     mf = kits.read(target)
     every = str(mf.get("settings", {}).get("every") or "5m")
     events = strategy == "poller" and kit != "promql"
-    lines: list = [(f"scaffolded the {kit} kit's poller {name} into {target} (machine.toml, {name}.py, test_{name}.py, "
-                    "AGENTS.md); machine.toml: clearance \"needs approval\", so it reads only a fake on this machine")
+    lines: list = [(f"scaffolded the {kit} kit's poller {name} into {target} (poller.toml, {name}.py, test_{name}.py, "
+                    "AGENTS.md); poller.toml: clearance \"needs approval\", so it reads only a fake on this machine")
                    if first else f"ran its test again in {target}",
                    f"its test against the kit's fake: {'passed' if test['passed'] else 'NOT passed'} ({test['summary']})"]
     rec.update(test=test, settings=settings, every=every, events=events,
@@ -399,7 +399,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         if settings:
             kits.fill(target, settings, None)
         kits.clear(target, creds, data_class, base_url)
-        lines.append(f"{rec['dir']}/machine.toml: clearance \"approved\", data_class {data_class!r}, {named} (by reference "
+        lines.append(f"{rec['dir']}/poller.toml: clearance \"approved\", data_class {data_class!r}, {named} (by reference "
                      f"only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))
         lines.append("its test ran against the kit's fake before your settings (it sets the template's variable and reads "
                      "the fake's own world); its first poll, in its log, says whether it reads the real system")

@@ -48,7 +48,7 @@ def draft_dir(project, name="jira_poller"):
 
 
 def machine_toml(project, name="jira_poller") -> dict:
-    return tomllib.loads((scaffolded(project, name) / "machine.toml").read_text())
+    return tomllib.loads((scaffolded(project, name) / "poller.toml").read_text())
 
 
 def asked(store) -> list[dict]:
@@ -62,7 +62,7 @@ def test_a_jira_poller_is_scaffolded_declared_as_jira_and_waits_for_the_owner(pr
     assert any(str(d) in line for line in got["said"])
     assert any("a coding tool" in line and "the owner commits it or approves its pull request" in line for line in got["said"])
     assert got["ok"] and got["integration"] == "jira_poller" and got["clearance"] == "needs approval"
-    assert {p.name for p in d.iterdir()} >= {"machine.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
+    assert {p.name for p in d.iterdir()} >= {"poller.toml", "jira_poller.py", "test_jira_poller.py", "AGENTS.md"}
     m = machine_toml(project)
     assert m["clearance"] == "needs approval" and m["settings"]["jql"] == "project = OPS"
     assert m["settings"]["base_url"] == "https://jira.acme.test" and "wanted" not in m   # the owner's words are the record's
@@ -223,14 +223,29 @@ def test_what_fill_and_clear_write_is_read_by_the_pollers_own_reader(project, st
     from orchestra_bridges.kits.machinefile import read
     connect(project, store)
     target = scaffolded(project)
-    assert read(target / "machine.toml").extra["jql"] == "project = OPS"           # what fill wrote
+    assert read(target / "poller.toml").extra["jql"] == "project = OPS"           # what fill wrote
     integrate_kits.clear(target, {"token_env": "JIRA_TOKEN"}, "metadata only", "https://jira.acme.test")
-    m = read(target / "machine.toml")
+    m = read(target / "poller.toml")
     assert (m.clearance, m.token_env, m.data_class, m.base_url) == ("approved", "JIRA_TOKEN", "metadata only", "https://jira.acme.test")
-    before = (target / "machine.toml").read_text()
+    before = (target / "poller.toml").read_text()
     with pytest.raises(StoreError, match="the poller's own reader refuses the change .*put back as it was"):
         integrate_kits.fill(target, {"per_minute": "lots"}, None)
-    assert (target / "machine.toml").read_text() == before
+    assert (target / "poller.toml").read_text() == before
+
+
+def test_the_settings_file_is_the_one_the_bridges_reader_finds_new_or_legacy(project, store, tmp_path):
+    """The kit's layout, not a name of ours: the scaffold writes ``machinefile.FILE`` (``poller.toml``)
+    and the agents edit what ``machinefile.locate`` finds, so a scaffold made before the rename (a
+    ``machine.toml`` with a top-level ``kit``) is still filled where it is, never beside it."""
+    from orchestra_bridges.kits.machinefile import FILE, LEGACY
+    connect(project, store)
+    target = scaffolded(project)
+    assert integrate_kits.settings_file(target) == target / FILE and not (target / LEGACY).exists()
+    old = tmp_path / "old_poller"
+    old.mkdir()
+    (target / FILE).rename(old / LEGACY)
+    integrate_kits.fill(old, {"jql": "project = LEGACY"}, None)
+    assert not (old / FILE).exists() and integrate_kits.read(old)["settings"]["jql"] == "project = LEGACY"
 
 
 def test_integrating_is_the_supervisors_alone(project, store):
@@ -316,7 +331,7 @@ def test_the_scope_the_template_guesses_is_asked_for(project, store):
 def test_the_state_directory_only_when_the_owner_keeps_the_repository_clean(project, store):
     got = connect(project, store, root="state")
     d = project.orchestra.state_dir / "machines" / "jira_poller"
-    assert got["dir"] == str(d) and (d / "machine.toml").is_file() and not scaffolded(project).exists()
+    assert got["dir"] == str(d) and (d / "poller.toml").is_file() and not scaffolded(project).exists()
     assert any("outside the repository" in line for line in got["said"])
     assert git(project.repo_root, "status", "--porcelain") == ""             # the repository untouched
     with pytest.raises(StoreError, match="root is repository"):
@@ -342,7 +357,7 @@ def test_a_system_with_no_template_is_scaffolded_and_handed_to_the_coordinator(p
                quote="Yes, you may read Jenkins", reason=WHY)
     landed = scaffolded(project, "jenkins_poller")
     assert got["clearance"] == "approved" and not draft.exists()
-    assert tomllib.loads((landed / "machine.toml").read_text())["clearance"] == "approved"
+    assert tomllib.loads((landed / "poller.toml").read_text())["clearance"] == "approved"
     entry = next(e for e in overlay(project)["machines"] if e["name"] == "jenkins_poller")
     assert str(landed / "jenkins_poller.py") in entry["command"]
 

@@ -86,9 +86,9 @@ def test_haiku_connects_jira_and_asks_for_the_variable(tmp_path, monkeypatch):
         jira = intended_api.current(project)["machines"].get("jira")
         assert jira and jira["managed"] == "external" and "bot.jira" in jira["aliases"], jira
     d = project.orchestra.repo_root / ".orchestra" / "machines"
-    polls = [p for p in d.iterdir() if (p / "machine.toml").exists()]
+    polls = [p for p in d.iterdir() if (p / "poller.toml").exists()]
     assert polls, "a poller was scaffolded"
-    m = tomllib.loads((polls[0] / "machine.toml").read_text())
+    m = tomllib.loads((polls[0] / "poller.toml").read_text())
     assert m["clearance"] == "approved" and m["settings"]["token_env"] == "JIRA_TOKEN" and "OPS" in m["settings"]["jql"]
     project.reload_config()
     assert any(e.get("restart") == "always" for e in project.orchestra.config.raw.get("machines") or [])

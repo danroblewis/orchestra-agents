@@ -118,7 +118,9 @@ too), is a list of event types in `receives` (`declare_machine`), changed with `
 `remove_receives` (`refine_machine`); what it publishes is in `emits`. Never put them only in
 `steps` or `uses`: those are words, and nothing wakes on them. Name only types a machine speaks:
 `read_events` lists them, in `by_type` (heard on the bus) and `announced_not_heard` (announced by
-a machine that listens for them: `gate.rejected` before the gate first rejects). An announced
+a machine that listens for them: `gate.rejected` before the gate first rejects). A type in
+`by_type` is heard on the bus; it needs no declaration, and goes in receives as it is
+(`sail.check.completed`, which the SAIL machine publishes, though no machine declares it). An announced
 type counts as heard, and so does one a declared machine emits. Never invent one
 (`work.proposed`): a new type goes in an existing family with a declared purpose (`declare_event`),
 only for what this machine itself publishes. When no machine speaks the type the owner's words

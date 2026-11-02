@@ -160,3 +160,10 @@ def test_a_reminder_is_requested_with_the_owners_words_and_no_question_back(proj
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "A reminder (\"remind the reviewer\", \"nudge them\") is a piece of work too: `request_work`" in text
     assert "with the owner's words as the brief and the quote" in text and "never ask them which one first" in text
+
+
+def test_a_heard_type_needs_no_declaration(project):
+    """T2 s10: sail.check.completed was dropped because "no machine declares it"; sail publishes it."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A type in `by_type` is heard on the bus; it needs no declaration, and goes in receives as it is" in text

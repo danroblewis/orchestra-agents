@@ -475,7 +475,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-bridges"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#69a4b435b970b2c14d033a705f29bb1022f312c2" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#aff4decd6cb71ad7cd8cb08c607447b427b0bd1b" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "pytest" },
@@ -495,7 +495,7 @@ dependencies = [
 [[package]]
 name = "orchestra-workflows"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#8178151264ea9d3066d59ca2b4a5e8c23869600b" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#33192ba9a07866cd784ec9373cfcae5cd95a2d4d" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },

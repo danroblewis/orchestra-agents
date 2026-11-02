@@ -337,6 +337,13 @@ TOOLS: list[ToolDef] = [
             "disabled ones are listed apart: they do no work until what they name is fixed. An ad hoc machine is 'last heard "
             "<when>; acts when offered work', never quiet; gone_quiet is the core's mark on a continuous or scheduled one, and "
             "the only sign that a machine stopped."),
+    ToolDef("machine_ages", "observe",
+            "Each machine on the bus in its age, with the counts: agent (announced kind agent), program in .orchestra/ "
+            "(its [[machines]] command runs a file under .orchestra/, being proven), graduated (its command is the "
+            "project's own: npm run, cargo run, python3 -m), unknown (no file or command of the project's runs it). "
+            "Which are due to graduate (a program in .orchestra/ heard for a week or more), whether .orchestra/ holds "
+            "the majority, and the line to say. Whether an agent is a program waiting to be written is not measured. "
+            "Read only."),
     ToolDef("read_outbox", "observe",
             "The Outbox's drafts as its approval page has them: those waiting for the owner, and the latest sent, rejected "
             "or failed, each with its kind, target, drafter and how it was approved (the owner, by their person id, or the "

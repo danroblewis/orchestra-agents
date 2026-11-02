@@ -8,7 +8,8 @@ It leads with what looks wrong (``since_anomalies``: new work on a Done ticket, 
 pull request, attention over an hour old, an open item whose pull request closed unmerged), then
 one paragraph per class, in this order: tickets, pull requests (with each rejection and triage
 verdict), checks, labels, incidents, the Outbox, items, machines marked quiet, the other events
-counted, what waits on the owner, the predictions, and the model line last (``closing_line``).
+counted, what waits on the owner, the predictions, the machines by age (``machine_ages``: who is due to graduate),
+and the model line last (``closing_line``).
 Each list names at most 5 entries, then "… and K more", the count still the whole one; when the
 digest would pass ``LIMIT`` (2,500 characters) the lists name 4, then 3, down to 1, so three days of
 a sprint board read at a glance (R3: 57 hours of the owner's board, 8 tickets and 15 pull requests,
@@ -412,14 +413,14 @@ def predictions(p) -> str:
 
 
 def digest(events: list[dict], start: float, now: float, tz: str | None, *, outbox_state: str | None = None,
-           waiting: dict | None = None, preds=None, model: str | None = None) -> str:
+           waiting: dict | None = None, preds=None, model: str | None = None, ages: str | None = None) -> str:
     clock = Clock(tz, now)
     for cap in CAPS:
         d = Day(events, clock, cap)
         head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} "
                 f"{clock.local(start):%H:%M} (all times {clock.named()}): {_n(len(d.events), 'event')} on the bus.")
         paras = [head, first(d), tickets(d), pull_requests(d), checks(d), labels(d), incidents(d),
-                 outbox(d, outbox_state), items(d), quiet(d), others(d), owner(waiting, clock), predictions(preds), model]
+                 outbox(d, outbox_state), items(d), quiet(d), others(d), owner(waiting, clock), predictions(preds), ages, model]
         text = "\n\n".join(p for p in paras if p)
         if len(text) <= LIMIT:
             break

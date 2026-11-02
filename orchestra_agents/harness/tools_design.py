@@ -339,6 +339,21 @@ DESIGN_TOOLS: list[ToolDef] = [
              "base_url": S("The system's address, when it was not given before"),
              "settings": INTEGRATION_SETTINGS, "quote": QUOTE, "reason": REASON},
             ("name", "quote", "reason")),
+    ToolDef("graduate_machine", "design",
+            "A program proven in .orchestra/machines/<name>/ moves into the project's own tree, in its language "
+            "(pyproject.toml: <pkg>/<name>/, run as python3 -m <pkg>.<name>; package.json: scripts/<name>/ and a script "
+            "entry, npm run <name>; Cargo.toml: src/bin/<name>/ and a [[bin]], cargo run --bin <name>), and each "
+            "[[machines]] and [[collect]] entry that runs it gets the new command. Its code is not changed, so it stays "
+            "the same machine on the bus. Always a dry run first (the default): put its plan to the owner; on their yes, "
+            "quoted, call again with dry_run false. Nothing is committed: the move, the manifest and orchestra.toml are "
+            "left for the owner to commit together or land through a pull request.",
+            {"name": S("The machine's directory in .orchestra/machines/ (relator)"),
+             "dry_run": B("true (the default): only say what the move does; false: do it, on the owner's quoted yes after a "
+                          "dry run"),
+             "language": E(["python", "node", "rust"], "Leave out: the machine's files say it"),
+             "destination": S("Node only, leave out for scripts/<name>: a path in the repository outside .orchestra/"),
+             "quote": QUOTE, "reason": REASON},
+            ("name", "reason")),
     ToolDef("read_design", "observe",
             "The declared layer in one read: every declared and proposed element with its state, link and guessed fields; "
             "each machine's fields; each event type's declared publishers and listeners and who was heard publishing it or "

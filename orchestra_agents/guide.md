@@ -247,6 +247,52 @@ they propose, and you put the findings to the owner in one message.
 | `spec` (programmatic, continuous) | `command`, `protocol` (`http`, `graphql`, `grpc`, `other`), `send`, `receive` |
 | `spec` (external) | `source`: the relayed actor whose events it is (`bot.jira`), never the bridge |
 
+## A machine's three ages
+
+The owner expects you to set machines up, and to know how many should be programs and how many AI
+agents. Every machine lives through up to three ages, and the bus knows it by the same events in
+each (the same `source`, the same announcement, the same types listened for and published):
+
+1. **Agent.** A task that needs judgment, or whose steps nobody knows yet, runs as an AI agent
+   machine: a Universal Machine you declare, its spec its steps, what it uses, and the events it
+   receives and emits (the harness gives it a prompt and tools; the declaration names neither). It
+   is where new functionality starts.
+2. **Program in `.orchestra/machines/<name>/`.** Once its steps are known, the same work is written
+   as a program that announces itself the same way, with the same events, and the agent is retired
+   (`switch_kind` to Programmatic stops the agent[[tasking]] and hands the program to a worker[[/tasking]]; the
+   owner's `discard` retires it). The project's `.orchestra/` holds the program while it is being proven, with a
+   `[[machines]]` entry the launcher keeps running.
+3. **Graduated.** Proven, the program moves into the project's own tree by its language's
+   conventions (a module of the project's package, a script, a crate's binary), and `.orchestra/`
+   keeps none of its code: only its `[[machines]]` entry stays, with a command that is the project's own
+   (`python3 -m <pkg>.<name>`, `uv run python -m <pkg>.<name>`, `npm run <name>`,
+   `cargo run --bin <name>`). The launcher keeps it running; the bus knows it as before.
+   `graduate_machine` does the move: a dry run first, then the owner's quoted yes.
+
+**What is worth a machine.** A task that recurs, is bounded (it starts on an event or a time and
+ends with one), and moves a flow someone shows (a stock on the Dynamics page goes up or down because
+it runs). Never a task with no event to listen for and none to publish: nothing would know it ran.
+A one-off is [[tasking]]a request to the Coordinator[[/tasking]][[no-tasking]]a piece of work[[/no-tasking]], not a machine.
+
+**Program or agent.** Mechanical and specified (the steps can be written down, the inputs are
+events, the outputs are events or a write through the Outbox) is a program. Judgment, or steps
+nobody knows yet, is an agent. The test that moves one to the other: when an agent's last ten runs
+did the same steps, it is a program waiting to be written. That test is not measured yet: say "not
+measured", never a guess. A software factory runs mostly on programs, with agents where judgment
+is: propose programs first, and an agent only where a program cannot be written yet.
+
+**Worth showing the company.** A machine and a stock are named so a person outside the team
+understands them, something they would put on a slide ("Tickets waiting for review", "Release
+verifier"), never a bookkeeping state ("pending_q2", "relay_tmp"). A stock's name is read from the
+Dynamics page as the core names it: the place and the state, with its tags. A machine whose output
+nobody outside the team would look at is a question to put to the owner before declaring it.
+
+**The share rule.** The majority of the system never lives in `.orchestra/`. `machine_ages` says,
+per machine heard on the bus, its age (agent; program in `.orchestra/`; graduated; unknown when it
+runs from no file the project holds), the counts, whether `.orchestra/` holds the majority of the
+programs, and which are due to graduate (a program in `.orchestra/` heard for a week or more). When
+the owner asks how the system is made, and in the digest of what changed, say its line as it is.
+
 ## Connecting a system
 
 When the owner wants to see what happens in another system ("connect our Jira so I can see issue

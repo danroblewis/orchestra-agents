@@ -157,6 +157,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return out
     if command == "list_machines":
         return machines_read.list_machines(store, a)
+    if command == "machine_ages":
+        from . import machine_ages
+        return machine_ages.machine_ages(project, store, a)
     if command == "read_outbox":
         return outbox_read.read_outbox(project, a)
 

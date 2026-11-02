@@ -153,10 +153,14 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
         counted["waiting_on_owner"] = owner_waits.waiting_on_owner(project, store)
         counted["model"] = model_line(project, start)
         counted["closing_line"] = counted["model"]       # the reply's last line, verbatim (closing_line.py)
-        from . import clock, since_digest
+        from . import clock, machine_ages, since_digest
+        try:
+            ages = machine_ages.machine_ages(project, store).get("line") or "Machines by age: not read."
+        except Exception:  # noqa: BLE001 - the machines view unreadable: the digest still stands, saying so
+            ages = "Machines by age: not read."
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
-                                                model=counted["model"])
+                                                model=counted["model"], ages=ages)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

@@ -329,6 +329,17 @@ def proposed_elsewhere(project: Project, mid: str, title: str) -> None:
                      f"{runs_it(m)}, and ask any follow-up after")
 
 
+def age_line(m: dict) -> str | None:
+    """Where the machine stands in its three ages (the guide's "A machine's three ages")."""
+    if m.get("managed") == "external":
+        return None
+    if m["kind"] == "universal":
+        return ("age: an agent; once its runs take the same steps each time, it is a program waiting to be written "
+                "(switch_kind to programmatic)")
+    return (f"age: a program; it is proven in .orchestra/machines/{m['id']}/ and then graduates into the project's own tree "
+            "(graduate_machine), so .orchestra/ never holds most of the system")
+
+
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id(a)
     kind = a.get("kind")
@@ -355,6 +366,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
              state_machines.unmapped_line(m)]
     if a.get("guesses"):
         lines.append(f"guessed: {', '.join(a['guesses'])}")
+    lines.append(age_line(m))
     unheard = [t for t, who_ in listeners(project, store, m["emits"], mid).items() if not who_]
     if unheard:
         lines.append(f"no listener yet for {', '.join(unheard)} (the refinement pass will propose one)")

@@ -117,6 +117,16 @@ declare it now, quoting that message. Never ask the owner to restate or repeat a
    yes, quoted, `approve_integration` with what they gave. Your guide's "Connecting a system" has
    the rest.
 
+**A machine's age** (your guide's "A machine's three ages"). Before `declare_machine`, decide its
+kind by the work: mechanical and specified is `programmatic`; judgment or steps nobody knows yet is
+`universal` (an agent), and an agent whose runs keep taking the same steps is a program waiting to
+be written. Propose programs first: the factory runs mostly on programs. Declare a machine only for
+a task that recurs, is bounded by events or a time, and moves a flow someone shows; never one with
+no event to receive or emit. Name it, and any stock, so a person outside the team would put it on a
+slide. A proven program in `.orchestra/machines/` graduates into the project's tree
+(`graduate_machine`: a dry run, then the owner's quoted yes); `machine_ages` says how many machines
+are in each age and which are due, and you say its line when asked how the system is made.
+
 **Events go in `receives`.** What a machine watches, or reads at each run (a scheduled machine
 too), is a list of event types in `receives` (`declare_machine`), changed with `add_receives` and
 `remove_receives` (`refine_machine`); what it publishes is in `emits`. Never put them only in

@@ -72,8 +72,12 @@ in the turn: they are configuration, not tickets.
   or will not send unless that line says so (a machine the bus marks quiet is no outage while
   `outbox` says running). `read_outbox` lists the drafts waiting and the latest sent or rejected,
   each with how it was approved. Every prediction in the answer's `predictions` is told, by its id,
-  with its `state` as given (what it waits for, or its verdict). Never describe your own tool use
-  (which tools ran, or that none did). End the answer with the model's state: the answer's last
+  with its `state` as given (what it waits for, or its verdict). Then, before the model line, name
+  what waits on the owner now, from the answer's `waiting_on_owner`: each disabled machine and
+  what it says it needs, each Outbox draft waiting for their approval, and each question you asked
+  them that what they said next does not answer (a go-ahead you asked for and did not get still
+  waits); "nothing waits on you" only when all three are empty, and a part not read is said so.
+  Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the answer's last
   line is that read's `model` line, as it gives it (the stocks and flows counted, or why there is
   no model, or that it could not be read; the same line `read_model` gives, so no second call is
   needed), and nothing after it; never "no stocks" from a failed read.

@@ -15,7 +15,9 @@ first failure, because the machines that wait for it say so when they start.
 With ``since`` it also answers the window's ``tally`` (``event_tally``): each class of event
 counted, for "what changed since", and the ``model`` line (``modeling.model_line``: the state line
 read_model gives), so the answer has the model from its first call (T2d s16), with the ``outbox``
-("running; N sent, M waiting") and each prediction's state (``since_facts``, T2e s16)."""
+("running; N sent, M waiting") and each prediction's state (``since_facts``, T2e s16), and what waits
+on the owner now (``owner_waits``: disabled machines, Outbox drafts, the Supervisor's open
+questions; T2f s16)."""
 
 from __future__ import annotations
 
@@ -141,10 +143,11 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
     more = (" (read on with since set to the last one's ts)" if oldest and len(picked) > len(shown) else "")
     counted = {"tally": tally(picked), "tally_note": TALLY_NOTE} if a.get("since") not in (None, "") else {}
     if counted and project is not None:
-        from . import since_facts
+        from . import owner_waits, since_facts
         from .modeling import model_line
         counted["outbox"] = since_facts.outbox(project, start)
         counted["predictions"] = since_facts.predictions(project)
+        counted["waiting_on_owner"] = owner_waits.waiting_on_owner(project, store)
         counted["model"] = model_line(project)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],

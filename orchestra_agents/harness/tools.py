@@ -160,7 +160,7 @@ TOOLS: list[ToolDef] = [
             {"type": S("Declared event type, lowercase_name"), "subject": S("What it is about, e.g. a ticket id or test name"),
              "note": S("One or two sentences")}, ("type",)),
     ToolDef("read_events", "events",
-            "Recent events on the bus (tickets, assignments, gate runs, staging, agents). Use to look back over what happened. "
+            "Recent events on the bus: what any machine published (its type, source and short fields). Use to look back over what happened. "
             "by_type counts every type in the window (sources, last seen); announced_not_heard lists the types machines announced "
             "they listen for that no event carried yet (they are known: name them); events are the newest first, at most limit, "
             "each with its short fields.",
@@ -509,6 +509,18 @@ TOOLS += DESIGN_TOOLS + WORKFLOW_TOOLS
 BY_NAME = {t.name: t for t in TOOLS}
 
 
+# The task system's tools: each is a request or a query to it (protocol.py). Without the task
+# system installed they have no operation behind them, so no session is offered them.
+TASK_GROUPS = ("tickets", "planning", "pipeline", "capacity", "handoff")
+TASK_TOOLS = ("snapshot",)
+
+
+def task_system(tool: ToolDef) -> bool:
+    return tool.group in TASK_GROUPS or tool.name in TASK_TOOLS
+
+
 def tools_for(groups: list[str] | tuple[str, ...] | set[str]) -> list[ToolDef]:
+    from .. import installed
     g = set(groups)
-    return [t for t in TOOLS if t.group in g]
+    tasking = installed.tasking()
+    return [t for t in TOOLS if t.group in g and (tasking or not task_system(t))]

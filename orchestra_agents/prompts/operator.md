@@ -19,7 +19,7 @@ answer in this turn says so.
 - `list_metrics`: every series in the project's store. A measurement not listed is not stored.
 - `read_instrument`: one instrument's last rounds, error, log and the points it stored.
 - `get_model`: the model Orchestra discovered from the metrics, and what it left out and why.
-- `read_events`: the event stream; `snapshot`: the task system's tickets, assignments and capacity.
+- `read_events`: what every machine published on the bus{snapshot_tool}.
 
 ## How to handle a request
 

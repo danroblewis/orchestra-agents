@@ -22,11 +22,14 @@ to the agent that reacts, never to the host, which is no machine (events.py):
 What wakes an agent without an event on the bus (a human's message, a brief or a message from
 another agent, a crash loop) is not listed: nothing on the bus causes it. Neither is what the host
 reads for its own bookkeeping without any agent acting on it (a finished ticket's sessions go to
-the archive)."""
+the archive). Without the task system installed (``installed.tasking``) none of its events are
+listed: no answers to requests, no ticket endings, no plan from a Coordinator that is not started."""
 
 from __future__ import annotations
 
+from . import installed
 from .builtins import ROLES as BUILTIN_ROLES
+from .events import WORK_PLANNED as PLANNED
 from .floor import LISTENS_FOR as FLOOR_EVENTS
 from .org import JUDGED, AgentDef
 from .protocol import CREATED, DONE, REFUSED, SUPERVISOR, endings
@@ -43,15 +46,18 @@ def listens_for(agent: AgentDef | None, work: str, groups: tuple[str, ...] | lis
     if groups is None:
         groups = [g for r in agent.roles if agent.builtin and r in BUILTIN_ROLES for g in BUILTIN_ROLES[r].tools]
     per_ticket = agent.builtin and not agent.resident
+    tasking = installed.tasking()
     out = {w.split(":")[0] for w in agent.wake_on} | set(agent.reads_events or [])
-    if not per_ticket:                                           # a woken agent asks the task system as itself
+    if not tasking:                                              # nothing hands work on or answers it as the task system
+        out -= {PLANNED}
+    if not per_ticket and tasking:                               # a woken agent asks the task system as itself
         out |= {DONE, REFUSED}
     if floor:
         out |= set(FLOOR_EVENTS)
-    if agent.name == SUPERVISOR:
+    if agent.name == SUPERVISOR and tasking:
         out |= {CREATED, *endings(work)}
     if "predict" in groups:
-        out |= {JUDGED, *(endings(work) if per_ticket else ())}
+        out |= {JUDGED, *(endings(work) if per_ticket and tasking else ())}
     return sorted(out)
 
 

@@ -58,7 +58,15 @@ from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
 from .listening import engaged, listens_for
 from .machine_spec import load as load_spec
-from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
+from .org import (
+    AgentDef,
+    built_in_agents,
+    effective_tools,
+    event_matches,
+    needs_task_system,
+    team_chain,
+    tools_path,
+)
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
 from .residents import Residents
@@ -745,7 +753,7 @@ class AgentHost:
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)
-        if agent is None:
+        if agent is None or needs_task_system(agent):     # the Coordinator without the task system: nothing to plan into
             return
         with self._turn_lock(target):
             self._wake_turn(agent, target, reasons)

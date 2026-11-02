@@ -26,6 +26,7 @@ from . import (
     duties,
     guides,
     handoff,
+    installed,
     instruments,
     ledger,
     modeling,
@@ -247,6 +248,10 @@ def may_change_tickets(project: Project, role: str, command: str = "") -> bool:
     return bool(ag) and not ag.builtin and group in effective_tools(ag, all_roles(project), all_teams(project))
 
 
+# The snapshot of a project without the task system installed: empty, and marked ``absent`` so the
+# prompts leave the task system out (no ticket counts, no "did not answer").
+NO_TASK_SYSTEM = {"counts": {}, "tickets": [], "milestones": [], "pipeline": {"paused": False}, "capacity": {},
+                  "assignments": [], "absent": True}
 _UNANSWERED: dict[str, float] = {}     # project key -> when the task system last left a snapshot unanswered
 SILENT_FOR_S, SILENT_WAIT_S = 600.0, 3.0   # after a snapshot nobody answered, the next ones wait this long, for this long
 
@@ -258,6 +263,8 @@ def snapshot(store: AgentStore, role: str, wait_s: float | None = None) -> dict:
     (protocol.WAIT_S by default; SILENT_WAIT_S for ten minutes after one went unanswered, so a project
     without the task system, as before its setup, does not hold every turn for half a minute). When the
     task system does not answer, an empty one that says so."""
+    if not installed.tasking():               # no task system installed: nothing to ask, and nothing published
+        return dict(NO_TASK_SYSTEM)
     if wait_s is None and time.time() - _UNANSWERED.get(store.project.key, 0.0) < SILENT_FOR_S:
         wait_s = SILENT_WAIT_S                    # it did not answer a moment ago: no task system runs, most likely
     got = TaskClient(store.events, role, source=role, wait_s=wait_s)("snapshot")

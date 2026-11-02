@@ -22,7 +22,7 @@ from .store import AgentStore
 DEFAULT_LIMIT, MAX_LIMIT = 20, 100
 SCAN = 20_000                           # the newest events read for the summary and the known types
 TEXT = 160                              # a field's text past this is cut
-HIDDEN = ("session.started", "session.settled")
+HIDDEN = ("session.started", "session.settled", "task.query_requested")   # the host's own markers, and an agent's reads of the task system
 ENVELOPE = ("type", "ts", "source", "subject", "id")
 ANNOUNCED = "orchestra.machine.started"
 

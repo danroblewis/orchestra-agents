@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import ClassVar
 
+from . import installed
 from .config import Project
 from .org import EVENT_TYPES, team_chain, tools_path
 from .org_store import RepoOrgStore, all_teams
@@ -37,11 +38,13 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 def prompt_path(project: Project, role: str) -> Path | None:
     """The file a built-in role's prompt is read from: the project's override, else the variant
     for the project's kind of work (``worker.tasks.md``: no git, no merge gate), else
-    ``<role>.md``; None for a custom role, whose prompt is in ``.orchestra/roles/``."""
+    ``<role>.md``; None for a custom role, whose prompt is in ``.orchestra/roles/``. The kind of
+    work is the task system's (``[project] work``), so without it installed the variant is not read."""
     override = project.config.prompt_overrides.get(role)
     if override:
         return project.repo_root / override
-    for p in (PROMPTS_DIR / f"{role}.{project.config.work}.md", PROMPTS_DIR / f"{role}.md"):
+    variant = [PROMPTS_DIR / f"{role}.{project.config.work}.md"] if installed.tasking() else []
+    for p in (*variant, PROMPTS_DIR / f"{role}.md"):
         if p.exists():
             return p
     return None
@@ -97,11 +100,31 @@ def _fill(project: Project, text: str) -> str:
     """Placeholders: ``{operator}`` (the Supervisor's part shared by both kinds of work: seeing the
     system and fixing its setup, prompts/operator.md, then designing it, prompts/design.md, with its
     built-in refine_map duty, prompts/duties/refine_map.md), then the project's settings."""
+    text = _task_system(text)
     if "{operator}" in text:
-        text = text.replace("{operator}", "\n\n".join((PROMPTS_DIR / f).read_text(encoding="utf-8").strip()
-                                                       for f in ("operator.md", "design.md", "duties/refine_map.md")))
+        text = _task_system(text.replace("{operator}", "\n\n".join((PROMPTS_DIR / f).read_text(encoding="utf-8").strip()
+                                                                    for f in ("operator.md", "design.md", "duties/refine_map.md"))))
     return (text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
             .replace("{machines_doc}", machines_doc()))
+
+
+TASK_SYSTEM_INTRO = (" Code work becomes requirements the Coordinator can *plan* into tickets, that a worker who cannot "
+                     "ask questions can *execute*, a reviewer reading a diff can *review*, and the merge gate's acceptance "
+                     "tests can *verify*. You make no tickets yourself: the Coordinator does, from your requirements.")
+
+
+def _task_system(text: str) -> str:
+    """The Supervisor's task-system parts (``{task_system_intro}``, ``{task_system}``,
+    prompts/task_system.md, and ``{ticket_states}``, prompts/ticket_states.md), after the
+    workflows, only when the task system is installed (``installed.tasking``); else nothing."""
+    if not any(k in text for k in ("{task_system_intro}", "{task_system}", "{ticket_states}", "{snapshot_tool}")):
+        return text
+    on = installed.tasking()
+    text = text.replace("{snapshot_tool}", "; `snapshot`: the task system's tickets, assignments and capacity" if on else "")
+    tasks = (PROMPTS_DIR / "task_system.md").read_text(encoding="utf-8").rstrip("\n") if on else ""
+    states = (PROMPTS_DIR / "ticket_states.md").read_text(encoding="utf-8").rstrip("\n") + "\n\n" if on else ""
+    return (text.replace("{task_system_intro}", TASK_SYSTEM_INTRO if on else "").replace("{task_system}\n", tasks + "\n" if on else "")
+            .replace("{ticket_states}", states))
 
 
 def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict | None = None) -> str:
@@ -159,7 +182,7 @@ def _agent_prompt(project: Project, agent, roles: dict | None = None, teams: dic
         reach_line = (f"Your lead `{team.lead}` is reached with `message_agent`; the human, and decisions above your lead, "
                       "only through `escalate_to_supervisor`.")
     parts = [AGENT_PREAMBLE.format(agent=agent.name, roles=", ".join(f"`{r}`" for r in agent.roles), team_line=team_line,
-                                   reach_line=reach_line)]
+                                   reach_line=reach_line, tickets_line=TICKETS_LINE if installed.tasking() else "")]
     for r in agent.roles:
         parts.append(f"## Your role: {r}\n\n{role_prompt(project, r).strip()}\n")
     for i, t in enumerate(chain):
@@ -266,9 +289,9 @@ You are an agent in a software project run by Orchestra, with the role {roles}. 
 Orchestra wakes you with a message that says why (an event, a schedule, or a note or brief from
 another agent) and gives you a snapshot of the project. Act using your tools, then reply with a
 short summary of what you did and why. You never write code on the base branch and never start
-agents yourself; code changes happen by creating or editing tickets, which the Coordinator
-orders and workers implement. {reach_line}
+agents yourself.{tickets_line} {reach_line}
 """
+TICKETS_LINE = " Code changes happen by creating or editing tickets, which the Coordinator orders and workers implement."
 
 
 def _ticket_block(t: TicketView) -> str:
@@ -351,6 +374,12 @@ def wake_task(target: str, reasons: list[str], snapshot: dict, roles: list[str] 
     lines += [f"- {r}" for r in shown]
     if len(reasons) > len(shown):
         lines.append(f"- ...and {len(reasons) - len(shown)} more of the same kinds; the snapshot below is current")
+    if snapshot.get("absent"):                 # no task system installed: no picture of tickets to give
+        if roles:
+            lines += ["", "## Who fills the roles"] + roles
+        lines += ["", ("Use your tools to act, then report the way your role says to; if it does not say, reply with a few "
+                       "lines on what you did and why.")]
+        return "\n".join(lines)
     if snapshot.get("unavailable"):
         lines += ["", (f"The task system did not answer: {snapshot['unavailable']}. The snapshot below is empty for that "
                        "reason, not because the project is empty; do not act on ticket counts this turn.")]
@@ -501,7 +530,9 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
                 parts.append(f"{k}={e[k]}")
         lines.append("- " + " ".join(str(p) for p in parts)[:240])
     counts = ", ".join(f"{k}={v}" for k, v in snapshot["counts"].items() if v)
-    if snapshot.get("unavailable"):
+    if snapshot.get("absent"):
+        pass                                    # no task system installed: no ticket line at all
+    elif snapshot.get("unavailable"):
         lines.append(f"[Orchestra: the task system did not answer: {snapshot['unavailable']}; ticket counts unknown]")
     else:
         lines.append(f"[Orchestra: ticket counts now: {counts or 'none'}]")

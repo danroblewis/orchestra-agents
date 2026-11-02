@@ -91,7 +91,9 @@ declare it now, quoting that message. Never ask the owner to restate or repeat a
    achieves, invariants a reviewer can check, numbered steps naming each event where it is used,
    what it receives, emits, reads and uses; never a model, a prompt or a tool. Mark every guess.
    Give it an expected effect (`declare_expected_effect`, rates where you can; a stock with no
-   series waits for one), or say why none can be named. State its cost as drafted: its turns a day
+   series waits for one; a factor on a flow the model does not have yet, "SAILED per day ×1.2"
+   with no model, is recorded on the flow in the owner's words and waits for discovery: never say
+   it cannot be recorded), or say why none can be named. State its cost as drafted: its turns a day
    and their price; unconfirmed, it never runs.
 5. **Refine** as the owner talks: `refine_machine` with only what changes (`add_receives`,
    `remove_receives`, `add_uses`, `add_tags`, `steps`, `mode` with `at` and `tz`, `set_field` for a

@@ -230,3 +230,17 @@ def test_the_owners_name_for_a_machine_a_plugin_proposed_refines_that_one(projec
          mode="scheduled", at="09:00", reason=WHY)
     assert layer(project)["machines"]["review_nudger"]["engagement"]["at"] == "09:00"
 
+
+def test_the_owners_factor_is_recorded_as_a_waiting_draft_with_no_model(project, store):
+    """T2 s10: "SAILED per day ×1.2" with no model saved yet: recorded on the flow the owner named,
+    as a draft that waits for discovery, never "can't be recorded"; confirm is then not held."""
+    say(store, ASKED.replace("Review Nudger", "Notes Improver"), 1)
+    machine(project, store, "notes_improver", quote="Create a machine called Notes Improver")
+    out = call(project, store, "declare_expected_effect", machine="notes_improver", horizon="3d", reason=WHY,
+               quote="I expect SAILED per day ×1.2", expect=[{"kind": "factor", "flow": "SAILED per day", "factor": 1.2}])
+    said = " ".join(out["said"])
+    assert "a draft" in said and "waiting for discovery" in said and "there is no model yet" in said
+    assert "SAILED per day ×1.2" in said and "can't" not in said and "cannot" not in said
+    effect = layer(project)["machines"]["notes_improver"]["expected_effect"]
+    assert effect["edits"] == [{"flow": "SAILED per day", "factor": 1.2}]
+    design_asked.check_expectation_recorded(store, layer(project)["machines"]["notes_improver"])

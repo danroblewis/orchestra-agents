@@ -571,7 +571,7 @@ def waiting_line(project: Project, store: AgentStore, lay: dict, e: dict, why: s
     """Why one edit waits, and what publishes it: a declared stock or effect waits for its link
     (discovery never finds a declared id); anything else for discovery to find it."""
     from .design_instruments import drafts
-    name = next((e[k] for k in ("stock", "to", "from") if e.get(k)), "?")
+    name = next((e[k] for k in ("stock", "flow", "to", "from") if e.get(k)), "?")
     decl = (lay.get("stocks") or {}).get(name) or (lay.get("effects") or {}).get(name)
     if decl is not None and decl.get("found_as"):
         return (f"{decl.get('name') or name} is linked to {decl['found_as']}, which is not in the current model: published "
@@ -687,7 +687,24 @@ def declare_expected_effect(project: Project, store: AgentStore, a: dict, prov: 
     for e in stored:
         if (w := publishable(project, lay, mid, e, keys=keys, core=core)[1]) is not None:
             lines.append(waiting_line(project, store, lay, e, w))
+        elif (line := flow_waits(project, e, keys)) is not None:
+            lines.append(line)
     return answer(project, done, lines, machine=mid)
+
+
+def flow_waits(project: Project, e: dict, keys: intended_api.Keys) -> str | None:
+    """What a factor on a flow the current model does not have waits for (no model saved yet, or
+    one without that flow): it is recorded, as the owner said it, and judged once discovery finds
+    the flow. None when the flow is the model's."""
+    name = e.get("flow")
+    if not isinstance(name, str):
+        return None
+    model = intended_api.current_model(project)
+    if model is not None and (name in keys.flows or name in {f.id for f in model.flows}):
+        return None
+    now = "there is no model yet" if model is None else "the current model has no such flow"
+    return (f"recorded, waiting for discovery: {name} ×{e.get('factor')} is kept as the owner said it; {now}, so it is "
+            "judged once discovery finds that flow (read_model says what discovery needs). Nothing more to do now")
 
 
 COMMANDS = {"declare_machine": declare_machine, "refine_machine": refine_machine, "switch_kind": switch_kind,

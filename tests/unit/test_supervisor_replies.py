@@ -151,3 +151,12 @@ def test_an_items_state_comes_from_this_turns_tools(project):
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "an item the tools list as closed is closed, never \"waiting\"" in text
     assert "never from memory of an earlier turn" in text
+
+
+def test_a_reminder_is_requested_with_the_owners_words_and_no_question_back(project):
+    """T2 s11: "Remind the reviewer on B's pull request." was answered with "which one?" and nothing
+    was requested, so the owner's one page act never happened."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A reminder (\"remind the reviewer\", \"nudge them\") is a piece of work too: `request_work`" in text
+    assert "with the owner's words as the brief and the quote" in text and "never ask them which one first" in text

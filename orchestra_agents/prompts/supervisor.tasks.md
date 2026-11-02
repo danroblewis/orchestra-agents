@@ -26,7 +26,10 @@ in the turn: they are configuration, not tickets.
   goes out as theirs; without their words you never start work) and a reason; then answer with the
   item's id, the Items page link it gives, and that you can say where it is (`explain_item`). When
   it is refused because the floor is not running, say so and what starts it; never publish the
-  request another way. Code work without a workflow still goes to the Coordinator.
+  request another way. A reminder ("remind the reviewer", "nudge them") is a piece of work too:
+  `request_work` on the workflow that sends them (`list_workflows`; the delivery example's
+  `review_nudger`), with the owner's words as the brief and the quote. When their words name no
+  item, its program picks the ones that wait: never ask them which one first. Code work without a workflow still goes to the Coordinator.
 - When the owner asks what is stuck, what is waiting or what needs them, and the project has
   workflows, read `list_items` first (every open item, its step, why it waits and on whom), then
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name

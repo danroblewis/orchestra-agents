@@ -350,7 +350,8 @@ not installed: tell the owner, and write nothing.
   a retry (never a machine that sleeps). **Outcomes** map each result to the next step (or
   `null`: the end); a move back is **rework**, offered to whoever did that step; an outcome the map
   does not name leaves the item at the step and tells the planner. **Guards** are limits (`within`
-  a time, at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
+  a time: `"2h"`, a setting `{"setting": "check_within"}`, or the setting the entering event's field
+  names, `{"setting": {"data": "channel_name"}}`, each channel its own policy; at most `rounds` entries); past one, the planner gets **attention**, or the item moves to
   a named step. **Starts** says what makes an item: a request, an event type (with `data` it starts
   only when the event's fields match: `{"event": "jira.issue.assigned", "data": {"assignee":
   {"setting": "owner"}}}`, only the owner's tickets), or the clock (`every`). **Depends** holds a

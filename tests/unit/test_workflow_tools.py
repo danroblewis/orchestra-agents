@@ -427,3 +427,81 @@ def test_the_design_prompt_takes_the_zone_answer():
     text = " ".join((PROMPTS_DIR / "design.md").read_text().split())
     assert "when it is \"this machine's clock\", \"local\" or \"here\", pass those words as `tz`" in text
     assert "Declare it in that turn, say what was declared, and never ask for the zone again" in text
+
+
+SLACK_QUEUES = {   # orchestra-workflows' examples/slack_queues definition, as it ships (T14)
+    "name": "slack_queues", "about": "Threads in the SRE team's Slack channels, answered within the channel's policy.",
+    "items": {"one": "thread", "many": "threads"}, "planner": "coordinator",
+    "starts": [{"event": "slack.thread.started"}],
+    "steps": [
+        {"name": "awaiting_reply", "who": {"outside": "slack"},
+         "done_when": {"event": "slack.thread.replied", "data": {"first": True}}, "outcomes": {"done": "awaiting_check"},
+         "guards": {"within": {"setting": {"data": "channel_name"}}, "then": "late"}},
+        {"name": "late", "who": {"outside": "slack"},
+         "done_when": {"event": "slack.thread.replied", "data": {"first": True}}, "outcomes": {"done": "awaiting_check"}},
+        {"name": "awaiting_check", "who": {"outside": "slack"},
+         "done_when": {"event": "slack.thread.checked", "data": {"emoji": {"setting": "check_emoji"}}},
+         "outcomes": {"done": None}, "guards": {"within": {"setting": "check_within"}, "then": "unchecked"}},
+        {"name": "unchecked", "who": {"outside": "slack"},
+         "done_when": {"event": "slack.thread.checked", "data": {"emoji": {"setting": "check_emoji"}}},
+         "outcomes": {"done": None}}],
+    "settings": {"sre-help": {"type": "string", "default": "2h"}, "oncall": {"type": "string", "default": "30m"},
+                 "check_emoji": {"type": "string", "default": "white_check_mark"},
+                 "check_within": {"type": "string", "default": "3h"}}}
+
+JSON_TYPES = {"string": str, "integer": int, "number": (int, float), "boolean": bool, "object": dict, "array": list,
+              "null": type(None)}
+
+
+def conforms(value, schema: dict, where: str = "definition") -> list[str]:
+    """The JSON Schema subset the catalogue uses (type, enum, anyOf, properties, required, items,
+    additionalProperties): every place ``value`` breaks ``schema``, so a shape the plugin accepts
+    and the tool's schema refuses (a model's client may enforce it) is found here, not at the owner's."""
+    if "anyOf" in schema:
+        return [] if any(not conforms(value, s, where) for s in schema["anyOf"]) else [f"{where}: no shape fits {value!r}"]
+    types = schema.get("type")
+    if types is not None:
+        types = [types] if isinstance(types, str) else types
+        ok = any(isinstance(value, JSON_TYPES[t]) and not (t in ("integer", "number") and isinstance(value, bool))
+                 for t in types)
+        if not ok:
+            return [f"{where}: {value!r} is not {'/'.join(types)}"]
+    if "enum" in schema and value not in schema["enum"]:
+        return [f"{where}: {value!r} not in {schema['enum']}"]
+    out = []
+    if isinstance(value, dict):
+        out += [f"{where}: {k} missing" for k in schema.get("required", []) if k not in value]
+        props, extra = schema.get("properties", {}), schema.get("additionalProperties")
+        for k, v in value.items():
+            if k in props:
+                out += conforms(v, props[k], f"{where}.{k}")
+            elif isinstance(extra, dict):
+                out += conforms(v, extra, f"{where}.{k}")
+    if isinstance(value, list) and isinstance(schema.get("items"), dict):
+        for i, v in enumerate(value):
+            out += conforms(v, schema["items"], f"{where}[{i}]")
+    return out
+
+
+@pytest.mark.parametrize("within", ["2h", {"setting": "check_within"}, {"setting": {"data": "channel_name"}}])
+def test_the_schema_takes_every_within_the_plugin_takes(within):
+    """e (O1): ``within`` is a duration, a setting or the setting a field names (workflows
+    ``define/steps.py`` ``within_ref``); a schema saying only "string" refused slack_queues."""
+    schema = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]
+    d = json.loads(json.dumps(SLACK_QUEUES))
+    d["steps"][0]["guards"]["within"] = within
+    assert conforms(d, schema) == []
+    assert conforms({**d, "steps": [{"name": "x", "guards": {"within": 7200}}]}, schema)   # a number is no duration
+
+
+def test_the_shipped_definitions_fit_the_schema_and_the_plugin_accepts_them():
+    """Value shapes, not only key names: what fits the tool's schema is what the plugin parses."""
+    schema = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]
+    for d in (DEF, SLACK_QUEUES):
+        assert conforms(d, schema) == [], d["name"]
+    pytest.importorskip("orchestra_workflows")
+    import importlib
+    parse = importlib.import_module("orchestra_workflows.define.parse").parse
+    for d in (DEF, SLACK_QUEUES):
+        wf, problems = parse(json.loads(json.dumps(d)))
+        assert problems == [] and wf is not None, problems

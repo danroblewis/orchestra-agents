@@ -28,7 +28,7 @@ from pathlib import Path
 
 from orchestra.config import ConfigError, parse_duration
 
-from . import design_asked, design_named, intended_api, state_machines
+from . import design_asked, design_named, intended_api, machine_sends, state_machines
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, check_request, plural
 from .expect_grammar import expect_edit
@@ -365,7 +365,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
         lines.append(NO_RECEIVES)
     if d:
         lines.append(f"draft implementation: {d} (not official until confirmed)")
-    return answer(project, done, lines, machine=mid, draft=str(d) if d else None)
+    return answer(project, done, lines, machine=mid, draft=str(d) if d else None, sends=machine_sends.sends(project, mid))
 
 
 LIST_EDITS = (("add_receives", "receives", True), ("remove_receives", "receives", False), ("add_emits", "emits", True),
@@ -492,7 +492,8 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                      "workflow's clock holds")
     if (a.get("steps") or a.get("add_uses") or a.get("remove_receives")) and not after.get("receives"):
         lines.append(NO_RECEIVES)
-    return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"))
+    return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"),
+                  sends=machine_sends.sends(project, mid))
 
 
 def runs_here(m: dict) -> bool:

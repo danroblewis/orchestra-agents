@@ -40,7 +40,14 @@ import time
 import uuid
 from datetime import datetime
 
-from . import design_asked, design_named, intended_api, machines_running, state_machines
+from . import (
+    design_asked,
+    design_named,
+    intended_api,
+    machine_sends,
+    machines_running,
+    state_machines,
+)
 from .clock import next_at, zone
 from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, plural
@@ -143,6 +150,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         extra: dict = {}
         if before is not None:
             lines += _made_so(project, store, before, current(project, eid), prov, extra)
+            extra["sends"] = machine_sends.sends(project, eid)
         lines += _refinement_after(project, store, prov)
         return answer(project, done, lines, **extra)
     m = current(project, eid)
@@ -195,7 +203,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     if here and not runs and extra.get("prediction"):
         lines.append(f"its prediction is judged once its program runs: announce_change with change {change} then")
     lines += _refinement_after(project, store, prov)
-    return answer(project, done, lines, machine=eid, **extra)
+    return answer(project, done, lines, machine=eid, sends=machine_sends.sends(project, eid), **extra)
 
 
 def _made_so(project: Project, store: AgentStore, before: dict, m: dict, prov: dict, extra: dict) -> list[str]:

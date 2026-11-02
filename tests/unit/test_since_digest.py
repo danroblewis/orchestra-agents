@@ -109,8 +109,8 @@ def test_nothing_waiting_and_failed_reads_are_said_so():
 
 def test_a_question_asked_is_told_with_what_the_owner_said_next():
     w = {"machines": [], "outbox": [], "changes": [], "questions": [
-        {"asked_at": NOW - 600, "questions": ["Shall I write it?"], "owner_said_next": {"message": "Remind the reviewer."}},
-        {"asked_at": NOW - 60, "questions": ["Confirm it?"], "owner_said_next": {"message": "what changed?", "this_turn": True}}]}
+        {"asked_at": NOW - 600, "question": "Shall I write it?", "owner_said_next": {"message": "Remind the reviewer."}},
+        {"asked_at": NOW - 60, "question": "Confirm it?", "owner_said_next": {"message": "what changed?", "this_turn": True}}]}
     text = since_digest.owner(w, since_digest.Clock("UTC", NOW))
     assert "I asked at 13:24: \"Shall I write it?\"; what you said next: \"Remind the reviewer.\"" in text
     assert "I asked at 13:33: \"Confirm it?\"; your message now is the first since" in text

@@ -170,7 +170,7 @@ TOOLS: list[ToolDef] = [
             "outbox is the Outbox's state now (running; N sent since then, M waiting; or not installed; or why it was not read); "
             "predictions is each prediction's id and state (what it waits for, or its verdict); "
             "waiting_on_owner is what waits on the owner now (each disabled machine and what it needs, each Outbox draft "
-            "waiting for approval, the questions you last asked the owner with what they said next); "
+            "waiting for approval, each question you asked the owner, by a question mark or a list of choices, that no later message of theirs answers, with what they said next); "
             "model is the model's state now: its version, who changed it and when (the version's recorded origin: "
             "the only cause of a model change to give), its stocks and flows counted; or why there is none, or that it "
             "could not be read; and digest is the whole answer to \"what changed since\", written from all of it, "

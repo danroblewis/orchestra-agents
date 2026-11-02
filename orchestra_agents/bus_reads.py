@@ -17,7 +17,7 @@ counted, for "what changed since", and the ``model`` line (``modeling.model_line
 state with who changed it and when, from the version's own record, T2f s16), so the answer has the model from its first call (T2d s16), with the ``outbox``
 ("running; N sent, M waiting") and each prediction's state (``since_facts``, T2e s16), and what waits
 on the owner now (``owner_waits``: disabled machines, Outbox drafts, the Supervisor's open
-questions; T2f s16)."""
+questions; T2f s16), and ``closing_line``: the line the reply ends on, verbatim (the model line)."""
 
 from __future__ import annotations
 
@@ -149,6 +149,7 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
         counted["predictions"] = since_facts.predictions(project)
         counted["waiting_on_owner"] = owner_waits.waiting_on_owner(project, store)
         counted["model"] = model_line(project, start)
+        counted["closing_line"] = counted["model"]       # the reply's last line, verbatim (closing_line.py)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

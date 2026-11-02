@@ -150,7 +150,11 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return {"ok": True, "message": "The supervisor will be woken with your note."}
 
     if command == "read_events":
-        return bus_reads.read_events(store, a, project)
+        out = bus_reads.read_events(store, a, project)
+        if role == "supervisor" and out.get("closing_line"):
+            from . import closing_line
+            closing_line.record(store, out["closing_line"])       # the host ends the reply on it (host._closed)
+        return out
     if command == "list_machines":
         return machines_read.list_machines(store, a)
     if command == "read_outbox":

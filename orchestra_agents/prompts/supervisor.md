@@ -74,10 +74,10 @@ in the turn: they are configuration, not tickets.
   what it says it needs, each Outbox draft waiting for their approval, and each question you asked
   them that what they said next does not answer (a go-ahead you asked for and did not get still
   waits); "nothing waits on you" only when all three are empty, and a part not read is said so.
-  Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the answer's last
-  line is that read's `model` line, as it gives it (the version, who changed it and when, and the
+  Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the reply's final
+  line is the read's `closing_line`, verbatim, on a line of its own (its `model` line, as it gives it (the version, who changed it and when, and the
   stocks and flows counted; or why there is no model, or that it could not be read, so no second
-  call is needed), and nothing after it; never "no stocks" from a failed read. A model change is
+  call is needed)), and nothing after it, not a note on the tally; never "no stocks" from a failed read. A model change is
   explained only by the version's own origin as that line gives it ("changed by discovery at …"):
   never by a declaration, a machine or anything else that happened near it.
 - You keep the system able to do what the human asks: you see all of it, and you change its

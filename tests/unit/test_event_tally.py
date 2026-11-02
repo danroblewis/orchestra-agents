@@ -98,8 +98,8 @@ def test_the_prompt_copies_the_tally_says_an_idle_outbox_waits_and_ends_with_the
         assert "never that it is down, needs starting or will not send unless that line says so" in text
         assert "Every prediction in the answer's `predictions` is told, by its id" in text
         assert "Never describe your own tool use (which tools ran, or that none did)" in text
-        assert "End the answer with the model's state: the answer's last line is that read's `model` line" in text
-        assert "call is needed), and nothing after it" in text
+        assert "End the answer with the model's state: the reply's final line is the read's `closing_line`, verbatim" in text
+        assert "call is needed)), and nothing after it" in text
         assert "its triage verdict (`tally`'s `triage`)" in text
 
 

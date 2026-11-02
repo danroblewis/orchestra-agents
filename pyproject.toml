@@ -17,8 +17,8 @@ dependencies = ["orchestra>=1.0.0a1,<1.0.0rc0", "psutil", "fastapi"]   # the hos
 # orchestra-bridges: its kits (scaffold, templates, fakes), which integrate_system builds a poller from.
 # orchestra-workflows: the floor whose contract floor.py copies (the copy test) and its e2e.
 dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6",
-       "orchestra-tasking @ git+ssh://git@github.com/danroblewis/orchestra-tasking",
-       "orchestra-bridges @ git+ssh://git@github.com/danroblewis/orchestra-bridges",
+       "orchestra-tasking @ git+https://github.com/danroblewis/orchestra-tasking",
+       "orchestra-bridges @ git+https://github.com/danroblewis/orchestra-bridges",
        "orchestra-workflows @ git+ssh://git@github.com/danroblewis/orchestra-workflows",
        "orchestra[sd]"]
 

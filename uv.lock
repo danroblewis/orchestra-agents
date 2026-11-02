@@ -463,8 +463,8 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "orchestra", specifier = ">=1.0.0a1,<1.0.0rc0" },
     { name = "orchestra", extras = ["sd"], marker = "extra == 'dev'" },
-    { name = "orchestra-bridges", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-bridges" },
-    { name = "orchestra-tasking", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-tasking" },
+    { name = "orchestra-bridges", marker = "extra == 'dev'", git = "https://github.com/danroblewis/orchestra-bridges" },
+    { name = "orchestra-tasking", marker = "extra == 'dev'", git = "https://github.com/danroblewis/orchestra-tasking" },
     { name = "orchestra-workflows", marker = "extra == 'dev'", git = "ssh://git@github.com/danroblewis/orchestra-workflows" },
     { name = "psutil" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -475,7 +475,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-bridges"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-bridges#4e0ac6e28cf5b627a84f545117b0dc00f98bd5ec" }
+source = { git = "https://github.com/danroblewis/orchestra-bridges#4e0ac6e28cf5b627a84f545117b0dc00f98bd5ec" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "pytest" },
@@ -484,7 +484,7 @@ dependencies = [
 [[package]]
 name = "orchestra-tasking"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-tasking#c5ac976c99d36955fb748928e2767e848f978fb6" }
+source = { git = "https://github.com/danroblewis/orchestra-tasking#c5ac976c99d36955fb748928e2767e848f978fb6" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },
@@ -495,7 +495,7 @@ dependencies = [
 [[package]]
 name = "orchestra-workflows"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#131f2b13493d3f9a4f2e6bc83fb7210f6ee0200d" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#675c95897456442785a72513acac0adfd5a9dfbb" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },

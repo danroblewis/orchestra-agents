@@ -135,7 +135,7 @@ def test_the_tools_are_the_supervisors_group_and_the_schema_spells_out_the_defin
     d = BY_NAME["declare_workflow"].input_schema
     assert d["required"] == ["definition", "reason"] and d["properties"]["root"]["enum"] == ["state", "repository"]
     props = d["properties"]["definition"]["properties"]
-    assert set(props) == {"name", "planner", "starts", "steps", "piles", "settings"}
+    assert set(props) == {"name", "about", "planner", "starts", "steps", "piles", "settings"}
     step = props["steps"]["items"]["properties"]
     assert set(step) == {"name", "who", "needs", "lease", "done_when", "outcomes", "guards", "on", "depends", "draft"}
     words = pytest.importorskip("orchestra_workflows.define.words")

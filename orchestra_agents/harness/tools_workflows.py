@@ -93,6 +93,7 @@ STEP = {"type": "object", "description": "One stage the item goes through", "pro
 DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary's words and nothing else (no "
               "expressions or scripts: anything that needs logic is a machine)", "properties": {
     "name": S("The workflow's name: lowercase letters, digits, _ and - (task_loop); its folder's name"),
+    "about": S("One sentence: what the workflow is for and what a request's brief selects (at most 400 characters)"),
     "planner": S("The role that is told when an item needs attention (default: the settings' planner, coordinator)"),
     "starts": {"type": "array", "description": "What starts an item: [{\"request\": true}] (an item.requested naming "
                "it), [{\"event\": \"jira.issue.assigned\", \"data\": {\"assignee\": {\"setting\": \"owner\"}}}] (an "

@@ -94,6 +94,8 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
               "expressions or scripts: anything that needs logic is a machine)", "properties": {
     "name": S("The workflow's name: lowercase letters, digits, _ and - (task_loop); its folder's name"),
     "about": S("One sentence: what the workflow is for and what a request's brief selects (at most 400 characters)"),
+    "items": {"description": "What the workflow's items are, one and many: a word (\"delivery\") or {\"one\": \"release candidate\", \"many\": \"release candidates\"}; the piles' unit and the pages' counts; default item/items",
+              "anyOf": [{"type": "string"}, {"type": "object", "properties": {"one": S("The singular"), "many": S("The plural")}}]},
     "planner": S("The role that is told when an item needs attention (default: the settings' planner[[tasking]], coordinator[[/tasking]])"),
     "starts": {"type": "array", "description": "What starts an item: [{\"request\": true}] (an item.requested naming "
                "it), [{\"event\": \"jira.issue.assigned\", \"data\": {\"assignee\": {\"setting\": \"owner\"}}}] (an "

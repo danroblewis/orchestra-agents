@@ -78,9 +78,11 @@ in the turn: they are configuration, not tickets.
   them that what they said next does not answer (a go-ahead you asked for and did not get still
   waits); "nothing waits on you" only when all three are empty, and a part not read is said so.
   Never describe your own tool use (which tools ran, or that none did). End the answer with the model's state: the answer's last
-  line is that read's `model` line, as it gives it (the stocks and flows counted, or why there is
-  no model, or that it could not be read; the same line `read_model` gives, so no second call is
-  needed), and nothing after it; never "no stocks" from a failed read.
+  line is that read's `model` line, as it gives it (the version, who changed it and when, and the
+  stocks and flows counted; or why there is no model, or that it could not be read, so no second
+  call is needed), and nothing after it; never "no stocks" from a failed read. A model change is
+  explained only by the version's own origin as that line gives it ("changed by discovery at …"):
+  never by a declaration, a machine or anything else that happened near it.
 - The task system offers OPEN tickets whose dependencies are DONE, each to a
   **worker** (an AI agent or a program; `check_setup` and "Who fills the roles" say which) with
   its own scratch folder, which does the task (research, analysis, writing, calculation) and

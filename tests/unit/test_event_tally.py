@@ -99,13 +99,16 @@ def test_the_prompt_copies_the_tally_says_an_idle_outbox_waits_and_ends_with_the
         assert "Every prediction in the answer's `predictions` is told, by its id" in text
         assert "Never describe your own tool use (which tools ran, or that none did)" in text
         assert "End the answer with the model's state: the answer's last line is that read's `model` line" in text
-        assert "needed), and nothing after it" in text
+        assert "call is needed), and nothing after it" in text
         assert "its triage verdict (`tally`'s `triage`)" in text
 
 
 class Reads:
-    def __init__(self, got):
-        self.got = got
+    def __init__(self, got, versions=()):
+        self.got, self.saved = got, list(versions)
+
+    def versions(self):
+        return {"ok": True, "versions": self.saved}
 
     def model(self, version=None, raw=False):
         if isinstance(self.got, Exception):
@@ -119,8 +122,8 @@ def test_read_events_since_carries_the_model_line_read_model_gives(project, stor
     v4 = {"version": "v4", "stocks": [{"id": "a", "hidden": True}, {"id": "b", "hidden": True}], "flows": [{"id": f"f{i}"} for i in range(5)]}
     monkeypatch.setattr(modeling, "reads", lambda project: Reads(v4))
     out = call(project, store, "read_events", since="2026-11-02T04:00:00Z", order="oldest")
-    assert out["model"] == "the model (v4) has 2 stocks and 5 flows"
-    assert out["model"] == call(project, store, "read_model")["state"]     # the same line read_model gives
+    assert out["model"] == "model v4: its version's record was not read; it has 2 stocks and 5 flows"
+    assert call(project, store, "read_model")["state"] == "the model (v4) has 2 stocks and 5 flows"
     gone = ReadError("no model", 404)
     gone.text = "No model yet: discovery looked at 12 series and kept none. It left out 12 of them: too short."
     monkeypatch.setattr(modeling, "reads", lambda project: Reads(gone))
@@ -130,6 +133,35 @@ def test_read_events_since_carries_the_model_line_read_model_gives(project, stor
     monkeypatch.setattr(modeling, "reads", lambda project: Reads(RuntimeError("down")))
     assert call(project, store, "read_events", since="1d")["model"] == "the model could not be read (RuntimeError)"
     assert "model" not in call(project, store, "read_events", minutes=60)       # only with since
+
+
+def test_the_model_line_says_who_changed_the_model_and_when(project, store, monkeypatch):
+    """T2f s16: "Model: one change, from the Review Nudger declaration" while discovery changed it
+    (11:14:57Z); and the tool's line printed the label's dict."""
+    monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: DAY)
+    changed = datetime(2026, 11, 2, 11, 14, 57, tzinfo=UTC).timestamp()
+    m = {"label": {"version": None, "latest_discovery_at": changed + 60, "current_version": 5},
+         "stocks": [{"id": s} for s in "abc"], "flows": [{"id": f"f{i}"} for i in range(6)]}
+    saved = [{"version": 4, "saved_at": changed - 3600, "note": "discovered: the structure changed (net-flow)"},
+             {"version": 5, "saved_at": changed, "note": "discovered: the structure changed (net-flow)"}]
+    monkeypatch.setattr(modeling, "reads", lambda project: Reads(m, saved))
+    out = call(project, store, "read_events", since="2026-11-02T10:15:00Z", order="oldest")
+    assert out["model"] == ("model v5, changed by discovery (discovered: the structure changed (net-flow)) at "
+                            "2026-11-02 11:14:57Z; it has 3 stocks and 6 flows")
+    assert "{" not in out["model"] and "{" not in call(project, store, "read_model")["state"]
+    assert call(project, store, "read_model")["state"] == "the model (v5) has 3 stocks and 6 flows"
+    later = call(project, store, "read_events", since="2026-11-02T12:00:00Z")["model"]
+    assert later.startswith("model v5, unchanged since then; last changed by discovery (")
+    m["label"]["current_version"] = None
+    assert call(project, store, "read_events", since="1d")["model"] == (
+        "model: the latest discovery, at 2026-11-02 11:15:57Z, not saved as a version yet; it has 3 stocks and 6 flows")
+    assert modeling.origin("era e2 began: its prior") == "discovery (era e2 began: its prior)"
+
+
+def test_the_prompt_explains_a_model_change_only_by_its_versions_origin(project):
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A model change is explained only by the version's own origin as that line gives it" in text
+    assert "never by a declaration, a machine or anything else that happened near it" in text
 
 
 class Predicting(Reads):

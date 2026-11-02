@@ -130,7 +130,7 @@ def make_project(target: Path, dummy: bool = False, tools_via: str | None = None
     ``tools_via`` they call Orchestra's tools that way (``[agents] tools_via``: mcp, bash, auto)."""
     if target.exists():
         sys.exit(f"{target} exists; remove it or name another directory")
-    shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__", *(() if dummy else (DUMMY_SCRIPT,))))
+    shutil.copytree(HERE, target, ignore=shutil.ignore_patterns("run.py", "__pycache__", "*task_loop*", "*task-loop*", *(() if dummy else (DUMMY_SCRIPT,))))
     if dummy:
         toml = target / "orchestra.toml"
         text = toml.read_text(encoding="utf-8")

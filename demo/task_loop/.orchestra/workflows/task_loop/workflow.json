@@ -1,0 +1,57 @@
+{
+  "name": "task_loop",
+  "planner": "coordinator",
+  "starts": [
+    {
+      "request": true
+    }
+  ],
+  "steps": [
+    {
+      "name": "write",
+      "who": {
+        "role": "worker"
+      },
+      "needs": [
+        "worktree"
+      ],
+      "done_when": {
+        "event": "offer.finished"
+      },
+      "outcomes": {
+        "ready": "review"
+      }
+    },
+    {
+      "name": "review",
+      "who": {
+        "role": "reviewer"
+      },
+      "needs": [
+        "worktree"
+      ],
+      "outcomes": {
+        "approved": "gate",
+        "rejected": "write"
+      },
+      "guards": {
+        "rounds": 3,
+        "then": "attention"
+      }
+    },
+    {
+      "name": "gate",
+      "who": {
+        "program": "merge_gate"
+      },
+      "needs": [
+        "worktree"
+      ],
+      "outcomes": {
+        "landed": null,
+        "failed": "write",
+        "conflict": "write"
+      }
+    }
+  ]
+}

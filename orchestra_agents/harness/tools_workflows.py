@@ -146,7 +146,9 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "long it has been there (age_s), how often it was reworked, and its fields (a ticket's key, a pull request's "
             "number); then the recently closed, with their last step and outcome. An item's end is item.closed (the floor "
             "publishes it when a workflow's item reaches the end of every workflow it entered): a closed item is never "
-            "waiting. What to read first when the owner asks what is stuck or what needs them.",
+            "waiting. waiting_outside lists the open items at each step that waits on an outside system (CI, a review, "
+            "SAIL): the ones an incident on that system's service holds. What to read first when the owner asks what is "
+            "stuck or what needs them, and after an alert.",
             {"workflow": S("Only this workflow's items (leave out: every workflow)")}),
     ToolDef("explain_item", "workflows",
             "Why an item is where it is: its summary, each field with the fact that set it, its position in each workflow "

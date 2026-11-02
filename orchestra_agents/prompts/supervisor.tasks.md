@@ -43,7 +43,11 @@ in the turn: they are configuration, not tickets.
   (the core's mark) and its mode is continuous or scheduled.
 - When an alert comes in ("we got a page", an incident), read `read_events` with types
   `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
-  announced itself a fake (`list_machines`: its `fake` note).
+  announced itself a fake (`list_machines`: its `fake` note). Then read `list_items`: an incident
+  on a service a step waits on holds the items at that step: name them (`waiting_outside`, each
+  with its ticket's key and pull request). No tool says which service a step's system runs on, so
+  never say the work is unaffected while an item waits at such a step: name it as one the
+  incident may hold.
 - When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
   with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
   happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says

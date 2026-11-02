@@ -804,7 +804,7 @@ server reads one), `list_metrics` (the project's store, as the Core page's catal
 `snapshot` (the task system's query, offered only with the task system installed), `read_events`
 (types or prefixes, `since`, newest or oldest first), and `list_machines` (Orchestra's machines view
 over the bus: each machine's kind, engagement and announced notes, `disabled` first,
-`machines_read.py`), and `read_outbox` (the outbox plugin's state API through Orchestra's web server:
+`machines_read.py`), `machine_ages` (each machine's age, below), and `read_outbox` (the outbox plugin's state API through Orchestra's web server:
 the drafts waiting, sent and rejected, with how each was approved; `outbox_read.py`). All of it reads through Orchestra as a library; nothing is written.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
@@ -1053,6 +1053,41 @@ re-reading `machine.toml`, but its `[[collect]]` measurement would fail every ro
 approval. Each
 integration's record (its plan, test, clearance and variable's name) is the Supervisor's state,
 `integrations`, in `runtime.json`.
+
+**A machine's three ages** (the owner, 2026-11-02: "a programmatic machine might start its life in
+the .orchestrator/machines/ directory, but eventually we want it to be refactored out of that
+directory into the actual project directory, and it should be replaced by a simple `npm run` or
+`cargo run` or `python3 -m` command"; and 2026-10-27, new functionality starts as an AI agent machine
+and is replaced by programs). The lifecycle is the Supervisor's knowledge, in its guide ("A machine's
+three ages") and its design prompt: agent, program in `.orchestra/machines/<name>/`, graduated; what
+is worth a machine, program versus agent, the company-wide value test for a machine and a stock, and
+the share rule (the majority of the system never lives in `.orchestra/`). `declare_machine`'s answer
+says the machine's age (`design_machines.age_line`). Two tools carry it:
+
+- `machine_ages` (group `observe`, read only, `machine_ages.py`): each machine heard on the bus in
+  its age, joined to its `[[machines]]` entry by the log it announced (the launcher's
+  `<state>/logs/machines/<entry>.log`), its id, or a command naming `.orchestra/machines/<id>/`;
+  a program with none of these and no directory is `unknown`; the counts, the share of programs in
+  `.orchestra/`, and those due to graduate (a program in `.orchestra/` first heard a week ago or
+  more in the events read). Whether an agent is a program waiting to be written is "not measured".
+  Its line is the digest's second-to-last paragraph, before the model line (`since_digest`).
+- `graduate_machine` (group `design`, `machine_graduate.py`, `graduate_wiring.py`): a dry run by
+  default, kept in the Supervisor's state (`graduations`); then, on the owner's quoted yes and only
+  for the plan that dry run showed, the directory moves (`git mv`, or a plain move when git does
+  not track it) into the project's tree by its language (Python: `<pkg>/<name>/` with
+  `__init__.py` and a `__main__.py` that runs the entry, `python3 -m <pkg>.<name>` or
+  `uv run python -m …` with a `uv.lock`; Node: `scripts/<name>/` and a script in `package.json`,
+  `npm run <name>`; Rust: `src/bin/<name>/` and a `[[bin]]`, `cargo run --bin <name>`, or a crate of
+  its own as a workspace member under `crates/<name>/`, `cargo run -p <crate>`), and every
+  `[[machines]]` and `[[collect]]` entry that runs it gets the new command (its arguments kept)
+  through `config_edit`. The code is not changed, so the announcement is the same and the machine
+  stays the same machine on the bus; the answer names the source to hear again. Refused, with
+  nothing moved: an agent's spec (`role.md`), a directory no `[[machines]]` entry runs, one the
+  configuration names elsewhere, an uncommitted edit to the directory, the manifest or
+  `orchestra.toml`, a destination that exists. **Nothing is committed**: an entry in
+  `orchestra.toml` is written and left uncommitted with the move and the manifest (a commit of
+  `orchestra.toml` alone would name code its commit does not hold), for the owner to commit
+  together or land through a pull request; one in the overlay is changed as any overlay change.
 
 **Publishing a draft prediction.** An edit names keys (or declared ids, read through their
 `found_as`); the judge reads the era's ids, so each `stock`, `from` and `to` is resolved to the

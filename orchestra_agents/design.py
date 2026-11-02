@@ -211,9 +211,10 @@ def _modules():
         design_machines,
         design_names,
         design_passthrough,
+        machine_graduate,
     )
     return (design_dynamics, design_instruments, design_machines, design_confirm, design_integrate, design_passthrough,
-            design_names)
+            design_names, machine_graduate)
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:

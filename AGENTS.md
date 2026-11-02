@@ -30,7 +30,12 @@ broken without updating the spec and saying so in the commit.
    overlay and puts the overlay back byte for byte; it commits nothing.) A workflow definition
    (`declare_workflow`, 2026-11-01) goes to the state directory; one the owner asks for in the
    repository is written to `.orchestra/workflows/<name>/` and left uncommitted, for the
-   Coordinator to land through a ticket.
+   Coordinator to land through a ticket. A graduation (`graduate_machine`, 2026-11-02, the owner: a
+   program proven in `.orchestra/machines/<name>/` moves into the project's own tree) is a `git mv`
+   of that one directory (a plain move when git does not track it), the one manifest entry its
+   language needs, and its `[[machines]]`/`[[collect]]` commands through `config_edit`, on the
+   owner's quoted yes after a dry run: staged or written, never committed, for the owner to commit
+   together or land through a pull request.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
@@ -110,7 +115,10 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     to the Coordinator, moved out of the checkout first; the ticket's review and gate land it), never by the Supervisor, which changes only its `machine.toml` (the owner's
     settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
     reference: a variable's name or a file's path; the scaffolded test reads them from `machine.toml`)
-    and the overlay entries that run it. So the Supervisor
+    and the overlay entries that run it. A graduation (`graduate_machine`, invariant 2) moves a
+    program's files unchanged and writes only the wiring its language needs (a `__main__.py` that
+    runs the entry, a script in `package.json`, a `[[bin]]` or a workspace member in `Cargo.toml`):
+    no new code, on the owner's quoted yes. So the Supervisor
     writes code of its own in exactly two cases: that measurement script, and a repair (the owner, 2026-10-28, D20; SPEC §12), only through its
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,

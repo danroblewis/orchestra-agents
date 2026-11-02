@@ -4,9 +4,16 @@ small model every fact in one tool answer, and each time it dropped some and mis
 s16: "#33 and #34 opened at 04:57" for 04:16, "all three merged at 05:12" for one, "2 opened, 2
 closed" for three tickets Done, the triage verdict and the prediction's state left out).
 
-One paragraph per class, in this order: tickets, pull requests (with each rejection and triage
+It leads with what looks wrong (``since_anomalies``: new work on a Done ticket, a label on a merged
+pull request, attention over an hour old, an open item whose pull request closed unmerged), then
+one paragraph per class, in this order: tickets, pull requests (with each rejection and triage
 verdict), checks, labels, incidents, the Outbox, items, machines marked quiet, the other events
 counted, what waits on the owner, the predictions, and the model line last (``closing_line``).
+Each list names at most 5 entries, then "… and K more", the count still the whole one; when the
+digest would pass ``LIMIT`` (2,500 characters) the lists name 4, then 3, down to 1, so three days of
+a sprint board read at a glance (R3: 57 hours of the owner's board, 8 tickets and 15 pull requests,
+5,791 characters uncapped, about 2,500 capped at 1). The anomalies name at least ``LOOK`` per kind,
+and what waits on the owner is never cut.
 Every number is counted here and every time is the event's own, in one zone, named once in the
 first line (the host's: the pages show the viewer's clock, and the owner's viewer is this host).
 
@@ -24,6 +31,11 @@ from zoneinfo import ZoneInfo
 
 from .bus_reads import _ts
 from .event_tally import DONE, field
+from .since_anomalies import anomalies
+
+CAPS = (5, 4, 3, 2, 1)       # entries named per list, the first that keeps the digest within LIMIT
+LIMIT = 2500                 # characters: three days of the owner's sprint board at a glance
+LOOK = 3                     # the anomalies name at least this many per kind, whatever the cap
 
 OWNER = ("owner", "person.owner")
 KEY = re.compile(r"[A-Z][A-Z0-9_]*-\d+")
@@ -41,6 +53,10 @@ def _and(xs: list[str]) -> str:
 
 def _times(n: int) -> str:
     return "once" if n == 1 else "twice" if n == 2 else f"{n} times"
+
+
+def _cap(xs: list, n: int) -> list:
+    return xs if len(xs) <= n else [*xs[:n], f"… and {len(xs) - n} more"]
 
 
 def _n(n: int, one: str, many: str | None = None) -> str:
@@ -68,8 +84,8 @@ class Clock:
 class Day:
     """The window's events, sorted by their own time, with what the items' facts say."""
 
-    def __init__(self, events: list[dict], clock: Clock):
-        self.clock = clock
+    def __init__(self, events: list[dict], clock: Clock, cap: int = CAPS[0]):
+        self.clock, self.cap = clock, cap
         self.events = sorted(((t, e) for e in events if (t := _ts(e)) is not None), key=lambda x: x[0])
         self.ticket: dict[str, str] = {}             # item -> its ticket's key
         self.pr: dict[str, int] = {}                 # item -> its pull request's number
@@ -106,13 +122,14 @@ class Day:
     def runs(self, pairs: list[tuple[str, float]]) -> str:
         """``A and B at 04:11, C at 04:57``: labels at one minute said together, in time order."""
         groups: list[tuple[str, list[str]]] = []
-        for label, ts in pairs:
+        more = len(pairs) - self.cap
+        for label, ts in pairs[:self.cap]:
             t = self.clock.at(ts)
             if groups and groups[-1][0] == t:
                 groups[-1][1].append(label)
             else:
                 groups.append((t, [label]))
-        return ", ".join(f"{_and(ls)} at {t}" for t, ls in groups)
+        return ", ".join(f"{_and(ls)} at {t}" for t, ls in groups) + (f", … and {more} more" if more > 0 else "")
 
 
 def _set(v) -> dict:
@@ -191,7 +208,7 @@ def pull_requests(d: Day) -> str | None:
              f"{len(merged)} merged: {d.runs(merged)}" if merged else "none merged",
              f"{len(rejected)} rejected (labelled REJECTED): {d.runs(rejected)}" if rejected else "none rejected"]
     if triage:
-        parts.append(f"{_n(len(triage), 'triage verdict')}: {'; '.join(triage)}")
+        parts.append(f"{_n(len(triage), 'triage verdict')}: {'; '.join(_cap(triage, d.cap))}")
     if pushed:
         parts.append(f"new commits pushed: {d.runs(pushed)}")
     if comments:
@@ -203,16 +220,22 @@ WORDS = {"success": "succeeded", "failure": "failed"}
 
 
 def checks(d: Day) -> str | None:
-    rows: dict[str, list[str]] = {}
+    rows: dict[str, list[tuple[str, str | None]]] = {}
     for t, e in d.of("checks.completed", "check.completed"):
         fam = str(e["type"]).rsplit(".", 1)[0]
         outcome = str(field(e, "outcome") or field(e, "conclusion") or "?")
         why = field(e, "reason") if outcome != "success" else None
-        rows.setdefault(f"{fam} {WORDS.get(outcome, outcome)}", []).append(
-            f"{d.pull(e)} at {d.clock.at(t)}" + (f" ({why})" if why else ""))
+        rows.setdefault(f"{fam} {WORDS.get(outcome, outcome)}", []).append((f"{d.pull(e)} at {d.clock.at(t)}", why))
     if not rows:
         return None
-    return "Checks: " + "; ".join(f"{what} {_times(len(xs))}: {', '.join(xs)}" for what, xs in rows.items()) + "."
+
+    def said(xs):            # one reason shared by every failure is said once, after the list
+        whys = {w for _, w in xs}
+        if len(whys) == 1 and len(xs) > 1:
+            w = whys.pop()
+            return ", ".join(_cap([x for x, _ in xs], d.cap)) + (f" (each: {w})" if w else "")
+        return ", ".join(_cap([x + (f" ({w})" if w else "") for x, w in xs], d.cap))
+    return "Checks: " + "; ".join(f"{what} {_times(len(xs))}: {said(xs)}" for what, xs in rows.items()) + "."
 
 
 def labels(d: Day) -> str | None:
@@ -249,7 +272,7 @@ def incidents(d: Day) -> str | None:
                    ("" if row["resolved"] else ", not resolved in this window"))
     opened = sum(1 for r in seen.values() if any(w.startswith("opened") for w in r["what"]))
     done = sum(1 for r in seen.values() if r["resolved"])
-    return f"Incidents: {opened} opened, {done} resolved: " + "; ".join(out) + "."
+    return f"Incidents: {opened} opened, {done} resolved: " + "; ".join(_cap(out, d.cap)) + "."
 
 
 def outbox(d: Day, state: str | None) -> str | None:
@@ -274,12 +297,12 @@ def outbox(d: Day, state: str | None) -> str | None:
     if not (kind or state):
         return None
     n = sum(len(x) for x in sent.values())
-    parts = [f"{n} sent" + (": " + "; ".join(f"{k} {_times(len(ts))} ({', '.join(ts)})" for k, ts in sent.items()) if n else "")]
+    parts = [f"{n} sent" + (": " + "; ".join(f"{k} {_times(len(ts))} ({', '.join(_cap(ts, d.cap))})" for k, ts in sent.items()) if n else "")]
     if by_config or by_owner:
         parts.append(f"{by_config} approved by configuration, {len(by_owner)} by you" +
-                     (f" ({', '.join(by_owner)})" if by_owner else ""))
-    parts.append(f"{len(rejected)} rejected" + (f" ({', '.join(rejected)})" if rejected else ""))
-    parts.append(f"{len(failed)} failed to send" + (f" ({', '.join(failed)})" if failed else ""))
+                     (f" ({', '.join(_cap(by_owner, d.cap))})" if by_owner else ""))
+    parts.append(f"{len(rejected)} rejected" + (f" ({', '.join(_cap(rejected, d.cap))})" if rejected else ""))
+    parts.append(f"{len(failed)} failed to send" + (f" ({', '.join(_cap(failed, d.cap))})" if failed else ""))
     return "The Outbox: " + "; ".join(parts) + "." + (f" Its state now: {state}." if state else "")
 
 
@@ -299,10 +322,10 @@ def items(d: Day) -> str | None:
             attention.append(f"{d.item(item)} at {d.clock.at(t)}" + (f" ({why})" if why else ""))
     if not (started or closed or attention):
         return None
-    parts = [f"{len(started)} started: {'; '.join(started)}" if started else "none started",
-             f"{len(closed)} closed: {'; '.join(closed)}" if closed else "none closed"]
+    parts = [f"{len(started)} started: {'; '.join(_cap(started, d.cap))}" if started else "none started",
+             f"{len(closed)} closed: {'; '.join(_cap(closed, d.cap))}" if closed else "none closed"]
     if attention:
-        parts.append(f"attention raised {_times(len(attention))}: {'; '.join(attention)}")
+        parts.append(f"attention raised {_times(len(attention))}: {'; '.join(_cap(attention, d.cap))}")
     return "Items: " + "; ".join(parts) + "."
 
 
@@ -313,8 +336,8 @@ def quiet(d: Day) -> str | None:
         who.setdefault(name, []).append((name, t))
     if not who:
         return None
-    said = [f"{name} at {', '.join(d.clock.at(t) for _, t in xs)}" for name, xs in who.items()]
-    return ("Marked quiet (not heard for a while; not that it stopped): " + "; ".join(said) + ".")
+    said = [f"{name} at {', '.join(_cap([d.clock.at(t) for _, t in xs], d.cap))}" for name, xs in who.items()]
+    return ("Marked quiet (not heard for a while; not that it stopped): " + "; ".join(_cap(said, d.cap)) + ".")
 
 
 def others(d: Day) -> str | None:
@@ -325,7 +348,8 @@ def others(d: Day) -> str | None:
             rest[ty] = rest.get(ty, 0) + 1
     if not rest:
         return None
-    return "Also on the bus: " + ", ".join(f"{ty} {_times(n)}" for ty, n in sorted(rest.items(), key=lambda x: (-x[1], x[0]))) + "."
+    counted = [f"{ty} {_times(n)}" for ty, n in sorted(rest.items(), key=lambda x: (-x[1], x[0]))]
+    return "Also on the bus: " + ", ".join(_cap(counted, d.cap)) + "."
 
 
 def owner(w: dict | None, clock: Clock) -> str:
@@ -369,6 +393,14 @@ def owner(w: dict | None, clock: Clock) -> str:
     return "Waiting on you: " + "; ".join(parts) + "."
 
 
+def first(d: Day) -> str | None:
+    found = anomalies(d, d.clock.now)
+    if not found:
+        return None
+    n = max(d.cap, LOOK)
+    return "Look first: " + "; ".join(f"{what}: {'; '.join(_cap(xs, n))}" for what, xs in found) + "."
+
+
 def predictions(p) -> str:
     if isinstance(p, str):
         return f"Predictions: {p}."
@@ -382,9 +414,13 @@ def predictions(p) -> str:
 def digest(events: list[dict], start: float, now: float, tz: str | None, *, outbox_state: str | None = None,
            waiting: dict | None = None, preds=None, model: str | None = None) -> str:
     clock = Clock(tz, now)
-    d = Day(events, clock)
-    head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} {clock.local(start):%H:%M} "
-            f"(all times {clock.named()}): {_n(len(d.events), 'event')} on the bus.")
-    paras = [head, tickets(d), pull_requests(d), checks(d), labels(d), incidents(d), outbox(d, outbox_state), items(d),
-             quiet(d), others(d), owner(waiting, clock), predictions(preds), model]
-    return "\n\n".join(p for p in paras if p)
+    for cap in CAPS:
+        d = Day(events, clock, cap)
+        head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} "
+                f"{clock.local(start):%H:%M} (all times {clock.named()}): {_n(len(d.events), 'event')} on the bus.")
+        paras = [head, first(d), tickets(d), pull_requests(d), checks(d), labels(d), incidents(d),
+                 outbox(d, outbox_state), items(d), quiet(d), others(d), owner(waiting, clock), predictions(preds), model]
+        text = "\n\n".join(p for p in paras if p)
+        if len(text) <= LIMIT:
+            break
+    return text

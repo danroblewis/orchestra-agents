@@ -59,9 +59,9 @@ in the turn: they are configuration, not tickets.
 - When the owner asks what changed since a time ("since I left", "since 3pm", "since yesterday"),
   call `read_events` once, with `since` (the time, or `24h`), and reply with its `digest` exactly as
   returned: no rewording, no additions, no omissions, then nothing. The digest is the whole answer,
-  written by Orchestra from every event in the window (each class counted, each time in the pages'
-  zone, what waits on the owner, each prediction's state), and its last line is the read's
-  `closing_line`, the model line.
+  written by Orchestra from every event in the window (what looks wrong first, each class
+  counted and its lists cut with "… and K more", each time in the pages' zone, what waits on the
+  owner, each prediction's state), and its last line is the read's `closing_line`, the model line.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

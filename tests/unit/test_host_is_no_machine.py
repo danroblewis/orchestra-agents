@@ -119,3 +119,15 @@ def test_the_measurements_reach_the_store_through_the_plugins_instrument(project
     assert 'agent_turns_finished_total{machine="coordinator",role="coordinator"} 1' in text
     out = subprocess.run([sys.executable, "-m", "orchestra", "agents", "metrics"], cwd=project.repo_root, capture_output=True, text=True, check=True)
     assert out.stdout == text                                                               # what the instrument runs
+
+
+def test_the_instrument_declares_its_series_views_so_the_level_balances_by_construction(project):
+    """D33: agents_working and the two turn counters come from one record, so the instrument says
+    so (Orchestra's collect.views) and discovery keeps the stock by construction, never a fit
+    ("R² 1.000 · trust 0.83 high" was a balance of its own making)."""
+    [c] = web.collectors(project)
+    views = {v.series: v.record(c.name) for v in c.views}
+    assert views["agents_working"] == {"source": "own", "instrument": "turns", "view": "count", "place": "role",
+                                       "describes": "agent sessions of a role in a turn now"}
+    assert views["agent_turns_started_total"]["view"] == "starts" and views["agent_turns_started_total"]["place"] == "role"
+    assert views["agent_turns_finished_total"]["view"] == "stops" and views["agent_turns_finished_total"]["place"] == "role"

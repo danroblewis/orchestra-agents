@@ -34,6 +34,7 @@ from .events import Events
 from .floor_roles import served
 from .harness import read_transcript
 from .listening import engaged, listens_for
+from .measures import FINISHED, STARTED, WORKING
 from .org import EVENT_HELP, effective_tools
 from .org_store import all_agents, all_teams
 from .org_views import agents_status, residents_of, session_alive
@@ -105,7 +106,18 @@ def collectors(project) -> list[Collector]:
     if not set_up(project):
         return []
     step = max(1.0, float(project.orchestra.config.discovery_step))
-    return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra agents metrics", every_s=step, timeout_s=min(step, 10.0))]
+    return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra agents metrics", every_s=step,
+                              timeout_s=min(step, 10.0), views=TURN_VIEWS)]
+
+
+# How agents.turns makes its series (Orchestra's collect.views): the level of sessions in a turn, per
+# role, and the counters of turns started and finished that move it, read from one record
+# (measures.py), so the level balances by construction and discovery says so (D33), never a fit.
+TURN_VIEWS = {
+    WORKING: {"view": "count", "place": "role", "describes": "agent sessions of a role in a turn now"},
+    STARTED: {"view": "starts", "place": "role", "describes": "agent turns started, by role"},
+    FINISHED: {"view": "stops", "place": "role", "describes": "agent turns finished, by role"},
+}
 
 
 def declared(project) -> list[Declared]:

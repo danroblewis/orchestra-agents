@@ -94,6 +94,8 @@ QUERY = "task.query_requested"
 QUERIES = ("list_tickets", "get_ticket", "project_status", "list_milestones", "get_capacity", "snapshot",
            "list_gate_runs", "get_gate_run", "get_staging_status")
 DONE, REFUSED = "request.done", "request.refused"
+NOT_INSTALLED = ("the task system (orchestra-tasking) is not installed beside the agents, so there are no tickets, "
+                 "milestones or gate runs here: nothing was asked or changed")
 WAIT_S = 30.0
 
 
@@ -142,6 +144,9 @@ class TaskClient:
         self.wait_s = wait_s                                            # how long to wait for the answer (default WAIT_S)
 
     def __call__(self, op: str, args: dict | None = None) -> dict:
+        from . import installed
+        if not installed.tasking():                 # nobody would answer: publish nothing (no task.query_requested)
+            return {"ok": False, "error": NOT_INSTALLED}
         args = dict(args or {})
         offset = self.events.end()                  # from now: the answer comes after the request
         rid = uuid.uuid4().hex[:12]

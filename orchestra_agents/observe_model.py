@@ -66,7 +66,9 @@ def get_model(project: Project) -> dict:
     and what the last discovery left out and why."""
     view = model_view(project.orchestra)
     if not view.get("ok"):
-        return {"ok": True, "model": None, "why": view.get("error"), "discovery": view.get("discovery")}
+        from .modeling import NO_MODEL, WAITS
+        why = view.get("text") or (NO_MODEL if "no model" in str(view.get("error") or "") else view.get("error"))
+        return {"ok": True, "model": None, "why": why, "waits": WAITS, "discovery": view.get("discovery")}
     m = view["model"]
     d = m.get("discovery") or {}
     eq = lambda f: f.get("current") or {}

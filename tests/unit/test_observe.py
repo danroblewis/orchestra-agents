@@ -215,3 +215,19 @@ def test_a_word_no_series_name_starts_with_finds_the_series_carrying_it_in_a_lab
     out = see(project, store, "list_metrics", prefix="disk")
     assert [m["name"] for m in out["metrics"]] == ["disk_free_bytes"] and "note" not in out
     assert see(project, store, "list_metrics", prefix="nothing")["metrics"] == []
+
+
+def test_the_model_with_the_cores_no_model_answer(project, store, monkeypatch):
+    """The core's no-model answer (its T4 branch: model_view and /api/dynamics/model give 404 JSON
+    {"error": "no model", "text", "reason"}): its paragraph is passed on; the bare old one is not
+    read as "no metrics"."""
+    from orchestra_agents import observe_model
+    answer = {"ok": False, "error": "no model",
+              "text": "Discovery looked at 152 series and kept none. Too few events: at most 3 per counter, 5 needed.",
+              "reason": {"looked_at": 152, "max_events": 3, "min_events": 5}}
+    monkeypatch.setattr(observe_model, "model_view", lambda project: answer)
+    out = see(project, store, "get_model")
+    assert out["model"] is None and out["why"] == answer["text"] and "waits for discovery" in out["waits"]
+    monkeypatch.setattr(observe_model, "model_view", lambda project: {"ok": False, "error": "no model"})
+    out = see(project, store, "get_model")
+    assert "the Dynamics page lists the series looked at" in out["why"] and "no metrics" not in out["why"]

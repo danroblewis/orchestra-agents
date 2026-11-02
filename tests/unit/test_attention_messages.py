@@ -128,3 +128,13 @@ def test_a_landing_wake_up_shows_what_landed_not_the_directive():
     assert reasons(f"x\n{WOKEN}\n- {said}\n") == ["DEMO-5 landed on main (List open orders)"]
     tasks = said.replace("it landed on main", "its result was approved")
     assert reasons(f"x\n{WOKEN}\n- {tasks}\n") == ["DEMO-5's result was approved (List open orders)"]
+
+
+def test_the_chip_counts_the_messages_the_banner_counts():
+    """T2 (d, O10): the banner said "(3 messages)" while the chip said 1."""
+    from pathlib import Path
+
+    import orchestra_agents
+    js = (Path(orchestra_agents.__file__).parent / "static" / "attention.js").read_text()
+    assert "d.count = (d.message ? Math.max(1, d.message.count || 1) : 0) + d.blocked.length;" in js
+    assert "(${A.message.count} messages)" in js

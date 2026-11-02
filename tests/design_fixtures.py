@@ -87,7 +87,8 @@ def make_host(project):
 
 def say(store, message: str, n: int = 1) -> None:
     """The owner's message begins a Supervisor turn (host._turn_began)."""
-    store.set_agent_state("supervisor", turn={"n": n, "id": f"sessions/supervisor/{n}", "message": message, "at": 1.0})
+    from orchestra_agents.design import begin_turn
+    begin_turn(store, message, n)
 
 
 def call(project, store, tool, role="supervisor", **args):

@@ -353,6 +353,16 @@ class TeamDef:
         return cls(**{k: v for k, v in d.items() if k in known})
 
 
+TASK_SYSTEM_AGENTS = ("coordinator",)     # built-ins whose work is the task system's tickets
+
+
+def needs_task_system(agent: AgentDef) -> bool:
+    """A built-in agent that has nothing to do without the task system installed (the Coordinator
+    plans into its tickets): it is not started, so it is never announced on the bus."""
+    from . import installed
+    return agent.builtin and agent.name in TASK_SYSTEM_AGENTS and not installed.tasking()
+
+
 def built_in_agents() -> dict[str, AgentDef]:
     out: dict[str, AgentDef] = {}
     for b in BUILTIN_ROLES.values():

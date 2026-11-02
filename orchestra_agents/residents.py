@@ -12,7 +12,7 @@ from pathlib import Path
 from . import access
 from .closing import close_together
 from .harness import AgentSession
-from .org import AgentDef
+from .org import AgentDef, needs_task_system
 
 CRASH_LOOP_COUNT, CRASH_LOOP_WINDOW = 3, 15 * 60
 
@@ -45,7 +45,7 @@ class Residents:
         after a restart or reset, and for an agent just created. Paused and deleted agents stay down."""
         for name, agent in self.host.agents.items():
             st = states.get(name) or {}
-            if name in self.procs or not agent.resident or st.get("paused") or st.get("deleted"):
+            if name in self.procs or not agent.resident or st.get("paused") or st.get("deleted") or needs_task_system(agent):
                 continue
             self.start(agent)
 
@@ -70,7 +70,7 @@ class Residents:
             host.store.set_session(sid, status="idle", pid=None)
             if st.get("reset_requested"):
                 archived = host.store.retire_session(sid, proc.retire())
-                host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0)
+                host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0, said=None, session_machines=None)
                 host._mark("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by"))
                 host.log(f"{name}: session reset by request; previous transcript archived as {archived}")
             elif st.get("restart_requested"):

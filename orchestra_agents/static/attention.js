@@ -150,7 +150,8 @@
       d.blocked = t.blocked || [];
       // the chat is open in front of the human: what the Supervisor writes there now is read there
       if (d.message && chatOpen()) { const m = d.message; await markSeen(); d.message = null; setTimeout(() => mark(m), POLL_MS + 500); }
-      d.count = (d.message ? 1 : 0) + d.blocked.length;
+      // the chip counts what the banner says: each message since the human last looked, and each blocked ticket
+      d.count = (d.message ? Math.max(1, d.message.count || 1) : 0) + d.blocked.length;
       if (d.ok) { A = d; render(); }
     } catch (e) { /* the task system is down: keep the last state */ }
   }

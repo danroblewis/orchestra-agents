@@ -160,12 +160,16 @@ TOOLS: list[ToolDef] = [
             {"type": S("Declared event type, lowercase_name"), "subject": S("What it is about, e.g. a ticket id or test name"),
              "note": S("One or two sentences")}, ("type",)),
     ToolDef("read_events", "events",
-            "Recent events on the bus (tickets, assignments, gate runs, staging, agents). Use to look back over what happened. "
+            "Recent events on the bus: what any machine published (its type, source and short fields). Use to look back over what happened. "
             "by_type counts every type in the window (sources, last seen); announced_not_heard lists the types machines announced "
-            "they listen for that no event carried yet (they are known: name them); events are the newest first, at most limit, "
-            "each with its short fields.",
-            {"minutes": I("How far back, default 60"), "types": A("Event types to include; empty for all"),
-             "limit": I("How many events to show, newest first: default 20, at most 100 (by_type counts them all)")}),
+            "they listen for that no event carried yet (they are known: name them); events are the newest first (or, with order "
+            "oldest, the first after since, in order), at most limit, each with its short fields.",
+            {"minutes": I("How far back, default 60 (since overrides it)"),
+             "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
+             "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),
+             "order": {"type": "string", "enum": ["newest", "oldest"],
+                       "description": "newest (default: the newest first) or oldest (from since on, in the order they happened)"},
+             "limit": I("How many events to show: default 20, at most 100 (by_type counts them all)")}),
     # team: reading the organisation, and talking down or up the tree (leads and the supervisor)
     ToolDef("list_teams", "team", "All teams: lead, agents, sub-teams, access, paused state."),
     ToolDef("get_team", "team", "One team in full: responsibilities (own and inherited), agents, access, space.",
@@ -316,6 +320,14 @@ TOOLS: list[ToolDef] = [
             {"agent": S("The agent (supervisor, coordinator, worker, ...)"), "session": S("Or a session id (worker-ORC-3)"),
              "around": S("A time (ISO or unix seconds): the turns nearest it; default the latest"),
              "turns": I("How many turns, default 2, at most 6")}),
+    ToolDef("list_machines", "observe",
+            "Every machine on the bus as the Machines page has it: its kind, how it is engaged, whether it is active, and the "
+            "notes it announced about itself (disabled with its reason first, then fake, stand_in, writes, ...). The "
+            "disabled ones are listed apart: they do no work until what they name is fixed."),
+    ToolDef("read_outbox", "observe",
+            "The Outbox's drafts as its approval page has them: those waiting for the owner, and the latest sent, rejected "
+            "or failed, each with its kind, target, drafter and how it was approved (the owner, by their person id, or the "
+            "kind's policy). Read only: the owner approves on the Outbox page."),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment. A workflow's items are not here: list_items."),
@@ -509,6 +521,18 @@ TOOLS += DESIGN_TOOLS + WORKFLOW_TOOLS
 BY_NAME = {t.name: t for t in TOOLS}
 
 
+# The task system's tools: each is a request or a query to it (protocol.py). Without the task
+# system installed they have no operation behind them, so no session is offered them.
+TASK_GROUPS = ("tickets", "planning", "pipeline", "capacity", "handoff")
+TASK_TOOLS = ("snapshot",)
+
+
+def task_system(tool: ToolDef) -> bool:
+    return tool.group in TASK_GROUPS or tool.name in TASK_TOOLS
+
+
 def tools_for(groups: list[str] | tuple[str, ...] | set[str]) -> list[ToolDef]:
+    from .. import installed
     g = set(groups)
-    return [t for t in TOOLS if t.group in g]
+    tasking = installed.tasking()
+    return [t for t in TOOLS if t.group in g and (tasking or not task_system(t))]

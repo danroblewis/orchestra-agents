@@ -29,6 +29,7 @@ from orchestra.tokens import owner_only
 from . import (
     access,
     budget,
+    design,
     design_confirm,
     design_instruments,
     floor,
@@ -58,7 +59,15 @@ from .harness import AgentSession, SessionSpec, TurnResult, get_harness
 from .landings import Landings
 from .listening import engaged, listens_for
 from .machine_spec import load as load_spec
-from .org import AgentDef, built_in_agents, effective_tools, event_matches, team_chain, tools_path
+from .org import (
+    AgentDef,
+    built_in_agents,
+    effective_tools,
+    event_matches,
+    needs_task_system,
+    team_chain,
+    tools_path,
+)
 from .org_store import all_agents, all_teams
 from .probes import Prober, team_probes
 from .residents import Residents
@@ -680,9 +689,7 @@ class AgentHost:
     def _turn_began(self, message: str | None) -> None:
         """The Supervisor's turn as its design tools record it in their provenance: its id, and the
         owner's message that began it (None for a wake-up: then no quote can be the owner's)."""
-        n = int((self.store.agent_state("supervisor").get("turn") or {}).get("n") or 0) + 1
-        self.store.set_agent_state("supervisor", turn={"n": n, "id": f"sessions/supervisor/{n}", "message": message,
-                                                       "at": time.time()})
+        design.begin_turn(self.store, message)
 
     def _expire_drafts(self) -> None:
         """Once a minute: draft instruments the owner did not keep, past their expiry, removed
@@ -745,7 +752,7 @@ class AgentHost:
 
     def _wake(self, target: str, reasons: list[str]) -> None:
         agent = self.agents.get(target)
-        if agent is None:
+        if agent is None or needs_task_system(agent):     # the Coordinator without the task system: nothing to plan into
             return
         with self._turn_lock(target):
             self._wake_turn(agent, target, reasons)
@@ -776,7 +783,8 @@ class AgentHost:
             self._turn_began(None)
             facts, began = self.facts.before(snap)
             facts += handoff_overdue.facts_line(self.store, began, handoff_overdue.deadline(self.cfg))
-            task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
+            context = prompting.supervisor_context(snap, [], self.project, self.store) or prompting.clock_line() + "\n\n"
+            task = prompting.SUPERVISOR_WAKE + context + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))
             budget.record(self.store, res.cost_usd, initiative=initiative(reasons, self._duty_types()))

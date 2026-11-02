@@ -102,6 +102,34 @@ def test_read_events_is_capped_newest_first_and_summarised_by_type(project, stor
     assert call(project, store, "read_events", limit=500)["shown"] == 61
 
 
+def test_read_events_takes_prefixes_a_since_and_the_oldest_first(project, store, monkeypatch):
+    """T2 s13 and s16: an alert read as pagerduty.*, and "what changed since 22:40" told in order
+    from then, which newest-first with a limit missed (it began at 23:05:57 and lost REJECTED at 22:47)."""
+    from datetime import UTC, datetime
+    at = lambda hm: datetime(2026, 11, 1, int(hm[:2]), int(hm[3:]), tzinfo=UTC).isoformat()
+    evs = [{"type": "pagerduty.incident.triggered", "ts": at("22:30"), "source": "bot.pagerduty_fake", "incident": "PINC001"},
+           {"type": "github.pr.opened", "ts": at("22:41"), "source": "github"},
+           {"type": "changes.requested", "ts": at("22:47"), "source": "reviewer_stand_in"},
+           {"type": "pagerduty.incident.acknowledged", "ts": at("22:50"), "source": "person.pagerduty_fake.puser01"},
+           {"type": "outbox.sent", "ts": at("23:01"), "source": "outbox"},
+           {"type": "pagerdutyx.other", "ts": at("23:02"), "source": "elsewhere"},
+           {"type": "session.started", "ts": at("23:03"), "source": "supervisor"}]
+    monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: evs)
+    out = call(project, store, "read_events", types=["pagerduty."], since="2026-11-01T22:00:00Z")
+    assert [e["type"] for e in out["events"]] == ["pagerduty.incident.acknowledged", "pagerduty.incident.triggered"]
+    assert call(project, store, "read_events", types=["pagerduty.*"], since="2026-11-01T22:00:00Z")["count"] == 2
+    out = call(project, store, "read_events", since="2026-11-01T22:40:00Z", order="oldest", limit=3)
+    assert [e["type"] for e in out["events"]] == ["github.pr.opened", "changes.requested", "pagerduty.incident.acknowledged"]
+    assert out["count"] == 5 and "in the order they happened" in out["note"] and "read on" in out["note"]
+    assert out["since"].startswith("2026-11-01T22:40")
+    now = datetime(2026, 11, 1, 23, 10, tzinfo=UTC).timestamp()
+    assert bus_reads.since_of("30m", now) == now - 1800 and bus_reads.since_of("2h", now) == now - 7200
+    with pytest.raises(StoreError, match="since: an ISO time"):
+        call(project, store, "read_events", since="yesterday-ish")
+    with pytest.raises(StoreError, match="order is newest"):
+        call(project, store, "read_events", order="sideways")
+
+
 def test_an_announced_type_is_known_and_an_invented_one_is_named_in_the_answer(project, store):
     store.events.publish("gate.landed", {}, source="merge_gate")
     store.events.publish("orchestra.machine.started", {"listens_for": ["gate.rejected", "changes.requested"]}, source="coordinator")
@@ -182,3 +210,57 @@ def test_the_design_prompt_says_store_first_receives_flows_and_the_owners_zone()
     assert "`propose_measurements` links the declared stock to it itself" in text and "never the stock's own key" in text
     assert "Never write UTC or the host's zone as theirs" in text and "ask in that reply which zone" in text
     assert "Your tools are the ones this session lists" in text
+
+
+def test_list_machines_names_each_machines_mode_kind_and_notes_disabled_first(project, store, monkeypatch):
+    """T2 s01 and s16: slack_notify announced disabled (a token without a scope) and sail announced
+    fake; no tool said so, so "what needs me" never named them."""
+    from orchestra_agents import machines_read
+    answer = {"ok": True, "machines": [
+        {"id": "orchestra", "bootstrap": True, "kind": "program", "mode": "continuous", "about": {}, "active": True},
+        {"id": "slack_notify", "kind": "program", "mode": "continuous", "active": True, "package": "workflows",
+         "about": {"writes": "slack", "disabled": "Slack refused conversations.list: missing_scope; posting nothing"}},
+        {"id": "sail", "kind": "program", "mode": "ad hoc", "active": False, "about": {"fake": "FAKE: SAIL, played by this example"}},
+        {"id": "review_nudger", "kind": "program", "mode": "scheduled", "active": False, "about": {"roles": ["review_nudger"]}}]}
+    monkeypatch.setattr(machines_read, "view", lambda store: answer)
+    out = call(project, store, "list_machines")
+    assert out["summary"][0].startswith("disabled (needs the owner): slack_notify: Slack refused")
+    assert out["disabled"] == ["slack_notify: Slack refused conversations.list: missing_scope; posting nothing"]
+    assert out["fakes"] == ["sail: FAKE: SAIL, played by this example"]
+    slack = next(m for m in out["machines"] if m["id"] == "slack_notify")
+    assert list(slack["notes"]) == ["disabled", "writes"] and slack["mode"] == "continuous" and slack["kind"] == "program"
+    assert "orchestra" not in {m["id"] for m in out["machines"]}
+    assert "review_nudger (program, scheduled, quiet); roles: ['review_nudger']" in out["summary"]
+
+
+def test_list_machines_reads_the_bus_as_the_machines_page_does(project, store):
+    store.events.publish("orchestra.machine.started", {"mode": "continuous", "kind": "program", "listens_for": ["x.y"],
+                                                        "disabled": "no token"}, source="slack_notify")
+    out = call(project, store, "list_machines")
+    assert out["disabled"] == ["slack_notify: no token"]
+
+
+def test_read_outbox_lists_waiting_sent_and_rejected_with_how_each_was_approved(project, store, monkeypatch):
+    from orchestra_agents import outbox_read
+    state = {"ok": True, "configured": True, "running": True, "owner": "person.dan",
+             "kinds": [{"name": "live.nudge", "approval": "always", "unedited_streak": 3}],
+             "waiting": [{"id": "d1", "kind": "live.nudge", "state": "drafted", "target": {"pr": 15}, "drafter": "review_nudger/1",
+                          "content": "x" * 400, "held": None}],
+             "recent": [{"id": "d0", "kind": "github.label", "state": "sent", "target": {"pr": 14}, "drafter": "sail",
+                         "approved_by": "owner", "approver": "person.dan", "edited": False, "sent_at": 2.0},
+                        {"id": "d9", "kind": "jira.transition", "state": "rejected", "target": {"issue": "SCRUM-3"},
+                         "drafter": "worker/1", "approved_by": None, "approver": "person.dan", "reason": "wrong_target"}]}
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: state)
+    out = call(project, store, "read_outbox")
+    assert out["summary"][0] == "1 waiting; of the latest 2 decided: 1 sent, 1 rejected, 0 failed"
+    [w] = out["waiting"]
+    assert w["how"] == "waiting for the owner" and w["content"].endswith("(400 chars)") and w["target"] == {"pr": 15}
+    sent, rejected = out["recent"]
+    assert sent["how"] == "approved by the owner (person.dan), unedited"
+    assert rejected["how"] == "rejected by the owner (person.dan): wrong_target"
+    assert out["kinds"] == [{"name": "live.nudge", "approval": "always", "unedited_streak": 3}]
+
+
+def test_read_outbox_without_the_web_server_says_where_else_to_look(project, store):
+    with pytest.raises(StoreError, match="web server is not running.*types outbox"):
+        call(project, store, "read_outbox")

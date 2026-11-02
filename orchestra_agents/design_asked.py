@@ -7,7 +7,9 @@ named Triage and Release Notes") or by asking for one without a name ("make an a
 issues", "add two machines", "and a second one"). A loop described in passing ("a feedback loop where once per day an
 agent runs") asks for none: the owner names the machine in a later message. The turn is the one
 the host recorded (``design.turn_of``): its message, and the machines declared in it so far, which
-the next turn's record clears. A wake-up has no message and no limit (the refinement passes
+the next turn's record clears. A machine asked for in an earlier message of the session and not
+declared yet is still asked for (``design.said_in_session``): the owner never has to say it again,
+so a turn that answers a question ("This machine's clock.") may declare it. A wake-up has no message and no limit (the refinement passes
 propose machines then); an external machine (``managed: external``, a system known by its events)
 is not counted, since the owner's words may need its events without naming it."""
 
@@ -15,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-from .design import MACHINE, turn_of
+from .design import MACHINE, said_in_session, turn_of
 from .store import AgentStore, StoreError
 
 MACHINE_WORDS = r"(?:machines?|agents?|programs?|bots?|workers?|jobs?)"
@@ -48,8 +50,19 @@ def asked_for(message: str) -> int:
     return max(named, unnamed)
 
 
+def owed(store: AgentStore, mid: str) -> tuple[int, list[str]]:
+    """The machines the owner's messages of this session asked for and not yet declared in it (a
+    count), and the names they gave, oldest first."""
+    said = said_in_session(store)
+    asked = sum(asked_for(r.get("message") or "") for r in said)
+    declared = [m for m in store.agent_state(MACHINE).get("session_machines") or [] if m != mid]
+    names = list(dict.fromkeys(n for r in said for n in names_in(r.get("message") or "")))
+    return max(0, asked - len(declared)), names
+
+
 def check(store: AgentStore, mid: str, managed: str) -> None:
-    """Refuse a declaration past what this turn's message asked for."""
+    """Refuse a declaration past what the owner asked for: this turn's message, and what earlier
+    messages of the session asked for that is not declared yet."""
     turn = turn_of(store)
     message = turn.get("message")
     if not message or managed == "external":
@@ -58,22 +71,27 @@ def check(store: AgentStore, mid: str, managed: str) -> None:
     asked = asked_for(message)
     if len(done) < asked:
         return
-    names = names_in(message)
-    said = (f"asks for {asked} machine{'s' if asked != 1 else ''}" + (f" ({', '.join(names)})" if names else "")
+    still, _ = owed(store, mid)
+    if still > 0:                               # asked for in an earlier message, and not declared yet
+        return
+    said = (f"asks for {asked} machine{'s' if asked != 1 else ''}" + (f" ({', '.join(names_in(message))})" if names_in(message) else "")
             if asked else "asks for no machine")
-    raise StoreError(f"not declared: the owner's message this turn {said}"
-                     + (f", and {', '.join(done)} is declared already" if done else "")
-                     + ". Declare only what they asked for in this message; say in your reply what you would propose "
-                       "(a machine for the loop they described, say), and declare it when they ask for it by name")
+    raise StoreError(f"not declared: the owner's message this turn {said}, and the session's earlier messages ask for none "
+                     "that is not declared yet"
+                     + (f"; {', '.join(done)} is declared already" if done else "")
+                     + ". Declare only the machines the owner asked for in this session; propose any other in your reply "
+                       "(a machine for the loop they described, say) and declare it once they ask for it. A request they "
+                       "made in an earlier message still counts: never ask them to repeat it")
 
 
 def note(store: AgentStore, mid: str) -> None:
-    """Record ``mid`` as declared in this turn."""
+    """Record ``mid`` as declared in this turn, and in the session."""
     def add(turn):
         turn = turn or {}
         turn["machines"] = list(dict.fromkeys([*(turn.get("machines") or []), mid]))
         return turn
     store.update_agent_state(MACHINE, "turn", add)
+    store.update_agent_state(MACHINE, "session_machines", lambda ms: list(dict.fromkeys([*(ms or []), mid])))
 
 
 # What the owner expects a machine to change, as their message says it: a direction ("notes files to

@@ -143,3 +143,51 @@ def test_a_hand_off_s_promise_to_tell_the_plan_is_kept():
     assert "I will tell you the plan" in reply
     assert unkept(reply, ["hand_to_coordinator"]) is None                       # the plan wakes it (work.planned)
     assert unkept(reply, ["project_status"]) is not None                         # no hand-off: nothing will wake it
+
+
+def test_an_items_state_comes_from_this_turns_tools(project):
+    """T2 s14: the merged SCRUM-17 and SCRUM-18 were called waiting from memory of earlier turns."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "an item the tools list as closed is closed, never \"waiting\"" in text
+    assert "never from memory of an earlier turn" in text
+
+
+def test_a_reminder_is_requested_with_the_owners_words_and_no_question_back(project):
+    """T2 s11: "Remind the reviewer on B's pull request." was answered with "which one?" and nothing
+    was requested, so the owner's one page act never happened."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A reminder (\"remind the reviewer\", \"nudge them\") is a piece of work too: `request_work`" in text
+    assert "with the owner's words as the brief and the quote" in text and "never ask them which one first" in text
+
+
+def test_a_heard_type_needs_no_declaration(project):
+    """T2 s10: sail.check.completed was dropped because "no machine declares it"; sail publishes it."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A type in `by_type` is heard on the bus; it needs no declaration, and goes in receives as it is" in text
+
+
+def test_times_are_given_in_the_pages_zone_named(monkeypatch):
+    """T2 (b O10, d O6): replies gave UTC times while the pages showed PST."""
+    import time as _time
+    from datetime import UTC, datetime
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    _time.tzset()
+    try:
+        now = datetime(2026, 11, 1, 22, 47, tzinfo=UTC).timestamp()
+        line = prompting.clock_line(now)
+        assert "now 2026-11-01 14:47 PST (UTC-08:00)" in line and '"14:47 PST"' in line and "never in UTC" in line
+        ctx = prompting.supervisor_context({"counts": {}, "absent": True}, [{"type": "item.requested"}])
+        assert ctx.startswith("[Orchestra: now ") and "PST" in ctx.split("\n")[0]
+        assert prompting.supervisor_context({"counts": {}, "absent": True}, []) == ""        # "yes, go ahead" as itself
+    finally:
+        monkeypatch.delenv("TZ")
+        _time.tzset()
+
+
+def test_recording_a_factor_says_what_judging_it_needs(project):
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "the flow fitted in both eras" in text and "about 200 a side for ×1.2" in text

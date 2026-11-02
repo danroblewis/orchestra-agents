@@ -100,7 +100,13 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
     x = reads(project)
     raw = bool(a.get("raw"))
     if command == "read_model":
-        m = x.model(a.get("version"), raw=raw)["model"]
+        from orchestra.sd.reads import ReadError
+        try:
+            m = x.model(a.get("version"), raw=raw)["model"]
+        except ReadError as e:
+            if (said := no_model(e)) is None:
+                raise
+            return answer(said, model=None, **({"reason": e.reason} if isinstance(getattr(e, "reason", None), dict) else {}))
         return answer(T.model_lines(m), {"model": m} if raw else None)
     if command == "read_series":
         return read_series(x, a)
@@ -121,6 +127,23 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
     if command == "read_predictions":
         return read_predictions(x, a, source)
     raise StoreError(f"unknown command {command!r}")
+
+
+NO_MODEL = ("no model yet; the Dynamics page lists the series looked at and why each was left out; metrics are being "
+            "collected, and discovery saves a model once a counter has enough events")
+WAITS = ("an expectation recorded meanwhile (declare_expected_effect) is kept as a draft: a factor waits for discovery to find "
+         "its flow, a level for its stock, and is judged only then")
+
+
+def no_model(e: Exception) -> list[str] | None:
+    """What read_model says when there is no model: Orchestra's own paragraph (``NoModel.text``:
+    the series looked at, why each was left out, events per counter against the minimum) when the
+    installed core gives one, else that the Dynamics page lists them (never "no metrics"); then
+    what a recorded expectation waits for. None for any other read error."""
+    text = (getattr(e, "text", None) or "").strip()
+    if not text and "no model" not in str(e):
+        return None
+    return [text or NO_MODEL, WAITS]
 
 
 def read_series(x, a: dict) -> dict:

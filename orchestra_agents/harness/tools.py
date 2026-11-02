@@ -167,6 +167,8 @@ TOOLS: list[ToolDef] = [
             "item's end (a workflow's item: its workflow, last_step and outcome); nothing waits on it after. With since, "
             "tally counts each class over the whole window (issues opened and closed, pull requests opened and merged, checks, labels by "
             "name, triage verdicts, incidents, the Outbox's drafts, approvals and sends, items, model changes): copy it; "
+            "outbox is the Outbox's state now (running; N sent since then, M waiting; or not installed; or why it was not read); "
+            "predictions is each prediction's id and state (what it waits for, or its verdict); "
             "and model is the model's state now, the line read_model gives (its stocks and flows counted, or why there is "
             "none, or that it could not be read).",
             {"minutes": I("How far back, default 60 (since overrides it)"),

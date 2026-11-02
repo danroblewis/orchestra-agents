@@ -330,3 +330,21 @@ def test_a_drafts_kind_is_one_the_owner_configures_never_an_example_that_exists_
     step = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["steps"]["items"]["properties"]
     kind = step["draft"]["properties"]["kind"]["description"]
     assert "[outbox.kinds]" in kind and "sail.label" not in kind and "review.ping" not in kind
+
+
+def test_an_every_start_takes_at_and_tz_and_the_answer_says_the_clock(project, store, fake):
+    """T2b s10: '9am every day' was claimed while the workflow started every 24h at 00:00 UTC."""
+    starts = BY_NAME["declare_workflow"].input_schema["properties"]["definition"]["properties"]["starts"]
+    props = starts["items"]["properties"]
+    assert {"every", "at", "tz"} <= set(props) and "HH:MM" in props["at"]["description"]
+    assert "00:00 UTC" in props["at"]["description"] and "America/Los_Angeles" in props["tz"]["description"]
+    words = pytest.importorskip("orchestra_workflows.define.words")
+    assert {"every", "at", "tz"} == words.START_EVERY_KEYS                    # the schema offers what the plugin takes
+    timed = {**DEF, "starts": [{"every": "24h", "at": "09:00", "tz": "America/Los_Angeles"}]}
+    out = call(project, store, "declare_workflow", definition=timed, reason=WHY)
+    assert out["clock"] == "every 24h at 09:00 America/Los_Angeles: say this run time, and no other"
+    assert workflow_tools.clock_words([{"every": "24h"}]).startswith("every 24h, counted from 00:00 UTC")
+    assert "the project's local zone" in workflow_tools.clock_words([{"every": "24h", "at": "09:00"}])
+    assert workflow_tools.clock_words([{"request": True}]) is None
+    [w] = call(project, store, "list_workflows")["workflows"]
+    assert w["clock"] == "every 24h at 09:00 America/Los_Angeles"

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from orchestra.config import ConfigError, parse_duration
 
-from . import design_asked, intended_api, state_machines
+from . import design_asked, design_named, intended_api, state_machines
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, check_request, plural
 from .expect_grammar import expect_edit
@@ -331,11 +331,12 @@ def proposed_elsewhere(project: Project, mid: str, title: str) -> None:
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id(a)
     kind = a.get("kind")
+    named, named_lines = design_named.resolve(project, store, a.get("owner_named"), mid)
     m = {"id": mid, "title": (a.get("title") or "").strip() or mid.replace("_", " ").title(),
          "description": (a.get("description") or "").strip(), "tags": list(a.get("tags") or []), "kind": kind,
          "managed": a.get("managed") or "orchestra", "engagement": engagement(a),
-         "receives": list(a.get("receives") or []), "emits": list(a.get("emits") or []), "reads": list(a.get("reads") or []),
-         "spec": {k: v for k, v in spec_of(a).items() if v not in (None, "", [])}}
+         "receives": list(dict.fromkeys([*(a.get("receives") or []), *named])), "emits": list(a.get("emits") or []),
+         "reads": list(a.get("reads") or []), "spec": {k: v for k, v in spec_of(a).items() if v not in (None, "", [])}}
     if kind not in ("universal", "programmatic"):
         raise StoreError("kind is universal (an abstract machine, described by its steps) or programmatic (a program)")
     if not m["description"]:
@@ -356,7 +357,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     unheard = [t for t, who_ in listeners(project, store, m["emits"], mid).items() if not who_]
     if unheard:
         lines.append(f"no listener yet for {', '.join(unheard)} (the refinement pass will propose one)")
-    lines += type_lines(project, store, mid, m["receives"], m["emits"])
+    lines += type_lines(project, store, mid, m["receives"], m["emits"]) + named_lines
     if not m["receives"]:
         lines.append(NO_RECEIVES)
     if d:
@@ -448,6 +449,9 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                          "declaration is quoted or proposed")
     if a.get("remove_receives") and any(a.get(k) for k in ("mode", "at", "tz", "missed")):
         raise StoreError(SCHEDULE_KEEPS)
+    named, named_lines = design_named.resolve(project, store, a.get("owner_named"), mid)
+    if extra := [t for t in named if t not in (m.get("receives") or []) and t not in (a.get("add_receives") or [])]:
+        a = {**a, "add_receives": [*(a.get("add_receives") or []), *extra]}
     after = json.loads(json.dumps(m))
     ops = edits_of(a, after)
     folded = m.get("state") == "declared" and len(fold_spec(ops)) < len(ops)
@@ -473,7 +477,12 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
                   state_machines.unmapped_line(now)]
         if runs_a_day(store, after)[0] != runs_a_day(store, m)[0]:
             lines.append(cost_line(project, store, after))
-    lines += type_lines(project, store, mid, list(a.get("add_receives") or []), list(a.get("add_emits") or []))
+    lines += type_lines(project, store, mid, list(a.get("add_receives") or []), list(a.get("add_emits") or [])) + named_lines
+    if any(a.get(k) for k in ("mode", "at", "tz")) and (m.get("provenance") or {}).get("author") not in (OWNER, MACHINE, None):
+        lines.append(f"{mid} is run by {runs_it(m)}: the engagement recorded here is the declaration and changes no run "
+                     "time. When a workflow's clock starts it (list_workflows: its every start and clock), declare that "
+                     "start with at and tz (declare_workflow) for the time the owner named, and state only the run time the "
+                     "workflow's clock holds")
     if (a.get("steps") or a.get("add_uses") or a.get("remove_receives")) and not after.get("receives"):
         lines.append(NO_RECEIVES)
     return answer(project, done, lines, machine=mid, pending=pending, kind=now.get("kind"))

@@ -95,9 +95,25 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
         out["next"] = (f"The file is in the checkout, uncommitted ({_rel(o, written.path)}): nothing here commits it. Hand "
                        "it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull request, and tell "
                        "the owner it applies now in this checkout only.")
+    if runs := clock_words(definition.get("starts")):
+        out["clock"] = runs + ": say this run time, and no other"
     if written.notes:
         out["lacks"] = "What the project still lacks for it is in notes: nothing is offered for such a step until it is there."
     return out
+
+
+def clock_words(starts) -> str | None:
+    """When a workflow's clock starts its items, in words, from its ``every`` start as declared
+    (the plugin counts slots from 00:00 UTC with no ``at``, from ``at`` in ``tz`` with one, in the
+    project's local zone when ``tz`` is unset): the run time a reply may state, and no other."""
+    every = next((s for s in starts or [] if isinstance(s, dict) and "every" in s), None)
+    if every is None:
+        return None
+    if not every.get("at") and not every.get("tz"):
+        return (f"every {every['every']}, counted from 00:00 UTC (no time of day declared: with a time the owner "
+                "named, declare at and tz)")
+    zone = every.get("tz") or f"the project's local zone ({time.strftime('%Z')}, no tz declared)"
+    return f"every {every['every']} at {every.get('at') or '00:00'} {zone}"
 
 
 def _rel(o, path) -> str:
@@ -138,8 +154,9 @@ def list_workflows(project: Project, a: dict) -> dict:
                 if raw.get(k):
                     step[k] = raw[k]
             steps.append(step)
+        runs = clock_words(w.raw.get("starts"))
         workflows.append({"name": w.name, "where": where(w.name), "planner": w.planner,
-                          "starts": w.raw.get("starts") or [], "steps": steps})
+                          "starts": w.raw.get("starts") or [], **({"clock": runs} if runs else {}), "steps": steps})
     return {"ok": True, "workflows": workflows, "problems": list(defs.problems), "notes": list(defs.notes),
             "shown": "The Items page (/items) shows their items; the Dynamics page shows their piles as stocks."}
 

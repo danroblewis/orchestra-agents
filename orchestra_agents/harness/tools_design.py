@@ -33,6 +33,13 @@ RECEIVES_D = ("Event types (family.name) it watches, or reads at each run (a sch
               "(read_events: by_type, announced_not_heard), or emitted by a declared machine")
 EMITS_D = ("Event types it publishes: one heard or announced (read_events), or one you declare first (declare_event); "
            "never an invented name")
+OWNER_NAMED = {"type": "array", "description": (
+    "Every event family the owner's words name (\"the GitHub pull request events\", \"the SAIL check results on the bus\"), "
+    "each with the types you matched it to from read_events' by_type: every one goes into receives, and the answer says "
+    "what each phrase was matched to and what could not be. Never leave a phrase out because another event carries the "
+    "same news"), "items": {"type": "object", "properties": {
+        "said": S("The owner's words naming the events, as they said them: the SAIL check results"),
+        "types": A("The event types heard on the bus you matched them to: sail.check.completed")}, "required": ["said"]}}
 MISSED = E(["skip", "run once"], "For scheduled: a run missed while the host was down is skipped or run once")
 OPTION = {"type": "object", "properties": {
     "label": S("A few words: acceptance tests passing on main"),
@@ -208,7 +215,7 @@ DESIGN_TOOLS: list[ToolDef] = [
              "managed": E(["orchestra", "external"], "orchestra (default): started and kept here; external: runs elsewhere, "
                                                      "known by its events"),
              "mode": MODE, "at": AT, "tz": TZ, "missed": MISSED,
-             "receives": A(RECEIVES_D), "emits": A(EMITS_D),
+             "receives": A(RECEIVES_D), "owner_named": OWNER_NAMED, "emits": A(EMITS_D),
              "reads": A("Stocks and effects it may read (never one it produces)"), **SPEC_FIELDS,
              "guesses": A("The fields you guessed, whole or one item: engagement (mode, at, tz), receives[0], ..."), "quote": QUOTE, "reason": REASON},
             ("name", "kind", "description", "reason")),
@@ -218,7 +225,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             "quoted it applies at once on an unconfirmed machine; otherwise, or on a confirmed one, it is a proposed change "
             "the owner confirms. The Universal | Programmatic switch is switch_kind.",
             {"name": S("The machine"),
-             "add_receives": A("Event types to add to what it watches: " + RECEIVES_D),
+             "add_receives": A("Event types to add to what it watches: " + RECEIVES_D), "owner_named": OWNER_NAMED,
              "remove_receives": A("Event types to take out of its receives: only those the owner says it should stop watching, "
                                   "in a call of its own; never with mode, at, tz or missed (scheduling keeps every receive)"),
              "add_emits": A(EMITS_D), "remove_emits": A("Event types it will no longer publish"),

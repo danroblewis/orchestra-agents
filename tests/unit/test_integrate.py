@@ -556,3 +556,22 @@ def test_jira_data_center_and_github_enterprise_are_settings_never_code(project,
          reason=WHY)
     assert machine_toml(project, "github_poller")["settings"]["base_url"] == "https://ghe.acme.test/api/v3"
     assert not asked(store)
+
+
+def test_a_relays_declared_types_are_kept_before_they_are_heard(project, store):
+    """R3 e (T2i s10): the Jira poller, approved but not yet run, has published nothing; a machine
+    the owner names as listening to its transitions keeps them, marked the kit's, not heard yet.
+    A type no poller declares is still left out until heard."""
+    from design_fixtures import layer
+    connect(project, store)
+    say(store, "Create a machine called Ticket Watcher that listens for the Jira issue transitions", 2)
+    out = call(project, store, "declare_machine", name="Ticket Watcher", kind="universal", description="Watches tickets",
+               receives=["jira.issue.transitioned", "jira.issue.deleted"], quote="Create a machine called Ticket Watcher",
+               reason=WHY, owner_named=[{"said": "the Jira issue transitions",
+                                         "types": ["jira.issue.transitioned", "jira.issue.deleted"]}])
+    assert layer(project)["machines"]["ticket_watcher"]["receives"] == ["jira.issue.transitioned"]
+    said = " ".join(out["said"])
+    assert ("'the Jira issue transitions' -> jira.issue.transitioned (the kit's, not heard yet: jira_poller declares it "
+            "in [[publishes]])") in said
+    assert "jira.issue.deleted never heard on the bus" in said
+    assert "jira.issue.created" not in said                    # the kit's other types: neither added nor called unheard

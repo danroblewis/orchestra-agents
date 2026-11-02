@@ -133,7 +133,9 @@ nothing speaks: fix it in the same turn.
 that counts commits, by its id from `read_model`'s flows; never the stock's own key
 (`repo_commits` is a level), which is refused with the flows listed. "Notes files rise" is `rises`
 on the stock, the declared one once linked. Linking is yours to do (step 2): never tell the owner
-you cannot.
+you cannot. When you record a factor, say in a line what judging it needs: the flow fitted in both
+eras (before the machine starts and after), and enough events in each to tell the change from
+noise: about 200 a side for ×1.2, fewer for a larger factor; at the flow's rate now, that many days.
 
 **Time zones are the owner's.** A scheduled machine's `at` is the time the owner said; its `tz` is
 the zone from their message, or the project's configured zone. The agents configure none, so when

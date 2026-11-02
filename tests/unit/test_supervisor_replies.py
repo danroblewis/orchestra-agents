@@ -185,3 +185,9 @@ def test_times_are_given_in_the_pages_zone_named(monkeypatch):
     finally:
         monkeypatch.delenv("TZ")
         _time.tzset()
+
+
+def test_recording_a_factor_says_what_judging_it_needs(project):
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "the flow fitted in both eras" in text and "about 200 a side for ×1.2" in text

@@ -26,7 +26,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
 import re
 import subprocess
@@ -36,8 +35,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import Project
+from .integrate_settings import CREDENTIAL_KEYS, check_settings, drop_keys, set_keys
 from .secret_shapes import secret_in
 from .store import StoreError
+
+__all__ = ["CREDENTIAL_KEYS", "check_settings", "drop_keys", "set_keys"]   # the settings, checked and written: integrate_settings
 
 STRATEGIES = ("source", "poller", "collect")
 ROOTS = {"repository": "repo", "state": "state"}      # integrate_system's word -> the kit scaffold's --root
@@ -50,10 +52,8 @@ KIT_OF = {"jira": "jira", "slack": "slack", "pagerduty": "pagerduty", "github": 
 SCOPE = {"jql": "which Jira projects to follow (or a JQL filter)", "channels": "which Slack channels to follow (their ids)"}
 SCOPE_OF = {"jira": ("jql",), "slack": ("channels",)}      # what a kit's template only guesses: the owner's to name
 TITLES = {"jira": "Jira", "slack": "Slack", "pagerduty": "PagerDuty", "github": "GitHub", "chronosphere": "Chronosphere"}
-KEY = re.compile(r"^[a-z_][a-z0-9_]{0,40}$")
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "acme.chronosphere.io")
 CREDENTIAL_VARS = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|_KEY|BEARER|CREDENTIAL)", re.IGNORECASE)
-CREDENTIAL_KEYS = ("token", "token_env", "token_file", "user_env", "user_file")   # the kits' [settings] credentials
 TEST_TIMEOUT_S = 300
 INTEGRATING = "Orchestra's docs/INTEGRATING.md (https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md)"
 
@@ -101,6 +101,40 @@ def scaffold(project: Project, kit: str, name: str, root: str = "repository") ->
         raise StoreError(f"scaffold: {e}") from None
 
 
+LISTED_ROOTS = {"repo": "repository", "state": "state", "overlay": "overlay"}   # the bridges' root -> the record's word
+
+
+def shipped(project: Project) -> list[dict]:
+    """The collectors already in the project that a kit scaffolded, as the bridges list them
+    (``orchestra_bridges.kits.integrations.listing``: under each of their roots, a ``poller.toml``,
+    or a legacy ``machine.toml`` with a ``kit``, read by their own reader): each one's name (its
+    directory's, which names its program and its test), kit, directory and root. Read from the files
+    on disk, never from what a machine says of itself; one the bridges' reader refuses is left out."""
+    from orchestra_bridges.kits.integrations import listing
+    try:
+        found = listing(project.orchestra)
+    except (OSError, ValueError):
+        return []
+    return [{"name": Path(i.path).name, "kit": i.kit, "dir": i.path, "root": LISTED_ROOTS.get(i.root, i.root),
+             "schedule": i.schedule, "clearance": i.clearance}
+            for i in found if not i.error and i.kit != "?" and (Path(i.path) / f"{Path(i.path).name}.py").is_file()]
+
+
+def has_poller(kit: str) -> bool:
+    """Whether the kit relays events (a poller), as the bridges' kinds say; ``promql`` only measures."""
+    from orchestra_bridges.kits.scaffold import KINDS
+    return KINDS[kit].poller if kit in KINDS else True
+
+
+def bounded(selector: str) -> bool:
+    """The promql kit's own test of a selector that names something (``promql.bounded``)."""
+    try:
+        from orchestra_bridges.kits.promql import bounded
+    except ImportError:
+        return bool(selector.strip()) and selector.replace(" ", "") not in ("{}", '{__name__=~".+"}', '{__name__=~".*"}')
+    return bounded(selector)
+
+
 def settings_file(target: Path) -> Path:
     """The poller's settings file in ``target``, as the bridges' own reader finds it
     (``machinefile.locate``): its ``poller.toml``, else a legacy ``machine.toml`` that is a poller's."""
@@ -123,73 +157,6 @@ def placeholder(url: str | None) -> bool:
     return not host or any(host == h or host.endswith("." + h) for h in PLACEHOLDER_HOSTS)
 
 
-def check_settings(settings: dict) -> dict:
-    """The owner's settings for the program, checked: plain keys, plain values, no credential."""
-    if not isinstance(settings, dict):
-        raise StoreError("settings is an object of the program's own settings (jql, channels, every, per_minute, ttl)")
-    out = {}
-    for k, v in settings.items():
-        if not KEY.match(str(k)):
-            raise StoreError(f"settings: {k!r} is not a setting's name (lower case, digits, _)")
-        if k in CREDENTIAL_KEYS or k in ("clearance", "data_class") or "token" in k or "secret" in k:
-            raise StoreError(f"settings: {k} is not set here: the token's variable and the clearance are the owner's, at "
-                             "approve_integration; a token is never written anywhere")
-        ok = isinstance(v, str | int | float | bool) or (isinstance(v, list) and all(isinstance(x, str | int | float) for x in v))
-        if not ok:
-            raise StoreError(f"settings: {k} is a string, a number, true/false or a list of them")
-        if why := secret_in(f"{k} = {v!r}"):
-            raise StoreError(f"settings: {k} looks like it holds a secret ({why}); nothing was written")
-        out[k] = v
-    return out
-
-
-def _value(v) -> str:
-    """A TOML value from a string, number, boolean or list of them (JSON's string escapes are TOML's)."""
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, int | float):
-        return repr(v)
-    if isinstance(v, list):
-        return "[" + ", ".join(_value(x) for x in v) + "]"
-    return json.dumps(str(v))
-
-
-def set_keys(text: str, table: str | None, values: dict) -> str:
-    """``text`` with each key of ``values`` set in ``table`` (None: the top level), line by line:
-    a key's line replaced (its end-of-line comment, which described the old value, goes), a new key
-    added at the end of the table; every other line, comments included, kept as it was. The
-    program's own ``poller.toml`` is edited this way; Orchestra's configuration never is (rule 12)."""
-    lines = text.splitlines()
-    head = re.compile(r"^\s*\[")
-    start = 0 if table is None else next(
-        (i + 1 for i, ln in enumerate(lines) if re.match(rf"^\s*\[{re.escape(table)}\]\s*(#.*)?$", ln)), None)
-    if start is None:
-        lines += ["", f"[{table}]"]
-        start = len(lines)
-    end = next((i for i in range(start, len(lines)) if head.match(lines[i])), len(lines))
-    for k, v in values.items():
-        line = f"{k} = {_value(v)}"
-        at = next((i for i in range(start, end) if re.match(rf"^\s*{re.escape(k)}\s*=", lines[i])), None)
-        if at is not None:
-            lines[at] = line
-            continue
-        last = max((i for i in range(start, end) if lines[i].strip()), default=start - 1)
-        lines.insert(last + 1, line)
-        end += 1
-    return "\n".join(lines) + "\n"
-
-
-def drop_keys(text: str, table: str, keys: list[str]) -> str:
-    """``text`` without the lines that set ``keys`` in ``table`` (a commented-out line is kept)."""
-    lines = text.splitlines()
-    start = next((i + 1 for i, ln in enumerate(lines) if re.match(rf"^\s*\[{re.escape(table)}\]\s*(#.*)?$", ln)), None)
-    if start is None:
-        return text
-    end = next((i for i in range(start, len(lines)) if re.match(r"^\s*\[", lines[i])), len(lines))
-    gone = {i for i in range(start, end) if any(re.match(rf"^\s*{re.escape(k)}\s*=", lines[i]) for k in keys)}
-    return "\n".join(ln for i, ln in enumerate(lines) if i not in gone) + "\n"
-
-
 def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None:
     """The change, written, then read back by the program's own reader (the bridges'
     ``machinefile.read``): what it refuses is put back as it was."""
@@ -198,7 +165,10 @@ def _edit(target: Path, top: dict, settings: dict, drop: list[str] = ()) -> None
     old = path.read_text(encoding="utf-8")
     text = set_keys(set_keys(old, None, top), "settings", settings)
     text = drop_keys(text, "settings", [k for k in drop if k not in settings])
-    got = tomllib.loads(text)                       # still TOML, and says what was set: refused before it is written otherwise
+    try:
+        got = tomllib.loads(text)                   # still TOML, and says what was set: refused before it is written otherwise
+    except tomllib.TOMLDecodeError as e:
+        raise StoreError(f"{path}: the change would not be TOML ({e}); nothing was changed") from None
     if any(k in got.get("settings", {}) for k in drop if k not in settings):
         raise StoreError(f"{path}: the change did not read back as written; nothing was changed")
     if any(got.get(k) != v for k, v in top.items()) or any(got.get("settings", {}).get(k) != v for k, v in settings.items()):

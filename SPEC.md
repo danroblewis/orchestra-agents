@@ -994,6 +994,32 @@ no failure and is handed to no one (state `test not run`): the answer gives the 
 `dev` extra, and the same call again begins it afresh; `approve_integration` refuses both. If a
 step after the declaration fails, the error names what stayed in the declared layer (the machine,
 the stock), each with its change ids; the answer's `changes` lists every declaration.
+**A collector already in the project is configured, not scaffolded again** (T18, 2026-11-02: a
+project such as the work demo ships its collectors in `.orchestra/machines/`). Before scaffolding,
+`integrate_system` asks the bridges which collectors the project holds
+(`integrate_kits.shipped`, over `orchestra_bridges.kits.integrations.listing`: under each of the
+bridges' roots, a settings file found by `machinefile.locate` and read by their own reader, its kit
+its `kit` key), never a machine's description of itself. The one `name` names, else the only one
+from the system's kit, that no integration has yet, is adopted: its own test runs, the owner's
+settings are filled into it, the system is declared and its run planned as for a new scaffold, and
+nothing is scaffolded beside it (`adopted` in the answer and the record). Several from one kit and
+no `name` are refused, naming them; a `name` from another kit is refused; a new name still
+scaffolds. A store whose strategy was left out, with such a collector, is measured by it
+(`collect`) rather than planned as a `[[sources]]` entry, and a measurement alone may share the
+store's name (no machine is declared for it). An adopted directory is never removed or moved: one
+git tracks, whose test fails, is handed to the Coordinator to adapt where it is, in the worker's own
+worktree. `approve_integration` then says whether the system's actors (`bot.<system>`,
+`person.<system>.<account>`) are heard on the bus (`heard`, from the Machines page's view), and,
+when not yet, how to confirm it after the first poll (`next`).
+**The settings' shapes** (`integrate_settings.py`: `check_settings`, `set_keys`): a string, number, boolean, a list of
+them, a table of them (written inline: the Slack kit's per-channel `cadence`, the promql kit's
+`aliases`) or a list of such tables (written as `[[settings.<key>]]` blocks replacing the old ones:
+the promql kit's `queries`). Each key and value is checked as before (no credential's key at any
+depth, nothing shaped like a secret), and the kits' own meanings too: each query a series' `name`
+and its PromQL `query` (and `help`), names unique; each of `selectors` and `match` bounded by the
+promql kit's own `bounded` (never the whole store); `cadence` a channel's id to a duration;
+`max_backoff` a duration. What is written is read back by TOML and then by the bridges' reader, and
+put back as it was when either refuses it.
 Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
 bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
 Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer

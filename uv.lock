@@ -475,7 +475,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-bridges"
 version = "0.1.0"
-source = { git = "https://github.com/danroblewis/orchestra-bridges#4e0ac6e28cf5b627a84f545117b0dc00f98bd5ec" }
+source = { git = "https://github.com/danroblewis/orchestra-bridges#911a6113aad2458bf1cb972fbdc5b6a775e6e5fd" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "pytest" },

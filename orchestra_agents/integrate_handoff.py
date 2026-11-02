@@ -44,7 +44,8 @@ def draft_dir(project: Project, name: str) -> Path:
     return project.orchestra.state_dir / "machines" / name
 
 
-def _tracked(project: Project, d: Path) -> bool:
+def tracked(project: Project, d: Path) -> bool:
+    """Whether git tracks anything in ``d`` (True when git cannot say: never removed then)."""
     p = subprocess.run(["git", "ls-files", "--", str(d)], cwd=project.repo_root, capture_output=True, text=True, check=False)
     return p.returncode != 0 or bool(p.stdout.strip())
 
@@ -57,7 +58,7 @@ def leftover(project: Project, name: str) -> list[str]:
     for d in (repo_dir(project, name), draft_dir(project, name)):
         if not d.is_dir() or not {p.name for p in d.iterdir()} <= own:
             continue
-        if d == repo_dir(project, name) and _tracked(project, d):
+        if d == repo_dir(project, name) and tracked(project, d):
             continue
         shutil.rmtree(d)
         gone.append(str(d))
@@ -66,8 +67,8 @@ def leftover(project: Project, name: str) -> list[str]:
 
 def move_out(project: Project, rec: dict) -> None:
     """A repository scaffold moved out of the owner's checkout to the draft before it is handed on."""
-    if rec.get("root") != "repository":
-        return
+    if rec.get("root") != "repository" or rec.get("tracked"):
+        return                                      # a committed collector: the worker's worktree has it already
     src, dest = Path(rec["dir"]), draft_dir(project, rec["name"])
     if dest.exists():
         raise StoreError(f"{dest} exists, so the scaffold in {src} cannot be moved out of the checkout for the "
@@ -94,6 +95,11 @@ def landed(rec: dict) -> bool:
 
 def who_lands(rec: dict) -> str:
     """Where the scaffold is and who lands it, for the answer."""
+    if rec.get("adopted"):
+        where = ("committed in the owner's repository" if rec.get("tracked") else "in the owner's repository, uncommitted"
+                 if rec.get("root") == "repository" else f"in the {rec.get('root')} directory, outside the repository")
+        return (f"it was already in the project ({where}, at {rec['dir']}) and is configured where it is: a coding tool may "
+                "edit it there; never ask the owner to commit, discard or land it")
     if rec.get("root") != "repository":
         return "in Orchestra's state directory, outside the repository as the owner asked: edit it there and commit nothing"
     if rec.get("lands"):
@@ -114,6 +120,10 @@ def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, li
                  f"your branch.")
         test, lands = f"{rel}/test_{name}.py", (f"{rel}/ is committed on your branch; the ticket's review and gate land it on "
                                                "the base branch.")
+    elif rec.get("tracked"):
+        where = (f"It is committed in the repository at {rel}/: adapt {name}.py there in your own worktree (and its fake's "
+                 f"world in the test), and commit {rel}/ on your branch.")
+        test, lands = f"{rel}/test_{name}.py", f"{rel}/ is committed on your branch; the ticket's review and gate land it."
     else:
         where = (f"Adapt {name}.py there, in place (and its fake's world in the test); it is outside any repository, so "
                  "commit nothing.")

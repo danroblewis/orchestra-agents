@@ -77,7 +77,7 @@ def _retry(store: AgentStore, name: str) -> None:
     scaffold and record go first (nothing else was written for it)."""
     rec = integrations(store).get(name)
     if rec and rec.get("state") == "test not run":
-        if rec.get("dir"):
+        if rec.get("dir") and not rec.get("adopted"):      # a collector the project already had is never removed
             shutil.rmtree(rec["dir"], ignore_errors=True)
         store.update_agent_state(MACHINE, KEY, lambda d: {k: v for k, v in (d or {}).items() if k != name})
 
@@ -90,6 +90,37 @@ def _taken(project: Project, store: AgentStore, name: str) -> str | None:
         if any(isinstance(e, dict) and e.get("name") == name for e in raw.get(section) or []):
             return f"a [[{section}]] entry"
     return None
+
+
+def _adoptable(project: Project, store: AgentStore, system: str, strategy: str, a: dict, given: str) -> dict | None:
+    """A collector already in the project (shipped with it, or scaffolded by hand) from the kit this
+    system takes, which is configured instead of scaffolding a second beside it: the one ``name``
+    names, else the only one of that kit. Recognised from the files on disk as the bridges list them
+    (``integrate_kits.shipped``: each one's kit from its own ``poller.toml``), never from what a
+    machine says of itself. One an integration already has is not offered again. A store whose
+    strategy was left out is measured by such a collector (``collect``) rather than planned as a
+    ``[[sources]]`` entry."""
+    if strategy == "source":
+        if a.get("strategy"):
+            return None
+        strategy = "collect"
+    kit = a.get("kit") or kits.kit_for(system, strategy)
+    recs = integrations(store)
+    known = {r.get(k) for r in recs.values() for k in ("dir", "lands")}
+    found = [c for c in kits.shipped(project) if c["name"] not in recs and c["dir"] not in known]
+    if given:
+        c = next((c for c in found if c["name"] == given), None)
+        if c and c["kit"] != kit:
+            raise StoreError(f"{given} is already in the project at {c['dir']}, from the {c['kit']} kit, not {kit}: name "
+                             f"another collector, or leave kit out to configure that one; nothing was written")
+        return {**c, "strategy": strategy} if c else None
+    mine = [c for c in found if c["kit"] == kit]
+    if len(mine) > 1:
+        raise StoreError(f"the project already has {len(mine)} collectors from the {kit} kit ({', '.join(c['name'] for c in mine)}"
+                         f", in {Path(mine[0]['dir']).parent}): call integrate_system once for each the owner wants, naming "
+                         "it (name) with its own settings, or name a new collector to scaffold another beside them; "
+                         "nothing was written")
+    return {**mine[0], "strategy": strategy} if mine else None
 
 
 def _no_kits(system: str) -> dict:
@@ -180,14 +211,19 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     base_url = (a.get("base_url") or "").strip() or None
     if base_url and not re.match(r"^https?://[^\s/]+", base_url):
         raise StoreError("base_url is the API's root, an http(s) URL")
-    name = (a.get("name") or "").strip() or (system if strategy == "source" else f"{system}_poller")
-    if not design_machines.ID.match(name) or (strategy in ("poller", "collect") and name == system):
+    given = (a.get("name") or "").strip()
+    adopt = _adoptable(project, store, system, strategy, a, given) if kits.installed() else None
+    if adopt:
+        strategy = adopt["strategy"]
+    name = given or (adopt or {}).get("name") or (system if strategy == "source" else f"{system}_poller")
+    relays = not adopt or kits.has_poller(adopt["kit"])  # a measurement alone may share the store's name: no machine is declared
+    if not design_machines.ID.match(name) or (strategy in ("poller", "collect") and name == system and relays):
         raise StoreError(f"{name!r}: the poller's name is lower case letters, digits and _ (2 to 41), and never the system's "
                          f"own name (the system is the machine; the poller only relays it): {system}_poller")
     _retry(store, name)
     if (old := integrations(store).get(name)) and old.get("state") == "test failed":
         return _retest(project, store, a, prov, old, settings)
-    if taken := _taken(project, store, name):
+    if not adopt and (taken := _taken(project, store, name)):
         raise StoreError(f"{taken} already has the name {name}: nothing was written")
     rec = {"system": system, "strategy": strategy, "wants": wants, "clearance": NEEDS, "token_env": None, "at": time.time(),
            "base_url": base_url, "root": root}
@@ -195,6 +231,8 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
         return _plan_only(project, store, name, rec, settings, a, prov)
     if not kits.installed():
         return _no_kits(system)
+    if adopt:
+        return _adopt(project, store, a, prov, rec, adopt, settings)
     kit = a.get("kit") or kits.kit_for(system, strategy)
     if kit not in kits.kits():
         raise StoreError(f"no kit {kit!r}: the kits are {', '.join(kits.kits())}")
@@ -208,6 +246,18 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
         if name not in integrations(store):               # nothing recorded: nothing left behind
             shutil.rmtree(rec["dir"], ignore_errors=True)
         raise
+
+
+def _adopt(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict, found: dict, settings: dict) -> dict:
+    """A collector the project already has, configured in place: its own test run against the kit's
+    fake, the owner's settings written into its ``poller.toml``, the system declared and its run
+    planned, exactly as for a new scaffold, but nothing scaffolded, and its directory never removed
+    or moved (a committed one is adapted on a ticket where it is)."""
+    design_machines.intended_api.current(project)        # the declared layer answers before anything is written
+    target = Path(found["dir"])
+    rec.update(name=found["name"], kit=found["kit"], dir=str(target), settings=settings, adopted=True, root=found["root"],
+               tracked=found["root"] == "repository" and handoff.tracked(project, target))
+    return _tested(project, store, a, prov, rec, kits.run_test(target, found["name"]), settings, first=True)
 
 
 def _retest(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict, settings: dict) -> dict:
@@ -245,7 +295,8 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     mf = kits.read(target)
     every = str(mf.get("settings", {}).get("every") or "5m")
     events = strategy == "poller" and kit != "promql"
-    lines: list = [(f"scaffolded the {kit} kit's poller {name} into {target} (poller.toml, {name}.py, test_{name}.py, "
+    lines: list = [(_adopted_line(rec, target) if rec.get("adopted") else
+                    f"scaffolded the {kit} kit's poller {name} into {target} (poller.toml, {name}.py, test_{name}.py, "
                     "AGENTS.md); poller.toml: clearance \"needs approval\", so it reads only a fake on this machine")
                    if first else f"ran its test again in {target}",
                    f"its test against the kit's fake: {'passed' if test['passed'] else 'NOT passed'} ({test['summary']})"]
@@ -279,7 +330,7 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     home = Path(rec.get("lands") or target)               # where it runs: the landed copy, once the Coordinator's ticket lands it
     rec["steps"] = schedule.poller(name, home, every, events=events)
     rec.update(state=NEEDS, machine=mid, stock=sid)
-    hand = not kits.templated(kit) and not rec.get("request")
+    hand = not kits.templated(kit) and not rec.get("request") and not rec.get("adopted")
     if hand:
         handoff.move_out(project, rec)
     _save(store, name, rec)
@@ -289,9 +340,18 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
         _save(store, name, rec)
         lines += said
     lines.insert(2, handoff.who_lands(rec))
-    extra = {"request": rec["request"]} if rec.get("request") else {}
+    extra = {**({"request": rec["request"]} if rec.get("request") else {}), **({"adopted": True} if rec.get("adopted") else {})}
     return _report(project, name, rec, {"changes": [{"change": c} for c in changes]}, lines,
                    mf.get("settings", {}).get("token_env"), test=test, dir=rec["dir"], **extra)
+
+
+def _adopted_line(rec: dict, target: Path) -> str:
+    clearance = kits.read(target).get("clearance") or NEEDS
+    return (f"configured {rec['name']}, the {rec['kit']} kit's collector already in the project at {target} (its "
+            f"{kits.settings_file(target).name} says kit {rec['kit']}), in place: nothing was scaffolded beside it; its "
+            f"{kits.settings_file(target).name} says clearance \"{clearance}\""
+            + (", so it reads only a fake on this machine until approve_integration" if clearance != "approved" else
+               ": approve_integration records the owner's own yes and where the token is"))
 
 
 def _declarations(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict, target: Path, every: str,
@@ -430,9 +490,35 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
             lines.append(f"{v}: {state} (its content is never read here)")
             if state != "there, chmod 600":
                 missing.append(f"{v}: the file, chmod 600" if state == "not there yet" else f"chmod 600 {v}")
-    return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds,
+    said, more = _confirm_heard(store, rec)
+    lines += said
+    return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds, **more,
                   token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
                   owner_must_set=missing)
+
+
+def heard(store: AgentStore, system: str) -> list[str]:
+    """The sources the bus has heard as the system's actors (``bot.<system>``, ``person.<system>.<account>``),
+    as the Machines page has them: how a relayed system is confirmed heard."""
+    seen = design_dynamics.last_seen(store)
+    return sorted(s for s in seen if s in (system, f"bot.{system}") or s.startswith((f"bot.{system}.", f"person.{system}.")))
+
+
+def _confirm_heard(store: AgentStore, rec: dict) -> tuple[list[str], dict]:
+    """What the answer says of whether the system is heard yet, and what to do next to confirm it."""
+    system, every = rec["system"], rec.get("every") or "5m"
+    if not rec.get("events"):
+        return ([(f"it measures only: its series appear on the Instruments page after the first [[collect]] round "
+                 f"(every {every}); nothing of it is heard on the bus")],
+                {"next": f"After {every}, confirm its series with list_metrics (the queries' names) and tell the owner."})
+    got = heard(store, system)
+    if got:
+        return [f"{kits.title(system)} is heard on the bus already: {', '.join(got[:5])}"], {"heard": got}
+    return ([(f"{kits.title(system)} is not heard on the bus yet: its first poll is within {every} of orchestra run reading "
+             "the overlay")],
+            {"heard": [], "next": (f"Confirm it is heard: after {every}, read_design shows machine {system} running, its "
+                                   f"events heard from bot.{system} or person.{system}.<account>. Tell the owner it is heard, "
+                                   "or, if not, read the collector's log (its [[machines]] process) and say why.")})
 
 
 COMMANDS = {"integrate_system": integrate_system, "approve_integration": approve_integration}

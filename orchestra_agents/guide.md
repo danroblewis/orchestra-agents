@@ -278,7 +278,25 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    `*.atlassian.net` and Data Center elsewhere; a Cloud site on its own domain says `cloud`). The
    GitHub kit reads **GitHub Enterprise** with `base_url = "https://<host>/api/v3"` (github.com's is
    `https://api.github.com`). Neither needs a change to the code: "connect our Jira Data Center and
-   GitHub Enterprise" is two `integrate_system` calls with those settings, never a handoff. The script is scaffolded into the repository, its own test is run against the kit's fake, and the
+   GitHub Enterprise" is two `integrate_system` calls with those settings, never a handoff.
+   **A collector already in the project is configured, never scaffolded twice.** When
+   `.orchestra/machines/` (or the state directory) already holds one built from the system's kit
+   (shipped with the project: its `poller.toml` says `kit = "jira"`), `integrate_system` configures
+   that one in place (its test, the owner's settings, the declaration, then the approval runs it),
+   and its answer says `adopted`. With several from one kit (`jira_team`, `jira_epics`, `jira_uff`),
+   call it once for each the owner wants, naming it (`name`) with its own settings; a new name
+   scaffolds another beside them only when the owner asked for a new one. A store (Chronosphere)
+   with such a collector is measured by it (`collect`) unless you say `source`.
+   **What you can set** (`settings`, the kit's own names, only what the owner said): Jira's `jql`,
+   `users`, `sprint_field`, `since`, `flavour`; GitHub's `authors`, `org`, `projects`; Slack's
+   `channels`, `every`, a channel's own `cadence` (`{"C0123": "30m"}`) and `max_backoff`; the promql
+   kit's `selectors` (each naming the team's part of the store, never the whole of it), `aliases`,
+   `max_series` and `queries`, the allowlist of named PromQL queries it measures
+   (`[{"name": "payments_errors", "query": "sum by (service) (...)", "help": "..."}]`, replacing
+   the template's), chosen from what its `schema` command lists; and `every`, `per_minute`, `ttl`
+   for any. A value is a string, a number, true/false, a list of them, a table of them or a list of
+   such tables; a token, its variable or its file is never a setting (that is
+   `approve_integration`'s, by reference). The script is scaffolded into the repository, its own test is run against the kit's fake, and the
    system is declared on the Machines page as a machine managed elsewhere, heard as
    `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
    relays what the system's people and bots did, as them. The answer names the directory: tell
@@ -308,6 +326,9 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    the approval, not before: an uncleared poller only waits, reading nothing, but its measurement
    would fail every round. If the answer says the script does not log in with an account yet (a
    script edited away from the template), hand that change to the Coordinator before saying it reads.
+   Then **confirm it is heard**: the answer says whether the system's actors (`bot.<system>`,
+   `person.<system>.<account>`) are on the bus yet; if not, after its first poll `read_design`
+   shows the machine running. Tell the owner it is heard, or what its log says.
 
 **What the human decides, and nothing else:** whether the system may be read (their quoted yes,
 and the data class), where its credentials are (a variable's name or a file's path; they put the

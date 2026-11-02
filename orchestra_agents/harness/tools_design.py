@@ -99,7 +99,26 @@ INTEGRATION_SETTINGS = {"type": "object", "description": "The program's own sett
     "list_path": S("http kit: the list endpoint (/api/builds)"),
     "match": A("source: the PromQL selectors to read ({__name__=~\"http_requests_total\"})"),
     "prefix": S("source: the series' prefix (chrono)"), "machine": S("source: the label naming machines (service)"),
-    "max_series": INT, "rate": NUM, "max_requests_per_day": INT}}
+    "max_series": INT, "rate": NUM, "max_requests_per_day": INT,
+    "users": A("Jira: a team's user names (Data Center) or account ids (Cloud): the scope becomes (jql) AND (assignee "
+               "or reporter in them)"),
+    "sprint_field": S("Jira: the Sprint field's id (customfield_10101, the one named Sprint in /rest/api/2/field)"),
+    "since": S("How far back the first poll catches up (14d: the sprint so far)"),
+    "authors": A("GitHub: the logins whose pull requests to follow"), "org": S("GitHub: the organisation searched"),
+    "projects": A("GitHub: the Jira project keys a branch or title names (PAY)"),
+    "cadence": {"type": "object", "additionalProperties": {"type": "string"},
+                "description": "Slack: a channel read less often than every poll, by its id, to its own interval "
+                               "({\"C0123\": \"30m\"}); the others are read each poll"},
+    "max_backoff": S("Slack: the longest a channel answered 429 waits (1h)"),
+    "selectors": A("promql: the allowlist schema looks within, each naming the team's part of the store "
+                   "({namespace=\"payments\"}), never the whole store"),
+    "queries": {"type": "array", "description": "promql: the allowlist of named PromQL queries it measures, each a gauge "
+                "(chosen from its schema command's answer); replaces the template's",
+                "items": {"type": "object", "properties": {
+                    "name": S("The series' name (payments_requests)"), "query": S("The PromQL, instant"),
+                    "help": S("What it measures, in a sentence")}, "required": ["name", "query"]}},
+    "aliases": {"type": "object", "additionalProperties": {"type": "string"},
+                "description": "promql: the store's label to the project's name for it ({\"k8s_cluster\": \"cluster\"})"}}}
 
 DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("declare_stock", "design",

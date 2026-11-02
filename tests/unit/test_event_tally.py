@@ -8,8 +8,7 @@ from datetime import UTC, datetime
 
 from design_fixtures import call
 
-from orchestra_agents import bus_reads, event_tally, modeling, prompting
-from orchestra_agents.org import built_in_agents
+from orchestra_agents import bus_reads, event_tally, modeling
 
 pytest_plugins = ["design_fixtures"]
 
@@ -88,21 +87,6 @@ def test_the_tally_reads_the_cloudevents_shape_too():
     assert event_tally.tally([e]) == {"pull_requests": {"merged": {"count": 1, "which": ["#22 (SCRUM-24)"]}}}
 
 
-def test_the_prompt_copies_the_tally_says_an_idle_outbox_waits_and_ends_with_the_model(project, monkeypatch):
-    from orchestra_agents import installed
-    for on in (False, True):
-        monkeypatch.setattr(installed, "tasking", lambda on=on: on)
-        text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
-        assert "Every number and name comes from the answer's `tally`" in text and "never count the events yourself" in text
-        assert "The Outbox's state is the answer's `outbox` line" in text
-        assert "never that it is down, needs starting or will not send unless that line says so" in text
-        assert "Every prediction in the answer's `predictions` is told, by its id" in text
-        assert "Never describe your own tool use (which tools ran, or that none did)" in text
-        assert "End the answer with the model's state: the reply's final line is the read's `closing_line`, verbatim" in text
-        assert "call is needed)), and nothing after it" in text
-        assert "its triage verdict (`tally`'s `triage`)" in text
-
-
 class Reads:
     def __init__(self, got, versions=()):
         self.got, self.saved = got, list(versions)
@@ -156,12 +140,6 @@ def test_the_model_line_says_who_changed_the_model_and_when(project, store, monk
     assert call(project, store, "read_events", since="1d")["model"] == (
         "model: the latest discovery, at 2026-11-02 11:15:57Z, not saved as a version yet; it has 3 stocks and 6 flows")
     assert modeling.origin("era e2 began: its prior") == "discovery (era e2 began: its prior)"
-
-
-def test_the_prompt_explains_a_model_change_only_by_its_versions_origin(project):
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
-    assert "A model change is explained only by the version's own origin as that line gives it" in text
-    assert "never by a declaration, a machine or anything else that happened near it" in text
 
 
 class Predicting(Reads):

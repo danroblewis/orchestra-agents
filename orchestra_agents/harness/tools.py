@@ -171,9 +171,10 @@ TOOLS: list[ToolDef] = [
             "predictions is each prediction's id and state (what it waits for, or its verdict); "
             "waiting_on_owner is what waits on the owner now (each disabled machine and what it needs, each Outbox draft "
             "waiting for approval, the questions you last asked the owner with what they said next); "
-            "and model is the model's state now: its version, who changed it and when (the version's recorded origin: "
+            "model is the model's state now: its version, who changed it and when (the version's recorded origin: "
             "the only cause of a model change to give), its stocks and flows counted; or why there is none, or that it "
-            "could not be read.",
+            "could not be read; and digest is the whole answer to \"what changed since\", written from all of it, "
+            "times in the pages' zone: reply with it as it is.",
             {"minutes": I("How far back, default 60 (since overrides it)"),
              "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
              "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),

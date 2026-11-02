@@ -93,5 +93,5 @@ def test_read_events_since_answers_the_closing_line_and_records_it_for_the_super
 
 def test_the_prompt_says_the_final_line_is_the_closing_line_verbatim(project):
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
-    assert "the reply's final line is the read's `closing_line`, verbatim, on a line of its own" in text
-    assert "and nothing after it, not a note on the tally" in text
+    assert "its last line is the read's `closing_line`, the model line" in text
+    assert "no rewording, no additions, no omissions, then nothing" in text

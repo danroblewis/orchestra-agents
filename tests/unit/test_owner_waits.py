@@ -8,7 +8,6 @@ import json
 from design_fixtures import call
 
 from orchestra_agents import bus_reads, machines_read, outbox_read, owner_waits, prompting
-from orchestra_agents.org import built_in_agents
 
 pytest_plugins = ["design_fixtures"]
 
@@ -72,10 +71,3 @@ def test_a_part_that_was_not_read_says_so(project, store, monkeypatch):
     w = owner_waits.waiting_on_owner(project, store)
     assert w["machines"] == "not read (RuntimeError)"
     assert w["outbox"].startswith("not read: ") and w["questions"] == []
-
-
-def test_the_prompt_names_what_waits_on_the_owner_before_the_model_line(project):
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
-    said = text.index("before the model line, name what waits on the owner now, from the answer's `waiting_on_owner`")
-    assert "a go-ahead you asked for and did not get still waits" in text
-    assert said < text.index("End the answer with the model's state")

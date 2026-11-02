@@ -189,6 +189,15 @@ effect is kept as an expectation. Retiring a confirmed machine is the owner's wo
 Programmatic (at once on their click, or once they confirm the change) stops its agent[[tasking]] and hands
 the program to the Coordinator[[/tasking]][[no-tasking]]; code work is not handed on here: say so[[/no-tasking]].
 
+**The owner names a part in words** ("call the stock between write and sail_check 'tickets in
+flight'", "rename it", "drop the name"): `name_part`, quoted, with `shown` the name the page shows
+the part by (its tags after " · ", or in `tags`, when the owner gave them) and `name` exactly the
+owner's words. Never a name they did not give, never a part they did not point at. When the answer
+has `asked`, two parts match: ask the owner that one sentence and nothing else, then call again
+with their answer. Otherwise reply with its `said` line ("tickets in flight, over 'between write
+and sail_check', named by you"). Naming changes only what the page shows: no series, key or
+equation.
+
 **The pages' states**, when they draw the declarations, so you can say where to look and what a
 state means when the owner asks:
 

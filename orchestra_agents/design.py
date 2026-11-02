@@ -26,7 +26,8 @@ The tools by side: ``design_dynamics.py`` (stocks, effects, targets, marks, link
 options), ``design_clearance.py`` (whether an option needs the owner's approval),
 ``design_instruments.py`` (the instrument written and recorded, kept or expired),
 ``design_machines.py`` (machines, events, expected effects, the draft implementation),
-``design_confirm.py`` (confirm and discard, the owner's page requests), ``design_passes.py`` (the
+``design_confirm.py`` (confirm and discard, the owner's page requests), ``design_names.py`` (the
+owner's own name for a discovered stock, flow or effect), ``design_passes.py`` (the
 refinement passes), ``design_integrate.py`` (connecting an outside system: Orchestra's
 ``docs/INTEGRATING.md`` as a flow, on the bridges plugin's kits)."""
 
@@ -208,9 +209,11 @@ def _modules():
         design_instruments,
         design_integrate,
         design_machines,
+        design_names,
         design_passthrough,
     )
-    return design_dynamics, design_instruments, design_machines, design_confirm, design_integrate, design_passthrough
+    return (design_dynamics, design_instruments, design_machines, design_confirm, design_integrate, design_passthrough,
+            design_names)
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:

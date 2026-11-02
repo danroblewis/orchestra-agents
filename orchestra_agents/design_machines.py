@@ -358,6 +358,8 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     if unheard:
         lines.append(f"no listener yet for {', '.join(unheard)} (the refinement pass will propose one)")
     lines += type_lines(project, store, mid, m["receives"], m["emits"]) + named_lines
+    if proto := design_named.protocol_line(m["receives"]):
+        lines.append(proto)
     if not m["receives"]:
         lines.append(NO_RECEIVES)
     if d:
@@ -480,6 +482,8 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         if runs_a_day(store, after)[0] != runs_a_day(store, m)[0]:
             lines.append(cost_line(project, store, after))
     lines += type_lines(project, store, mid, list(a.get("add_receives") or []), list(a.get("add_emits") or [])) + named_lines
+    if proto := design_named.protocol_line(after.get("receives")):
+        lines.append(proto)
     if any(a.get(k) for k in ("mode", "at", "tz")) and (m.get("provenance") or {}).get("author") not in (OWNER, MACHINE, None):
         lines.append(f"{mid} is run by {runs_it(m)}: the engagement recorded here is the declaration and changes no run "
                      "time. When a workflow's clock starts it (list_workflows: its every start and clock), declare that "

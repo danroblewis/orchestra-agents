@@ -57,6 +57,7 @@ import pytest
 from live.live_helpers import FAKE, FORBIDDEN, costs, find, keep, layer, rediscover, say, wrapper
 
 from demo.run import Web, wait_until
+from orchestra_agents.floor import PROTOCOL
 
 LIVE = os.environ.get("ORCHESTRA_LIVE_DESIGN", "")
 REHEARSE = LIVE == "rehearse"
@@ -202,9 +203,11 @@ def receives_problem(receives: list[str], heard: set[str], families: tuple[str, 
     """Why the nudger's receives fail the owner's words, or "": every type heard on the bus, and for
     each family the owner named exactly the heard types of it (T2c s10: github.pr.approved and
     github.pr.changes_requested, never heard, were in). Also the unit tests' oracle
-    (tests/unit/test_named_heard_only.py)."""
-    if not receives or set(receives) - heard:
-        return f"receives {receives}: {sorted(set(receives) - heard)} not heard on the bus"
+    (tests/unit/test_named_heard_only.py). The floor's protocol types (floor.PROTOCOL: offer.made,
+    offer.withdrawn, …) are the plugin's, carried by its proposal: allowed whether or not heard (T2d s10)."""
+    unheard = set(receives) - heard - set(PROTOCOL)
+    if not receives or unheard:
+        return f"receives {receives}: {sorted(unheard)} not heard on the bus"
     for fam in families:
         got, want = {t for t in receives if t.startswith(fam)}, {t for t in heard if t.startswith(fam)}
         if not got or got != want:

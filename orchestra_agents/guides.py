@@ -2,7 +2,8 @@
 installed plugin's (``Plugin.guide``), as Orchestra collects them (``orchestra.guides.collect``, also
 ``GET /api/guides``). Together they are about 100 KB, so an agent first lists them, each with what it
 is about and its sections (``list_guides``), and then reads the one it needs, whole or one section
-(``read_guide``). Read only; the text is the plugins', never interpreted here."""
+(``read_guide``). Read only; the text is the plugins', never interpreted here, except that the
+agents' own is gated on the task system (``tasking_text.gate``: no Coordinator without it, T2d s13)."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import re
 
 from .config import Project
 from .store import StoreError
+from .tasking_text import gate
 
 SUMMARY_CHARS = 400
 _CACHE: dict[str, list[dict]] = {}     # project key -> the guides, once per process: what is installed does not change while it runs
@@ -38,6 +40,12 @@ def collect(project: Project) -> list[dict]:
     return got
 
 
+def _text(g: dict) -> str:
+    """A guide's text as it holds now: the agents' own with its task-system words kept or dropped."""
+    text = g.get("text") or ""
+    return gate(text) if g.get("name") == "agents" else text
+
+
 def sections(text: str) -> list[str]:
     return [m.group(1).strip() for m in re.finditer(r"^#{2,3} (.+)$", text, re.MULTILINE)]
 
@@ -52,8 +60,8 @@ def summary(text: str) -> str:
 def list_guides(project: Project) -> dict:
     out = []
     for g in collect(project):
-        row = {"name": g["name"], "chars": len(g.get("text") or ""), "about": summary(g.get("text") or ""),
-               "sections": sections(g.get("text") or "")}
+        text = _text(g)
+        row = {"name": g["name"], "chars": len(text), "about": summary(text), "sections": sections(text)}
         if g.get("error") or g.get("note"):
             row["note"] = g.get("error") or g.get("note")
         out.append(row)
@@ -66,7 +74,7 @@ def read_guide(project: Project, a: dict) -> dict:
     guides = {g["name"]: g for g in collect(project)}
     if name not in guides:
         raise StoreError(f"no guide {name!r}; the guides are {', '.join(guides) or 'none'} (list_guides)")
-    text = guides[name].get("text") or ""
+    text = _text(guides[name])
     if not text:
         raise StoreError(guides[name].get("error") or f"the guide {name} is empty")
     if not want:

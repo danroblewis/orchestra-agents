@@ -29,6 +29,7 @@ from . import (
     installed,
     instruments,
     ledger,
+    machines_read,
     modeling,
     observe,
     observe_model,
@@ -149,6 +150,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
     if command == "read_events":
         return bus_reads.read_events(store, a)
+    if command == "list_machines":
+        return machines_read.list_machines(store, a)
 
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)

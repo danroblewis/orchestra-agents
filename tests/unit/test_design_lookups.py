@@ -210,3 +210,31 @@ def test_the_design_prompt_says_store_first_receives_flows_and_the_owners_zone()
     assert "`propose_measurements` links the declared stock to it itself" in text and "never the stock's own key" in text
     assert "Never write UTC or the host's zone as theirs" in text and "ask in that reply which zone" in text
     assert "Your tools are the ones this session lists" in text
+
+
+def test_list_machines_names_each_machines_mode_kind_and_notes_disabled_first(project, store, monkeypatch):
+    """T2 s01 and s16: slack_notify announced disabled (a token without a scope) and sail announced
+    fake; no tool said so, so "what needs me" never named them."""
+    from orchestra_agents import machines_read
+    answer = {"ok": True, "machines": [
+        {"id": "orchestra", "bootstrap": True, "kind": "program", "mode": "continuous", "about": {}, "active": True},
+        {"id": "slack_notify", "kind": "program", "mode": "continuous", "active": True, "package": "workflows",
+         "about": {"writes": "slack", "disabled": "Slack refused conversations.list: missing_scope; posting nothing"}},
+        {"id": "sail", "kind": "program", "mode": "ad hoc", "active": False, "about": {"fake": "FAKE: SAIL, played by this example"}},
+        {"id": "review_nudger", "kind": "program", "mode": "scheduled", "active": False, "about": {"roles": ["review_nudger"]}}]}
+    monkeypatch.setattr(machines_read, "view", lambda store: answer)
+    out = call(project, store, "list_machines")
+    assert out["summary"][0].startswith("disabled (needs the owner): slack_notify: Slack refused")
+    assert out["disabled"] == ["slack_notify: Slack refused conversations.list: missing_scope; posting nothing"]
+    assert out["fakes"] == ["sail: FAKE: SAIL, played by this example"]
+    slack = next(m for m in out["machines"] if m["id"] == "slack_notify")
+    assert list(slack["notes"]) == ["disabled", "writes"] and slack["mode"] == "continuous" and slack["kind"] == "program"
+    assert "orchestra" not in {m["id"] for m in out["machines"]}
+    assert "review_nudger (program, scheduled, quiet); roles: ['review_nudger']" in out["summary"]
+
+
+def test_list_machines_reads_the_bus_as_the_machines_page_does(project, store):
+    store.events.publish("orchestra.machine.started", {"mode": "continuous", "kind": "program", "listens_for": ["x.y"],
+                                                        "disabled": "no token"}, source="slack_notify")
+    out = call(project, store, "list_machines")
+    assert out["disabled"] == ["slack_notify: no token"]

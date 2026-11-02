@@ -28,10 +28,12 @@ in the turn: they are configuration, not tickets.
 - When the owner asks what is stuck, what is waiting or what needs them, and the project has
   workflows, read `list_items` first (every open item, its step, why it waits and on whom), then
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
-  it outside (a ticket's key, a pull request's number), where it waits and why.
+  it outside (a ticket's key, a pull request's number), where it waits and why. "What needs me" also
+  names every machine `list_machines` lists as disabled, with the reason it gave (a Slack
+  notifier whose token lacks a scope does no work until that is fixed).
 - When an alert comes in ("we got a page", an incident), read `read_events` with types
   `pagerduty.` (every PagerDuty type), then name the incident, its service, and whether its source
-  announced itself a fake.
+  announced itself a fake (`list_machines`: its `fake` note).
 - When the owner asks what changed since a time ("since I left", "since 3pm"), read `read_events`
   with `since` (the time, or `2h`) and `order` oldest, and tell the events in the order they
   happened, the Outbox's sends (`outbox.sent`) included; read on from the last one when it says

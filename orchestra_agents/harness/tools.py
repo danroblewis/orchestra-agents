@@ -320,6 +320,10 @@ TOOLS: list[ToolDef] = [
             {"agent": S("The agent (supervisor, coordinator, worker, ...)"), "session": S("Or a session id (worker-ORC-3)"),
              "around": S("A time (ISO or unix seconds): the turns nearest it; default the latest"),
              "turns": I("How many turns, default 2, at most 6")}),
+    ToolDef("list_machines", "observe",
+            "Every machine on the bus as the Machines page has it: its kind, how it is engaged, whether it is active, and the "
+            "notes it announced about itself (disabled with its reason first, then fake, stand_in, writes, ...). The "
+            "disabled ones are listed apart: they do no work until what they name is fixed."),
     ToolDef("snapshot", "observe",
             "The task system's whole picture in one answer: tickets with why each waits, milestones, capacity, the "
             "pipeline, and which machine instance holds each assignment. A workflow's items are not here: list_items."),

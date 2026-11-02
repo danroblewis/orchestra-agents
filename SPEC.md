@@ -801,7 +801,10 @@ collectors), `read_machine_log` (a process's or collector's log, Orchestra's hos
 machine announced, read only within the repository or the state directory, as Orchestra's web
 server reads one), `list_metrics` (the project's store, as the Core page's catalogue),
 `get_model` (Orchestra's model view, shortened), `read_instrument`, the four sources tools,
-`snapshot` (the task system's query), and `read_events`. All of it reads through Orchestra as a library; nothing is written.
+`snapshot` (the task system's query, offered only with the task system installed), `read_events`
+(types or prefixes, `since`, newest or oldest first), and `list_machines` (Orchestra's machines view
+over the bus: each machine's kind, engagement and announced notes, `disabled` first,
+`machines_read.py`). All of it reads through Orchestra as a library; nothing is written.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),

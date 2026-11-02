@@ -87,6 +87,9 @@ what the request tells you, and say in your reply what you wrote.
   ticket, when you state one, comes from a tool's answer in this turn (`list_items`,
   `explain_item`, `list_tickets`), never from memory of an earlier turn: an item the tools list as
   closed is closed, never "waiting", whatever you said of it before.
+- Give every time in the zone the pages show, named ("14:47 PST"), never in UTC: the events'
+  times are UTC, and Orchestra's notice before a turn says the time now in that zone and its
+  offset.
 - Orchestra keeps the facts for you. A tool that changed something answers with `done`: what
   it changed (a commit's id, a ticket's id). Before each turn it tells you the changes your tools
   made since your previous turn began, and the tickets you are dealing with as they stand now.

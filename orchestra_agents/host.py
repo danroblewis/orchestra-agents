@@ -783,7 +783,8 @@ class AgentHost:
             self._turn_began(None)
             facts, began = self.facts.before(snap)
             facts += handoff_overdue.facts_line(self.store, began, handoff_overdue.deadline(self.cfg))
-            task = prompting.SUPERVISOR_WAKE + prompting.supervisor_context(snap, [], self.project, self.store) + facts + task
+            context = prompting.supervisor_context(snap, [], self.project, self.store) or prompting.clock_line() + "\n\n"
+            task = prompting.SUPERVISOR_WAKE + context + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))
             budget.record(self.store, res.cost_usd, initiative=initiative(reasons, self._duty_types()))

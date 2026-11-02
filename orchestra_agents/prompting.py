@@ -485,6 +485,16 @@ def concerns_supervisor(e: dict) -> bool:
             or (t == "task.reported" and report.get("state") == "BLOCKED"))     # a worker's turn ended blocked
 
 
+def clock_line(now: float | None = None) -> str:
+    """The time now in the zone the pages show (this machine's, as a browser on it shows times),
+    named, with its offset from UTC: the events' times are UTC, a reply's are in this zone."""
+    t = time.localtime(now if now is not None else time.time())
+    off = time.strftime("%z", t)
+    return (f"[Orchestra: now {time.strftime('%Y-%m-%d %H:%M', t)} {time.strftime('%Z', t)} (UTC{off[:3]}:{off[3:]}), the "
+            "zone the pages show. Events carry UTC times: give every time in your reply in this zone, named "
+            f"(\"{time.strftime('%H:%M', t)} {time.strftime('%Z', t)}\"), never in UTC.]")
+
+
 def supervisor_context(snapshot: dict, events: list[dict], project: Project | None = None, store=None,
                        roles: list[str] | None = None) -> str:
     """What Orchestra puts in front of a Supervisor turn: the project context document only
@@ -494,7 +504,12 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
     most DIGEST_EVENTS. Who fills the task system's roles (``roles``, fillers.py) comes first
     when it has changed since the Supervisor last saw it. The digest stays a few lines however busy the bus was, so a turn does
     not fill the session's context; the snapshot and `list_tickets` have the rest. A human's
-    "yes, go ahead" arrives as itself."""
+    "yes, go ahead" arrives as itself; with any notice, the clock (``clock_line``) comes first."""
+    out = _notices(snapshot, events, project, store, roles)
+    return clock_line() + "\n\n" + out if out else ""
+
+
+def _notices(snapshot: dict, events: list[dict], project: Project | None, store, roles: list[str] | None) -> str:
     out = ""
     if project is not None:
         text = read_context(project).strip()

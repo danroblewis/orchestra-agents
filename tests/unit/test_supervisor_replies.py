@@ -167,3 +167,21 @@ def test_a_heard_type_needs_no_declaration(project):
     from orchestra_agents.org import built_in_agents
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "A type in `by_type` is heard on the bus; it needs no declaration, and goes in receives as it is" in text
+
+
+def test_times_are_given_in_the_pages_zone_named(monkeypatch):
+    """T2 (b O10, d O6): replies gave UTC times while the pages showed PST."""
+    import time as _time
+    from datetime import UTC, datetime
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    _time.tzset()
+    try:
+        now = datetime(2026, 11, 1, 22, 47, tzinfo=UTC).timestamp()
+        line = prompting.clock_line(now)
+        assert "now 2026-11-01 14:47 PST (UTC-08:00)" in line and '"14:47 PST"' in line and "never in UTC" in line
+        ctx = prompting.supervisor_context({"counts": {}, "absent": True}, [{"type": "item.requested"}])
+        assert ctx.startswith("[Orchestra: now ") and "PST" in ctx.split("\n")[0]
+        assert prompting.supervisor_context({"counts": {}, "absent": True}, []) == ""        # "yes, go ahead" as itself
+    finally:
+        monkeypatch.delenv("TZ")
+        _time.tzset()

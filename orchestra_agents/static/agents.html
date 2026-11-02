@@ -188,6 +188,7 @@ function unfilled(role) {
   return "no agent";
 }
 function statusOf(a, now) {
+  if (a.paused && a.paused_why) return `<span class="chip" title="${esc(a.paused_why)}"><span class="dot"></span>paused: ${esc(a.paused_why)}</span>`;
   if (a.paused) return `<span class="chip ${a.crash_loop ? "down" : ""}" title="${esc(a.crash_loop ? a.crash_loop + ": ask the Supervisor to resume it once fixed" : "paused by the Supervisor; ask it to resume")}"><span class="dot"></span>${a.crash_loop ? "paused after a crash loop" : "paused"}</span>`;
   // the latest session of this agent: its resident one, or the newest of its runs
   const s = sessionOf(a) || (STATE ? STATE.sessions.filter((x) => x.kind === a.name).sort((x, y) => (y.started_at || 0) - (x.started_at || 0))[0] : null) || null;

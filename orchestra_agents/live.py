@@ -6,7 +6,9 @@ makes, and what that example's own ``--supervisor`` option calls, with nothing p
 by writing ``orchestra.toml`` itself; the example's clone keeps it out of git), writes the
 Supervisor's role and spec into the target's ``.orchestra/`` and records its setup as having run,
 so the host wakes nobody for a first run. Starting the processes stays the example's
-(``orchestra run`` launches the agents' host once ``[agents]`` is set). Nothing here runs a model."""
+(``orchestra run`` launches the agents' host once ``[agents]`` is set). ``cap_supervisor`` keeps a
+standing example's Supervisor within a spend a day: paused at the cap with the reason the Agents
+page shows, resumed the next day. Nothing here runs a model."""
 
 from __future__ import annotations
 
@@ -74,3 +76,45 @@ def start_supervisor(project_dir: Path | str, *, role: list[str] | tuple[str, ..
     project = load_project(repo)
     AgentStore(project).set_agent_state("supervisor", setup={"ran_at": 1.0, "harness": project.config.harness})
     return {"project": str(repo), "slack": on, "tools": tools, "agents": {k.split(".", 1)[1]: v for k, v in agents.items()}}
+
+
+SUPERVISOR = "supervisor"
+CAPPED_BY = "the daily spend cap"        # ``paused_by`` of a pause this module made, and only undoes
+
+
+def cap_supervisor(project_dir: Path | str, usd_per_day: float, t: float | None = None) -> dict:
+    """Hold the Supervisor of the example in ``project_dir`` to ``usd_per_day`` dollars a day, every
+    turn counted (the agents' spend record, ``budget.spent``: what Claude Code reported per turn).
+
+    At the cap it is **paused, not stopped**: its state says ``paused`` with ``paused_by`` (this
+    cap) and ``paused_why`` (what was spent, the cap, when it resumes), which the Agents page shows
+    on its chip, and ``agent.paused`` is published with the reason; its wake-ups wait queued and a
+    chat message is refused with the reason. The next day (the spend record's day) it is resumed,
+    ``agent.resumed`` said, if this cap paused it; a pause by anyone else is never undone here. A
+    turn already running when the cap is crossed finishes: the cap can be passed by one turn.
+    ``usd_per_day`` of 0 or less: no cap (a pause this cap made is undone).
+    Returns ``{"paused", "why", "usd", "changed"}``."""
+    from . import budget
+    from .config import load_project
+    from .store import AgentStore
+
+    store = AgentStore(load_project(Path(project_dir).expanduser().resolve()))
+    st = store.agent_state(SUPERVISOR)
+    usd = float(budget.spent(store, t).get("usd", 0.0))
+    ours = st.get("paused") and st.get("paused_by") == CAPPED_BY
+    if usd_per_day > 0 and usd >= usd_per_day:
+        if st.get("paused"):
+            return {"paused": True, "why": st.get("paused_why") or st.get("crash_loop") or "paused", "usd": usd,
+                    "changed": False}
+        why = (f"the day's spend cap: ${usd:.2f} spent on {budget.day(t)}, the cap is ${usd_per_day:.2f} a day; "
+               "it resumes tomorrow")
+        store.set_agent_state(SUPERVISOR, paused=True, paused_by=CAPPED_BY, paused_why=why)
+        store.events.emit("agent.paused", src=SUPERVISOR, agent=SUPERVISOR, by=CAPPED_BY, why=why)
+        return {"paused": True, "why": why, "usd": usd, "changed": True}
+    if ours:
+        store.set_agent_state(SUPERVISOR, paused=False, paused_by=None, paused_why=None)
+        store.events.emit("agent.resumed", src=SUPERVISOR, agent=SUPERVISOR, by=CAPPED_BY,
+                          why=f"a new day: ${usd:.2f} spent so far, the cap is ${usd_per_day:.2f}")
+        return {"paused": False, "why": None, "usd": usd, "changed": True}
+    return {"paused": bool(st.get("paused")), "why": st.get("paused_why") if st.get("paused") else None, "usd": usd,
+            "changed": False}

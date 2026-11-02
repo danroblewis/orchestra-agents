@@ -647,7 +647,7 @@ class AgentHost:
         wake-ups behind it and a pause, restart or reset waits for it to end."""
         st = self.store.agent_state("supervisor")
         if st.get("paused") or st.get("deleted"):
-            why = st.get("crash_loop") or "by request"
+            why = st.get("paused_why") or st.get("crash_loop") or "by request"
             raise StoreError(f"the Supervisor is {'deleted' if st.get('deleted') else 'paused'} ({why}); its messages wait until it is resumed")
         with self._turn_lock("supervisor"):
             self.agent_threads["supervisor"] = threading.current_thread()

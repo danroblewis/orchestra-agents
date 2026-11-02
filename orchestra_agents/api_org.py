@@ -213,7 +213,8 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict[str, Any]
         store.events.emit("agent.deleted", agent=a["name"], by=author)
         return {"ok": True, "storage": os_.last_commit_note}
     if command in ("pause_agent", "resume_agent"):
-        store.set_agent_state(a["name"], paused=(command == "pause_agent"), crash_loop=None, crashes=[])
+        store.set_agent_state(a["name"], paused=(command == "pause_agent"), crash_loop=None, crashes=[],
+                             paused_by=None, paused_why=None)
         store.events.emit("agent.paused" if command == "pause_agent" else "agent.resumed", agent=a["name"], by=author)
         return {"ok": True, "paused": command == "pause_agent"}
     if command == "restart_agent":

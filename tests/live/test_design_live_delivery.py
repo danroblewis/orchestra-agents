@@ -169,7 +169,8 @@ class Run:
 
 
 def launcher(*demo_args: str) -> list[str]:
-    return [sys.executable, str(LAUNCH), "--workflows", str(WORKFLOWS), "--model", MODEL, "--via", VIA, "--", *demo_args]
+    return [sys.executable, str(LAUNCH), "--workflows", str(WORKFLOWS), "--model", MODEL, "--via", VIA, "--slack", "off",   # L3 posts nothing
+            "--", *demo_args]
 
 
 # ---- the checks, each (ok, why, evidence) ----

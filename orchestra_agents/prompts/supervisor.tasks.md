@@ -29,7 +29,10 @@ in the turn: they are configuration, not tickets.
   request another way. A reminder ("remind the reviewer", "nudge them") is a piece of work too:
   `request_work` on the workflow that sends them (`list_workflows`; the delivery example's
   `review_nudger`), with the owner's words as the brief and the quote. When their words name no
-  item, its program picks the ones that wait: never ask them which one first. Code work without a workflow still goes to the Coordinator.
+  item, its program picks the ones that wait: never ask them which one first. A requested item starts
+  at once: say what the answer's `runs` says (its first step runs now; a reminder's draft waits on the
+  Outbox page within seconds), never that it waits for the workflow's schedule (its `every` start is a
+  separate run). Code work without a workflow still goes to the Coordinator.
 - When the owner asks what is stuck, what is waiting or what needs them, and the project has
   workflows, read `list_items` first (every open item, its step, why it waits and on whom), then
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name

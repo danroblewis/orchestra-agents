@@ -17,7 +17,8 @@ from ``owner``):
 Refused, with nothing published: the plugin not installed; no ``orchestra run`` launching the
 project, or its floor (``workflows.floor``) not running, since nothing would offer the item; a
 workflow the plugin does not load, or one that a request does not start; an id the record already
-holds. The answer names the item, the Items page that shows it, and ``explain_item`` to follow it."""
+holds. The answer names the item, the Items page that shows it, ``explain_item`` to follow it, and
+what runs (``runs``): the first step at once, apart from any ``every`` start of the workflow."""
 
 from __future__ import annotations
 
@@ -63,6 +64,20 @@ def _workflow(p, project: Project, name: str):
     return w
 
 
+def runs_now(w, item: str) -> str:
+    """What happens to a requested item, in the owner's words: the floor offers its first step at once;
+    a clock start (``every``) is a separate run of its own, never this one's wait."""
+    steps = getattr(w, "steps", ()) or ()
+    first = getattr(steps[0], "name", None) if steps else None
+    out = f"started now as item {item}; " + (f"its first step {first} runs at once" if first else "it runs at once")
+    every = next((s for s in (getattr(w, "raw", {}) or {}).get("starts") or []
+                  if isinstance(s, dict) and s.get("every")), None)
+    if every:
+        at = f" at {every['at']}" + (f" {every['tz']}" if every.get("tz") else "") if every.get("at") else ""
+        out += f"; the workflow's every {every['every']}{at} start is a separate run, not this one"
+    return out
+
+
 def _fields(a: dict) -> dict:
     fields = a.get("fields")
     if fields in (None, {}):
@@ -97,7 +112,7 @@ def request_work(project: Project, store: AgentStore, a: dict, role: str) -> dic
             raise StoreError("give the reason in a sentence: which plan this item is part of")
         source, extra = role, {}
     project.reload_config()
-    _workflow(p, project, name)
+    w = _workflow(p, project, name)
     item = str(a.get("item") or "").strip() or f"{name}-{secrets.token_hex(3)}"
     if not ID.match(item):
         raise StoreError("item is the new item's id: letters, digits and . _ : @ -, up to 80 (leave it out for a new one)")
@@ -112,7 +127,9 @@ def request_work(project: Project, store: AgentStore, a: dict, role: str) -> dic
     out = {"ok": True, "item": item, "workflow": name, "source": source, "requested": ev.get("id"),
            "shown": f"The Items page shows it: /items#item={urlquote(item, safe='')}; explain_item with item {item!r} says "
                     "where it is and why.",
-           "say": f"Tell the owner the item's id, {item}, and where to watch it."}
+           "runs": runs_now(w, item),
+           "say": f"Tell the owner the item's id, {item}, where to watch it, and what runs says: it starts now, "
+                  "never on the workflow's schedule."}
     if parent:
         out["parent"] = parent
     if fields:

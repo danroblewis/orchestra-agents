@@ -116,7 +116,8 @@ def list_machines(store: AgentStore, a: dict | None = None) -> dict:
             "note": ("notes are what each machine announced about itself (orchestra.machine.started), passed on as said; "
                      "a disabled machine does no work until what it names is fixed; state is how it is heard: an ad hoc machine "
                      "acts when it is offered work, so its silence is no fault; only gone_quiet (the core's mark, on a "
-                     "continuous or scheduled machine) means it stopped being heard, and only then may it need restarting; "
+                     "continuous or scheduled machine) means it stopped being heard, not that it stopped running (list_processes "
+                     "says whether its process runs): say what the tools returned, and when a tool did not answer, say that; "
                      "running says whether a declared machine runs: one heard on the bus is running, and a program a "
                      "workflow's step names runs as that workflow's program, confirmed or not (unconfirmed is the declared "
                      "layer's state, never a switch that stops it)")}

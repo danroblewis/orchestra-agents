@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import agents_project
 
-from orchestra_agents import tooling, workflow_tools
+from orchestra_agents import design_machines, tooling, workflow_tools
 from orchestra_agents.builtins import ROLES
 from orchestra_agents.events import Events
 from orchestra_agents.harness.tools import BY_NAME
@@ -379,3 +379,38 @@ def test_the_alert_line_names_the_items_an_incident_may_hold(project):
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "an incident on a service a step waits on holds the items at that step: name them" in text
     assert "never say the work is unaffected while an item waits at such a step" in text
+
+
+def test_the_owners_this_machines_clock_is_declared_as_the_hosts_zone(project, store, fake, monkeypatch):
+    """T2e s10b, s15: "This machine's clock." was neither declared nor taken: it was asked again."""
+    monkeypatch.setenv("TZ", "Asia/Tokyo")                           # a faked local zone
+    for words in ("This machine's clock.", "local", "here"):
+        timed = {**DEF, "starts": [{"every": "24h", "at": "09:00", "tz": words}]}
+        out = call(project, store, "declare_workflow", definition=timed, reason=WHY)
+        assert out["clock"] == "every 24h at 09:00 Asia/Tokyo: say this run time, and no other"
+        assert out["zone"].startswith(f"{words!r} is this machine's zone, Asia/Tokyo: declared 09:00 Asia/Tokyo")
+        assert "do not ask for the zone again" in out["zone"]
+        [w] = call(project, store, "list_workflows")["workflows"]
+        assert w["clock"] == "every 24h at 09:00 Asia/Tokyo"
+    out = call(project, store, "declare_workflow", reason=WHY,
+               definition={**DEF, "starts": [{"every": "24h", "at": "09:00", "tz": "UTC"}]})
+    assert "zone" not in out
+
+
+def test_the_hosts_zone_is_its_iana_name(monkeypatch):
+    from orchestra_agents import clock
+    monkeypatch.setenv("TZ", ":Europe/Berlin")
+    assert clock.host_zone() == "Europe/Berlin" and clock.resolve_tz("this machine's clock") == "Europe/Berlin"
+    assert clock.resolve_tz("America/New_York") == "America/New_York" and clock.resolve_tz(None) is None
+    monkeypatch.setenv("TZ", "nowhere")
+    monkeypatch.setattr("os.path.realpath", lambda p: "/usr/share/zoneinfo/Pacific/Auckland")
+    assert clock.host_zone() == "Pacific/Auckland"
+    e = design_machines.engagement({"mode": "scheduled", "at": "09:00", "tz": "This machine's clock."})
+    assert e == {"mode": "scheduled", "at": "09:00", "tz": "Pacific/Auckland"}
+
+
+def test_the_design_prompt_takes_the_zone_answer():
+    from orchestra_agents.prompting import PROMPTS_DIR
+    text = " ".join((PROMPTS_DIR / "design.md").read_text().split())
+    assert "when it is \"this machine's clock\", \"local\" or \"here\", pass those words as `tz`" in text
+    assert "Declare it in that turn, say what was declared, and never ask for the zone again" in text

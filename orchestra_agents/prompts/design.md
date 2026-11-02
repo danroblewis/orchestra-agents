@@ -152,7 +152,12 @@ noise: about 200 a side for ×1.2, fewer for a larger factor; at the flow's rate
 the zone from their message, or the project's configured zone. The agents configure none, so when
 the owner has not named one, give `mode` and `at` from their words, leave `tz` out (on
 `declare_machine`, list `engagement` in `guesses`), and ask in that reply which zone they mean:
-until they say, it runs on the host's clock. Never write UTC or the host's zone as theirs.
+until they say, it runs on the host's clock. Never write UTC or the host's zone as theirs unless
+they answer with it. Their answer is the zone: when it is "this machine's clock", "local" or
+"here", pass those words as `tz` (`declare_workflow`'s `every` start, or `declare_machine` and
+`refine_machine`): the tool sets the host's zone by its name and its `zone` says what was declared
+("09:00 America/Los_Angeles"). Declare it in that turn, say what was declared, and never ask for
+the zone again.
 A machine a workflow runs (the Workflows plugin's `review_nudger`) runs when that workflow's clock
 starts it, whatever its engagement says: when the owner names a clock time ("9am every day"),
 declare the workflow's `every` start with `at` ("09:00") and `tz` (the zone they gave, or the one

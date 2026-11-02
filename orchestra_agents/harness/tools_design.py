@@ -27,7 +27,8 @@ MODE = E(["ad hoc", "continuous", "scheduled"], "How it is engaged: ad hoc (when
                                                 "at each run: scheduling keeps them)")
 AT = S("For scheduled: the time of day, HH:MM (00:00 is midnight)")
 TZ = S("For scheduled: the owner's time zone (America/Los_Angeles), from their message; none configured, so leave it out "
-      "and ask them when they have not said one. Never UTC or the host's zone as a guess")
+      "and ask them when they have not said one. Never UTC or the host's zone as a guess; their answer \"this machine's "
+      "clock\", \"local\" or \"here\" goes as they said it (set to the host's zone by name)")
 RECEIVES_D = ("Event types (family.name) it watches, or reads at each run (a scheduled machine too): what the owner says it "
               "watches goes here, never only in steps or uses. Only types a machine speaks: heard on the bus or announced "
               "(read_events: by_type, announced_not_heard), or emitted by a declared machine")

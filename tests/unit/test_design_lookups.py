@@ -257,7 +257,8 @@ def test_list_machines_calls_no_machine_quiet_the_core_did_not_mark(project, sto
     assert not by["worker"]["gone_quiet"]                     # heard again after the mark
     assert by["supervisor"]["state"] == "active"
     assert [x for x in out["summary"] if "quiet" in x] == [next(x for x in out["summary"] if x.startswith("outbox"))]
-    assert "only gone_quiet" in out["note"]
+    assert "only gone_quiet" in out["note"] and "not that it stopped running" in out["note"]
+    assert "may need restarting" not in out["note"] and "when a tool did not answer, say that" in out["note"]
 
 
 def test_quiet_marks_are_the_cores_events(project, store):
@@ -272,8 +273,12 @@ def test_the_stuck_line_never_advises_a_restart_the_core_did_not_mark(project):
     from orchestra_agents.org import built_in_agents
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "is waiting for that event, not stuck on a quiet machine" in text
-    assert ("Never advise restarting a machine, or say it needs starting, unless `list_machines` shows it `gone_quiet` "
-            "(the core's mark) and its mode is continuous or scheduled") in text
+    assert ("A machine's state is what the tools returned: say what they returned; when a tool did not answer, "
+            "say that.") in text
+    assert ("never advise restarting a machine, or say it needs starting or is down, unless `list_processes` shows "
+            "its process stopped") in text
+    for guess in ("may need starting", "might be down", "may need restarting", "only then may it need"):
+        assert guess not in text.lower(), guess
 
 
 def test_list_machines_reads_the_bus_as_the_machines_page_does(project, store):

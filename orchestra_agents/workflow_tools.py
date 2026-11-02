@@ -12,6 +12,8 @@ validated writer, its loader and its record's read API, the one exception to AGE
   ``.orchestra/`` only with the owner's quoted words, and then it is **not committed** (at work the
   base branch is protected, and the plugin's writer leaves landing it to a pull request): the answer
   says so, and the Supervisor hands it to the Coordinator to land through a ticket.
+  An ``every`` start's ``tz`` given as the owner answered the zone question ("this machine's
+  clock", "local", "here") is written as the host's zone's IANA name, and the answer's ``zone`` says so.
 - ``list_workflows``, ``list_items`` and ``explain_item`` only read. ``list_items`` is the Items
   page's list (the plugin's ``pages.items``): what the owner asks when they ask what is stuck, and
   what needs them (L3: without it the Supervisor asked the task system, which this project does not
@@ -24,7 +26,10 @@ import time
 from importlib import import_module
 from types import SimpleNamespace
 
+from orchestra.config import ConfigError
+
 from . import design
+from .clock import resolve_tz
 from .config import Project
 from .store import AgentStore, StoreError
 from .tasking_text import gate
@@ -76,6 +81,7 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
     definition = a.get("definition")
     if not isinstance(definition, dict):
         raise StoreError("definition is the workflow as an object: {name, starts, steps: [{name, who, ...}], ...}")
+    definition, local = _local_zone(definition)
     project.reload_config()
     o = project.orchestra
     refusing = list(p.problems(o, definition))
@@ -99,9 +105,33 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
                            "theirs to commit, and tell[[/no-tasking]] the owner it applies now in this checkout only.")
     if runs := clock_words(definition.get("starts")):
         out["clock"] = runs + ": say this run time, and no other"
+    if local:
+        out["zone"] = (f"{local[0]!r} is this machine's zone, {local[1]}: declared {local[2]} {local[1]}. Tell the owner "
+                       "that, and do not ask for the zone again")
     if written.notes:
         out["lacks"] = "What the project still lacks for it is in notes: nothing is offered for such a step until it is there."
     return out
+
+
+def _local_zone(definition: dict) -> tuple[dict, tuple | None]:
+    """The definition with an ``every`` start's ``tz`` given as the owner answered the zone question
+    ("this machine's clock", "local", "here") set to the host's zone's IANA name, and what was
+    resolved (their words, the zone, the start's ``at``), or None when nothing was."""
+    starts, got = definition.get("starts"), None
+    if not isinstance(starts, list):
+        return definition, None
+    out = []
+    for s in starts:
+        if isinstance(s, dict) and "every" in s and isinstance(s.get("tz"), str):
+            try:
+                tz = resolve_tz(s["tz"])
+            except ConfigError as e:
+                raise StoreError(str(e)) from None
+            if tz != s["tz"]:
+                got = (s["tz"], tz, s.get("at") or "00:00")
+                s = {**s, "tz": tz}
+        out.append(s)
+    return ({**definition, "starts": out} if got else definition), got
 
 
 def clock_words(starts) -> str | None:

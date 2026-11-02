@@ -94,9 +94,12 @@ def test_the_prompt_copies_the_tally_says_an_idle_outbox_waits_and_ends_with_the
         monkeypatch.setattr(installed, "tasking", lambda on=on: on)
         text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
         assert "Every number and name comes from the answer's `tally`" in text and "never count the events yourself" in text
-        assert ('An Outbox with no drafts waiting is idle: say "nothing waiting", never that it will not send or is down'
-                in text)
+        assert "The Outbox's state is the answer's `outbox` line" in text
+        assert "never that it is down, needs starting or will not send unless that line says so" in text
+        assert "Every prediction in the answer's `predictions` is told, by its id" in text
+        assert "Never describe your own tool use (which tools ran, or that none did)" in text
         assert "End the answer with the model's state: the answer's last line is that read's `model` line" in text
+        assert "needed), and nothing after it" in text
         assert "its triage verdict (`tally`'s `triage`)" in text
 
 
@@ -127,3 +130,50 @@ def test_read_events_since_carries_the_model_line_read_model_gives(project, stor
     monkeypatch.setattr(modeling, "reads", lambda project: Reads(RuntimeError("down")))
     assert call(project, store, "read_events", since="1d")["model"] == "the model could not be read (RuntimeError)"
     assert "model" not in call(project, store, "read_events", minutes=60)       # only with since
+
+
+class Predicting(Reads):
+    def __init__(self, got, preds):
+        super().__init__(got)
+        self.preds = preds
+
+    def predictions(self, pid=None):
+        if isinstance(self.preds, Exception):
+            raise self.preds
+        return {"ok": True, "predictions": self.preds}
+
+
+def test_read_events_since_carries_the_outbox_and_each_predictions_state(project, store, monkeypatch):
+    """T2e s16: "the Outbox ... needs starting" while it ran the whole time; the waiting prediction
+    left out."""
+    from orchestra_agents import outbox_read
+    from orchestra_agents.store import StoreError
+    monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: DAY)
+    start = bus_reads.since_of("2026-11-02T04:00:00Z")
+    state = {"ok": True, "running": True, "waiting": [{"id": "d9", "state": "drafted"}],
+             "recent": [{"id": "d1", "state": "sent", "sent_at": start + 60}, {"id": "d2", "state": "sent", "sent_at": start + 99},
+                        {"id": "d0", "state": "sent", "sent_at": start - 60}, {"id": "d3", "state": "rejected"}]}
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: state)
+    preds = [{"id": "f19ff580", "source": "supervisor", "subject": "review_nudger", "status": "waiting", "horizon_s": 259200,
+              "era": None},
+             {"id": "a1", "source": "supervisor", "subject": "x", "status": "waiting", "horizon_s": 3600, "era": "e2"},
+             {"id": "b2", "source": "worker", "subject": "y", "status": "judged", "verdict": {"verdict": "met"}}]
+    monkeypatch.setattr(modeling, "reads", lambda project: Predicting({"version": "v5", "stocks": [], "flows": []}, preds))
+    out = call(project, store, "read_events", since="2026-11-02T04:00:00Z", order="oldest")
+    assert out["outbox"] == "running; 2 sent since then, 1 waiting"
+    assert out["predictions"] == [
+        {"id": "f19ff580", "by": "supervisor", "about": "review_nudger",
+         "state": "waiting for its change to begin an era, judged 72 h after it begins"},
+        {"id": "a1", "by": "supervisor", "about": "x", "state": "waiting: its era e2 has begun, judged 1 h after it begins"},
+        {"id": "b2", "by": "worker", "about": "y", "state": "judged: met"}]
+    assert list(out).index("model") > list(out).index("predictions")
+    state["running"] = False
+    assert call(project, store, "read_events", since="1d")["outbox"].startswith("not running; ")
+
+    def missing(project):
+        raise StoreError("the outbox plugin is not installed beside Orchestra's web server: there is no Outbox to read")
+    monkeypatch.setattr(outbox_read, "fetch", missing)
+    monkeypatch.setattr(modeling, "reads", lambda project: Predicting({}, RuntimeError("down")))
+    out = call(project, store, "read_events", since="1d")
+    assert out["outbox"] == "not installed" and out["predictions"] == "not read (RuntimeError)"
+    assert "outbox" not in call(project, store, "read_events", minutes=60) and "tools_used" not in out

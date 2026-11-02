@@ -166,3 +166,24 @@ def test_without_the_plugin_it_says_so(project, store, monkeypatch):
     monkeypatch.setattr(workflow_tools, "plugin", lambda: None)
     with pytest.raises(StoreError, match="not installed"):
         call(project, store, "request_work", workflow="write_review", brief=BRIEF, quote=ASKED, reason=WHY)
+
+
+def test_the_answer_says_the_item_starts_now_not_on_the_schedule(project, store, fake, floor):
+    """T2e s11: "Its step runs on the workflow's schedule, not right away", while the reminder's
+    draft waited on the Outbox page 4 s later."""
+    fake.write(project.orchestra, {**DEF, "name": "nudger", "starts": [{"request": True},
+                                                                     {"every": "24h", "at": "09:00", "tz": "UTC"}]})
+    out = call(project, store, "request_work", workflow="write_review", brief=BRIEF, quote=ASKED, reason=WHY)
+    assert out["runs"] == f"started now as item {out['item']}; its first step write runs at once"
+    out = call(project, store, "request_work", workflow="nudger", brief=BRIEF, quote=ASKED, reason=WHY)
+    assert out["runs"] == (f"started now as item {out['item']}; its first step write runs at once; the workflow's "
+                           "every 24h at 09:00 UTC start is a separate run, not this one")
+    assert "never on the workflow's schedule" in out["say"]
+
+
+def test_the_prompt_says_a_requested_reminder_starts_at_once(project):
+    from orchestra_agents import prompting
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "A requested item starts at once: say what the answer's `runs` says" in text
+    assert "never that it waits for the workflow's schedule" in text

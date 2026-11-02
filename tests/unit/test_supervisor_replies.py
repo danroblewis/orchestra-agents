@@ -143,3 +143,11 @@ def test_a_hand_off_s_promise_to_tell_the_plan_is_kept():
     assert "I will tell you the plan" in reply
     assert unkept(reply, ["hand_to_coordinator"]) is None                       # the plan wakes it (work.planned)
     assert unkept(reply, ["project_status"]) is not None                         # no hand-off: nothing will wake it
+
+
+def test_an_items_state_comes_from_this_turns_tools(project):
+    """T2 s14: the merged SCRUM-17 and SCRUM-18 were called waiting from memory of earlier turns."""
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "an item the tools list as closed is closed, never \"waiting\"" in text
+    assert "never from memory of an earlier turn" in text

@@ -83,3 +83,14 @@ def test_no_coordinator_is_announced_and_nothing_asks_the_task_system(project, n
     assert not {"request.done", "request.refused", "ticket.created", "gate.landed", "work.planned"} & set(sup["listens_for"])
     assert not [e for e in evs if e["type"] == "task.query_requested"]
     assert "coordinator" not in host.residents.procs
+
+
+def test_no_coordinator_placeholder_on_the_machines_page(project, monkeypatch):
+    """T2b s01: Plugin.machines still declared coordinator ("declared, not run yet") on a
+    Workflows-only run; T4 had gated its announcement only."""
+    from orchestra_agents import web
+    monkeypatch.setattr(installed, "tasking", lambda: False)
+    names = {d.id for d in web.declared(project)}
+    assert "coordinator" not in names and "supervisor" in names
+    monkeypatch.setattr(installed, "tasking", lambda: True)
+    assert "coordinator" in {d.id for d in web.declared(project)}

@@ -29,6 +29,7 @@ from orchestra.tokens import owner_only
 from . import (
     access,
     budget,
+    design,
     design_confirm,
     design_instruments,
     floor,
@@ -688,9 +689,7 @@ class AgentHost:
     def _turn_began(self, message: str | None) -> None:
         """The Supervisor's turn as its design tools record it in their provenance: its id, and the
         owner's message that began it (None for a wake-up: then no quote can be the owner's)."""
-        n = int((self.store.agent_state("supervisor").get("turn") or {}).get("n") or 0) + 1
-        self.store.set_agent_state("supervisor", turn={"n": n, "id": f"sessions/supervisor/{n}", "message": message,
-                                                       "at": time.time()})
+        design.begin_turn(self.store, message)
 
     def _expire_drafts(self) -> None:
         """Once a minute: draft instruments the owner did not keep, past their expiry, removed

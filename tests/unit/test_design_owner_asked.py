@@ -6,7 +6,7 @@ instrument; a schedule that keeps every receive."""
 import pytest
 from design_fixtures import WHY, call, journal, layer, model_with, say
 
-from orchestra_agents import design_asked
+from orchestra_agents import design_asked, intended_api
 from orchestra_agents.harness.tools_design import DESIGN_TOOLS
 from orchestra_agents.store import StoreError
 
@@ -43,7 +43,7 @@ def test_a_machine_the_message_did_not_ask_for_is_refused(project, store):
 def test_one_machine_named_is_one_declared_and_a_second_is_refused(project, store):
     say(store, TURN3, 3)
     machine(project, store, "notes_improver", quote=TURN3)
-    with pytest.raises(StoreError, match=r"asks for 1 machine \(Notes Improver\), and notes_improver is declared already"):
+    with pytest.raises(StoreError, match=r"asks for 1 machine \(Notes Improver\), and the session's earlier messages ask for none that is not declared yet; notes_improver is declared already"):
         machine(project, store, "notes_improver_helper")
     say(store, "Add two machines: a builder and a tester.", 4)              # the next turn asks for two
     machine(project, store, "builder")
@@ -172,3 +172,61 @@ def test_confirm_with_no_expectation_stated_is_not_held(project, store):
     say(store, "Confirm it.", 6)
     call(project, store, "confirm", element="machine:notes_improver", quote="Confirm it.", reason=WHY)
     assert layer(project)["machines"]["notes_improver"]["state"] == "declared"
+
+
+ASKED = ("Create a machine called Review Nudger: when a pull request has waited too long for its review or for SAIL, it "
+         "reminds the reviewer. Make it a scheduled task for 9am every day. Then confirm it. I expect SAILED per day ×1.2.")
+CLOCK = "This machine's clock."
+
+
+def test_a_machine_asked_for_in_an_earlier_turn_is_still_asked_for(project, store):
+    """T2 s10: the Supervisor asked a question first; the owner's answer names no machine, and the
+    machine their earlier message asked for is declared in that turn, quoting the earlier message."""
+    say(store, ASKED.replace("Review Nudger", "Notes Improver"), 1)
+    say(store, CLOCK, 2)
+    out = machine(project, store, "notes_improver", quote="Create a machine called Notes Improver", mode="scheduled",
+                  at="09:00")
+    assert out.get("machine") == "notes_improver", out
+    prov = layer(project)["machines"]["notes_improver"]["provenance"]
+    assert prov["author"] == "owner" and prov["quote"] == "Create a machine called Notes Improver"
+    assert prov["message"].startswith("Create a machine called Notes Improver") and prov["turn"] == "sessions/supervisor/2"
+    with pytest.raises(StoreError, match="ask for none that is not declared yet") as e:     # owed once, declared once
+        machine(project, store, "notes_improver_helper")
+    assert "restate" not in str(e.value) and "never ask them to repeat it" in str(e.value)
+
+
+def test_a_quote_from_no_message_of_the_session_is_refused(project, store):
+    say(store, TURN3, 3)
+    say(store, CLOCK, 4)
+    with pytest.raises(StoreError, match="any of their messages in this session"):
+        machine(project, store, "notes_improver", quote="Create a new Universal Machine called Pager")
+    machine(project, store, "notes_improver", quote="Create a new Universal Machine called Notes Improver")
+
+
+def test_a_reset_session_owes_nothing(project, store):
+    say(store, TURN3, 3)
+    store.set_agent_state("supervisor", said=None, session_machines=None)       # residents.py, on reset
+    say(store, CLOCK, 4)
+    with pytest.raises(StoreError, match="asks for no machine"):
+        machine(project, store, "notes_improver")
+
+
+def test_the_owners_name_for_a_machine_a_plugin_proposed_refines_that_one(project, store):
+    """The Workflows plugin proposed review_nudger (its workflow's program runs it): the owner's
+    "a machine called Review Nudger" is that one, refined and confirmed, never a second beside it."""
+    intended_api.layer(project).apply(
+        [{"op": "propose_machine", "id": "review_nudger", "title": "review_nudger", "kind": "programmatic",
+          "description": "Named by workflow review_nudger: the program review_nudger.", "receives": ["offer.made"],
+          "engagement": {"mode": "ad hoc"}}],
+        {"author": "workflows", "source": "workflow review_nudger", "reason": "the definition of workflow review_nudger"})
+    say(store, ASKED, 1)
+    with pytest.raises(StoreError) as e:
+        machine(project, store, "review_nudger_daily", title="Review Nudger", quote="Create a machine called Review Nudger")
+    said = str(e.value)
+    assert "review_nudger" in said and "workflow review_nudger" in said and "the program review_nudger" in said
+    assert "refine_machine name review_nudger" in said and "restate" not in said
+    assert set(layer(project)["machines"]) == {"review_nudger"}
+    call(project, store, "refine_machine", name="review_nudger", quote="Make it a scheduled task for 9am every day",
+         mode="scheduled", at="09:00", reason=WHY)
+    assert layer(project)["machines"]["review_nudger"]["engagement"]["at"] == "09:00"
+

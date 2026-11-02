@@ -70,7 +70,7 @@ class Residents:
             host.store.set_session(sid, status="idle", pid=None)
             if st.get("reset_requested"):
                 archived = host.store.retire_session(sid, proc.retire())
-                host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0)
+                host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0, said=None, session_machines=None)
                 host._mark("agent.reset", session=sid, agent=name, archived=archived, by=st.get("reset_by"))
                 host.log(f"{name}: session reset by request; previous transcript archived as {archived}")
             elif st.get("restart_requested"):

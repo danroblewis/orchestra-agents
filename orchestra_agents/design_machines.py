@@ -302,6 +302,32 @@ def type_lines(project: Project, store: AgentStore, mid: str, receives: list[str
                         unknown_line(project, store, emits, "emits", mid)) if x]
 
 
+def runs_it(m: dict) -> str:
+    """What runs a machine a plugin proposed, in its proposal's words (its source and description)."""
+    src = (m.get("provenance") or {}).get("source") or (m.get("provenance") or {}).get("author") or "a plugin"
+    desc = (m.get("description") or "").strip().rstrip(".")
+    return f"{src}" + (f" ({desc})" if desc else "")
+
+
+def proposed_elsewhere(project: Project, mid: str, title: str) -> None:
+    """The owner's name matches a machine a plugin already proposed (the Workflows plugin's
+    ``review_nudger``, run by its workflow's program): that one is refined and confirmed, never a
+    second declared beside it."""
+    machines = intended_api.current(project).get("machines") or {}
+    want = {mid, slug(title or "")}
+    m = next(({**x, "id": k} for k, x in machines.items()
+              if (x.get("provenance") or {}).get("author") not in (OWNER, MACHINE, None)
+              and (k in want or slug(x.get("title") or k) in want)), None)
+    if m is None:
+        return
+    author = (m.get("provenance") or {}).get("author")
+    raise StoreError(f"not declared again: the name is machine {m['id']}'s, which {author} proposed; {runs_it(m)} runs it. "
+                     f"This is the machine the owner means: refine it now, in this turn (refine_machine name {m['id']}, their "
+                     "quote, only what their words change: title, receives, mode with at and tz, steps), record what they "
+                     f"expect (declare_expected_effect), then confirm it if they asked; tell them it is {m['id']}, run by "
+                     f"{runs_it(m)}, and ask any follow-up after")
+
+
 def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     mid = machine_id(a)
     kind = a.get("kind")
@@ -315,6 +341,7 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
     if not m["description"]:
         raise StoreError("describe what it achieves, in the work's terms")
     check_machine(m)
+    proposed_elsewhere(project, mid, m["title"])
     design_asked.check(store, mid, m["managed"])
     guessed = list(dict.fromkeys("engagement" if g in ("mode", "at", "tz", "missed") else g for g in a.get("guesses") or []))
     done = apply(project, [{"op": "propose_machine", **m, "guessed": guessed}], prov)

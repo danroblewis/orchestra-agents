@@ -33,6 +33,7 @@ refinement passes), ``design_integrate.py`` (connecting an outside system: Orche
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from . import intended_api
@@ -89,6 +90,40 @@ def turn_of(store: AgentStore) -> dict:
     return store.agent_state(MACHINE).get("turn") or {}
 
 
+SESSION_SAID = 30          # the owner's messages kept for the session: a request made a few turns back still counts
+
+
+def begin_turn(store: AgentStore, message: str | None, n: int | None = None) -> dict:
+    """A Supervisor turn begins (host._turn_began): its id and the owner's message (None for a
+    wake-up), and the message kept with the session's earlier ones (``said``, cleared when the
+    session is reset), so a machine the owner asked for a few turns back is still asked for and
+    their words there can still be quoted."""
+    st = store.agent_state(MACHINE)
+    n = n if n is not None else int((st.get("turn") or {}).get("n") or 0) + 1
+    turn = {"n": n, "id": f"sessions/supervisor/{n}", "message": message, "at": time.time()}
+    said = list(st.get("said") or [])
+    if message:
+        said = [*said, {"turn": turn["id"], "message": message}][-SESSION_SAID:]
+    store.set_agent_state(MACHINE, turn=turn, said=said)
+    return turn
+
+
+def said_in_session(store: AgentStore) -> list[dict]:
+    """The owner's messages of this session, oldest first: ``{"turn", "message"}`` each."""
+    return list(store.agent_state(MACHINE).get("said") or [])
+
+
+def quoted_message(store: AgentStore, quote: str, message: str) -> str | None:
+    """The owner's message ``quote`` is from: this turn's, else the latest earlier one of the session
+    that holds it; None when none does."""
+    if quote_in(quote, message):
+        return message
+    for row in reversed(said_in_session(store)):
+        if quote_in(quote, row.get("message") or ""):
+            return row["message"]
+    return None
+
+
 def recent_events(store: AgentStore, n: int = 5000) -> list[dict]:
     """The last ``n`` events on the bus, oldest first."""
     end = store.events.end()
@@ -131,13 +166,14 @@ def provenance(store: AgentStore, a: dict) -> dict:
     if quote and not message:
         raise StoreError("this turn has no message from the owner (a wake-up), so nothing can be quoted: leave quote out, "
                          "or pass the request id of their click")
-    if quote and not quote_in(quote, message):
-        raise StoreError(f"the quote {quote[:80]!r} is not the owner's words in their message of this turn (quote at least "
-                         "three words exactly, or their whole message), or leave quote out (the change is then yours, a "
+    quoted = quoted_message(store, quote, message) if quote else message
+    if quote and quoted is None:
+        raise StoreError(f"the quote {quote[:80]!r} is not the owner's words in any of their messages in this session (quote "
+                         "at least three words exactly, or a whole message), or leave quote out (the change is then yours, a "
                          "proposal)")
     rid = (a.get("request") or "").strip()
     prov = {"author": OWNER if quote else MACHINE, "source": MACHINE, "turn": turn.get("id"),
-            "message": kept_message(message, quote) or None, "quote": redact(quote) or None, "reason": reason,
+            "message": kept_message(quoted or "", quote) or None, "quote": redact(quote) or None, "reason": reason,
             "request": rid or None}
     return {k: v for k, v in prov.items() if v is not None}
 

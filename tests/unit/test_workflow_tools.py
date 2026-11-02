@@ -529,3 +529,41 @@ def test_the_owner_is_never_asked_to_commit_discard_or_land_a_file(project, stor
     assert ": ask the owner to commit" not in Path(patching.__file__).read_text()
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "Never ask the owner to commit, discard or land a file." in text
+
+
+WHY_WAIT = {"reason": "attention raised", "why": "not past step ci of delivery_live within 30 min", "by": "coordinator",
+            "kind": "attention", "entered_on": "f9"}
+
+
+def test_an_attention_waits_why_reaches_list_items_and_explain_item(project, store, fake, monkeypatch):
+    """R3 b (O4): asked what was stuck, the Supervisor said "the attention events carry no reason".
+    The plugin's walk puts the attention's reason on the wait as why (T16a); both tools pass it on."""
+    row = {"item": "SCRUM-34", "step": "ci", "pile": "ci.waiting", "wait": WHY_WAIT, "since": "t1", "age_s": 7200,
+           "at": {"delivery_live": {"step": "ci", "pile": "ci.waiting", "wait": WHY_WAIT}}}
+
+    class Rec:
+        def explain(self, item):
+            return {"fields": {}, "timeline": [], "facts": 3}
+
+        def items(self, pred):
+            return [row] if pred(row) else []
+
+        def item(self, item):
+            return {"item": item}
+
+    record = Rec()
+    item_list = lambda record, defs, now, workflow=None: {
+        "workflows": [{"workflow": "delivery_live", "steps": ["ci"], "items": [row]}], "open": 1}
+    monkeypatch.setattr(workflow_tools, "plugin", lambda: SimpleNamespace(
+        **vars(fake.ns()), Record=SimpleNamespace(for_project=lambda o: record), item_list=item_list))
+    listed = call(project, store, "list_items")["workflows"][0]["open"][0]["wait"]
+    assert listed["why"] == WHY_WAIT["why"] and listed["reason"] == "attention raised"
+    ex = call(project, store, "explain_item", item="SCRUM-34")
+    assert ex["summary"]["wait"]["why"] == WHY_WAIT["why"]
+    assert ex["positions"]["delivery_live"]["wait"]["why"] == WHY_WAIT["why"]
+    assert "why (an attention's own cause" in BY_NAME["list_items"].description
+    from orchestra_agents import prompting
+    from orchestra_agents.org import built_in_agents
+    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    assert "a wait's `why`" in text and "is the cause to report" in text
+    assert "never say the attention events carry no reason" in text

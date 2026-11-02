@@ -252,13 +252,15 @@ def _exit(x: dict) -> str:
 
 
 def wait_of(w) -> dict | None:
-    """A wait as the tools show it: its reason, by and until, the fact it entered on (``entered_on``;
+    """A wait as the tools show it: its reason, its ``why`` (an attention wait's own cause, the
+    ``attention.needed``'s reason, from the plugin's walk: "not past step ci of delivery_live within
+    30 min"), by and until, the fact it entered on (``entered_on``;
     ``fact`` from a plugin that serves only the old name) and what ends it, in words ("until
     github.pr.approved, or github.pr.commented with state = commented (to sail)"): the plugin's
     ``for``, so a review a stand-in's comment also ends is never told as waiting for an approval alone."""
     if not isinstance(w, dict):
         return None
-    out = {k: w[k] for k in ("reason", "by", "until", "kind") if w.get(k) not in (None, "", [], {})}
+    out = {k: w[k] for k in ("reason", "why", "by", "until", "kind") if w.get(k) not in (None, "", [], {})}
     if w.get("entered_on") or w.get("fact"):
         out["entered_on"] = w.get("entered_on") or w.get("fact")
     exits = [x for x in w.get("for") or [] if isinstance(x, dict)]

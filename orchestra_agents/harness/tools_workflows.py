@@ -153,7 +153,8 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),
     ToolDef("list_items", "workflows",
             "The open items of every workflow, as the Items page lists them, oldest first: each with its step and pile, "
-            "why it waits and on whom (its wait: reason, by, until, and ends_on: every event that ends it), its holder, how "
+            "why it waits and on whom (its wait: reason, why (an attention's own cause, to report as it says), by, until, "
+            "and ends_on: every event that ends it), its holder, how "
             "long it has been there (age_s), how often it was reworked, and its fields (a ticket's key, a pull request's "
             "number); then the recently closed, with their last step and outcome. An item's end is item.closed (the floor "
             "publishes it when a workflow's item reaches the end of every workflow it entered): a closed item is never "

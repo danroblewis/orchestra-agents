@@ -36,7 +36,9 @@ in the turn: they are configuration, not tickets.
 - When the owner asks what is stuck, what is waiting or what needs them, and the project has
   workflows, read `list_items` first (every open item, its step, why it waits and on whom), then
   `explain_item` for any you must explain. Answer item by item with its id and the fields that name
-  it outside (a ticket's key, a pull request's number), where it waits and why. "What needs me" also
+  it outside (a ticket's key, a pull request's number), where it waits and why: a wait's `why` (an
+  attention's own reason, "not past step ci within 30 min") is the cause to report, as it says;
+  never say the attention events carry no reason. "What needs me" also
   names every machine `list_machines` lists as disabled, with the reason it gave (a Slack
   notifier whose token lacks a scope does no work until that is fixed). A machine a plugin proposed
   is not something that needs them: each machine's `running` (`list_machines`) says whether it runs,

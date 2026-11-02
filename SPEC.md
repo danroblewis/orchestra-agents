@@ -935,6 +935,14 @@ under); `propose_attachment` and `revise_attachment` (an instrument's series mea
 passed through with provenance; there is no `find_machine_series`, not built: the match is given explicitly, read
 from the store with `list_metrics` first); `link` (a manual binding, origin declared; publishes a confirmed machine's edits that
 waited for it; a confirmed machine that reads the element has its records written again),
+`name_part` (`design_names.py`: the owner's own name for a discovered stock, flow or effect, shown
+on the Dynamics page as its name with the generated one beneath it, Orchestra's SPEC §4.6
+"declared names": the part found by the name the page shows, `shown` with its tags, or its key,
+two matches answered with one question, `asked`, and nothing declared; `declare_stock` or
+`declare_effect` with the owner's name and `link` to the stock's key, or `declare_flow` between
+its two stocks' keys with the name (a flow to or from outside, or one of two between the same
+stocks, cannot carry one); the owner's quote required and the name in it; again with a new name it
+re-declares the same id, `drop` retracts a declaration it made and refuses one that means more),
 `declare_machine` (the envelope Orchestra checks, engagement as flat `mode`, `at`, `tz`, `missed`,
 and the opaque `spec`, whose fields are given flat beside the envelope (a nested `spec` is taken for
 one release): Universal `invariants`, `steps`, `uses`, said in no AI terms;

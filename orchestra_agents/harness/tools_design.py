@@ -206,6 +206,21 @@ DESIGN_TOOLS: list[ToolDef] = [
              "unlink": B("Take the link off, on the owner's words only (quote): they do not want that series"),
              "quote": QUOTE, "reason": REASON},
             ("declared", "reason")),
+    ToolDef("name_part", "design",
+            "Give a discovered stock, flow or effect the owner's own name (\"call the stock between write and sail_check "
+            "'tickets in flight'\"): the Dynamics page then shows it by that name, the generated one beneath it. Only a "
+            "part the owner pointed at, only the name they gave (it must be in your quote): never one you made up. Find "
+            "the part by the name the page shows (shown, with its tags after \" · \" or in tags). When two parts match, "
+            "nothing is declared and the answer's `asked` is the one question to put to the owner. The same call with a "
+            "new name renames it; drop=true takes the name off (\"drop the name\").",
+            {"shown": S("The name the page shows the part by, as the owner pointed at it (between write and sail_check; "
+                        "held at write · workflow=hotfix), or its key"),
+             "tags": A("Tags the owner named to tell it from a part that reads alike (workflow=hotfix)"),
+             "part": E(["stock", "flow", "effect"], "Only when the owner's words say: \"the stock\", \"the flow\", \"the "
+                                                    "effect\" (an effect is a discovered stock they call one)"),
+             "name": S("The owner's name for it, exactly in their words (tickets in flight)"),
+             "drop": B("Take the owner's name off (\"drop the name\"): the generated one is shown again"),
+             "quote": QUOTE, "reason": REASON}, ("shown", "quote", "reason")),
     ToolDef("declare_machine", "design",
             "Declare a machine the owner asked for in this turn's message (\"Create a new Universal Machine called Feature "
             "Count Improver\"): no more than it asks for (a loop described in passing asks for none; refused past that). "

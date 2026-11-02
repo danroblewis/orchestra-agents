@@ -16,7 +16,8 @@ model's ``ops``, ``names``, ``keys`` and ``checks``; the model's ``store``, ``er
 - **Drawn** on Orchestra's Machines page (a machine) and its Dynamics page (a stock, an effect, a
   flow).
 - **Keys and names** are Orchestra's own (``orchestra.sd.intended.keys.Keys`` and
-  ``names.resolve``), so a draft edit is resolved exactly as Orchestra resolves it.
+  ``names.resolve``), so a draft edit is resolved exactly as Orchestra resolves it; and the names
+  declarations lend discovered parts (``display.declared_names``), as the Dynamics page shows them.
 - **One deadline per tool call** (``one_call``): after an endpoint timeout, the rest of the call
   fails at once, saying what it did; ``design()`` is read once per call (until a write); the host
   skips its design tick for a while after a timeout (``backing_off``)."""
@@ -33,6 +34,7 @@ from contextlib import contextmanager
 from typing import Protocol
 
 from orchestra.sd.intended.checks import PROVENANCE
+from orchestra.sd.intended.display import declared_names  # noqa: F401  (name_part reads the names lent as the pages do)
 from orchestra.sd.intended.keys import Keys
 from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK  # noqa: F401  (WAITS_LINK: the tools' wording keys on it)
 from orchestra.sd.intended.names import resolve as _core_resolve

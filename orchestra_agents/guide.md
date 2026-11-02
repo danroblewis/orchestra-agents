@@ -193,7 +193,11 @@ a file. Follow it top to bottom:
    work, a Prometheus, Jenkins, another host, a company CLI) is named and costed, "needs approval",
    never read; a credential is named by its environment variable (`bearer_env`), never shown. When
    discovery finds the quantity under its own name and the owner says it is the same, `link`; a
-   series that relates on its own needs nothing.
+   series that relates on its own needs nothing. When the owner names a discovered stock, flow
+   or effect in words ("call the stock between write and sail_check 'tickets in flight'"),
+   `name_part`, quoted: found by the name the page shows (with its tags), never guessed (two that
+   match are one question to the owner), the name only theirs; the same call renames it, `drop`
+   takes it off. The page then shows their name, the generated one beneath it.
    **Bringing in an outside system** (Jira, Slack, PagerDuty, a metrics store) as series, events or
    a declared external machine follows Orchestra's integration guide, `docs/INTEGRATING.md`
    (<https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md>): choose its strategy

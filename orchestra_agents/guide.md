@@ -238,8 +238,8 @@ The branch becomes a pull request through orchestra-scm's provider when the repo
 | `repo` | `"owner/name"` | the GitHub repository, as in its URL (one `/`) |
 | `base` | `"main"` | the branch the pull request merges into (default `main`) |
 | `api_url` | `"https://github.example.com/api/v3"` | optional: a GitHub Enterprise host's API (default `https://api.github.com`) |
-| `token_file` | `"~/.config/orchestra-bridges/github-token"` | optional (this is the default): the full path of a `chmod 600` file outside the repository that holds the token; never the token |
-| `template` | `"~/work-desk/pr_template.md"` | optional: the company's pull request template by path; else the repository's `.github/pull_request_template.md`, else the packaged one (Summary, Testing, Jira ID) |
+| `token_file` | `"<path to the token file>"` | optional (the provider has a default): the full path of a `chmod 600` file outside the repository that holds the token; never the token |
+| `template` | `"<path to the template>"` | optional: the company's pull request template by path; else the repository's `.github/pull_request_template.md`, else the packaged one (Summary, Testing, Jira ID) |
 | `protect` | `["release"]` | optional: branches never pushed, beside `main`, `master`, the base and the default branch |
 
 ```toml
@@ -247,7 +247,7 @@ The branch becomes a pull request through orchestra-scm's provider when the repo
 provider = "branch_pr"
 repo = "danroblewis/orchestra-live-delivery"
 base = "main"
-token_file = "/Users/me/.config/orchestra-bridges/github-token"
+token_file = "<path to the token file>"
 ```
 
 Set it with `set_setting` when the owner names the repository, the base and the token file (ask for
@@ -508,8 +508,10 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
 2. **Ask the owner** what the answer's `ask_owner` says, in your words: their yes to reading it
    (metadata only, read-only), and *where* the token is: an environment variable's name (in the
    environment `orchestra run` starts with) or a `chmod 600` file outside the project's repository
-   that no repository tracks (`~/.config/orchestra-bridges/jira-token`: allowed under a home
-   directory that is itself a repository, when it does not track it). When they already said where
+   that no repository tracks (allowed under a home directory that is itself a repository, when it
+   does not track it). Ask where they keep it and nothing more: never name a path as an example
+   (bootstrap run 6 offered a file under the home directory that existed on that machine), and never one
+   you know exists; write `<path to the token file>` when you must show its place. When they already said where
    it is, pass it to `integrate_system` too: it is checked before anything is scaffolded. Jira Cloud (an `atlassian.net` site) logs in with the
    account's email and the token together, so ask where the email is too. Never the token, never
    in the chat, and never a file for them to change.

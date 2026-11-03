@@ -5,7 +5,7 @@ each), what a query returns, and what Orchestra infers to read from it. All thro
 written to the store, the metrics store or the configuration, and no credential's value is shown.
 
 Each tool takes a declared source by ``source`` (its name in ``[[sources]]``), or a trial one by
-``url`` (and ``auth``, as ``[[sources]]`` writes it: ``{"bearer_file": "~/.config/x/token"}`` or
+``url`` (and ``auth``, as ``[[sources]]`` writes it: ``{"bearer_file": "<path to the token file>"}`` or
 ``{"bearer_env": "WORK_TOKEN"}``), so a store
 can be looked at before anything is declared. The credential is read from the environment of the
 agents' tools, which is ``orchestra run``'s."""

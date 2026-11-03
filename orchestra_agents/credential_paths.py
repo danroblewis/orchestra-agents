@@ -11,7 +11,11 @@ A file merely under a directory with a ``.git`` somewhere above it is allowed wh
 ignores it or does not track it: a home directory that is itself a repository (dotfiles), or a
 harness's run directory that ignores its ``creds/``. One that is untracked but not ignored there is
 allowed with a caution (a ``git add -A`` in that repository would take it), said in the answer.
-The file's content is never read here; git is asked only about its path."""
+The file's content is never read here; git is asked only about its path.
+
+No answer here names a place as an example (bootstrap run 6: the Supervisor passed on this module's
+hint, ``~/.config/orchestra-bridges/jira-token``, a file that existed on that machine, as where the
+owner might keep the token): a refusal describes the rule and shows ``PLACEHOLDER``, never a path."""
 
 from __future__ import annotations
 
@@ -23,7 +27,7 @@ from pathlib import Path
 from .store import StoreError
 
 GIT_TIMEOUT_S = 10
-HINT_DIR = "~/.config/orchestra-bridges"
+PLACEHOLDER = "<path to the token file>"   # what an answer shows for where a token is: never a real path
 
 
 def _existing(d: Path) -> Path | None:
@@ -88,23 +92,19 @@ def where(path: Path, repo_root: Path | None) -> tuple[str | None, str | None]:
                   f"repository would take it, so the owner may add its directory to that repository's .gitignore")
 
 
-def hint(repo_root: Path | None, name: str = "token") -> str:
-    """A place for the file that passes the rule, said in a refusal: ``~/.config/orchestra-bridges/``
-    when it would pass, else a plain description (never a path the rule would refuse)."""
-    candidate = Path(HINT_DIR).expanduser() / name
-    refused, _ = where(candidate, repo_root)
-    if refused is None:
-        return f"{HINT_DIR}/{name}, chmod 600"
-    return "a chmod 600 file outside the project's repository that no repository tracks"
+def hint() -> str:
+    """Where a credential's file may live, said in a refusal: the rule, with a placeholder, never a path
+    (a path named as an example is taken as advice, and may be one that exists on this machine)."""
+    return f"{PLACEHOLDER}: a chmod 600 file outside the project's repository that no repository tracks"
 
 
 def check(value: str, what: str, repo_root: Path | None) -> tuple[str, str | None]:
     """The path, unchanged, and a caution or None; refused (StoreError) with the reason naming the path."""
     p = Path(value).expanduser()
     if not p.is_absolute():
-        raise StoreError(f"{what} is a file's full path ({HINT_DIR}/jira-token), not {value!r}")
+        raise StoreError(f"{what} is a file's full path ({PLACEHOLDER}, as the owner says it), not {value!r}")
     refused, caution = where(p, repo_root)
     if refused:
         raise StoreError(f"{what}: {value} is refused: {refused}. A credential's file lives where no commit can carry it: "
-                         f"{hint(repo_root, p.name)}. Nothing was changed")
+                         f"{hint()}. Nothing was changed")
     return value, caution

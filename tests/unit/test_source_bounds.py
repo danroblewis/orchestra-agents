@@ -13,6 +13,7 @@ from conftest import agents_project
 from fake_store import FakeStore
 
 from orchestra_agents import source_bounds, tooling
+from orchestra_agents.design import begin_turn
 from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore, StoreError
 
@@ -56,7 +57,9 @@ def _project(tmp_path, monkeypatch, url: str, match: list[str] | None):
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     p.reload_config()
-    return p, AgentStore(p, Events.for_project(p, source="supervisor"))
+    store = AgentStore(p, Events.for_project(p, source="supervisor"))
+    begin_turn(store, "Read our store: only our namespace hackriff, at most 200 series.")   # the owner's limits (run 6)
+    return p, store
 
 
 def call(project, store, tool, **args):

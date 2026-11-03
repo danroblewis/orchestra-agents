@@ -383,7 +383,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             {"name": S("The integration's name, from integrate_system's answer"),
              "token_env": S("The NAME of the environment variable holding the token (JIRA_TOKEN), never its value"),
              "token_file": S("Or: the full path of the chmod 600 file the owner named holding the token "
-                             "(~/.config/orchestra-bridges/jira-token): refused inside the project's repository or when "
+                             "(as they said it; never an example of yours): refused inside the project's repository or when "
                              "a repository tracks it; never one you found yourself"),
              "user_env": S("HTTP Basic (Jira Cloud): the NAME of the variable holding the account (its email)"),
              "user_file": S("HTTP Basic (Jira Cloud): or the full path of a chmod 600 file holding the account's email"),

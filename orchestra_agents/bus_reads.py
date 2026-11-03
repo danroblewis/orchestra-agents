@@ -158,9 +158,14 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             ages = machine_ages.machine_ages(project, store).get("line") or "Machines by age: not read."
         except Exception:  # noqa: BLE001 - the machines view unreadable: the digest still stands, saying so
             ages = "Machines by age: not read."
+        from . import supervisor_pr
+        try:
+            own_pr = supervisor_pr.digest_line(project, store)
+        except Exception:  # noqa: BLE001 - git unreadable: the digest still stands, without the line
+            own_pr = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
-                                                model=counted["model"], ages=ages)
+                                                model=counted["model"], ages=ages, own_pr=own_pr)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

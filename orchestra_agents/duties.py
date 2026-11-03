@@ -24,7 +24,7 @@ import re
 import time
 from typing import Any
 
-from . import spec_git
+from . import spec_git, supervisor_pr
 from .config import Project
 from .gate_busy import landing
 from .machine_spec import NAME, Duty, MachineSpec, SpecError, lint, load, parse, render
@@ -144,6 +144,9 @@ def _commit(project: Project, store: AgentStore, spec: MachineSpec, files: dict,
         raise StoreError(str(e)) from None
     if not done.get("commit"):
         return {"ok": True, "changed": False, **done}
+    done.update(supervisor_pr.carried(project, store, done["commit"], title=f"Supervisor: {what}"[:120], reason=reason,
+                                      verified=(f"the duty tools' checks passed on the spec of {spec.name}, and the agents "
+                                                f"run it from {spec_git.SIDE} at once"), quote=supervisor_pr.owner_words(store)))
     if count:
         store.set_agent_state(MACHINE, spec_changes=[*changes_today(store), time.time()])
     store.events.publish("role.changed", {"machine": spec.name, "duty": duty, "change": change, "reason": reason,
@@ -154,7 +157,8 @@ def _commit(project: Project, store: AgentStore, spec: MachineSpec, files: dict,
     return {"ok": True, "changed": True, "duty": duty, "change": change, **done,
             "applies": "your session starts again after this turn with the new prompt (the conversation is kept)",
             "changes_left_today": max(0, left),
-            "next": "Tell the owner the duty and its commit. When the duty is meant to move something, predict it (predict_fix)."}
+            "next": ("Tell the owner the duty, its commit, and the branch and pull request as `said` puts them. When the duty "
+                     "is meant to move something, predict it (predict_fix).")}
 
 
 def _revert(project: Project, store: AgentStore, a: dict, reason: str) -> dict:

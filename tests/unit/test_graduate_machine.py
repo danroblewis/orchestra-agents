@@ -77,9 +77,13 @@ def test_python_goes_into_the_package_and_runs_as_a_module(project, store):
     assert machines_entry(project)["restart"] == "always"
     still_there(project)
     status = git(project.repo_root, "status", "--porcelain")
-    assert "R  .orchestra/machines/relator/relator.py -> acme_tools/relator/relator.py" in status    # git mv, not committed
-    assert " M orchestra.toml" in status
-    assert git(project.repo_root, "log", "--oneline").count("\n") == 2          # nothing committed
+    assert "R  .orchestra/machines/relator/relator.py -> acme_tools/relator/relator.py" in status    # git mv, staged
+    assert "orchestra.toml" not in status and "?? acme_tools/relator/__main__.py" in status     # clean to the gate but the move
+    assert git(project.repo_root, "log", "--oneline").count("\n") == 2          # nothing committed to the base
+    files = set(git(project.repo_root, "show", "--no-renames", "--name-only", "--format=", "orchestra/supervisor").split())
+    assert files == {".orchestra/machines/relator/relator.py", "acme_tools/relator/relator.py", "acme_tools/relator/__init__.py",
+                     "acme_tools/relator/__main__.py", "orchestra.toml"}                       # one commit on its branch
+    assert done["branch"] == "orchestra/supervisor" and "pull request is pending" in done["said"][-1]
     assert "heard again under the same source" in done["verify"]
     ran = subprocess.run([sys.executable, "-m", "acme_tools.relator"], cwd=project.repo_root, capture_output=True, text=True,
                          check=False)

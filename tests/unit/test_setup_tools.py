@@ -68,8 +68,9 @@ def toml(project) -> dict:
 
 
 def last_commit(project) -> tuple[str, list[str]]:
-    msg = git(project.repo_root, "log", "-1", "--format=%B")
-    files = git(project.repo_root, "show", "--name-only", "--format=", "HEAD").split()
+    """The Supervisor's latest commit: on its branch, never on the base (side_branch.py)."""
+    msg = git(project.repo_root, "log", "-1", "--format=%B", "orchestra/supervisor")
+    files = git(project.repo_root, "show", "--name-only", "--format=", "orchestra/supervisor").split()
     return msg, files
 
 
@@ -89,7 +90,10 @@ def test_set_agent_roles_commits_the_file_alone_with_the_reason_and_announces_it
     assert len(text.splitlines()) == len(before.splitlines())                     # only the one line changed
     msg, files = last_commit(project)
     assert files == ["orchestra.toml"] and WHY in msg and msg.startswith("Supervisor: the AI agents fill worker, reviewer")
-    assert git(project.repo_root, "status", "--porcelain").strip() == "?? notes.txt"
+    assert git(project.repo_root, "status", "--porcelain").strip() == "?? notes.txt"     # clean for the gate: skip-worktree
+    assert git(project.repo_root, "ls-files", "-v", "orchestra.toml").startswith("S ")
+    assert git(project.repo_root, "log", "-1", "--format=%s", "main").strip() == "init"                           # never on the base
+    assert "pull request is pending" in out["said"] and "[scm]" in out["pull_request"]["pending"]
     assert call(project, store, "check_setup")["roles"][0].startswith("The AI agents here fill: worker, reviewer")   # read afresh
     [ev] = changed_events(store)
     assert ev["source"] == "supervisor" and ev["section"] == "agents" and ev["reason"] == WHY
@@ -236,10 +240,12 @@ def test_a_change_that_cannot_be_its_own_commit_on_the_base_branch_is_refused(pr
     assert toml(project)["project"]["work"] == "tasks"
 
 
-def test_a_failed_commit_puts_the_file_back(project, store):
-    hook = project.repo_root / ".git" / "hooks" / "pre-commit"
-    hook.write_text("#!/bin/sh\necho 'refused by hook' >&2\nexit 1\n")
-    hook.chmod(0o755)
+def test_a_failed_commit_puts_the_file_back(project, store, monkeypatch):
+    from orchestra_agents import side_branch
+
+    def refused(*a, **k):
+        raise side_branch.SideBranchError("refused by hook")
+    monkeypatch.setattr(side_branch, "commit", refused)
     before = (project.repo_root / "orchestra.toml").read_text()
     with pytest.raises(StoreError, match="refused by hook"):
         call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")

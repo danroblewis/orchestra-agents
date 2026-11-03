@@ -104,9 +104,10 @@ def as_supervisor(project, command, args):
 
 def test_a_change_is_answered_with_what_changed_and_recorded(project):
     out = as_supervisor(project, "set_capacity_limit", {"workers": 2, "reason": "two tickets at once"})
-    sha = git(project.repo_root, "rev-parse", "--short", "HEAD").strip()
+    sha = git(project.repo_root, "rev-parse", "--short", "orchestra/supervisor").strip()
     assert out["commit"] == sha
-    assert out["done"] == f"Changed: committed {sha} to orchestra.toml on the base branch: at most 2 workers at once ([tasks])."
+    assert out["done"].startswith(f"Changed: committed {sha} to orchestra.toml on the branch orchestra/supervisor: at most 2 "
+                                  "workers at once ([tasks]) (On the branch orchestra/supervisor; a pull request is pending")
     store = AgentStore(project)
     assert ledger.since(store, "supervisor", 0) == [out["done"][len("Changed: "):-1]]
     again = as_supervisor(project, "set_capacity_limit", {"workers": 2, "reason": "the same again, to be sure"})   # already so: nothing changed
@@ -139,7 +140,7 @@ def test_a_nothing_done_reply_after_two_commits_is_corrected(project, tasks):
     host, store = host_with(project, [two_commits])
     seen = []
     out = host.prompt_supervisor("raise the workers to two and gate on pytest", seen.append)
-    shas = git(project.repo_root, "log", "--format=%h", "-2").split()
+    shas = git(project.repo_root, "log", "--format=%h", "-2", "orchestra/supervisor").split()
     fix = out["text"].split("\n\n", 1)[1]
     assert out["text"].startswith("I have not done anything.")
     assert fix.startswith("[Correction from Orchestra") and 'says "I have not done anything."' in fix

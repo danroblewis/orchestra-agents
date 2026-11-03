@@ -106,9 +106,9 @@ def test_a_new_project_is_set_up_by_the_supervisor_with_no_configuration(fresh):
 
     [changed] = events_of(repo, "instruments.changed")              # a measurement added: no new era of the model
     assert changed["source"] == "supervisor" and changed["section"] == "collect"
-    assert git(repo, "log", "-1", "--format=%s", "--", "orchestra.toml").startswith("Supervisor: added the collector todos")
-    assert not git(repo, "status", "--porcelain", "--", "orchestra.toml")    # the untracked file `orchestra init` wrote, committed with it
-    assert '"sh"' in git(repo, "show", "HEAD:orchestra.toml")
+    assert git(repo, "log", "-1", "--format=%s", "orchestra/supervisor", "--", "orchestra.toml").startswith("Supervisor: added the collector todos")
+    assert "orchestra.toml" in git(repo, "ls-tree", "--name-only", "orchestra/supervisor")   # the file `orchestra init` wrote, committed with it
+    assert '"sh"' in git(repo, "show", "orchestra/supervisor:orchestra.toml")
     dump = metrics_for(orchestra_project(repo)).dump("todo_comments", {})
     assert dump and dump[0][1]["instrument"] == "todos" and dump[0][2][-1][1] == 3.0
     sup = store.find_session("supervisor")

@@ -53,8 +53,8 @@ def add(project, store, name="keep_gate_moving", **extra):
 
 def test_the_starting_spec_is_written_once_as_a_commit_and_read_as_the_supervisor_s_contract(project):
     done = supervisor_spec.ensure(project)
-    assert done["where"] == "base" and done["commit"]
-    assert git(project.repo_root, "log", "-1", "--format=%s").startswith("orchestra-agents: the Supervisor's spec")
+    assert done["where"] == "side" and done["commit"]
+    assert git(project.repo_root, "log", "-1", "--format=%s", spec_git.SIDE).startswith("orchestra-agents: the Supervisor's spec")
     assert supervisor_spec.ensure(project) is None                                  # never twice, never overwritten
     spec = load(project, "supervisor")
     assert spec.model == "sonnet" and spec.review_every == "30m"
@@ -70,13 +70,14 @@ def test_the_starting_spec_is_written_once_as_a_commit_and_read_as_the_superviso
 def test_a_duty_added_is_one_commit_with_the_reason_announced_and_in_the_prompt(project, store):
     supervisor_spec.ensure(project)
     got = add(project, store)
-    assert got["changed"] and got["where"] == "base" and got["done"].startswith("Changed: committed")
-    msg = git(project.repo_root, "log", "-1", "--format=%B")
+    assert got["changed"] and got["where"] == "side" and got["done"].startswith("Changed: committed")
+    assert got["branch"] == spec_git.SIDE and "a pull request is pending" in got["said"]          # no remote, no [scm]
+    msg = git(project.repo_root, "log", "-1", "--format=%B", spec_git.SIDE)
     assert msg.startswith("Supervisor: add duty keep_gate_moving") and WHY in msg
-    files = git(project.repo_root, "show", "--name-only", "--format=", "HEAD").split()
+    files = git(project.repo_root, "show", "--name-only", "--format=", spec_git.SIDE).split()
     assert set(files) == {".orchestra/machines/supervisor/machine.toml", ".orchestra/machines/supervisor/duties/keep_gate_moving.md",
                           ".orchestra/machines/supervisor/ledger.md"}
-    assert "keep_gate_moving" in (project.repo_root / ".orchestra/machines/supervisor/ledger.md").read_text()
+    assert "keep_gate_moving" in load(project, "supervisor").files["ledger.md"]                # read from the branch
     [ev] = [e for e in store.events.read(0, 100)[0] if e["type"] == "role.changed"]
     assert ev["source"] == "supervisor" and ev["subject"] == "machine:supervisor" and ev["commit"] == got["commit"]
     assert store.agent_state("supervisor")["restart_requested"] is True             # the next turn runs the new prompt
@@ -84,18 +85,19 @@ def test_a_duty_added_is_one_commit_with_the_reason_announced_and_in_the_prompt(
     assert "### Duty `keep_gate_moving`" in prompting.agent_prompt(project, all_agents(project)["supervisor"])
 
 
-def test_a_dirty_checkout_gets_the_change_on_the_side_branch_and_the_host_runs_it_from_there(project, store):
+def test_a_change_goes_on_the_branch_never_the_base_and_the_host_runs_it_from_there(project, store):
     supervisor_spec.ensure(project)
+    head = git(project.repo_root, "rev-parse", "HEAD")
     (project.repo_root / "README.md").write_text("the owner's own edit\n")
     got = add(project, store)
     assert got["where"] == "side" and "orchestra/supervisor" in got["note"]
     assert git(project.repo_root, "status", "--porcelain").split() == ["M", "README.md"]       # the working tree is untouched
     assert not (project.repo_root / ".orchestra/machines/supervisor/duties/keep_gate_moving.md").exists()
     assert load(project, "supervisor").duty("keep_gate_moving") is not None                    # read from the side branch
-    git(project.repo_root, "checkout", "--", "README.md")                                    # clean again: the next change merges it
+    git(project.repo_root, "checkout", "--", "README.md")                                    # clean: still never the base
     call(project, store, "edit_duty", name="keep_gate_moving", about="the gate lands", reason="the owner asked for a shorter line")
-    assert spec_git.side_pending(project) is None
-    assert (project.repo_root / ".orchestra/machines/supervisor/duties/keep_gate_moving.md").exists()
+    assert spec_git.side_pending(project) and git(project.repo_root, "rev-parse", "HEAD") == head
+    assert load(project, "supervisor").duty("keep_gate_moving").about == "the gate lands"
 
 
 def test_what_a_duty_may_never_do(project, store):
@@ -122,7 +124,7 @@ def test_the_day_s_cap_holds_and_a_revert_is_still_allowed(project, store):
     got = call(project, store, "revert_change", commit=first["commit"], reason="the owner asked to undo the first duty")
     assert got["change"] == "revert" and load(project, "supervisor").duty("duty_one") is None
     assert load(project, "supervisor").duty("duty_two") is not None
-    assert git(project.repo_root, "log", "-1", "--format=%s").startswith(f"Supervisor: revert {first['commit'][:10]}")
+    assert git(project.repo_root, "log", "-1", "--format=%s", spec_git.SIDE).startswith(f"Supervisor: revert {first['commit'][:10]}")
     with pytest.raises(StoreError, match="not a commit of the machine specs"):
         call(project, store, "revert_change", commit=git(project.repo_root, "rev-list", "--max-parents=0", "HEAD").strip(),
              reason="try to revert the first commit of the repository")
@@ -146,5 +148,5 @@ def test_in_code_work_the_starting_spec_waits_on_the_side_branch_so_no_landing_i
     head = git(project.repo_root, "rev-parse", "HEAD")
     assert supervisor_spec.ensure(project)["where"] == "side"
     assert git(project.repo_root, "rev-parse", "HEAD") == head and load(project, "supervisor") is not None
-    add(project, store)                                                       # the first change on a clean checkout merges it
-    assert spec_git.side_pending(project) is None and (project.repo_root / ".orchestra/machines/supervisor/machine.toml").exists()
+    add(project, store)                                                       # the base never moves: the gate's landings are safe
+    assert spec_git.side_pending(project) and git(project.repo_root, "rev-parse", "HEAD") == head

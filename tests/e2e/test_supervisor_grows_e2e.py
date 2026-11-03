@@ -77,11 +77,11 @@ def test_the_supervisor_grows_a_duty_by_chat_keeps_the_flow_and_reviews_on_sched
     project, host, store, events = running
     spec = load(project, "supervisor")                                         # written the first time the host ran
     assert spec is not None and spec.model == "sonnet"
-    assert git(project.repo_root, "log", "-1", "--format=%s").startswith("orchestra-agents: the Supervisor's spec")
+    assert git(project.repo_root, "log", "-1", "--format=%s", "orchestra/supervisor").startswith("orchestra-agents: the Supervisor's spec")
 
     reply = host.prompt_supervisor("From now on, tell me every morning what waits on me", emit=lambda e: None)
     assert "standing duty" in reply["text"], reply
-    msg = git(project.repo_root, "log", "-1", "--format=%B")
+    msg = git(project.repo_root, "log", "-1", "--format=%B", "orchestra/supervisor")
     assert msg.startswith("Supervisor: add duty owner_duty_") and "every morning what waits on me" in msg
     duty = next(d for d in load(project, "supervisor").duties if d.name.startswith("owner_duty_"))
     assert "every morning" in load(project, "supervisor").duty_text(duty)

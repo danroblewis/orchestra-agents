@@ -36,7 +36,7 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import prompting
+from . import prompting, supervisor_pr
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -275,7 +275,8 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     plan = HANDLERS[command](project, store, a)
     if why := landing(store, role):
         raise StoreError(why)
-    done = change(project, plan.edit, plan.what, a.get("reason") or "", target)
+    done = change(project, plan.edit, plan.what, a.get("reason") or "", target, store=store,
+                  quote=supervisor_pr.owner_words(store, a))
     if recovered:
         done["recovered"] = recovered
     if not done["written"]:
@@ -292,7 +293,8 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     else:
         store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED, **data)
     out = {"ok": True, **done, "applies": applies,
-           "next": ("Tell the human what you changed and why, the commit, and what applies now." if target == "repo" else
+           "next": ("Tell the human what you changed and why, what applies now, and the branch and its pull request as "
+                    "`said` puts them (or that the pull request is pending, and why)." if target == "repo" else
                     "Tell the human what you changed in their private overlay (not committed) and why, and what applies now.")}
     if plan.then:
         try:

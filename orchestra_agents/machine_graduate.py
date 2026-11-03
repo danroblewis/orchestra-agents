@@ -14,10 +14,12 @@ yes from this turn (``author: owner``, as ``approve_integration``), and only the
 showed (worked out again, it must be the same). Then: ``git mv`` of the directory (a plain move when
 git does not track it, as a scaffolded collector), the language's wiring, and each entry's
 ``command`` changed through Orchestra's configuration objects (``config_edit``, never the file as
-text): in ``orchestra.toml`` written and **left uncommitted**, with the move and the manifest, so the
-owner commits the three together or lands them through a pull request (a commit of
-``orchestra.toml`` alone would name code its commit does not hold); in the owner's overlay as any
-overlay change. Nothing is committed. The program's code is not changed, so its announcement and
+text): in ``orchestra.toml`` written in place, and in the owner's overlay as any overlay change. All
+of it is live at once, and the move, the wiring, the manifest and ``orchestra.toml`` are **one
+commit on the Supervisor's branch** ``orchestra/supervisor`` (``side_branch``; a commit of
+``orchestra.toml`` alone would name code its commit does not hold), never on the base branch, which
+becomes a pull request for the owner or the merge gate to merge (``supervisor_pr``; since
+2026-11-02, the owner's self-improvement 5). The program's code is not changed, so its announcement and
 its events stay the same: the answer says which source to hear again (the launcher restarts a
 process whose command changed within a second of reading the configuration)."""
 
@@ -35,9 +37,9 @@ from orchestra.config import ConfigError
 from orchestra.overlay import OVERLAY, REPO
 
 from . import graduate_wiring as wiring
-from . import machine_ages
+from . import machine_ages, side_branch, supervisor_pr
 from .config import Project
-from .config_change import change, no_secret
+from .config_change import change, no_secret, someone_editing
 from .design import MACHINE, OWNER
 from .design_machines import ID
 from .setup_tools import CHANGED, INSTRUMENT_SECTIONS, INSTRUMENTS_CHANGED
@@ -146,9 +148,9 @@ def make_plan(project: Project, store: AgentStore, a: dict) -> dict:
     if others := other_mentions(project, mdir, runs):
         raise StoreError(f"the configuration names .orchestra/machines/{name}/ elsewhere too ({'; '.join(others[:3])}): "
                          "the move would break it; nothing was moved")
-    busy = [p for p in (f".orchestra/machines/{name}", w["manifest"]["file"] if w["manifest"] else None,
-                        project.orchestra.config_file.name if any(r["target"] == REPO for r in runs) else None)
-            if p and dirty(project, p)]
+    busy = [p for p in (f".orchestra/machines/{name}", w["manifest"]["file"] if w["manifest"] else None) if p and dirty(project, p)]
+    if any(r["target"] == REPO for r in runs) and someone_editing(project):
+        busy.append(project.orchestra.config_file.name)
     if busy:
         raise StoreError(f"{', '.join(busy)} has an uncommitted change (someone's edit in progress): the owner commits or "
                          "drops it first; nothing was moved")
@@ -216,7 +218,7 @@ def _set_command(project: Project, store: AgentStore, e: dict, reason: str) -> s
         done = change(project, lambda ed, kw: ed.add_entry(e["section"], entry, **kw),
                       lambda c: f"changed [[{e['section']}]] {e['name']}'s command (overlay)", reason, OVERLAY)
         what = done["changed"]
-    else:                     # orchestra.toml: written, left uncommitted with the move (the module's docstring)
+    else:                     # orchestra.toml: written, carried with the move (the module's docstring)
         ed = project.orchestra.config_edit
         try:
             c = ed.add_entry(e["section"], entry, target=REPO, dry_run=True)
@@ -225,7 +227,7 @@ def _set_command(project: Project, store: AgentStore, e: dict, reason: str) -> s
         except ConfigError as err:
             raise StoreError(str(err)) from err
         project.reload_config()
-        what = f"changed [[{e['section']}]] {e['name']}'s command in orchestra.toml (uncommitted, with the move)"
+        what = f"changed [[{e['section']}]] {e['name']}'s command in orchestra.toml (carried with the move on orchestra/supervisor)"
     store.events.emit(INSTRUMENTS_CHANGED if e["section"] in INSTRUMENT_SECTIONS else CHANGED, section=e["section"],
                       change=what, reason=reason, commit=None, target=e["target"],
                       applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE)
@@ -244,7 +246,7 @@ def graduate_machine(project: Project, store: AgentStore, a: dict, prov: dict) -
         store.update_agent_state(MACHINE, KEY, lambda d: {**(d or {}), p["name"]: {"plan": p, "at": time.time()}})
         return {"ok": True, "dry_run": True, "plan": p, "said": said(p, False), "verify": verify(p),
                 "next": ("Put the plan to the owner in a sentence or two (where it goes, its new command, that the "
-                         "move and orchestra.toml are left uncommitted for them to commit or land together). On their "
+                         "move and orchestra.toml become one commit on orchestra/supervisor and its pull request). On their "
                          "yes, quoted, call graduate_machine again with dry_run false.")}
     if prov["author"] != OWNER:
         raise StoreError("moving a machine is a change to the system and the owner's: quote their yes from this turn "
@@ -267,14 +269,32 @@ def graduate_machine(project: Project, store: AgentStore, a: dict, prov: dict) -
     except (StoreError, OSError) as err:
         _unmove(project, p)
         raise StoreError(f"{err}; the directory was moved back to {p['from']}/") from err
-    rec = {"plan": p, "at": time.time(), "graduated": True, "quote": prov.get("quote"), "turn": prov.get("turn")}
+    carried = _carry(project, store, p, prov)
+    rec = {"plan": p, "at": time.time(), "graduated": True, "quote": prov.get("quote"), "turn": prov.get("turn"),
+           "commit": carried.get("commit")}
     store.update_agent_state(MACHINE, KEY, lambda d: {**(d or {}), p["name"]: rec})
-    told = [*said(p, True), *([wrote] if wrote else []), *changed,
-            ("nothing is committed: the owner commits the move, the manifest and orchestra.toml together, or lands them "
-             "through a pull request")]
-    return {"ok": True, "dry_run": False, "plan": p, "said": told,
-            "verify": verify(p), "next": "Tell the owner where it is now and its command; then check it is heard again "
+    told = [*said(p, True), *([wrote] if wrote else []), *changed, carried["said"]]
+    return {"ok": True, "dry_run": False, "plan": p, "said": told, "branch": carried["branch"],
+            "commit": carried.get("commit"), "pull_request": carried["pull_request"],
+            "verify": verify(p), "next": "Tell the owner where it is now, its command, and the branch and pull request; then check it is heard again "
                                          "(machine_ages) and say so."}
+
+
+def _carry(project: Project, store: AgentStore, p: dict, prov: dict) -> dict:
+    """The graduation as one commit on the Supervisor's branch, and its pull request."""
+    paths = [p["from"], p["to"], *([p["manifest"]["file"]] if p["manifest"] else []), *[w["path"] for w in p["writes"]],
+             *([project.orchestra.config_file.name] if any(e["target"] == REPO for e in p["entries"]) else [])]
+    title = f"Supervisor: graduate {p['name']} to {p['to']}/"
+    try:
+        sha = side_branch.commit(project, f"{title}\n\n{prov['reason']}\n\nThe owner: {prov.get('quote') or ''}\n",
+                                 paths=list(dict.fromkeys(paths)))
+    except side_branch.SideBranchError as e:
+        return {"branch": side_branch.SIDE, "commit": None, "pull_request": None,
+                "said": f"the move is made and live, but its commit on {side_branch.SIDE} failed ({e}): tell the owner"}
+    return {"commit": sha, **supervisor_pr.carried(
+        project, store, sha, title=title, reason=prov["reason"], quote=prov.get("quote"),
+        verified=(f"the owner's yes on the dry run, worked out again unchanged; {len(p['files'])} files moved unchanged; "
+                  "Orchestra's configuration checks passed on each command"))}
 
 
 COMMANDS = {"graduate_machine": graduate_machine}

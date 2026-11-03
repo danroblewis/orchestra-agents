@@ -12,8 +12,9 @@ Two ways a repair reaches the project, and neither edits the owner's checkout:
 - ``write_override``: a bug in an installed plugin, which the project does not own. An override
   under ``.orchestra/overrides/<name>.py`` in Orchestra's format (Orchestra's ``overrides.py``:
   ``TARGET``, ``PACKAGE`` pinned to the installed version, ``KIND`` wrap or replace, ``ISSUE``,
-  and ``def override``), committed alone to the base branch when the checkout is clean there and
-  the gate is not landing, else written, left uncommitted and live (the tool says which and where).
+  and ``def override``), written in place (live at once) and committed alone on the Supervisor's
+  branch ``orchestra/supervisor`` (``side_branch``), never on the base branch, which becomes a pull
+  request (``supervisor_pr``; the tool says the branch and the pull request, or why it is pending).
   Orchestra applies it in every process that loads plugins, only on that exact version, so it
   stops when the package changes. Announced as ``system.changed`` (subject ``override:<name>``),
   which begins an era. The upstream issue is ``draft_upstream_issue`` (``upstream.py``)."""
@@ -27,9 +28,8 @@ import re
 import subprocess
 from pathlib import Path
 
-from . import handoff
+from . import handoff, side_branch, supervisor_pr
 from .config import Project
-from .gate_busy import landing
 from .modeling import claim_change
 from .secret_shapes import secret_in
 from .spec_git import is_git
@@ -165,33 +165,25 @@ def write_override(project: Project, store: AgentStore, a: dict, name: str, reas
     path = project.repo_root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-    sha, note = _commit_one(project, store, rel, f"Supervisor: override {name} of {target} — {reason.splitlines()[0][:100]}\n\n"
-                                                 f"{a['why'].strip()}\n\nPinned to {dist}=={version}.\n")
+    title = f"Supervisor: override {name} of {target} — {reason.splitlines()[0][:100]}"
+    try:
+        sha = side_branch.commit(project, f"{title}\n\n{a['why'].strip()}\n\nPinned to {dist}=={version}.\n", paths=[rel])
+    except side_branch.SideBranchError as e:
+        raise StoreError(f"the override is written and live at {rel}, but its commit on {side_branch.SIDE} failed: {e}") from None
+    pr = supervisor_pr.carried(project, store, sha, title=title, reason=reason, quote=supervisor_pr.owner_words(store, a),
+                               verified=(f"the override parses and defines override(); {target} resolves in the installed "
+                                         f"{dist}=={version}, which it is pinned to"))
+    note = (f"written and live at {rel}; " + (f"committed on {side_branch.SIDE}, never on {project.config.base_branch}"
+                                              if sha else f"{side_branch.SIDE} already holds it as it is"))
     data = {"override": name, "target": target, "package": f"{dist}=={version}", "kind": kind, "commit": sha, "reason": reason,
             "by": "supervisor"}
     if claim_change(store, "supervisor", a.get("change")):
         store.events.publish("system.changed", data, id=a["change"], subject=f"override:{name}")
     else:
         store.events.publish("system.changed", data, subject=f"override:{name}")
-    return {"ok": True, "file": rel, "package": f"{dist}=={version}", "commit": sha, "note": note,
+    return {"ok": True, "file": rel, "package": f"{dist}=={version}", "commit": sha, "note": note, **pr,
             "applies": ("Orchestra applies it the next time a process loads its plugins: orchestra run's host when the "
                         "configuration changes, and each plugin process (the agents' host, the task scheduler) and "
                         "orchestra web when they start again. Read the Core page's local overrides to see it applied."),
-            "next": "Draft the upstream issue with draft_upstream_issue (override: this name), then tell the owner."}
-
-
-def _commit_one(project: Project, store: AgentStore, rel: str, message: str) -> tuple[str | None, str]:
-    root, base = project.repo_root, project.config.base_branch
-    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    dirty = [ln for ln in _git(root, "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
-             if ln.strip() and ln[3:].strip().strip('"') != rel]
-    busy = landing(store, "supervisor")
-    if branch != base or dirty or busy:
-        why = busy or (f"the checkout is on {branch!r}" if branch != base else "the checkout has other uncommitted changes")
-        return None, f"written, not committed ({why}): it is live at {rel}; say where, and never ask the owner to commit it"
-    _git(root, "add", "--", rel)
-    has_ident = bool(_git(root, "config", "user.email").stdout.strip())
-    p = _git(root, "commit", "-q", "-m", message, "--", rel, ident=not has_ident)
-    if p.returncode != 0:
-        return None, f"written, the commit failed: {(p.stderr or p.stdout).strip()[:200]}"
-    return _git(root, "rev-parse", "HEAD").stdout.strip(), f"committed to {base}"
+            "next": ("Draft the upstream issue with draft_upstream_issue (override: this name), then tell the owner, with the "
+                     "branch and pull request as `said` puts them.")}

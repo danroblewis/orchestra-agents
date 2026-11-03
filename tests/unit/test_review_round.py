@@ -131,9 +131,9 @@ def test_crossed_signals_write_a_split_proposal_once_and_tell_it_to_tell_the_own
     got = host.review.tick(t0 + 1801)
     assert got["woke"] and "tools" in got["crossed"]
     prop = got["proposal"]
-    text = (host.project.repo_root / prop["path"]).read_text()
+    text = git(host.project.repo_root, "show", f"orchestra/supervisor:{prop['path']}")             # on the branch, never the base
     assert text.startswith("# Should the Supervisor be two machines?") and "| tools |" in text and "keep_flow" in text
-    assert git(host.project.repo_root, "log", "-1", "--format=%s").startswith("Supervisor: a split proposal")
+    assert git(host.project.repo_root, "log", "-1", "--format=%s", "orchestra/supervisor").startswith("Supervisor: a split proposal")
     [reason] = wakeups(host)
     assert "split proposal was written" in reason and "split nothing" in reason
     host.store.drain_wakeups("supervisor")

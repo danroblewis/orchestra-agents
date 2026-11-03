@@ -70,7 +70,7 @@ def test_a_spec_commit_leaves_a_poller_beside_it_untracked(project):
     assert set(UNTRACKED) <= untracked(project)
     (project.repo_root / UNTRACKED[0]).unlink()
     got = spec_git.commit(project, {".orchestra/machines/supervisor/duties.md": "- check the gate daily\n"}, "agents: a duty")
-    assert got["where"] == "base"
-    assert set(git(project.repo_root, "log", "--name-only", "--format=", f"{head}..HEAD").split()) == {
-        ".orchestra/machines/supervisor/duties.md"}                                         # the side branch merged, the spec alone
+    assert got["where"] == "side" and git(project.repo_root, "rev-parse", "HEAD").strip() == head      # never the base
+    assert set(git(project.repo_root, "log", "--name-only", "--format=", f"{head}..{spec_git.SIDE}").split()) == {
+        ".orchestra/machines/supervisor/duties.md"}                                         # the spec alone
     assert set(UNTRACKED[1:]) <= untracked(project)

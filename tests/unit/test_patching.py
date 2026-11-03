@@ -64,13 +64,18 @@ class FakeOutbox:
 
 
 def test_an_installed_plugin_is_patched_by_an_override_and_the_issue_is_drafted_for_the_owner(project, store, monkeypatch):
+    head = git(project.repo_root, "rev-parse", "HEAD")
     got = call(project, store, "write_override", name="cpu_count_fallback", target="psutil:cpu_count", kind="wrap", code=CODE,
                why=WHY, reason=REASON)
     version = importlib.metadata.version("psutil")
-    assert got["package"] == f"psutil=={version}" and got["note"] == "committed to main"
+    assert got["package"] == f"psutil=={version}" and "committed on orchestra/supervisor, never on main" in got["note"]
+    assert got["branch"] == "orchestra/supervisor" and "pull request is pending" in got["said"]
     text = (project.repo_root / ".orchestra/overrides/cpu_count_fallback.py").read_text()
     assert "TARGET = 'psutil:cpu_count'" in text and f"PACKAGE = 'psutil=={version}'" in text and "KIND = 'wrap'" in text
-    assert git(project.repo_root, "show", "--name-only", "--format=", "HEAD").split() == [".orchestra/overrides/cpu_count_fallback.py"]
+    assert git(project.repo_root, "show", "--name-only", "--format=", "orchestra/supervisor").split() == [
+        ".orchestra/overrides/cpu_count_fallback.py"]
+    assert got["commit"] == git(project.repo_root, "rev-parse", "orchestra/supervisor").strip()
+    assert git(project.repo_root, "rev-parse", "main") == head                                  # never committed to the base
     [ev] = [e for e in store.events.read(0, 100)[0] if e["type"] == "system.changed"]
     assert ev["subject"] == "override:cpu_count_fallback" and ev["source"] == "supervisor"     # an announced change: an era
     overrides = pytest.importorskip("orchestra.overrides")                                     # Orchestra applies it by file
@@ -83,7 +88,8 @@ def test_an_installed_plugin_is_patched_by_an_override_and_the_issue_is_drafted_
 
     outbox = FakeOutbox()
     monkeypatch.setattr(upstream, "outbox_client", lambda project, drafter: outbox)
-    git(project.repo_root, "checkout", "--", ".orchestra/overrides/cpu_count_fallback.py")
+    (project.repo_root / ".orchestra/overrides/cpu_count_fallback.py").write_text(          # back, as its branch holds it
+        git(project.repo_root, "show", "orchestra/supervisor:.orchestra/overrides/cpu_count_fallback.py"))
     got = call(project, store, "draft_upstream_issue", repo="giampaolo/psutil", title="cpu_count raises in containers",
                body="cpu_count raises OSError in a container without /proc/cpuinfo; it should fall back.", override="cpu_count_fallback")
     [d] = outbox.drafts

@@ -193,8 +193,8 @@ def test_an_orchestra_toml_git_does_not_track_yet_is_committed_with_the_first_ch
     git(project.repo_root, "rm", "-q", "--cached", "orchestra.toml")
     git(project.repo_root, "commit", "-qm", "orchestra.toml untracked, as orchestra init leaves it")
     out = call(project, store, "set_collector", name="todos", command=TODOS, shell=True, reason=WHY)
-    assert out["commit"] and git(project.repo_root, "ls-files", "orchestra.toml").strip() == "orchestra.toml"
-    assert not git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml")
+    assert out["commit"] and "orchestra.toml" in git(project.repo_root, "ls-tree", "--name-only", out["commit"])
+    assert git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml").startswith("??")   # the branch adds it; the base never moves
 
 
 def test_how_late_a_store_writes_is_measured_from_its_newest_samples():

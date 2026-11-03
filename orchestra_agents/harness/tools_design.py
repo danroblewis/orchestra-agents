@@ -351,14 +351,14 @@ DESIGN_TOOLS: list[ToolDef] = [
             "A failed test, or a system with no template of its own, is [[tasking]]handed to the Coordinator as work (its ticket lands "
             "the script); call again with the same name once the worker's test passes[[/tasking]][[no-tasking]]not handed on here: code work is not handed on here; say so[[/no-tasking]]. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
-            {"system": S("The system's name: jira, github, slack, pagerduty, chronosphere, jenkins"),
+            {"system": S("The system's name: jira, github, slack, discord, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),
              "strategy": E(["poller", "collect", "source"],
                            "Leave out for INTEGRATING.md's default: source for a Prometheus-API store, poller otherwise"),
              "name": S("The poller's name (default <system>_poller); never the system's own name"),
              "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
                        "when the owner said their repository must stay clean"),
-             "kit": E(["jira", "github", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
+             "kit": E(["jira", "github", "slack", "discord", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
              "base_url": S("The system's address (its API's root URL), only as the owner said it this session (or a "
                            "loopback address on this machine): a Jira Data Center host, or GitHub Enterprise's API, "
                            "https://<host>/api/v3. Never a guess, a template's default or a vendor's usual host: leave it "

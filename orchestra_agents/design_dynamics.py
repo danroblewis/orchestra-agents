@@ -405,7 +405,23 @@ def read_design(project: Project, store: AgentStore, a: dict) -> dict:
     for mid, m in machines.items():
         m["running"] = machines_running.running(mid, layer["machines"][mid], seen.get(mid), programs)
     return {"ok": True, **out, "machines": machines, "events": _event_edges(project, store, layer),
-            "instruments": drafts(store), "refinement": last_proposal(store), "kept_in": intended_api.where(project)}
+            "instruments": drafts(store), "refinement": last_proposal(store), "subsystems": _subsystems(project, layer),
+            "kept_in": intended_api.where(project)}
+
+
+def _subsystems(project: Project, layer: dict) -> dict:
+    """The declared subsystems (each with its state: a proposed one has no box) and the model's
+    partitions by label (``model.subsystems``), each said by its groups and crossing count."""
+    try:
+        parts = intended_api.partitions(intended_api.current_model(project))
+    except Exception as e:  # noqa: BLE001 - the design reads without the partitions, saying why
+        parts = {"default": None, "partitions": [], "error": f"{type(e).__name__}: {e}"}
+    return {"declared": {k: {f: x.get(f) for f in ("name", "state", "label", "value", "members", "note")}
+                         for k, x in (layer.get("subsystems") or {}).items()},
+            "default": parts.get("default"),
+            "partitions": [{"label": p["label"], "values": [g["value"] for g in p["groups"]], "joined": p.get("joined"),
+                            "crossed": p.get("crossed")} for p in parts.get("partitions") or []],
+            **({"error": parts["error"]} if parts.get("error") else {})}
 
 
 COMMANDS = {"declare_stock": declare_stock, "declare_effect": declare_effect, "set_target": set_target,

@@ -66,7 +66,7 @@ from .design_machines import (
 from .store import AgentStore, StoreError
 from .tasking_text import gate
 
-PARTS = ("stock", "effect", "flow", "machine", "attachment")
+PARTS = ("stock", "effect", "flow", "machine", "attachment", "subsystem")
 
 
 def machines_dir(project: Project):

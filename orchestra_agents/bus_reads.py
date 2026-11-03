@@ -158,9 +158,14 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             ages = machine_ages.machine_ages(project, store).get("line") or "Machines by age: not read."
         except Exception:  # noqa: BLE001 - the machines view unreadable: the digest still stands, saying so
             ages = "Machines by age: not read."
+        try:
+            from .subsystem_offer import line as subsystem_line
+            boxes = subsystem_line(project, store)         # at most once a day
+        except Exception:  # noqa: BLE001 - the declared layer or the model unreadable: no line, the digest stands
+            boxes = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
-                                                model=counted["model"], ages=ages)
+                                                model=counted["model"], ages=ages, subsystems=boxes)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

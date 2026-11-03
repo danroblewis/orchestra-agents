@@ -243,6 +243,29 @@ DESIGN_TOOLS: list[ToolDef] = [
              "name": S("The owner's name for it, exactly in their words (tickets in flight)"),
              "drop": B("Take the owner's name off (\"drop the name\"): the generated one is shown again"),
              "quote": QUOTE, "reason": REASON}, ("shown", "quote", "reason")),
+    ToolDef("declare_subsystem", "design",
+            "Draw a box on the Dynamics and Machines maps on the owner's words: a name for a label's value (\"call the "
+            "pr_watch workflow 'release watch'\": value, label if they said it), or parts gathered (\"put the stock "
+            "between write and sail_check, the review → sail flow and bot.sail together as 'the sail line'\": members by "
+            "the name the page shows, with tags, machines by id), or one dropped (\"drop the sail line\": subsystem, "
+            "drop=true). A subsystem is how the maps are read, never a split of the model. The name must be in your "
+            "quote: never one you made up. When the answer has `asked`, ask the owner that one sentence. Without a quote "
+            "it is your proposal: only a label's value, named by the value, and no box until the owner confirms "
+            "(confirm subsystem:<id>).",
+            {"name": S("The owner's name for the subsystem, exactly in their words (release watch)"),
+             "value": S("A label's value the owner named (pr_watch), as the model's partitions group it; label=value also "
+                        "works"),
+             "label": S("The label, only when the owner's words say it (workflow)"),
+             "members": {"type": "array", "description": "The stocks and flows to gather, each as the page shows it",
+                         "items": {"type": "object", "properties": {
+                             "shown": S("The name the page shows the part by (between write and sail_check; review → "
+                                        "sail; held at write · workflow=hotfix), or its key"),
+                             "tags": A("Tags that tell it from a part that reads alike (workflow=hotfix)"),
+                             "part": E(["stock", "flow"], "Only when the owner's words say")}, "required": ["shown"]}},
+             "machines": A("Machines to gather, by id as the Machines page shows it (bot.sail)"),
+             "subsystem": S("An existing subsystem, by its name or id: to rename it, change what it gathers, or drop it"),
+             "drop": B("Take the subsystem off both maps (\"drop the sail line\"): retracted, kept in the history"),
+             "quote": QUOTE, "reason": REASON}, ("reason",)),
     ToolDef("declare_machine", "design",
             "Declare a machine the owner asked for in this turn's message (\"Create a new Universal Machine called Feature "
             "Count Improver\"): no more than it asks for (a loop described in passing asks for none; refused past that). "
@@ -301,8 +324,8 @@ DESIGN_TOOLS: list[ToolDef] = [
             ("machine", "expect", "horizon", "reason")),
     ToolDef("confirm", "design",
             "The owner confirmed (\"confirm it\", quoted, or their click: request). A stock, effect or a pending change is "
-            "declared; a Universal Machine is declared and set running: its spec, role and agent records written to the "
-            "state directory's machines/, its expected effect published.",
+            "declared; a proposed subsystem (subsystem:<id>) gets its box; a Universal Machine is declared and set running: "
+            "its spec, role and agent records written to the state directory's machines/, its expected effect published.",
             {"element": ELEMENT, "change": S("A pending change's id, to confirm only that"), "request": REQUEST, "quote": QUOTE,
              "reason": REASON}, ("element", "reason")),
     ToolDef("discard", "design",

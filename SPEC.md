@@ -943,6 +943,24 @@ two matches answered with one question, `asked`, and nothing declared; `declare_
 its two stocks' keys with the name (a flow to or from outside, or one of two between the same
 stocks, cannot carry one); the owner's quote required and the name in it; again with a new name it
 re-declares the same id, `drop` retracts a declaration it made and refuses one that means more),
+`declare_subsystem` (`design_subsystems.py`, 2026-11-02: the owner's subsystems in words, Orchestra's
+`docs/proposals/subsystems.md` §5 and its SPEC §4.6, §10; a box on the Dynamics and Machines maps,
+how they are read, never a split of the model: it binds no series and changes no equation,
+hypothesis or key): a name for a label's value (`value`, `label` when the owner said it), found
+among the partitions Orchestra derives (`model.subsystems`, read in process through
+`intended_api.partitions`, `orchestra.sd.subsystems`), a value two labels carry asked as one
+question, one another subsystem names renamed; or parts gathered (`members` found by the name the
+page shows with their tags, as `name_part` finds them, `machines` by an id the model, the declared
+layer or the bus knows; two matches one question, `asked`; a part already in another subsystem
+refused, naming it: one subsystem at a time); or one dropped (`subsystem`, `drop`: `retract`).
+The owner's quote required and the name in it, sent with `author: owner`, `source: supervisor`.
+Unquoted, it is the Supervisor's proposal: only a label's value, named by the value, which
+Orchestra keeps `proposed` and draws no box for until the owner confirms (`confirm
+subsystem:<id>`, quoted). `read_design` lists the subsystems and the partitions. The digest of
+`read_events` with `since` carries one Subsystems line at most once a day (`subsystem_offer.py`,
+the time kept in the Supervisor's state, `subsystem_line_at`): its proposals waiting, else the
+model's default partition when it has two groups, keeps more flows inside a group than cross, and
+none of its values is named, with its crossing count, said and never judged),
 `declare_machine` (the envelope Orchestra checks, engagement as flat `mode`, `at`, `tz`, `missed`,
 and the opaque `spec`, whose fields are given flat beside the envelope (a nested `spec` is taken for
 one release): Universal `invariants`, `steps`, `uses`, said in no AI terms;
@@ -1078,7 +1096,8 @@ says the machine's age (`design_machines.age_line`). Two tools carry it:
   demos') go through Orchestra's `Events.announce`, so each carries the launcher's process; the counts, the share of programs in
   `.orchestra/`, and those due to graduate (a program in `.orchestra/` first heard a week ago or
   more in the events read). Whether an agent is a program waiting to be written is "not measured".
-  Its line is the digest's second-to-last paragraph, before the model line (`since_digest`).
+  Its line comes before the Subsystems line (at most once a day, `subsystem_offer.py`) and the model
+  line, which is last (`since_digest`).
 - `graduate_machine` (group `design`, `machine_graduate.py`, `graduate_wiring.py`): a dry run by
   default, kept in the Supervisor's state (`graduations`); then, on the owner's quoted yes and only
   for the plan that dry run showed, the directory moves (`git mv`, or a plain move when git does

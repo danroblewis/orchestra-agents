@@ -198,6 +198,14 @@ a file. Follow it top to bottom:
    `name_part`, quoted: found by the name the page shows (with its tags), never guessed (two that
    match are one question to the owner), the name only theirs; the same call renames it, `drop`
    takes it off. The page then shows their name, the generated one beneath it.
+   When the owner names a **subsystem** ("call the pr_watch workflow 'release watch'", "put the
+   stock between write and sail_check, the review → sail flow and bot.sail together as 'the sail
+   line'", "drop the sail line"), `declare_subsystem`, quoted: a box on the Dynamics and Machines
+   maps, how the maps are read, never a split of the model. A label's value is found among the
+   model's partitions; gathered parts by the names the page shows, machines by id; a part in one
+   subsystem at a time (one already in another is refused, saying which); two that match are one
+   question. Unquoted, it is your proposal of a label's value under its own name: no box until the
+   owner confirms, said in the digest's one Subsystems line at most once a day.
    **Bringing in an outside system** (Jira, Slack, PagerDuty, a metrics store) as series, events or
    a declared external machine follows Orchestra's integration guide, `docs/INTEGRATING.md`
    (<https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md>): choose its strategy

@@ -230,6 +230,18 @@ def current_model(project: Project):
     return m
 
 
+def partitions(model) -> dict:
+    """The model's partitions by the labels its series carry, the default first, exactly as Orchestra
+    serves them in ``/api/dynamics/model``'s ``model.subsystems`` before the declared ones are added
+    (``orchestra.sd.subsystems.subsystems``; not yet in its PLUGINS.md §11 list): ``{"default",
+    "partitions": [{"label", "groups": [{"value", "stocks", "flows", "machines"}], "crossing",
+    "joined", "crossed", ...}]}``. Empty without a model."""
+    if model is None:
+        return {"default": None, "partitions": []}
+    from orchestra.sd.subsystems import subsystems
+    return subsystems(model)
+
+
 def saved_models(project: Project, n: int) -> list:
     """The last ``n`` saved versions, oldest first."""
     models = _models(project)

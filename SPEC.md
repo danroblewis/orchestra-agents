@@ -1356,7 +1356,12 @@ says the machine's age (`design_machines.age_line`). Two tools carry it:
   `ORCHESTRA_PROCESS`): a name the project's `[[machines]]` holds is that entry, in the age its
   command says (graduated outside `.orchestra/`); a `<plugin>.<name>` is a plugin's process and never
   a machine's age (the provider is never the machine, Orchestra's rule 2), so it joins no entry and
-  the machine is `unknown` unless the project holds its directory. An announcement without
+  the machine is `unknown` unless the project holds its directory, which is in the age it says
+  (`by_dir`, 2026-11-03, the software factory's graduated workers): a `machine.json` of kind
+  `universal`/`agent` or an agent spec (`prompt`, `tools`) is an agent; a `spec.command` under
+  `.orchestra/` a program there; a command into the tree (`npm run`, `cargo run`, `python -m`, a path
+  outside `.orchestra/`) graduated, the directory holding only the declaration; none of these and no
+  program file, unknown. Every row says why (`reason`). An announcement without
   `process` falls back to the log it announced (the launcher's `<state>/logs/machines/<entry>.log`),
   its id, or a command naming `.orchestra/machines/<id>/`, and the row says so (`by: fallback`, the
   answer's `fell_back` and its note); a program with none of these and no directory is `unknown`.

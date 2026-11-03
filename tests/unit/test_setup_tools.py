@@ -161,15 +161,19 @@ def test_collectors_and_scrapes(project, store):
 
 
 def test_a_change_of_what_is_measured_only_begins_no_era(project, store):
+    """Orchestra's C3 decides by the envelope's subject: what is measured and a setting (the
+    capacity included) begin no era; a machine's change does."""
     from orchestra.sd.eras import DEFAULT_FROM, begins
     call(project, store, "set_collector", name="disk", command="machines/disk.sh", every="60s", reason="the owner wants disk usage")
     call(project, store, "set_setting", key="sources", value='[{"name": "shop", "url": "http://127.0.0.1:9"}]', target="repo", reason="the shop's store")
     call(project, store, "set_capacity_limit", workers=2, reason="the owner wants two at once")
+    call(project, store, "set_machine", name="feed", command="python feed.py", reason="the feed must keep running")
     evs = [e for e in store.events.read(0, 1000)[0] if e["type"].endswith(".changed")]
-    assert [(e["type"], e["section"]) for e in evs] == [("instruments.changed", "collect"), ("instruments.changed", "sources"),
-                                                        ("config.changed", "tasks")]
-    raw = {k: e[k] for e in evs for k in ("type", "source")}
-    assert [begins({"type": e["type"], "source": e["source"]}, DEFAULT_FROM) for e in evs] == [False, False, True], raw
+    assert [(e["type"], e["section"], e["subject"]) for e in evs] == [
+        ("instruments.changed", "collect", "collector:disk"), ("instruments.changed", "sources", "source:shop"),
+        ("config.changed", "tasks", "setting:tasks"), ("config.changed", "machines", "machine:feed")]
+    envelope = [{k: e[k] for k in ("id", "type", "source", "subject")} for e in evs]
+    assert [begins(e, DEFAULT_FROM) for e in envelope] == [False, False, False, True], envelope
 
 
 def test_a_source_orchestra_would_refuse_is_never_committed(project, store):

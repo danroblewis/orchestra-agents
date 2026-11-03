@@ -12,7 +12,9 @@ validated writer, its loader and its record's read API, the one exception to AGE
   ``.orchestra/`` only with the owner's quoted words, and then it is **not committed** (at work the
   base branch is protected, and the plugin's writer leaves landing it to a pull request): the answer
   says so and that it is live, and the Supervisor hands it to the Coordinator to land through a ticket
-  (never asking the owner to commit, discard or land it).
+  (never asking the owner to commit, discard or land it). A re-declaration that drops a relation the
+  definition in place holds (``of: children``, ``depends``) is refused without the owner's words about
+  the link (``relation_guard``, bootstrap run 5's step 8).
   An ``every`` start's ``tz`` given as the owner answered the zone question ("this machine's
   clock", "local", "here") is written as the host's zone's IANA name, and the answer's ``zone`` says so.
 - ``list_workflows``, ``list_items`` and ``explain_item`` only read. ``list_items`` is the Items
@@ -29,7 +31,7 @@ from types import SimpleNamespace
 
 from orchestra.config import ConfigError
 
-from . import design
+from . import design, relation_guard
 from .clock import resolve_tz
 from .config import Project
 from .store import AgentStore, StoreError
@@ -102,6 +104,11 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
     project.reload_config()
     o = project.orchestra
     refusing = list(p.problems(o, definition))
+    if not refusing:
+        try:        # a relation the definition in place holds is the owner's goal: never dropped on our own judgement
+            relation_guard.check(relation_guard.current(p, o, definition.get("name")), definition, prov, design.OWNER)
+        except ValueError as e:
+            raise StoreError(str(e)) from None
     before = _texts(p, o) if not refusing else None
     if not refusing:
         try:

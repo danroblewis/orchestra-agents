@@ -48,9 +48,9 @@ def _catalogue(project: Project, a: dict):
     url = (a.get("url") or "").strip()
     if url:
         name = trial_name(url)
-        bound = a.get("bound")
+        bound = bounds.trial_bound(for_project(project.orchestra).sources, url, a.get("bound"))   # a declared url's match holds
         entry = {"name": name, "url": url, **({"auth": a["auth"]} if a.get("auth") else {}),
-                 **({"match": [bound] if isinstance(bound, str) else list(bound)} if bound else {})}
+                 **({"match": bound} if bound else {})}
         specs = load({"sources": [entry]}, project.repo_root)
         if specs.refused:
             raise StoreError("that source cannot be read: " + "; ".join(specs.refused.values()))
@@ -116,7 +116,9 @@ def source_schema(project: Project, a: dict) -> dict:
             wanted = level_names(names)
             got = (listing(src, [with_names(b, wanted) for b in bound], start, now, concurrency=spec.concurrency,
                            limit=limit) if wanted else None)
-        meta = src.metadata(sorted(got.names) if detail else names)
+        # name by name, levels first, at most METADATA_NAMES: never the whole store's metadata (run 5)
+        listed = sorted(got.names) if detail else names
+        meta = bounds.metadata(src, [*level_names(listed), *listed])
     except TooManyNames as e:
         raise StoreError(f"the store is large: {e}. Give match, a selector per family you need (e.g. "
                          "{__name__=~\"rabbitmq_.*\"}), and look at each") from e

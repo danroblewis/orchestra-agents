@@ -77,6 +77,13 @@ already wrote, `git log`. Never more (the fixed core of your prompt; bootstrap r
 - **Never scaffold, declare or configure a system the owner has not named in words**
   (`integrate_system` refuses it): propose it in one line and wait for their word.
 - **Never list or offer credential files you find.** Where the token is, the owner says.
+- **Read another store only within the owner's scope** (bootstrap run 5): before the owner has
+  named it (a namespace, a cap), read nothing of a shared store; then declare it as the source's
+  `match` and `max_series`. Every request your tools send carries that match: a store given by
+  `url` that a `[[sources]]` entry declares is read within that entry's match whatever `bound` you
+  pass; metadata is asked name by name, never for the whole store; names are listed only with a
+  selector and the cap. Say only the bound a tool's answer shows (its `bound`): never "the reads
+  stayed within the namespace" unless it says so.
 
 On Claude Code your session's settings hold part of this (reads outside the project and the state
 directory, `cd ~`, `find /`, network probes, the usual build and test tools: SPEC §10); a refusal
@@ -514,6 +521,13 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    `person.<system>.<account>`) are on the bus yet; if not, after its first poll `read_design`
    shows the machine running. Tell the owner it is heard, or what its log says.
 
+**Removing or changing a collector** (a duplicate poller, a superseded one): `remove_entry` on its
+`[[machines]]` entry and on its `[[collect]]` entry (or `set_machine` to change its command). Both
+are announced as `collector:<name>`, what is measured, never `machine:<name>`: a kit's poller (its
+`poller.toml`) or a program with a `[[collect]]` twin is an instrument, and its change begins no era
+of the model (bootstrap run 5: a poller's removal said `machine:` and cut discovery's fit from a
+week to 58 minutes). Only a program that does work is a machine.
+
 **What the human decides, and nothing else:** whether the system may be read (their quoted yes,
 and the data class), where its credentials are (a variable's name or a file's path; they put the
 token there themselves), whether the repository must stay clean (`root: state`), and each write to
@@ -569,6 +583,14 @@ not installed: tell the owner, and write nothing.
   machine that knows it). An item waits in a step's **piles** (`<step>.waiting`, `<step>.held`),
   each wait with its reason (no offer taken, a resource, a dependency, awaiting an outside event,
   a person or the owner's approval).
+- **A relation the data lacks** (bootstrap run 5, step 8): a step that waits on an item's children
+  (`of: children`: a ticket's pull requests) moves only once something relates them, an
+  `item.related {kind: parent}` from a machine that knows the link. When items wait there because
+  nothing does, the data lacks the link, not the definition: keep the definition (the waiting is
+  the visible gap) and ask the owner in one sentence for, or propose, the small program that makes
+  it: a linker that reads the key from each pull request's branch or title and publishes the
+  relation. `declare_workflow` refuses a re-declaration that drops a relation the definition in
+  place holds, unless the owner's quoted words are about the link ("follow Jira's status only").
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
   so (quote them). The repository's is not committed by you: [[tasking]]hand it to the Coordinator to land

@@ -27,7 +27,7 @@ from orchestra.overlay import OVERLAY
 from .config import Project
 from .config_change import change
 from .design import MACHINE
-from .setup_tools import CHANGED, INSTRUMENT_SECTIONS, INSTRUMENTS_CHANGED
+from .setup_tools import INSTRUMENTS_CHANGED
 from .store import AgentStore
 
 COLLECT_TIMEOUT = "60s"
@@ -78,10 +78,11 @@ def write(project: Project, store: AgentStore, steps: list[dict], reason: str) -
         if not done["written"]:           # nothing changed: nothing announced, so it begins no era
             lines.append(f"{done['changed']}: not written or announced")
             continue
-        store.events.emit(INSTRUMENTS_CHANGED if section in INSTRUMENT_SECTIONS else CHANGED, section=section,
+        # a poller, a collector or a source measures: never machine:, so it begins no era (C3); its [[machines]]
+        # entry too, as setup_tools.measured says of a poller's (bootstrap run 5)
+        store.events.emit(INSTRUMENTS_CHANGED, section=section,
                           change=done["announce"], reason=reason, commit=None, target=OVERLAY,
                           applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE,
-                          # a poller, a collector or a source measures: never machine:, so it begins no era (C3)
                           about=f"{'source' if section == 'sources' else 'collector'}:{entry['name']}",
                           **{"for": f"the instrument {entry['name']}"})
         lines.append(done["changed"])

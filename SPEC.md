@@ -956,7 +956,14 @@ ANDed with it, a bound of several selectors read as their union (`or`); no listi
 than `max_series` series; `preview_query` refuses a query on a bounded source that does not name
 the bound's matchers; and a store with no bound (no `match`, or the match-everything default) is
 never asked for every metric name: `source_schema` without `match` and `find_balance`'s search
-refuse and say why (`find_balance` with given `candidates` still reads them).
+refuse and say why (`find_balance` with given `candidates` still reads them). **Amended
+2026-11-03** (bootstrap run 5: three bare `/api/v1/metadata` calls listed every metric name of the
+store, and 27 queries on a store given by `url` with a `job` bound named no namespace): metadata is
+asked name by name (each request a `metric`, `limit_per_metric=1`), for at most
+`source_bounds.METADATA_NAMES` names a call, the rest typed by their names, because Orchestra's
+`metadata` asks for the whole store's when given more than a few; and a store given by `url` that a
+`[[sources]]` entry declares is read within that entry's `match`, the given `bound` ANDed into it
+(`trial_bound`). A label-names or metadata request is never sent without a selector or a metric.
 
 **Seeing** (tool group `observe`; any role may be granted it; every list in these answers is its
 count and its first `answers.LISTED`, a log line at most 300 characters): `check_setup` (who fills the roles,
@@ -1042,7 +1049,11 @@ prompt (`prompts/operator.md`) says which goes where. Each tool:
   workflow declared or changed (`declare_workflow`, only when the file's text changed), and
   `override:<name>` (`write_override`'s `system.changed`); a change that cannot alter the
   system's behaviour is `setting:<key>` (`set_setting`, the roles, the work mode, the gate, the
-  capacity), `collector:<name>` (`[[collect]]`, `[[scrape]]`, an integration's poller),
+  capacity), `collector:<name>` (`[[collect]]`, `[[scrape]]`, an integration's poller, and a
+  `[[machines]]` entry that runs an instrument, added, changed or removed: a kit's poller, its
+  directory holding a `poller.toml`, or a program with a `[[collect]]` twin, `setup_tools.measures`;
+  since 2026-11-03, bootstrap run 5, whose poller removal said `machine:` and began its only era,
+  cutting discovery's fit from a week to 58 minutes; announced as `instruments.changed`),
   `source:<name>` (`[[sources]]`) or `instrument:<name>` (the design tools' instruments), and
   begins no era;
 - **never makes eras faster than discovery can fit a stock** (`era_guard.py`, since 2026-11-03:
@@ -1438,7 +1449,15 @@ refuses the call, every problem said, nothing written; otherwise it is written t
 directory (`~/.orchestrator/<key>/workflows/<name>/workflow.json`, the default) or, only with the
 owner's quoted words, to the repository's `.orchestra/workflows/<name>/workflow.json`, **left
 uncommitted**: the answer says so and the Supervisor hands it to the Coordinator to land through a
-ticket and a pull request (rule 2). The answer carries the path, the plugin's notes (what the
+ticket and a pull request (rule 2). **A relation is never dropped on the Supervisor's judgement**
+(`relation_guard.py`, since 2026-11-03, bootstrap run 5's step 8: tickets waited at `open_pr`
+because nothing related a pull request to its ticket, and the Supervisor re-declared the workflow to
+follow Jira's status only, with the false reason "each carrying the ticket key"): a
+re-declaration that drops a relation the definition in place holds (an `of: children` or `of:
+parent` wait, a `depends`) is refused, nothing written, unless the owner's quoted words are about
+the link (a general go-ahead is not); the refusal says to keep the gap visible and to ask for or
+propose the linker (a small program reading the key from the branch or title and publishing
+`item.related {kind: parent}`, orchestra-workflows' SPEC §2.2). The answer carries the path, the plugin's notes (what the
 project still lacks for it, shadowing) and where it shows (the plugin's Workflows, Items and Piles
 pages); the ledger keeps the line. `list_workflows` reads the loaded definitions back (where each
 is defined, its planner, starts, each step's who, needs and outcomes, the loader's problems and

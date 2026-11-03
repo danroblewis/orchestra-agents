@@ -147,6 +147,14 @@ enabled = true            # false: no host, no agents
   where it stopped, when a call was refused), and you are woken once with the reason (tell the
   human, and offer `bash` to make it permanent).
 
+- **`file`**: no Orchestra tools at all, no MCP server and no command: each session writes one
+  file at the end of its turn (`$ORCHESTRA_OUTPUT`, `name=value` lines as GitHub Actions'
+  `$GITHUB_OUTPUT`), and the host acts on it after the turn: `events`, `prediction`, `outcome` with
+  `summary`, and a Workflows item's `fields`. For a company whose policy allows an agent neither an
+  MCP server nor a command of Orchestra's. The agents can then read nothing of Orchestra while they
+  work (no reads, no tickets, no setup): fit for workers and machines on offers, not for you.
+  `docs/policy-modes.md` compares the three for a policy reviewer.
+
 The sessions start again on the new setting after their turn. Pi always calls the tools through
 its extension and the dummy harness in-process: the setting changes nothing there; Codex takes
 `bash`, and `auto` is the MCP server on Codex.

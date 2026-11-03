@@ -27,7 +27,7 @@ from .clock import parse_interval
 __all__ = ["Config", "ConfigError", "Project", "load_project"]
 
 
-TOOLS_VIA = ("mcp", "bash", "auto")   # harness/bash_tools.py MODES
+TOOLS_VIA = ("mcp", "bash", "auto", "file")   # harness/bash_tools.py MODES, harness/file_output.py
 DEFAULT_MODEL = "haiku"     # the model chosen when no harness is set and Claude Code is found: the cheapest that does the work
 
 
@@ -60,7 +60,7 @@ class Config:
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
-    tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto (harness/bash_tools.py)
+    tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto | file (harness/bash_tools.py, file_output.py)
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
     allow_push: list[str] = field(default_factory=list)   # roles whose sessions may push and write pull requests (push_guard.py)
     coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
@@ -95,7 +95,8 @@ class Config:
         via = a.get("tools_via", "auto")
         if via not in TOOLS_VIA:
             raise ConfigError(f"[agents] tools_via is {via!r}; it is one of {', '.join(TOOLS_VIA)}: mcp, Orchestra's MCP server; "
-                              "bash, a command the session runs from its shell; auto, the MCP server until it is found blocked")
+                              "bash, a command the session runs from its shell; auto, the MCP server until it is found blocked; "
+                              "file, no tools: a file the session writes, acted on after its turn")
         allow = a.get("allow_push", [])
         if not isinstance(allow, list) or not all(isinstance(r, str) and r for r in allow):
             raise ConfigError(f"[agents] allow_push is {allow!r}; it is a list of role names, like [\"worker\"] "

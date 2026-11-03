@@ -8,7 +8,8 @@ through the MCP server in ``mcp.py``, declared with a ``-c mcp_servers.orchestra
 override, and the role prompt rides along as ``developer_instructions``. With ``[agents] tools_via
 = "bash"`` there is no MCP server: the session runs ``orchestra agents tool`` from its shell
 (``bash_tools.py``), with the session's variables set in the shell's environment (Codex leaves out
-any variable whose name holds TOKEN by default). ``auto`` is the MCP server here: Codex says nothing
+any variable whose name holds TOKEN by default); with ``file``, no MCP server and no tools
+(``file_output.py``). ``auto`` is the MCP server here: Codex says nothing
 before the model runs about a server it could not start. The transcript is
 Codex's own rollout file under ``$CODEX_HOME/sessions/``."""
 
@@ -148,8 +149,9 @@ class CodexSession(AgentSession):
         if self.thread_id is None and self._meta_path.exists():
             self.open()
         bash = self.spec.tools_via == "bash"
+        shell = bash or self.spec.tools_via == "file"       # file: no MCP server, no tools (file_output.py)
         args = [self.binary, "exec", "--json", "--skip-git-repo-check", "--sandbox", "danger-full-access",
-                "-C", str(self.spec.cwd), "-c", self._shell_env() if bash else self._mcp_override()]
+                "-C", str(self.spec.cwd), "-c", self._shell_env() if shell else self._mcp_override()]
         system = self.spec.system_prompt or ""
         if bash:
             system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self.spec.env.get('PATH') or os.environ.get('PATH'))}"

@@ -3,7 +3,8 @@
 Pi stays resident between turns (the process is the session), takes one JSON command
 per line on stdin and streams events on stdout; ``agent_settled`` ends a turn. Tools
 come from the Orchestra extension (``pi_extension.ts``), which registers the tool
-definitions in ``tools.py`` and runs each call through ``<this interpreter> -m orchestra agents tool`` (ORCHESTRA_PYTHON)."""
+definitions in ``tools.py`` and runs each call through ``<this interpreter> -m orchestra agents tool`` (ORCHESTRA_PYTHON); with ``[agents]
+tools_via = "file"`` the extension is not loaded (``file_output.py``)."""
 
 from __future__ import annotations
 
@@ -49,8 +50,9 @@ class PiSession(AgentSession):
     def __init__(self, spec: SessionSpec, pi_binary: str | None = None):
         self.spec = spec
         args = [resolve_binary(pi_binary or os.environ.get("PI_BINARY", "pi")), "--mode", "rpc",
-                "--session-dir", str(spec.session_dir), "--session-id", spec.session_id,
-                "--extension", str(EXTENSION_PATH)]
+                "--session-dir", str(spec.session_dir), "--session-id", spec.session_id]
+        if spec.tools_via != "file":              # file: no Orchestra tools at all (file_output.py)
+            args += ["--extension", str(EXTENSION_PATH)]
         if spec.provider:
             args += ["--provider", spec.provider]
         if spec.model:

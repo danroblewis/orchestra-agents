@@ -48,7 +48,9 @@ class Caller:
             from ..events import Events
             from ..store import AgentStore
             self._project = load_project(self.env.get("ORCHESTRA_REPO") or None)
-            self._store = AgentStore(self._project, Events.for_project(self._project))
+            # as the session: its own environment's source (a file-mode session's file is acted on in the host)
+            source = self.env.get("ORCHESTRA_SOURCE") or self.env.get("ORCHESTRA_ROLE") or None
+            self._store = AgentStore(self._project, Events.for_project(self._project, source=source))
         return self._project, self._store
 
     def answer(self, name: str, args: dict | None) -> str:

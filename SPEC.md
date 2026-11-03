@@ -278,8 +278,9 @@ role) wakes the Coordinator (`attention.needed:coordinator` in its `wake_on`) or
 (`attention.needed:supervisor`), matched on `to` as the task system's `task.attention_needed` is;
 the wake-up (`floor.wake_reason`) names the item, its workflow and step, the guard and the reason.
 
-Not yet: passing an item on directly (the contract's pass-on, `offer.made` with `ends`) and
-`facts` on a finish; a worker on the floor finishes `ready` and the workflow's next step is the
+Not yet: passing an item on directly (the contract's pass-on, `offer.made` with `ends`), and
+`facts` on a finish other than a file-mode session's `fields` (section 6, `tools_via = "file"`: the
+finish carries them as `facts: {set: ...}`); a worker on the floor finishes `ready` and the workflow's next step is the
 floor's to offer.
 
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
@@ -474,7 +475,8 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
   change in Claude Code's `total_cost_usd`, which is a running total over a resumed session (the last
   total kept in the session's metadata; a lower one is a new session's). `CLAUDE_BINARY` names the binary to run.
 - **Codex** (`codex.py`): `codex exec --json` per turn, resumed by thread id, the rollout under
-  `$CODEX_HOME`; tools through the same MCP server, or from the shell with `tools_via = "bash"`.
+  `$CODEX_HOME`; tools through the same MCP server, or from the shell with `tools_via = "bash"`
+  (none with `file`, below).
 
 **How tools reach the model** (`[agents] tools_via`). `mcp`: Orchestra's MCP server, as above.
 `bash`: no MCP server (Claude Code keeps `--strict-mcp-config`, with an empty config, so no other
@@ -500,7 +502,34 @@ and the MCP server call through one path (`harness/caller.py`: the schema check,
 its token, `tooling.handle`), and the token reaches the command only through the session's
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
-command, and the dummy harness in-process; the setting changes neither.
+command, and the dummy harness in-process; `mcp`, `bash` and `auto` change neither.
+
+**`file`: no tools at all** (`harness/file_output.py`, since 2026-11-03, T34; the owner: "having AI
+agents produce a JSON file at the end of their runs instead of Orchestra specific tool calls ...
+whichever would satisfy my company's policies"; a reviewer's page: `docs/policy-modes.md`). The
+session is started with no tool groups, no MCP server (Claude Code's `--strict-mcp-config` with an
+empty config; Codex without the server's override; Pi without its extension) and without its token,
+so nothing it runs can reach Orchestra while it runs (a dummy script's `tool` step is refused). The
+harness names one file, `<sessions>/outputs/<session>.out`, in `ORCHESTRA_OUTPUT` and in the system
+prompt, whose section (`file_output.prompt`) replaces the tools' and `NO_SUBSTITUTE` and names only
+what the session's groups would have let it call; a session resumed from a transcript begun in another
+mode is told in its first message, once. The file is GitHub Actions' `$GITHUB_OUTPUT` format, the
+Workflows program host's (its SPEC §5.3; `file_output.read` is a copy of `programs/step.outputs`,
+checked against it when the installed plugin has it): `name=value` lines and `name<<DELIM` blocks, a
+value that parses as JSON is that value, a later line of a name wins. After the turn has ended (a turn
+that timed out or failed is not acted on, and the record says so) the wrapper (`FileSession`, which
+holds the token) acts on the reserved names in the order of their lines, each through
+`caller.Caller` as the session, so with exactly the tools' checks: `events`, a JSON list of
+`{type, subject?, data?}` (data a sentence, or `{note}`), each published by `emit_event` (its
+envelope: as the machine's instance, subject and note in the data); `prediction`, one `predict_fix`
+(`orchestra.prediction.made`); `outcome` with `summary`, the session's exit tool (`report_outcome`,
+or `report_ticket`'s state and `report_review`'s verdict, `ready`/`blocked`/`approved`/`rejected`
+taken for theirs); `fields`, a JSON object set with a floor offer's finish (`store.amend_report`;
+`floor_runner` finishes with `facts: {set: fields}`). Any other name is an output. A line of neither
+shape, an invalid event, a refused call: each is refused with its reason and the rest still go. What
+was done, what was refused and the outputs are the session record's `output`. The file is removed
+before each turn and once acted on. A turn that writes no file ends as one that ends without its exit
+tool does (one nudge, then the BLOCKED rule).
 **Every answer is bounded** (`answers.py`, since 2026-11-02, T26): `Caller.answer` gives no harness an
 answer, or a refusal, over `answers.BOUND` (24,000 characters, set there alone), under the size at
 which Claude Code spools an output to a file. Tools that list give a count and their first
@@ -641,7 +670,7 @@ reads and reaches no agent's tool.
 host's log say which was chosen and how to change it: `config.default_harness`), `enabled` (false:
 no host),
 `dummy_script` (the dummy harness's script, relative to the repository; section 6), `model`,
-`provider`, `thinking`, `tools_via` (`mcp`, `bash` or `auto`, the default: section 6) (`model` is the default: a machine spec's own `model` wins for its agent
+`provider`, `thinking`, `tools_via` (`mcp`, `bash`, `file` or `auto`, the default: section 6) (`model` is the default: a machine spec's own `model` wins for its agent
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24

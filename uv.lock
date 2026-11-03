@@ -420,7 +420,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#7d6238b4ff14be52342ed163b312c757adae0d36" }
+source = { git = "https://github.com/danroblewis/orchestra?rev=main#d6510efce05e2b2f374597952c9609944c531875" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },
@@ -506,7 +506,7 @@ dependencies = [
 [[package]]
 name = "orchestra-workflows"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#a3eec4ba1d53a478ec758bacfc18e21423ea1e6c" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#f402d509fc3d751590bc797d5e3d4d0d6907673c" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },

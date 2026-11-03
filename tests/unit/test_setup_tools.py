@@ -64,12 +64,16 @@ def call(project, store, tool, role="supervisor", **args):
 
 
 def toml(project) -> dict:
-    return tomllib.loads((project.repo_root / "orchestra.toml").read_text())
+    """orchestra.toml as the Supervisor's branch holds it (the checkout's while it has made no change)."""
+    p = subprocess.run(["git", "show", "orchestra/supervisor:orchestra.toml"], cwd=project.repo_root, capture_output=True,
+                       text=True, check=False)
+    return tomllib.loads(p.stdout if p.returncode == 0 else (project.repo_root / "orchestra.toml").read_text())
 
 
 def last_commit(project) -> tuple[str, list[str]]:
-    msg = git(project.repo_root, "log", "-1", "--format=%B")
-    files = git(project.repo_root, "show", "--name-only", "--format=", "HEAD").split()
+    """The Supervisor's latest commit: on its branch, never on the base (side_branch.py)."""
+    msg = git(project.repo_root, "log", "-1", "--format=%B", "orchestra/supervisor")
+    files = git(project.repo_root, "show", "--name-only", "--format=", "orchestra/supervisor").split()
     return msg, files
 
 
@@ -89,7 +93,10 @@ def test_set_agent_roles_commits_the_file_alone_with_the_reason_and_announces_it
     assert len(text.splitlines()) == len(before.splitlines())                     # only the one line changed
     msg, files = last_commit(project)
     assert files == ["orchestra.toml"] and WHY in msg and msg.startswith("Supervisor: the AI agents fill worker, reviewer")
-    assert git(project.repo_root, "status", "--porcelain").strip() == "?? notes.txt"
+    assert git(project.repo_root, "status", "--porcelain").strip() == "?? notes.txt"     # the checkout untouched
+    assert project.orchestra.config.raw["agents"]["serves"] == ["worker", "reviewer"]    # live through the overlay
+    assert git(project.repo_root, "log", "-1", "--format=%s", "main").strip() == "init"                           # never on the base
+    assert "pull request is pending" in out["said"] and "[scm]" in out["pull_request"]["pending"]
     assert call(project, store, "check_setup")["roles"][0].startswith("The AI agents here fill: worker, reviewer")   # read afresh
     [ev] = changed_events(store)
     assert ev["source"] == "supervisor" and ev["section"] == "agents" and ev["reason"] == WHY
@@ -219,27 +226,29 @@ def test_a_secret_passed_through_the_environment_or_a_file_is_accepted(project, 
     assert {m["name"] for m in toml(project)["machines"]} >= {"feed", "clone"}
 
 
-def test_a_change_that_cannot_be_its_own_commit_on_the_base_branch_is_refused(project, store):
+def test_the_checkout_is_never_touched_whatever_it_is_on(project, store):
     with pytest.raises(StoreError, match="reason"):
         call(project, store, "set_work_mode", work="code", reason="why")
-    toml_path = project.repo_root / "orchestra.toml"
-    toml_path.write_text(toml_path.read_text() + "\n# someone typing\n")
-    with pytest.raises(StoreError, match="uncommitted change"):
-        call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
-    git(project.repo_root, "checkout", "-q", "orchestra.toml")
-    git(project.repo_root, "checkout", "-q", "-b", "feature")
-    with pytest.raises(StoreError, match="checked out"):
-        call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
-    git(project.repo_root, "checkout", "-q", "main")
     with pytest.raises(StoreError, match="refused set_work_mode: it needs the 'setup' tool group"):
         call(project, store, "set_work_mode", role="coordinator", work="code", reason="a collector must land in the repository")
     assert toml(project)["project"]["work"] == "tasks"
+    toml_path = project.repo_root / "orchestra.toml"
+    git(project.repo_root, "checkout", "-q", "-b", "feature")
+    toml_path.write_text(toml_path.read_text() + "\n# someone typing\n")
+    typed = toml_path.read_text()
+    out = call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")
+    assert out["commit"] and toml(project)["project"]["work"] == "code"            # on the branch, from the base
+    assert "# someone typing" not in git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml")
+    assert toml_path.read_text() == typed and git(project.repo_root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feature"
+    assert project.orchestra.config.raw["project"]["work"] == "code"               # live through the overlay
 
 
-def test_a_failed_commit_puts_the_file_back(project, store):
-    hook = project.repo_root / ".git" / "hooks" / "pre-commit"
-    hook.write_text("#!/bin/sh\necho 'refused by hook' >&2\nexit 1\n")
-    hook.chmod(0o755)
+def test_a_failed_commit_puts_the_file_back(project, store, monkeypatch):
+    from orchestra_agents import side_branch
+
+    def refused(*a, **k):
+        raise side_branch.SideBranchError("refused by hook")
+    monkeypatch.setattr(side_branch, "commit", refused)
     before = (project.repo_root / "orchestra.toml").read_text()
     with pytest.raises(StoreError, match="refused by hook"):
         call(project, store, "set_work_mode", work="code", reason="a collector must land in the repository")

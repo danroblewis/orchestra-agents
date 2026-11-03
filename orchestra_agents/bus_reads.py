@@ -163,9 +163,14 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             boxes = subsystem_line(project, store)         # at most once a day
         except Exception:  # noqa: BLE001 - the declared layer or the model unreadable: no line, the digest stands
             boxes = None
+        from . import supervisor_pr
+        try:
+            own_pr = supervisor_pr.digest_line(project, store)
+        except Exception:  # noqa: BLE001 - git unreadable: the digest still stands, without the line
+            own_pr = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
-                                                model=counted["model"], ages=ages, subsystems=boxes)
+                                                model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr)
     return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
             "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
             "events": shown, "shown": len(shown),

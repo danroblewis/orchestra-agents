@@ -92,7 +92,7 @@ def test_a_trial_round_says_what_would_be_stored_and_what_is_wrong(project, stor
 def test_a_one_liner_is_declared_as_configuration_and_read_back_with_its_points(project, store):
     out = call(project, store, "set_collector", name="todos", command=TODOS, shell=True, every="60s", timeout="20s", reason=WHY)
     assert out["commit"] and "read_instrument todos" in out["applies"]
-    [entry] = tomllib.loads((project.repo_root / "orchestra.toml").read_text())["collect"]
+    [entry] = tomllib.loads(git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml"))["collect"]
     assert entry["command"][:2] == ["sh", "-c"] and "git grep" in entry["command"][2] and entry["every"] == "60s"
 
     seen = call(project, store, "read_instrument", name="todos")
@@ -172,7 +172,7 @@ def test_a_token_in_a_file_is_declared_by_its_path_and_never_shown(project, stor
     assert "present" in seen and "tok-9f8e7d6c5b4a" not in seen
     entry = json.dumps([{"name": "shop", "url": remote.url, "auth": auth, "match": ['{__name__="queue_depth"}']}])
     assert call(project, store, "set_setting", key="sources", value=entry, target="repo", reason="The shop's queue.")["commit"]
-    toml = (project.repo_root / "orchestra.toml").read_text()
+    toml = git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml")
     assert str(token) in toml and "tok-9f8e7d6c5b4a" not in toml
     assert "tok-9f8e7d6c5b4a" not in json.dumps(call(project, store, "read_config"))
 
@@ -193,8 +193,8 @@ def test_an_orchestra_toml_git_does_not_track_yet_is_committed_with_the_first_ch
     git(project.repo_root, "rm", "-q", "--cached", "orchestra.toml")
     git(project.repo_root, "commit", "-qm", "orchestra.toml untracked, as orchestra init leaves it")
     out = call(project, store, "set_collector", name="todos", command=TODOS, shell=True, reason=WHY)
-    assert out["commit"] and git(project.repo_root, "ls-files", "orchestra.toml").strip() == "orchestra.toml"
-    assert not git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml")
+    assert out["commit"] and "orchestra.toml" in git(project.repo_root, "ls-tree", "--name-only", out["commit"])
+    assert git(project.repo_root, "status", "--porcelain", "--", "orchestra.toml").startswith("??")   # the branch adds it; the base never moves
 
 
 def test_how_late_a_store_writes_is_measured_from_its_newest_samples():

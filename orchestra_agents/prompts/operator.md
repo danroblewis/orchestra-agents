@@ -285,7 +285,10 @@ Each setup tool takes a `target`, the file the change goes to:
 - `repo` (the default): the repository's `orchestra.toml`, shared with everyone who works on it.
   The project's own settings go here: the kind of work, the gate's tests, the capacity, the
   roles, the project's programs and collectors. Each change is a commit of `orchestra.toml` alone,
-  with the reason you give. A tool that refuses (the repository root on another branch,
+  with the reason you give, on your branch `orchestra/supervisor`, never on the base branch, and
+  live at once through the owner's overlay until it is merged (the tool's `live` says when it is
+  not); it becomes a pull request (the guide's "What you commit, and its pull request"): tell the
+  human the branch and the pull request as the tool's `said` puts them. A tool that refuses (the repository root on another branch,
   `orchestra.toml` being edited by someone) says why: tell the human what they need to do.
 - `overlay`: the owner's private overlay, a file outside the repository merged over
   `orchestra.toml`, never committed. The owner's own or their company's settings go here and

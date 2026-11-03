@@ -49,15 +49,27 @@ def go(project, store):
     return dry, graduate(project, store, dry_run=False, quote=YES)
 
 
-def machines_entry(project, name="relator") -> dict:
-    project.reload_config()
-    return next(e for e in project.orchestra.config.raw["machines"] if e["name"] == name)
+def branch(project):
+    """The Supervisor's branch checked out beside the repository, for the test to read (the
+    graduation exists only there until its pull request is merged)."""
+    d = project.repo_root.parent / "on-branch"
+    if d.exists():
+        git(project.repo_root, "worktree", "remove", "--force", str(d))
+    git(project.repo_root, "worktree", "add", "-q", "--detach", str(d), "orchestra/supervisor")
+    return d
+
+
+def machines_entry(project, name="relator", section="machines") -> dict:
+    """The entry as the branch's orchestra.toml has it."""
+    return next(e for e in tomllib.loads((branch(project) / "orchestra.toml").read_text())[section] if e["name"] == name)
 
 
 def still_there(project):
-    """Nothing else in .orchestra/ moved: the other machine is where it was."""
-    assert (project.repo_root / ".orchestra" / "machines" / "jira_poller" / "jira_poller.py").is_file()
-    assert not (project.repo_root / ".orchestra" / "machines" / "relator").exists()
+    """Nothing else in .orchestra/ moved on the branch, and the checkout is untouched."""
+    b = branch(project)
+    assert (b / ".orchestra" / "machines" / "jira_poller" / "jira_poller.py").is_file()
+    assert not (b / ".orchestra" / "machines" / "relator").exists()
+    assert (project.repo_root / ".orchestra" / "machines" / "relator").is_dir()
 
 
 def test_python_goes_into_the_package_and_runs_as_a_module(project, store):
@@ -70,18 +82,24 @@ def test_python_goes_into_the_package_and_runs_as_a_module(project, store):
     say(store, YES)
     done = graduate(project, store, dry_run=False, quote=YES)
     assert done["ok"] and not done["dry_run"]
-    dest = project.repo_root / "acme_tools" / "relator"
+    dest = branch(project) / "acme_tools" / "relator"
     assert (dest / "relator.py").read_text() == RELATOR                          # the code, and so its announcement, unchanged
     assert (dest / "__init__.py").exists() and "acme_tools.relator" in (dest / "__main__.py").read_text()
     assert machines_entry(project)["command"] == "python3 -m acme_tools.relator"
     assert machines_entry(project)["restart"] == "always"
     still_there(project)
-    status = git(project.repo_root, "status", "--porcelain")
-    assert "R  .orchestra/machines/relator/relator.py -> acme_tools/relator/relator.py" in status    # git mv, not committed
-    assert " M orchestra.toml" in status
-    assert git(project.repo_root, "log", "--oneline").count("\n") == 2          # nothing committed
+    assert git(project.repo_root, "status", "--porcelain") == ""                  # the checkout untouched
+    project.reload_config()
+    assert next(e for e in project.orchestra.config.raw["machines"] if e["name"] == "relator")["command"] == (
+        "python .orchestra/machines/relator/relator.py")                          # the launcher keeps the old one until merged
+    assert any("old command" in line for line in done["said"])
+    assert git(project.repo_root, "log", "--oneline").count("\n") == 2          # nothing committed to the base
+    files = set(git(project.repo_root, "show", "--no-renames", "--name-only", "--format=", "orchestra/supervisor").split())
+    assert files == {".orchestra/machines/relator/relator.py", "acme_tools/relator/relator.py", "acme_tools/relator/__init__.py",
+                     "acme_tools/relator/__main__.py", "orchestra.toml"}                       # one commit on its branch
+    assert done["branch"] == "orchestra/supervisor" and any("pull request is pending" in x for x in done["said"])
     assert "heard again under the same source" in done["verify"]
-    ran = subprocess.run([sys.executable, "-m", "acme_tools.relator"], cwd=project.repo_root, capture_output=True, text=True,
+    ran = subprocess.run([sys.executable, "-m", "acme_tools.relator"], cwd=branch(project), capture_output=True, text=True,
                          check=False)
     assert ran.returncode == 0 and ran.stdout.strip() == '{"kind": "program"}'     # the module's runner runs the entry
 
@@ -101,8 +119,8 @@ def test_node_gets_a_script_entry_and_runs_with_npm(project, store):
          "node .orchestra/machines/relator/relator.js")
     _, done = go(project, store)
     assert done["plan"]["to"] == "scripts/relator"
-    assert (project.repo_root / "scripts" / "relator" / "relator.js").is_file()
-    got = json.loads((project.repo_root / "package.json").read_text())
+    assert (branch(project) / "scripts" / "relator" / "relator.js").is_file()
+    got = json.loads((branch(project) / "package.json").read_text())
     assert got["scripts"] == {"test": "jest", "relator": "node scripts/relator/relator.js"}
     assert machines_entry(project)["command"] == "npm run relator"
     still_there(project)
@@ -114,7 +132,7 @@ def test_rust_gets_a_bin_and_runs_with_cargo(project, store):
          "rust-script .orchestra/machines/relator/main.rs")
     _, done = go(project, store)
     assert done["plan"]["to"] == "src/bin/relator"
-    cargo = tomllib.loads((project.repo_root / "Cargo.toml").read_text())
+    cargo = tomllib.loads((branch(project) / "Cargo.toml").read_text())
     assert cargo["bin"] == [{"name": "relator", "path": "src/bin/relator/main.rs"}]
     assert machines_entry(project)["command"] == "cargo run --bin relator"
     still_there(project)
@@ -127,8 +145,8 @@ def test_a_rust_crate_of_its_own_joins_the_workspace(project, store):
          "cargo run --manifest-path .orchestra/machines/relator/Cargo.toml -- --follow")
     _, done = go(project, store)
     assert done["plan"]["to"] == "crates/relator"
-    assert (project.repo_root / "crates" / "relator" / "src" / "main.rs").is_file()
-    assert tomllib.loads((project.repo_root / "Cargo.toml").read_text())["workspace"]["members"] == ["crates/relator"]
+    assert (branch(project) / "crates" / "relator" / "src" / "main.rs").is_file()
+    assert tomllib.loads((branch(project) / "Cargo.toml").read_text())["workspace"]["members"] == ["crates/relator"]
     assert machines_entry(project)["command"] == "cargo run -p relator -- --follow"
     still_there(project)
 
@@ -142,8 +160,7 @@ def test_a_collect_entry_keeps_its_arguments(project, store):
     git(project.repo_root, "commit", "-qam", "collect")
     project.reload_config()
     go(project, store)
-    project.reload_config()
-    col = next(e for e in project.orchestra.config.raw["collect"] if e["name"] == "relator")
+    col = machines_entry(project, section="collect")
     assert col["command"] == "python3 -m acme.relator measure" and col["every"] == "5m"
 
 
@@ -156,7 +173,8 @@ def test_an_untracked_scaffold_moves_without_git(project, store):
     project.reload_config()
     dry, _ = go(project, store)
     assert dry["plan"]["how"].startswith("move")
-    assert (project.repo_root / "acme" / "relator" / "relator.py").is_file()
+    assert (branch(project) / "acme" / "relator" / "relator.py").is_file()             # the branch adds it
+    assert (d / "relator.py").is_file()                                                 # the checkout untouched
 
 
 def test_the_move_is_the_owners_and_follows_a_dry_run(project, store):
@@ -170,7 +188,10 @@ def test_the_move_is_the_owners_and_follows_a_dry_run(project, store):
     with pytest.raises(StoreError, match="owner"):
         graduate(project, store, dry_run=False)                 # no quote: the Supervisor's own wish moves nothing
     assert (project.repo_root / ".orchestra" / "machines" / "relator" / "relator.py").is_file()
-    assert machines_entry(project)["command"] == "python .orchestra/machines/relator/relator.py"
+    project.reload_config()
+    assert next(e for e in project.orchestra.config.raw["machines"] if e["name"] == "relator")["command"] == (
+        "python .orchestra/machines/relator/relator.py")
+    assert not git(project.repo_root, "branch", "--list", "orchestra/supervisor").strip()      # nothing on the branch
 
 
 def test_refused_without_an_entry_that_runs_it_or_with_an_edit_in_progress(project, store):

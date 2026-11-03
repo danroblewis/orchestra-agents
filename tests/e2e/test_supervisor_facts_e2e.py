@@ -74,18 +74,19 @@ def test_a_commit_then_nothing_done_is_corrected(chat):
         {"tool": "set_capacity_limit", "args": {"workers": 2, "reason": "the owner wants two tickets at once"}},
         {"tool": "set_gate_unit", "args": {"command": "pytest -q", "reason": "branches must pass the tests to land"}},
         {"reply": "I have not done anything."}])
-    shas = git(repo, "log", "--format=%h", "-2").split()
+    shas = git(repo, "log", "--format=%h", "-2", "orchestra/supervisor").split()
     assert text.startswith("I have not done anything.\n\n[Correction from Orchestra")
     assert all(f"committed {sha} to orchestra.toml" in text for sha in shas)
     assert [e["text"] for e in seen if e["type"] == "assistant_end"][-1].startswith("[Correction from Orchestra")
-    assert git(repo, "log", "-2", "--format=%s").count("Supervisor:") == 2     # the two commits are the Supervisor's
+    assert git(repo, "log", "-2", "--format=%s", "orchestra/supervisor").count("Supervisor:") == 2     # the two commits are the Supervisor's
 
 
 def test_a_tool_answer_says_what_changed(chat):
     say, repo, _host = chat
     text, _ = say("Two at once.", [{"tool": "set_capacity_limit", "args": {"workers": 2, "reason": "the owner wants two at once"}}])
-    sha = git(repo, "rev-parse", "--short", "HEAD").strip()
-    assert f'"done": "Changed: committed {sha} to orchestra.toml on the base branch: at most 2 workers at once ([tasks])."' in text
+    sha = git(repo, "rev-parse", "--short", "orchestra/supervisor").strip()
+    assert (f'"done": "Changed: committed {sha} to orchestra.toml on the branch orchestra/supervisor: at most 2 workers at '
+            'once ([tasks]) (On the branch orchestra/supervisor; a pull request is pending') in text
     assert "Correction" not in text                                            # the fake's reply is the tool's answer: true
 
 

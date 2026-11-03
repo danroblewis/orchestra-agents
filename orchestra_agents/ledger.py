@@ -39,6 +39,11 @@ def _ticket(result: dict, args: dict) -> str:
     return str(t.get("id") or args.get("id") or "?")
 
 
+def _pr(result: dict) -> str:
+    """The pull request a change to the repository became, as ``supervisor_pr`` said it."""
+    return f" ({result['said'].rstrip('.')})" if result.get("said") else ""
+
+
 def did(command: str, args: dict[str, Any], result: dict) -> str | None:
     """One line saying what a successful call changed, or None when it changed nothing."""
     a = args or {}
@@ -47,15 +52,15 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         if not result.get("changed"):
             return None
         what = f"duty {result.get('duty')}" if result.get("duty") else "your spec"
-        where = "the base branch" if result.get("where") == "base" else f"the side branch ({result.get('where')})"
-        return f"committed {result.get('commit')} to {where}: {result.get('change')} {what}"
+        where = f"the branch {result['branch']}" if result.get("branch") else f"the {result.get('where')} branch"
+        return f"committed {result.get('commit')} on {where}: {result.get('change')} {what}" + _pr(result)
     if command == "predict_fix":
         return f"committed prediction {result.get('prediction')} of change {result.get('change')}"
     if command == "propose_patch":
         return (f"committed patch {result.get('commit')} on branch {result.get('branch')} and handed request "
                 f"{result.get('request')} to the Coordinator to land it")
     if command == "write_override":
-        return f"wrote the override {result.get('file')} ({result.get('note')})"
+        return f"wrote the override {result.get('file')} ({result.get('note')})" + _pr(result)
     if command == "declare_workflow":
         return (f"wrote the workflow {result.get('workflow')} to {result.get('path')}"
                 + (" (not committed)" if result.get("committed") is False else "")
@@ -64,7 +69,8 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return f"drafted the upstream issue {result.get('draft') or ''} for the owner's approval ({result.get('repo')})"
     if command in SETUP_COMMANDS:
         if result.get("commit"):
-            return f"committed {result['commit']} to orchestra.toml on the base branch: {result.get('changed')}"
+            return (f"committed {result['commit']} to orchestra.toml on the branch {result.get('branch')}: "
+                    f"{result.get('changed')}" + _pr(result))
         if result.get("written") and result.get("target") == "overlay":
             return f"changed the owner's private overlay (not committed): {result.get('announce')}"
         return None

@@ -42,7 +42,7 @@ def read_config(project: Project) -> dict:
     log = git(project, "log", "-8", "--format=%h %ad %s", "--date=format:%Y-%m-%d %H:%M", "--",
               file_name(project)).stdout.splitlines()
     return {"ok": True, "path": str(edit.file("repo")), "text": redact(edit.text("repo") or ""),
-            "can_change": why_not_committable(project) or "yes: the root is on the base branch and the file is committed",
+            "can_change": why_not_committable(project) or "yes: a change is committed on orchestra/supervisor (the checkout untouched), live through the owner overlay, and proposed as a pull request",
             "recent_commits": log,
             "overlay": {"path": str(edit.file("overlay")), "exists": edit.text("overlay") is not None,
                         "about": "the owner's private settings, merged over orchestra.toml; never committed"},

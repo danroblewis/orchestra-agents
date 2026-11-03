@@ -18,9 +18,10 @@ the Supervisor or why not, and the next round's time (``next_review_at``, for th
 
 from __future__ import annotations
 
+import contextlib
 import time
 
-from . import budget, design_passes, flow_signals, load, prompting, split_proposal
+from . import budget, design_passes, flow_signals, live_layers, load, prompting, split_proposal
 from .clock import parse_interval
 from .machine_spec import DEFAULT_REVIEW_EVERY
 from .machine_spec import load as load_spec
@@ -62,6 +63,8 @@ class ReviewRound:
             h.store.set_agent_state(MACHINE, next_review_at=last + every)
         if now - last < every:
             return None
+        with contextlib.suppress(Exception):     # git unreadable: the round runs regardless
+            live_layers.settle(h.project)        # a merged and pulled pull request of the Supervisor's: its live copies retire
         return self.run(agent, spec, last, now)
 
     def run(self, agent, spec, since: float, now: float) -> dict:
@@ -113,7 +116,7 @@ class ReviewRound:
             lines.append(f"- and {len(new) - 12} more")
         if proposal:
             lines.append(f"Your own overload signals crossed ({', '.join(proposal['signals'])}): a split proposal was written at "
-                         f"{proposal['path']}. Read it and tell the owner in two lines which duties you would hand to a new "
+                         f"{proposal['path']} (on the branch orchestra/supervisor). Read it and tell the owner in two lines which duties you would hand to a new "
                          "machine and why; split nothing.")
         if new:
             lines.append("Work it as your review_round duty says: the one thing that would improve the flow most.")

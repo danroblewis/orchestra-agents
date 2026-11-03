@@ -31,8 +31,8 @@ it, so it is listed here and never copied, edited or removed. The Supervisor's *
 turn, so nothing the Supervisor writes here can remove its guardrails.
 
 Orchestra reads none of this (its rule 2: the Machines page reads what is observed). The files
-are read through ``spec_git.read_files``: the working tree, or the side branch while a change
-committed there is not merged yet. A machine the owner designed with the Supervisor and confirmed
+are read through ``spec_git.read_files`` (the working tree), and a change of the Supervisor's not
+merged yet from its live copy in the state directory (``spec_git.live_copies``), which wins. A machine the owner designed with the Supervisor and confirmed
 has its spec in the state directory instead (``state_machines``, machine-design.md §2.1), with an
 ``emits`` list, the only types its ``emit_event`` may raise; the repository's spec wins on a name
 both have."""
@@ -45,7 +45,7 @@ import tomllib
 from dataclasses import dataclass, field
 
 from .config import Project
-from .spec_git import ROOT, read_files
+from .spec_git import ROOT, live_copies, read_files
 
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 ENGAGEMENTS = ("continuous", "scheduled", "ad_hoc")
@@ -180,9 +180,11 @@ def load_all(project: Project) -> dict[str, MachineSpec]:
         if NAME.match(name) and inner:
             by.setdefault(name, {})[inner] = text
     by = {n: f for n, f in by.items() if not scaffolded_poller(f)}
+    live = live_copies(project)                          # a change not merged yet: its live copy wins
+    by.update(live)
     roots = dict.fromkeys(by, ROOT)
     for name, files in _state_files(project).items():
-        if scaffolded_poller(files):
+        if scaffolded_poller(files) or name in live:
             continue
         if "machine.toml" not in by.get(name, {}):
             by[name], roots[name] = files, str(state_root(project))

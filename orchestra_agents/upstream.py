@@ -38,10 +38,13 @@ def _slug(text: str) -> str:
 
 
 def override_section(project: Project, name: str) -> str:
+    from . import side_branch
     p = project.repo_root / ".orchestra" / "overrides" / f"{name}.py"
-    if not p.exists():
-        raise StoreError(f"no override {name!r} under .orchestra/overrides/")
-    return f"\n\n## The patch (applied locally as an override)\n\n```python\n{p.read_text(encoding='utf-8').rstrip()}\n```\n"
+    text = p.read_text(encoding="utf-8") if p.exists() else side_branch.version(
+        project, f".orchestra/overrides/{name}.py", side_branch.ref(project.repo_root, f"refs/heads/{side_branch.SIDE}"))
+    if text is None:
+        raise StoreError(f"no override {name!r} under .orchestra/overrides/ or on {side_branch.SIDE}")
+    return f"\n\n## The patch (applied locally as an override)\n\n```python\n{text.rstrip()}\n```\n"
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict) -> dict:

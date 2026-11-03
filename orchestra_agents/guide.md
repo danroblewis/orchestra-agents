@@ -155,11 +155,56 @@ An agent with a machine spec runs with it: `machine.toml` (its `model`, its `[re
 duties with what wakes each and the tool groups each needs), `role.md`, `duties/<duty>.md`,
 `ledger.md`. The Supervisor's is written the first time the host runs (model `sonnet`, a review
 every 30 minutes, the duties `keep_flow` and `review_round`); after that you change it only with
-`add_duty`, `edit_duty`, `remove_duty` and `revert_change`, each a commit with its reason (on the
-side branch `orchestra/supervisor` when the checkout is dirty). A spec's `model` wins over
+`add_duty`, `edit_duty`, `remove_duty` and `revert_change`, each a commit with its reason on your
+branch `orchestra/supervisor` (below), run at once from its copy in the state directory. A spec's `model` wins over
 `[agents] model` for that agent when the harness takes the name (Claude Code: `haiku`, `sonnet`,
 `opus`). Your review round wakes you only when its quick check finds something new; past the
 day's cap it does not wake you, and nor do your duties' own events; the owner's chat always does.
+
+## What you commit, and its pull request
+
+Every change you make to the repository is one commit on the branch you keep for your own work,
+`orchestra/supervisor`, never on the base branch (the owner, 2026-11-02: "they probably need a pull
+request, but we can use it locally while working"): `orchestra.toml` (a setup tool with `target =
+"repo"`), your spec and duties, an override (`write_override`) and a graduation
+(`graduate_machine`). The owner's checkout is never touched (not switched, written or staged), so the
+merge gate lands as before and their pull of the merged pull request goes through. "Used live" is
+the private layer, "shared" is the pull request:
+
+- a change to `orchestra.toml` is also made in the owner's overlay, so it runs at once; the overlay's
+  copy is retired by itself once the merged pull request is pulled. When the overlay already sets
+  the key (the owner's own value wins) or cannot express the change (removing a key), it applies
+  only once merged: the answer's `live` says which;
+- your spec runs from its copy in the state directory until merged and pulled;
+- an override and a graduation are on the branch only: the repair, or the new command, applies once
+  the owner merges the pull request. Say so, so they know merging is what applies it.
+
+A change to the owner's overlay itself (`target = "overlay"`) is never committed.
+
+The branch becomes a pull request through orchestra-scm's provider when the repository has a remote
+(`origin`) and `[scm]` is set (in `orchestra.toml` or the owner's overlay; `set_setting`):
+
+```toml
+[scm]
+provider = "branch_pr"        # a plain branch and one pull request on GitHub
+repo = "acme/service"         # owner/name
+base = "main"
+# token_file = "~/.config/orchestra-bridges/github-token"   the default; never a token itself
+# template = "<a private path>"                             the company's template; else Summary, Testing, Jira ID
+```
+
+The pull request is opened at once, its description from the template: Summary is the change's
+reason, Testing what the tool verified, the Jira ID a ticket key in the owner's words (`ABC-123`),
+else "none". So give a reason that reads well as a summary, and quote the owner when they name a
+ticket. While it is open, each later change is pushed onto it. With the Outbox installed, opening a
+pull request is an outbound act its configuration approves: the branch is pushed and the pull
+request waits as an Outbox draft (`[outbox.kinds."supervisor.pull_request"] sender =
+"github.pr_open"`), opened when the owner approves it. Without a remote or `[scm]` the branch is
+still made and nothing is refused: say the pull request is pending that configuration, and offer
+to set `[scm]` (the repository and the token file are the owner's to name). The provider never
+pushes main, master or the base, and nothing you do merges: that is the merge gate's or the
+owner's. Every answer says the branch and the pull request (`said`); repeat it to the owner, with
+the number or the link, and the digest of what changed names it while it is open.
 
 ## Designing the system
 

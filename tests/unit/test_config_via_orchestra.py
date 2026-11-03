@@ -172,10 +172,11 @@ def test_the_supervisor_writes_to_the_overlay_when_asked_and_to_the_repository_o
 
     out = call(project, store, "set_capacity_limit", workers=3, reason="three tickets can run side by side now")
     assert out["target"] == "repo" and out["commit"]
-    text = repo_toml.read_text()
-    assert "workers = 3\n" in text and "# the task system" in text and len(text.splitlines()) == len(before.splitlines())
-    assert git(project.repo_root, "show", "--name-only", "--format=", "HEAD").split() == ["orchestra.toml"]
-    assert project.orchestra.config.raw["tasks"]["workers"] == 3
+    text = git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml")                  # committed on its branch
+    assert "workers = 3" in text and "# the task system" in text and len(text.splitlines()) == len(before.splitlines())
+    assert git(project.repo_root, "show", "--name-only", "--format=", "orchestra/supervisor").split() == ["orchestra.toml"]
+    assert repo_toml.read_text() == before and git(project.repo_root, "rev-parse", "HEAD") == head  # the checkout untouched
+    assert project.orchestra.config.raw["tasks"]["workers"] == 3                                    # live through the overlay
 
     out = call(project, store, "set_agent_roles", serves=["worker"], reason="the repository's own default changes")
     assert out["commit"] and "overlay" in out["note"]                                   # the owner's overlay still wins, and it is said

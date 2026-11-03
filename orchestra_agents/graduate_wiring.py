@@ -212,13 +212,15 @@ def apply_manifest(repo: Path, m: dict | None) -> str | None:
     if not m:
         return None
     f = repo / m["file"]
-    text = f.read_text(encoding="utf-8")
+    f.write_text(manifest_text(f.read_text(encoding="utf-8"), m), encoding="utf-8")
+    return f"{m['file']}: {m['what']}"
+
+
+def manifest_text(text: str, m: dict) -> str:
+    """The manifest ``text`` with the language's one entry ``m`` written in."""
     if m["kind"] == "npm_script":
         pkg = json.loads(text)
         indent = re.match(r"\{\s*\n(\s+)", text)
         pkg.setdefault("scripts", {})[m["key"]] = m["value"]
-        f.write_text(json.dumps(pkg, indent=len(indent.group(1)) if indent else 2) + ("\n" if text.endswith("\n") else ""),
-                     encoding="utf-8")
-    else:
-        f.write_text(cargo_text(text, m), encoding="utf-8")
-    return f"{m['file']}: {m['what']}"
+        return json.dumps(pkg, indent=len(indent.group(1)) if indent else 2) + ("\n" if text.endswith("\n") else "")
+    return cargo_text(text, m)

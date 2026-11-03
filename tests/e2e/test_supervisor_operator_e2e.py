@@ -129,11 +129,12 @@ def test_the_supervisor_reconfigures_and_the_collector_ends_up_running(broken):
     assert "worker/shell fills the worker role but is not a [[machines]] entry" in reply     # ... and the program it cannot change
     assert '"commit"' in reply
 
-    # each change is a commit of orchestra.toml alone on main, with its reason, and on the bus
-    log = git(target, "log", "--format=%s|%b", "main")
+    # each change is a commit of orchestra.toml alone on the Supervisor's branch (never main), with its reason, and on the bus
+    log = git(target, "log", "--format=%s|%b", "orchestra/supervisor")
+    assert "Supervisor:" not in git(target, "log", "--format=%s", "main")
     assert "Supervisor: the AI agents fill worker, reviewer ([agents] serves)|a collector is code" in log
     assert "Supervisor: work is code ([project] work)|a collector must land in the repository" in log
-    assert 'serves = ["worker", "reviewer"]' in git(target, "show", "main:orchestra.toml")
+    assert 'serves = ["worker", "reviewer"]' in git(target, "show", "orchestra/supervisor:orchestra.toml")
     changed = [e for e in all_events(web) if e["type"] == "config.changed"]
     assert [e["source"] for e in changed] == ["supervisor", "supervisor"]
     assert [e["data"]["section"] for e in changed] == ["agents", "project"]

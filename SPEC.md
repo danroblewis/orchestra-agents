@@ -658,7 +658,12 @@ token, owner-only, `control.py`), `no-push/` (the push guard's `git` and `gh` sh
 sessions it blocks, `push_guard.py`), `pending-restart.json` (a restart asked of the launcher and
 not yet seen done, `restart.py`), `verdicts/` (the working directory of the turn a prediction's
 verdict wakes, `verdicts.py`), `scratch/` (the worktree of a patch the Supervisor prepares,
-`patching.py`) and `upstream/` (the issues it drafts for other repositories, `upstream.py`).
+`patching.py`; `scratch/branch-config/`, the branch's `orchestra.toml` as Orchestra's editor works a
+change out on it, `config_change.py`), `upstream/` (the issues it drafts for other repositories,
+`upstream.py`), `live_overlay.json` (each overlay change that keeps a change to `orchestra.toml` on
+the Supervisor's branch live until merged, and a graduation's overlay command waiting for its move,
+`live_layers.py`) and `machines/<name>/` with `.pending.json` (a spec change's live copy until
+merged, `spec_git.py`).
 Beside it, in Orchestra's state directory and not the agents' own, `integrate_system` writes a
 scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffold: its
 `machine.toml`, with a top-level `kit`, and its program and test; `integrate_kits.py` edits the
@@ -755,6 +760,59 @@ a patch to the project's own code is written in a scratch worktree and lands thr
 review and the gate; a patch to an installed plugin is a project-local override pinned to the
 installed version, with the upstream issue drafted in the outbox for the owner's approval.
 
+**The Supervisor's own branch and pull request** (`side_branch.py`, `supervisor_pr.py`,
+`live_layers.py`; the owner, 2026-11-02, self-improvement 5: "they probably need a pull request, but
+we can use it locally while working"; scm 6–8: "plain branch plu PR", "the provider can push to the
+remote, but not to the main or master branch"; the coordinator's rule, the same day: "used live" is
+the private layer, "shared" is the pull request). Every change the Supervisor makes to the
+repository is one commit on the branch it keeps for its own work, `orchestra/supervisor`, never on
+the base branch: `orchestra.toml` (`config_change`, a setup tool with `target = "repo"`), its machine
+spec and duties (`spec_git`), an override (`write_override`) and a graduation (`graduate_machine`).
+The commit is made with git's plumbing on a private index, from the branch's tip while it holds
+commits the base lacks, else from the base's head (`origin/<base>` when it is ahead). **The owner's
+checkout is never touched**: not switched, written or staged, so `git status` is what the owner
+left, the merge gate lands tickets as before, and pulling the merged pull request goes through.
+**What is live until the merge**:
+
+- `orchestra.toml`: the same change is made in the owner's overlay, which Orchestra reads at once;
+  the branch's file is worked out by Orchestra's own editor over the branch's text
+  (`config_change.branch_editor`, in a scratch file of the state directory). The pairing is kept in
+  `live_overlay.json`, and the overlay's copy is retired, newest first, once the checkout's
+  `orchestra.toml` gives the same configuration without it (merged and pulled) and while the
+  overlay still holds what the change wrote. When the overlay sets the key itself (the owner's value
+  wins) or cannot say the change (removing a key), it is not touched and the answer says the change
+  applies once merged.
+- a spec or duty: the machine's whole spec as changed, in the state directory
+  (`<state>/agents/machines/<name>/`, with `.pending.json`), which `machine_spec.load_all` reads
+  before the repository's; retired once the checkout's files are the same.
+- an override: nothing (Orchestra loads overrides only from the checkout); it applies once merged
+  and pulled, and the answer says so.
+- a graduation: nothing; the launcher keeps the old command until the merge, and the answer says
+  so. An entry whose command is in the owner's overlay is changed there once the moved program is
+  in the checkout.
+
+`live_layers.settle` retires and applies these; the review round, the digest and every proposal
+call it. Then `supervisor_pr.propose`, through orchestra-scm's provider (`branch_pr`, configured by
+`[scm]` and read through Orchestra's configuration): with a remote (`origin`) and `[scm]`, the
+branch is pushed (the provider refuses main, master, the base and the default branch) and its pull
+request opened at once, the description from the provider's template (the packaged one: Summary,
+Testing, Jira ID): Summary from the change's reason, Testing from what the tool verified, the Jira ID
+from the owner's words when they name a ticket key, else "none". A pull request already open for
+the branch is updated by the push, never opened twice. With the Outbox installed (orchestra-outbox
+importable; the coordinator's decision), opening it is an outbound act its configuration approves:
+the branch is pushed and the pull request is an Outbox draft of the kind `supervisor.pull_request`
+(sender `github.pr_open`), opened when the owner approves it. Without a remote, `[scm]` or
+orchestra-scm, the branch is made, nothing is refused, and the answer says the pull request is
+pending that configuration. Merging is the merge gate's or the owner's. Every answer names the
+branch and the pull request (`said`), the ledger's line repeats it, and "what changed"
+(`since_digest`) has a line for the Supervisor's open pull request (merged, by the provider's
+`learn`, until the checkout has it). orchestra-scm is a dev dependency, imported only in
+`supervisor_pr`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
+one branch, so one pull request accumulates every change until it is merged, its description the
+first change's; the organisation's records (`roles.commit_orchestra_files`) still commit to the
+base branch when the checkout is clean there; a split proposal or the starting spec rides on the
+branch with the next change's pull request; and a repair by override waits for the merge.
+
 **Guides** (tool group `guides`; the Supervisor and the Coordinator): `list_guides` (each operator's
 guide Orchestra serves, `orchestra.guides.collect`: Orchestra's own and each installed plugin's
 `Plugin.guide`, this package's `guide.md` among them, with what it is about, its size and its
@@ -850,7 +908,10 @@ removed), which starts it again; `orchestra.toml` is not touched and nothing is 
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
 someone else changes the overlay in between, the entry is not put back and the answer says so.
 
-Limits: a commit to the base branch while the task system's gate is landing a ticket makes that
+Limits: since 2026-11-02 the Supervisor commits to its own branch, never the base, and never touches
+the checkout, so its changes neither move the base under a landing nor block one; the setup tools
+still refuse while one lands. A commit to
+the base branch (the organisation's records) while the task system's gate is landing a ticket makes that
 landing fail (the base moved under it), as any commit there would: the task system pauses its
 pipeline, puts the ticket back to APPROVED and asks the Supervisor for attention; `resume_pipeline`
 lands it on the next run. A tool's answer about what applies describes the readers' rules; it
@@ -1111,10 +1172,12 @@ says the machine's age (`design_machines.age_line`). Two tools carry it:
   stays the same machine on the bus; the answer names the source to hear again. Refused, with
   nothing moved: an agent's spec (`role.md`), a directory no `[[machines]]` entry runs, one the
   configuration names elsewhere, an uncommitted edit to the directory, the manifest or
-  `orchestra.toml`, a destination that exists. **Nothing is committed**: an entry in
-  `orchestra.toml` is written and left uncommitted with the move and the manifest (a commit of
-  `orchestra.toml` alone would name code its commit does not hold), for the owner to commit
-  together or land through a pull request; one in the overlay is changed as any overlay change.
+  `orchestra.toml`, a destination that exists. **Nothing is committed to the base branch, and the
+  checkout is not touched**: the move, the wiring, the manifest and an entry in `orchestra.toml` are
+  one commit on `orchestra/supervisor` (a commit of `orchestra.toml` alone would name code its commit
+  does not hold), proposed as its pull request (section 10; since 2026-11-02); the launcher keeps the
+  old command until it is merged and pulled; an entry in the overlay is changed once the program is
+  in the checkout (`live_layers`).
 
 **Publishing a draft prediction.** An edit names keys (or declared ids, read through their
 `found_as`); the judge reads the era's ids, so each `stock`, `from` and `to` is resolved to the
@@ -1292,12 +1355,11 @@ model reopens the resident session after its turn. The announcement names the mo
 a standing instruction ("from now on, ...", "whenever ...", "every morning ...") is a duty, written
 in the same turn with the owner's words as the reason. Every change:
 
-- needs a reason in a sentence; is one commit of `.orchestra/machines/` alone (`spec_git.commit`):
-  on the base branch when the checkout is on it with no other uncommitted change and the merge gate
-  is not landing; else on the side branch `orchestra/supervisor`, made with git's plumbing on a
-  private index so the working tree and the owner's index are untouched. While the side branch has
-  commits the checkout lacks, the specs are read from it; the next change on a clean base checkout
-  merges it;
+- needs a reason in a sentence; is one commit of `.orchestra/machines/` alone (`spec_git.commit`)
+  on the Supervisor's branch `orchestra/supervisor` (since 2026-11-02 never on the base branch,
+  section 10), made with git's plumbing on a private index so the checkout is untouched, and
+  proposed as its pull request. Until it is merged and pulled, the spec runs from its live copy in
+  the state directory (`<state>/agents/machines/supervisor/`); then from the checkout;
 - is refused past `[agents] spec_changes_per_day` in 24 hours (a revert never is); refused for a
   built-in duty, for a tool group the Supervisor does not hold, for text that looks like a secret;
 - is announced as `role.changed` (subject `machine:supervisor`, the commit, the reason), a line in
@@ -1341,7 +1403,9 @@ Steward may split off later). `propose_patch`: a bug in the project's own code, 
 worktree removed, and the Coordinator handed a request to land that commit through a ticket, a
 review and the gate. `write_override`: a bug in an installed plugin: `.orchestra/overrides/<name>.py`
 in Orchestra's override format (`TARGET`, `PACKAGE` pinned to the installed version, `KIND`,
-`ISSUE`, `def override`), committed alone to the base branch when it can be, announced as
+`ISSUE`, `def override`), committed alone on `orchestra/supervisor` with its pull request (section
+10), never on the base branch and not written in the checkout, so it applies once merged and
+pulled; announced as
 `system.changed` (subject `override:<name>`). Orchestra applies it by file in every process that
 loads plugins, on that exact version only. Never Orchestra's core or this package.
 `draft_upstream_issue`: the issue, with the override's code, as an outbox draft of kind

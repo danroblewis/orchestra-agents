@@ -13,16 +13,21 @@ broken without updating the spec and saying so in the commit.
    assignment; the agents work in it. A reviewer reads the diff in the worktree; the host never
    creates, switches, merges or deletes a ticket's branch. The git writes here are these, and
    each is the Supervisor's or the organisation's own: committing the organisation's own files
-   under `.orchestra/`, only when the checkout is on the base branch and otherwise clean; the
-   Supervisor's setup tools committing `orchestra.toml` alone (`config_change.py`), when a change
-   targets the repository, only when the checkout is on the base branch and that file has no
-   uncommitted change; and, since 2026-10-28 (the owner's decision D20), the Supervisor's machine
-   spec, committed alone to the base branch on the same terms or else to the side branch
-   `orchestra/supervisor` with git's plumbing on a private index, never touching the working tree
-   (`spec_git.py`); a repair to the project's code, written and committed in a scratch worktree in
+   under `.orchestra/`, only when the checkout is on the base branch and otherwise clean; **every
+   change the Supervisor makes to the repository as one commit on its own branch
+   `orchestra/supervisor`, never on the base branch, and the checkout never touched** (since
+   2026-11-02, the owner's self-improvement 5; `side_branch.py`: git's plumbing on a private index;
+   the checkout is not switched, written or staged), that branch pushed and proposed as a pull
+   request through orchestra-scm's provider, or an Outbox draft of one, when the repository has a
+   remote and `[scm]` is configured (`supervisor_pr.py`; the provider never pushes main, master or
+   the base, and nothing here merges); what is live until the merge is the private layer
+   (`live_layers.py`): `orchestra.toml` (`config_change.py`, a change that targets the repository),
+   live through the same change in the owner's overlay; the Supervisor's machine spec (`spec_git.py`,
+   D20), live from its copy in the state directory; an override file under `.orchestra/overrides/`
+   and a graduation (below), live only once merged; a repair to the project's code, written and committed
+   in a scratch worktree in
    the state directory on its own branch `supervisor/patch-<name>`, which is removed after and
-   whose branch only a ticket takes onward (`patching.py`); and an override file under
-   `.orchestra/overrides/`, committed alone on the same terms as `orchestra.toml`. A change to the
+   whose branch only a ticket takes onward (`patching.py`). A change to the
    owner's private overlay is never committed. Nor is anything the Supervisor's design tools write
    (since 2026-11-01, proposal 4, `machine-design.md` §2.1: at work the base branch is protected):
    a confirmed Universal Machine's spec and its role and agent records are written to the state
@@ -34,8 +39,8 @@ broken without updating the spec and saying so in the commit.
    program proven in `.orchestra/machines/<name>/` moves into the project's own tree) is a `git mv`
    of that one directory (a plain move when git does not track it), the one manifest entry its
    language needs, and its `[[machines]]`/`[[collect]]` commands through `config_edit`, on the
-   owner's quoted yes after a dry run: staged or written, never committed, for the owner to commit
-   together or land through a pull request.
+   owner's quoted yes after a dry run: one commit on `orchestra/supervisor` with its pull request,
+   for the owner or the merge gate to merge; the checkout and the running command change only then.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.
@@ -45,7 +50,8 @@ broken without updating the spec and saying so in the commit.
    is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
    W7; that plugin's SPEC §10) import its validated writer, loader and record API; and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
-   templates and settings, and its `machine.toml` reader).
+   templates and settings, and its `machine.toml` reader); and `supervisor_pr.py` (2026-11-02)
+   imports orchestra-scm's provider and the Outbox's client.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the

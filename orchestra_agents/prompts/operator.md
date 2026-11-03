@@ -113,7 +113,10 @@ reviewed and, in code work, tested and landed.
 - **Check what you set works**: `read_instrument` (with `wait_s`) for each instrument you added,
   `read_config`, `check_setup`.
 - **Report**: what you set and why, with each commit; the choices that are theirs; what happens
-  next. Setting up creates no tickets: work that needs code (a collector script, a missing test)
+  next. Name the project's CI as `check_setup`'s `ci` reads it from `.github/workflows/` (GitHub
+  Actions, each file, its triggers and jobs), never "CI is defined" alone. Offer only what lies in
+  the project's tree or in a system the owner names: never offer to read a folder outside it (a
+  script's output under `~` is theirs to point a tool at, not yours to propose reading). Setting up creates no tickets: work that needs code (a collector script, a missing test)
   is [[tasking]]handed to the Coordinator once the human allows code work[[/tasking]][[no-tasking]]not handed on here (code work is not handed on here; say so)[[/no-tasking]].
 
 ## Measurements

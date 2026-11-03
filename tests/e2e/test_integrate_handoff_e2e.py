@@ -87,7 +87,7 @@ def test_a_scaffold_handed_to_the_coordinator_lands_on_main_and_is_approved_ther
     web, target = demo
     rel = ".orchestra/machines/jenkins_poller"
     draft = load_project(target).state_dir / "machines" / "jenkins_poller"
-    reply = said(chat(web, "Connect Jenkins so I can see builds"))
+    reply = said(chat(web, "Connect Jenkins so I can see builds, at https://ci.acme.test"))
     assert f"at {draft};" in reply and "handed to the Coordinator as r-" in reply, reply
     assert not (target / rel).exists() and (draft / "jenkins_poller.py").is_file()     # out of the owner's checkout
     assert not git(target, "status", "--porcelain", "--untracked-files=all").strip()

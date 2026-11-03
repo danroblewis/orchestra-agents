@@ -46,7 +46,7 @@ TOLD = ("issue.created", "issue.assigned", "issue.transitioned", "issue.closed",
         "pr.merged", "pr.labeled", "pr.unlabeled", "pr.commented", "pr.synchronize", "checks.completed",
         "check.completed", "incident.triggered", "incident.acknowledged", "incident.resolved", "outbox.draft.created",
         "outbox.draft.approved", "outbox.draft.rejected", "outbox.sent", "outbox.send_failed", "item.requested",
-        "item.closed", "attention.needed", "orchestra.machine.quiet", "orchestra.model.changed")
+        "item.opened", "item.closed", "attention.needed", "orchestra.machine.quiet", "orchestra.model.changed")
 
 
 def _and(xs: list[str]) -> str:
@@ -308,11 +308,14 @@ def outbox(d: Day, state: str | None) -> str | None:
     return "The Outbox: " + "; ".join(parts) + "." + (f" Its state now: {state}." if state else "")
 
 
-def items(d: Day) -> str | None:
+def items(d: Day, open_now: int | None = None) -> str | None:
+    """Items started (``item.requested``, ``item.opened``), closed and raised; and how many are open
+    now (``open_now``, the Workflows plugin's own count): never "none started" while any are open
+    (bootstrap run 3: a start event opens an item and publishes no item event)."""
     started, closed, attention = [], [], []
-    for t, e in d.of("item.requested", "item.closed", "attention.needed"):
+    for t, e in d.of("item.requested", "item.opened", "item.closed", "attention.needed"):
         item, ty = str(e.get("subject") or "?"), e["type"]
-        if ty == "item.requested":
+        if ty in ("item.requested", "item.opened"):
             by = ("by you" if e.get("source") in OWNER else "on its schedule" if field(e, "every")
                   else f"by {e.get('source')}")
             started.append(f"{d.item(item)} {by} at {d.clock.at(t)}")
@@ -322,12 +325,16 @@ def items(d: Day) -> str | None:
         else:
             why = field(e, "reason")
             attention.append(f"{d.item(item)} at {d.clock.at(t)}" + (f" ({why})" if why else ""))
-    if not (started or closed or attention):
+    if not (started or closed or attention or open_now):
         return None
-    parts = [f"{len(started)} started: {'; '.join(_cap(started, d.cap))}" if started else "none started",
+    parts = [f"{len(started)} started: {'; '.join(_cap(started, d.cap))}" if started else
+             (f"{open_now} open now (a workflow's start event opens one with no item event; the Items page lists them)"
+              if open_now else "none started"),
              f"{len(closed)} closed: {'; '.join(_cap(closed, d.cap))}" if closed else "none closed"]
     if attention:
         parts.append(f"attention raised {_times(len(attention))}: {'; '.join(_cap(attention, d.cap))}")
+    if started and open_now:
+        parts.append(f"{open_now} open now")
     return "Items: " + "; ".join(parts) + "."
 
 
@@ -415,14 +422,14 @@ def predictions(p) -> str:
 
 def digest(events: list[dict], start: float, now: float, tz: str | None, *, outbox_state: str | None = None,
            waiting: dict | None = None, preds=None, model: str | None = None, ages: str | None = None,
-           subsystems: str | None = None, own_pr: str | None = None) -> str:
+           subsystems: str | None = None, own_pr: str | None = None, open_items: int | None = None) -> str:
     clock = Clock(tz, now)
     for cap in CAPS:
         d = Day(events, clock, cap)
         head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} "
                 f"{clock.local(start):%H:%M} (all times {clock.named()}): {_n(len(d.events), 'event')} on the bus.")
         paras = [head, first(d), tickets(d), pull_requests(d), checks(d), labels(d), incidents(d),
-                 outbox(d, outbox_state), items(d), quiet(d), others(d), owner(waiting, clock), predictions(preds), ages,
+                 outbox(d, outbox_state), items(d, open_items), quiet(d), others(d), owner(waiting, clock), predictions(preds), ages,
                  subsystems, own_pr, model]
         text = "\n\n".join(p for p in paras if p)
         if len(text) <= LIMIT:

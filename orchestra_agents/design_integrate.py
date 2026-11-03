@@ -7,8 +7,9 @@ Supervisor's alone, each with its reason and provenance).
 
 - **poller** (events and series) or **collect** (series alone): the bridges plugin's kit (a
   library: the owner, 2026-11-01) is scaffolded into the owner's repository
-  (``.orchestra/machines/<name>/``, uncommitted: a coding tool may edit it, and the owner commits it
-  or approves its pull request), or into the state directory (``<state>/machines/<name>/``) only
+  (``.orchestra/machines/<name>/``, live from there: a coding tool may edit it; its files one commit
+  on ``orchestra/supervisor`` for its pull request, the live copy ignored in this checkout only,
+  ``integrate_branch``), or into the state directory (``<state>/machines/<name>/``) only
   when the owner said the repository must stay clean (``root: state``); its test is run against the
   kit's fake, and the owner's settings are filled into its ``poller.toml`` (after the test, which
   reads the fake's own world; their words stay in the integration's record). When the test fails,
@@ -43,6 +44,8 @@ import time
 from pathlib import Path
 
 from . import design_dynamics, design_machines
+from . import integrate_address as address
+from . import integrate_branch as branch
 from . import integrate_handoff as handoff
 from . import integrate_kits as kits
 from . import integrate_schedule as schedule
@@ -194,7 +197,7 @@ def _effect(project: Project, store: AgentStore, mid: str, sid: str, prov: dict)
     return got["said"], list(got.get("changes") or [])
 
 
-def _ask(system: str, kit_env: str | None, base_url_missing: bool, scope: str | None = None) -> str:
+def _ask(system: str, kit_env: str | None, scope: str | None = None) -> str:
     t = kits.title(system)
     parts = [(f"May I read {t}? It reads metadata only (ids, keys, accounts, states, times; never titles, text or "
              "messages), at most the configured rate, and writes nothing to it. Your yes, in your words, naming the "
@@ -207,8 +210,6 @@ def _ask(system: str, kit_env: str | None, base_url_missing: bool, scope: str | 
     if system == "jira":
         parts.append("for Jira Cloud (an atlassian.net site), also where the account's email is (a variable's name or a "
                      "file's path): Cloud logs in with the email and the token together")
-    if base_url_missing:
-        parts.append(f"{t}'s address (its API's base URL)")
     if scope:
         parts.append(f"{kits.SCOPE[scope]} ({scope})")
     return "; ".join(parts) + "."
@@ -234,6 +235,8 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     base_url = (a.get("base_url") or "").strip() or None
     if base_url and not re.match(r"^https?://[^\s/]+", base_url):
         raise StoreError("base_url is the API's root, an http(s) URL")
+    if base_url and not address.given(store, base_url):          # never a guess (bootstrap run 3: slack.com)
+        raise StoreError(address.refused(kits.title(system), base_url))
     given = (a.get("name") or "").strip()
     adopt = _adoptable(project, store, system, strategy, a, given) if kits.installed() else None
     if adopt:
@@ -249,7 +252,7 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
     if not adopt and (taken := _taken(project, store, name)):
         raise StoreError(f"{taken} already has the name {name}: nothing was written")
     rec = {"system": system, "strategy": strategy, "wants": wants, "clearance": NEEDS, "token_env": None, "at": time.time(),
-           "base_url": base_url, "root": root}
+           "base_url": base_url, "base_url_from": address.given(store, base_url), "root": root}
     if named:                                    # where the owner said the token is, checked before anything is scaffolded
         rec["named"] = {k: v for k, v in named.items() if k != "cautions"}
         rec["cautions"] = named.get("cautions") or []
@@ -326,8 +329,10 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
                     "AGENTS.md); poller.toml: clearance \"needs approval\", so it reads only a fake on this machine")
                    if first else f"ran its test again in {target}",
                    f"its test against the kit's fake: {'passed' if test['passed'] else 'NOT passed'} ({test['summary']})"]
-    rec.update(test=test, settings=settings, every=every, events=events,
-               base_url=rec["base_url"] or mf.get("settings", {}).get("base_url"),
+    in_file = mf.get("settings", {}).get("base_url") or None
+    if not rec.get("base_url") and (came := address.given(store, in_file)):   # the file's, only when the owner said it or it is here
+        rec.update(base_url=in_file, base_url_from=came)
+    rec.update(test=test, settings=settings, every=every, events=events, template_url=None if rec.get("base_url") else in_file,
                scope=next((k for k in kits.SCOPE_OF.get(kit, ()) if k not in settings), None))
     if not test["ran"]:
         rec["state"] = "test not run"
@@ -365,6 +370,10 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
                                                "script is the generic http kit's guess at a JSON API", prov)
         _save(store, name, rec)
         lines += said
+    if carried := branch.carry(project, store, rec, f"scaffold the collector {name} ({kit} kit) for {kits.title(system)}",
+                               prov["reason"], prov.get("quote")):
+        _save(store, name, rec)
+        lines += carried
     lines.insert(2, handoff.who_lands(rec))
     extra = {**({"request": rec["request"]} if rec.get("request") else {}), **({"adopted": True} if rec.get("adopted") else {})}
     return _report(project, name, rec, {"changes": [{"change": c} for c in changes]}, lines,
@@ -433,13 +442,15 @@ def _plan_only(project: Project, store: AgentStore, name: str, rec: dict, settin
 
 def _report(project: Project, name: str, rec: dict, done: dict, lines: list, kit_env: str | None, **extra) -> dict:
     planned = [schedule.describe(s) for s in rec["steps"]]
-    missing_url = kits.placeholder(rec.get("base_url"))
+    missing_url = kits.placeholder(rec.get("base_url")) or not rec.get("base_url_from")
     lines.append(f"planned, written to the owner's overlay once approved: {'; '.join(planned)}")
     if rec.get("named"):
         lines.append("where the owner said the credentials are, checked (no commit can carry them), recorded for the approval: "
                      + ", ".join(f"{k} {v}" for k, v in rec["named"].items()))
         lines += rec.get("cautions") or []
-    ask = _ask(rec["system"], kit_env, missing_url, rec.get("scope"))
+    ask = _ask(rec["system"], kit_env, rec.get("scope"))
+    if missing_url:
+        ask += " " + address.ask(kits.title(rec["system"]), rec.get("template_url"))
     lines.append("waiting for the owner's approval and where the token is, by name or path (approve_integration)")
     return answer(project, done, lines, integration=name, clearance=NEEDS, planned=planned, ask_owner=ask,
                   owner_must_set=[f"the approval, in their words, for {kits.title(rec['system'])}",
@@ -476,9 +487,13 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         raise StoreError("a store's [[sources]] entry takes a bearer token alone (token_env or token_file), no account")
     data_class = (a.get("data_class") or DATA_CLASS).strip()
     base_url = (a.get("base_url") or "").strip() or rec.get("base_url")
-    if kits.placeholder(base_url):
-        raise StoreError(f"{kits.title(rec['system'])}'s address is still the template's ({base_url}): ask the owner for it "
-                         "(base_url); nothing was changed")
+    if not base_url or kits.placeholder(base_url):
+        raise StoreError(f"{kits.title(rec['system'])}'s address is still the template's ({base_url or rec.get('template_url')}): "
+                         f"ask the owner in one sentence: \"{address.ask(kits.title(rec['system']), rec.get('template_url'))}\"; "
+                         "nothing was changed")
+    came = address.given(store, base_url) or (rec.get("base_url_from") if base_url == rec.get("base_url") else None)
+    if not came:                                     # never a guess: the owner's words this session, or this machine
+        raise StoreError(address.refused(kits.title(rec["system"]), base_url).replace("nothing was written", "nothing was changed"))
     settings = kits.check_settings(a.get("settings") or {})
     scope = rec.get("scope")
     if scope and scope not in settings:
@@ -491,6 +506,8 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         if settings:
             kits.fill(target, settings, None)
         kits.clear(target, creds, data_class, base_url)
+        lines += branch.carry(project, store, rec, f"approve the collector {name} for {kits.title(rec['system'])}",
+                              prov["reason"], prov.get("quote"))
         lines.append(f"{rec['dir']}/poller.toml: clearance \"approved\", data_class {data_class!r}, {named} (by reference "
                      f"only), base_url {base_url}" + (f", {', '.join(settings)}" if settings else ""))
         lines.append("its test ran against the kit's fake before your settings (it sets the template's variable and reads "
@@ -505,7 +522,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]
     lines += schedule.write(project, store, steps, prov["reason"])
     rec.update(state="approved", clearance="approved", token_env=creds.get("token_env"), credentials=creds,
-               data_class=data_class, base_url=base_url,
+               data_class=data_class, base_url=base_url, base_url_from=came,
                approved={"at": time.time(), "quote": prov.get("quote"), "turn": prov.get("turn")}, steps=steps)
     _save(store, name, rec)
     missing = []

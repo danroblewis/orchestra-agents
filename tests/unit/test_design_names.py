@@ -132,4 +132,47 @@ def test_drop_refuses_a_declaration_that_is_more_than_a_name(project, store):
 
 def test_the_tool_is_listed_with_the_design_tools():
     tool = {t.name: t for t in DESIGN_TOOLS}["name_part"]
-    assert set(tool.required) == {"shown", "quote", "reason"} and "never one you made up" in tool.description
+    assert set(tool.required) == {"quote", "reason"} and "never one you made up" in tool.description
+    assert "before ever saying a stock is not in the model" in tool.description
+
+
+def run3_model(project):
+    """Bootstrap run 3's v1: the ticket workflow's in-progress pile, shown as "in in_progress", beside
+    its done pile (both tagged by their workflow)."""
+    from orchestra.sd.model import Model, SeriesRef, Stock
+    from orchestra.sd.store import ModelStore
+    pile = "workflow_step_items"
+    stocks = [Stock("wip", "in in_progress", series=SeriesRef(pile, {"step": "in_progress", "workflow": "ticket_delivery"}),
+                    evidence={"named": "places", "tags": ["workflow=ticket_delivery"]}),
+              Stock("fin", "in done", series=SeriesRef(pile, {"step": "done", "workflow": "ticket_delivery"}),
+                    evidence={"named": "places", "tags": ["workflow=ticket_delivery"]})]
+    ModelStore.for_state(project.orchestra.state_dir).save(Model("m", "m", stocks=stocks, flows=[]), "for the test")
+
+
+def test_the_owners_words_alone_find_the_discovered_stock_and_name_it(project, store):
+    """Run 3, step 10: asked for the stock that matters, the Supervisor said it was not in the model
+    while v1 held it. The owner's words are matched to the shown name and tags; it is declared,
+    linked and "named by you"."""
+    run3_model(project)
+    msg = "The one that matters most is tickets in flight"
+    out = name(project, store, msg, name="tickets in flight")
+    assert out["said"][0] == "tickets in flight, over 'in in_progress · workflow=ticket_delivery', named by you"
+    assert [c["op"] for c in changes(project)] == ["declare_stock", "link"]
+    assert names(project) == {"wip": "tickets in flight"}
+
+
+def test_a_stock_declared_before_is_linked_not_declared_twice(project, store):
+    run3_model(project)
+    say(store, "add a stock Tickets in flight")
+    call(project, store, "declare_stock", name="Tickets in flight", quote="add a stock Tickets in flight", reason=WHY)
+    out = name(project, store, "call it tickets in flight", name="tickets in flight", quote="call it tickets in flight")
+    assert "named by you" in out["said"][0]
+    assert [c["op"] for c in changes(project)] == ["declare_stock", "link"]
+    assert names(project) == {"wip": "Tickets in flight"}
+
+
+def test_no_match_says_so_with_the_discovered_stocks_listed(project, store):
+    run3_model(project)
+    with pytest.raises(StoreError, match=r"the model's stocks now: in in_progress · workflow=ticket_delivery; in done"):
+        name(project, store, "call it release health", name="release health")
+    assert changes(project) == []

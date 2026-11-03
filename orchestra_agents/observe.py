@@ -172,4 +172,14 @@ def check_setup(project: Project, store: AgentStore) -> dict:
             "plugin_checks": [{**c, "findings": first(c.get("findings") or [])} if isinstance(c, dict) else c
                               for c in first(plugins["plugins"])],
             "plugins_not_checked": first(plugins["not_checked"]),
-            "config_can_change": why_not_committable(project) or "yes"}
+            "config_can_change": why_not_committable(project) or "yes",
+            "ci": _ci(project)}
+
+
+def _ci(project: Project) -> dict:
+    """The project's CI from its workflow files (``project_ci``), named in the first answer."""
+    from . import project_ci
+    try:
+        return project_ci.summary(project.repo_root)
+    except Exception as e:  # noqa: BLE001 - an odd file never breaks the check: it says so
+        return {"workflows": [], "line": f"The CI workflow files could not be read ({e})."}

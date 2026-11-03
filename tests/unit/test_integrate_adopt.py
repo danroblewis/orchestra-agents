@@ -13,7 +13,7 @@ from orchestra_agents.store import StoreError
 
 pytest_plugins = ["design_fixtures"]
 
-ASK = "Connect Jira Data Center read-only, filtered to the sprint board's members"
+ASK = "Connect Jira Data Center at jira.corp.test read-only, filtered to the sprint board's members"
 YES = "I approve reading it read-only, metadata only; the token is in the jira-token file"
 
 
@@ -110,7 +110,7 @@ def test_a_new_name_still_scaffolds_and_another_kits_name_is_refused(project, st
 
 def test_a_store_with_a_collector_is_measured_by_it(project, store):
     ship(project, "promql", "chronosphere")
-    say(store, "Connect Chronosphere for this allowlist only")
+    say(store, "Connect Chronosphere for this allowlist only, at acme-corp.chronosphere.io")
     got = call(project, store, "integrate_system", system="chronosphere", wants="the team's series, bounded",
                base_url="https://acme-corp.chronosphere.io/data/metrics",
                settings={"selectors": ['{namespace="payments"}'],

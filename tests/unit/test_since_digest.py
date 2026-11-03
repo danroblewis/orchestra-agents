@@ -199,3 +199,19 @@ def test_the_anomalies_come_first():
     assert "SCRUM-8" not in look and "SCRUM-9" not in look
     assert "an open item whose pull request closed unmerged: SCRUM-7 (#43) on #43 (closed at" in look
     assert paras[2].startswith("Tickets:")
+
+
+def test_items_open_from_a_start_event_are_never_none_started():
+    """Bootstrap run 3: five tickets opened items by their assignment (a start event, no item event)
+    and the digest said "Items: none started". The Items line counts the plugin's open items, and an
+    ``item.opened`` on the bus counts as started."""
+    t = NOW - 3600
+    jira = [ev("jira.issue.assigned", t + i, f"HK-{102 + i}") for i in range(5)]
+    d = since_digest.digest(jira, NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M", open_items=5)
+    line = paragraph(d, "Items:")
+    assert "none started" not in line and "5 open now" in line
+    d = since_digest.digest([*jira, ev("item.opened", t + 9, "HK-102")], NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[],
+                            model="M", open_items=5)
+    assert "1 started: HK-102" in paragraph(d, "Items:") and "5 open now" in paragraph(d, "Items:")
+    d = since_digest.digest(jira, NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M", open_items=0)
+    assert "Items:" not in d                                         # nothing open, nothing said

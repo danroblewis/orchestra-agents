@@ -866,7 +866,9 @@ the branch is pushed and the pull request is an Outbox draft of the kind `superv
 orchestra-scm, the branch is made, nothing is refused, and the answer says the pull request is
 pending that configuration. Merging is the merge gate's or the owner's. Every answer names the
 branch and the pull request (`said`), the ledger's line repeats it, and "what changed"
-(`since_digest`) has a line for the Supervisor's open pull request (merged, by the provider's
+(`since_digest`; its Items line counts `item.requested` and `item.opened` in the window and the
+Workflows plugin's open items now, `workflow_tools.open_count`, and never says "none started" while
+any are open: a start event opens an item with no item event, bootstrap run 3) has a line for the Supervisor's open pull request (merged, by the provider's
 `learn`, until the checkout has it). orchestra-scm is a dev dependency, imported only in
 `supervisor_pr`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
 one branch, so one pull request accumulates every change until it is merged, its description the
@@ -918,7 +920,9 @@ count and its first `answers.LISTED`, a log line at most 300 characters): `check
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
 launcher runs; each collector's last round; what each installed plugin's `Plugin.check` says against
 the merged configuration, in its own words, a check that raises reported as `its check failed: <error>`
-without stopping the others, `plugin_findings.py`), `read_config` (orchestra.toml, whether it can be
+without stopping the others, `plugin_findings.py`; and `ci`, the project's CI as its
+`.github/workflows/*.yml` say it, each file's name, triggers and jobs, read line by line from the
+tree, `project_ci.py`, which the first answer names, bootstrap run 3), `read_config` (orchestra.toml, whether it can be
 changed now, its recent commits; whether the owner has a private overlay and each key it sets,
 secret values left out), `list_processes` (Orchestra's runtime record and the declared
 collectors), `read_machine_log` (a process's or collector's log, Orchestra's host's, or the log a
@@ -1071,7 +1075,13 @@ two matches answered with one question, `asked`, and nothing declared; `declare_
 `declare_effect` with the owner's name and `link` to the stock's key, or `declare_flow` between
 its two stocks' keys with the name (a flow to or from outside, or one of two between the same
 stocks, cannot carry one); the owner's quote required and the name in it; again with a new name it
-re-declares the same id, `drop` retracts a declaration it made and refuses one that means more),
+re-declares the same id, `drop` retracts a declaration it made and refuses one that means more;
+with `shown` left out, the owner's words alone are matched to the discovered stocks' shown names and
+tags (plurals and a few everyday words for a step: "in flight" is `progress`), the best one named,
+a tie one question, and none a refusal listing the model's stocks, so the Supervisor never says a
+stock is missing without them; a declared stock of that name not yet linked is linked, never
+declared twice; asked for "the stock that matters", the prompt has it `read_model` first, bootstrap
+run 3's step 10),
 `declare_subsystem` (`design_subsystems.py`, 2026-11-02: the owner's subsystems in words, Orchestra's
 `docs/proposals/subsystems.md` §5 and its SPEC §4.6, §10; a box on the Dynamics and Machines maps,
 how they are read, never a split of the model: it binds no series and changes no equation,
@@ -1121,8 +1131,14 @@ Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone
 library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
 scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
 imported only in `integrate_kits`) into the owner's repository (`.orchestra/machines/<name>/`, the
-kit's `--root repo`, uncommitted: a coding tool may edit it, and the owner commits it or approves
-its pull request, as INTEGRATING.md says), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
+kit's `--root repo`, live from there: a coding tool may edit it; its own four files are one commit
+on `orchestra/supervisor`, again when its `poller.toml` changes, proposed with that branch's pull
+request, and the live copy is ignored in this checkout only, `.git/info/exclude`, so `git status`
+stays the owner's and pulling the merged pull request replaces the ignored copy with the same files,
+tracked from then: `integrate_branch.py`, bootstrap run 3, whose 28 untracked files were the 7
+pollers' scaffolds; what a collector writes at run time, its cursor and cache, is the state
+directory's already; one handed to the Coordinator, adopted, or in the state directory is not
+carried), or into Orchestra's state directory (`<state>/machines/<name>/`, `--root state`) only
 with `root: state`, when the owner said the repository must stay clean; it runs the
 program's own test against the kit's fake in a child Python with every credential-looking variable
 left out of its environment, and only then fills the owner's words and settings into its
@@ -1195,7 +1211,15 @@ why, and its hint is a place the rule allows (`~/.config/orchestra-bridges/<file
 else a description). The check runs when `integrate_system` is given where the token is (its
 optional `token_env`/`token_file`/`user_env`/`user_file`: refused before anything is scaffolded,
 recorded for the approval) and again at `approve_integration`, against the file as it is then, the data class (`metadata only` by
-default) and the site's address when the template's placeholder is still there; it writes
+default) and the site's address when the owner has not given it. **An address is never guessed**
+(`integrate_address.py`, bootstrap run 3, where the template's `https://slack.com` was approved and
+the first poll sent a test token there): `base_url` is taken only from the owner's words this
+session (its host, and port when given, in one of their messages, the quoted one among them) or a
+loopback address on this machine (a kit's fake, or what the kit's probe found running here); a
+template's default, an adopted collector's file and a vendor's usual host are not, and a guessed
+one is refused with nothing written. With none, `ask_owner` asks for it in one sentence, naming the
+template's value for the owner to confirm in their words, and `approve_integration` approves
+nothing; it writes
 `clearance = "approved"`, `data_class` and those references into `machine.toml` (dropping the
 template's `token_env` when the owner named only a file; the scaffolded test reads them from
 there, so it is not run again), says whether each variable is set and each file is there and

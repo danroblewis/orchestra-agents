@@ -161,7 +161,7 @@ class Coordinator:
         self.asked = 0
 
     def announce(self) -> None:
-        self.events.publish("orchestra.machine.started", {"mode": "scheduled", "kind": "program", "listens_for": ["attention.needed"]})
+        self.events.announce({"mode": "scheduled", "kind": "program", "listens_for": ["attention.needed"]})
 
     def ask(self, count: int) -> list[str]:
         out = []

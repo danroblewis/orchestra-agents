@@ -1065,9 +1065,17 @@ the share rule (the majority of the system never lives in `.orchestra/`). `decla
 says the machine's age (`design_machines.age_line`). Two tools carry it:
 
 - `machine_ages` (group `observe`, read only, `machine_ages.py`): each machine heard on the bus in
-  its age, joined to its `[[machines]]` entry by the log it announced (the launcher's
-  `<state>/logs/machines/<entry>.log`), its id, or a command naming `.orchestra/machines/<id>/`;
-  a program with none of these and no directory is `unknown`; the counts, the share of programs in
+  its age, joined to its `[[machines]]` entry first by the launcher's process that started it (the
+  machines view's `processes`, from each announcement's `process`, which the launcher sets as
+  `ORCHESTRA_PROCESS`): a name the project's `[[machines]]` holds is that entry, in the age its
+  command says (graduated outside `.orchestra/`); a `<plugin>.<name>` is a plugin's process and never
+  a machine's age (the provider is never the machine, Orchestra's rule 2), so it joins no entry and
+  the machine is `unknown` unless the project holds its directory. An announcement without
+  `process` falls back to the log it announced (the launcher's `<state>/logs/machines/<entry>.log`),
+  its id, or a command naming `.orchestra/machines/<id>/`, and the row says so (`by: fallback`, the
+  answer's `fell_back` and its note); a program with none of these and no directory is `unknown`.
+  The agents' own announcements (the host's, so the runner's and the floor runner's, and the
+  demos') go through Orchestra's `Events.announce`, so each carries the launcher's process; the counts, the share of programs in
   `.orchestra/`, and those due to graduate (a program in `.orchestra/` first heard a week ago or
   more in the events read). Whether an agent is a program waiting to be written is "not measured".
   Its line is the digest's second-to-last paragraph, before the model line (`since_digest`).

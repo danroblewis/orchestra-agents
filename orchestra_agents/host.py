@@ -456,10 +456,9 @@ class AgentHost:
             return
         self._announced.add(key)
         agent = self.agents.get(role) or all_agents(self.project).get(role)
-        self.events.publish("orchestra.machine.started", {"package": "agents", "mode": engaged(agent),
-                                                          "listens_for": self._listens_for(agent), "kind": "agent",
-                                                          "role": role, **({"roles": floor} if floor else {})},
-                            source=source)
+        # Events.announce adds ``process``, the launcher's name for this host (ORCHESTRA_PROCESS)
+        self.events.announce({"package": "agents", "mode": engaged(agent), "listens_for": self._listens_for(agent),
+                              "kind": "agent", "role": role, **({"roles": floor} if floor else {})}, source=source)
 
     def _listens_for(self, agent: AgentDef | None) -> list[str]:
         floor = agent is not None and agent.name in served(self.project).values()

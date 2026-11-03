@@ -37,6 +37,19 @@ def test_an_announcement_carries_what_is_read_and_a_changed_floor_role_announces
     assert all("harness" not in e and "model" not in e and e["mode"] == "ad hoc" for e in said)
 
 
+def test_the_hosts_announcement_carries_the_launchers_process(tmp_path, monkeypatch):
+    project = project_at(tmp_path, monkeypatch)
+    monkeypatch.setenv("ORCHESTRA_PROCESS", "agents.host")
+    host = AgentHost(project, AgentStore(project), Events.for_project(project))
+    monkeypatch.setattr("orchestra_agents.host.served", lambda p: {})
+    host._announce("worker/1", "worker")
+    monkeypatch.delenv("ORCHESTRA_PROCESS")
+    host._announce("reviewer/1", "reviewer")
+    said = {e["source"]: e for e in host.events.read(0, 100)[0] if e["type"] == "orchestra.machine.started"}
+    assert said["worker/1"]["process"] == "agents.host"
+    assert "process" not in said["reviewer/1"]
+
+
 def test_a_heartbeat_says_the_last_line_the_agent_said(monkeypatch):
     monkeypatch.setattr(offer_turn, "SAY_S", 0.01)
     session = {"partial_text": "Reading the brief.\n\nRunning the tests now.\n  \n"}

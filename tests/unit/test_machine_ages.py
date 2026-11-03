@@ -47,8 +47,8 @@ def test_each_machine_in_its_age(project, store, heard):
               {"id": "orchestra-host", "bootstrap": True}]
     got = call(project, store, "machine_ages")
     by = {r["id"]: r for r in got["machines"]}
-    assert by["relator"]["age"] == "program in .orchestra/" and by["relator"]["joined"] == "by name"
-    assert by["place_ticket"]["age"] == "graduated" and by["place_ticket"]["joined"] == "by the log it announced"
+    assert by["relator"]["age"] == "program in .orchestra/" and by["relator"]["joined"].startswith("by name (fallback")
+    assert by["place_ticket"]["age"] == "graduated" and by["place_ticket"]["joined"].startswith("by the log it announced")
     assert by["supervisor"]["age"] == "agent" and by["owner"]["age"] == "other"
     assert by["bot.jira"]["age"] == "unknown"
     assert "orchestra-host" not in by
@@ -76,3 +76,42 @@ def test_the_digest_says_the_ages_before_the_model_line(project, store, heard):
     got = call(project, store, "read_events", since="1h")
     paras = got["digest"].split("\n\n")
     assert paras[-2].startswith("Machines by age: 1 agent, 0 programs in .orchestra/, 0 graduated") and paras[-1] == got["closing_line"]
+
+
+def test_graduated_by_the_launchers_process(project, store, heard):
+    project_with(project, {"placer-1": "python3 -m acme.placer", "relator": "python .orchestra/machines/relator/relator.py"})
+    heard += [{"id": "place_ticket", "kind": "program", "processes": ["placer-1"], "first_seen": time.time()},
+              {"id": "linker", "kind": "program", "processes": ["relator"], "first_seen": time.time()}]
+    got = machine_ages.machine_ages(project, store)
+    by = {r["id"]: r for r in got["machines"]}
+    assert by["place_ticket"]["age"] == "graduated" and by["place_ticket"]["entry"] == "placer-1"
+    assert by["place_ticket"]["by"] == "process" and "launcher's process" in by["place_ticket"]["joined"]
+    assert by["linker"]["age"] == "program in .orchestra/" and by["linker"]["entry"] == "relator"   # its process, not its name
+    assert got["fell_back"] == [] and "fallback" not in got["note"]
+
+
+def test_a_plugins_process_is_never_a_machines_age(project, store, heard):
+    project_with(project, {"relator": "python .orchestra/machines/relator/relator.py"})
+    heard += [{"id": "relator", "kind": "program", "processes": ["workflows.programs"], "first_seen": time.time()},
+              {"id": "poller", "kind": "program", "processes": ["bridges.poller"], "first_seen": time.time()}]
+    got = machine_ages.machine_ages(project, store)
+    by = {r["id"]: r for r in got["machines"]}
+    assert "entry" not in by["relator"] and by["relator"]["age"] == "program in .orchestra/"   # its directory, not the entry by name
+    assert by["relator"]["plugin_process"] == "workflows.programs"
+    assert by["poller"]["age"] == "unknown" and "plugin's process bridges.poller" in by["poller"]["joined"]
+    assert got["fell_back"] == [] and got["counts"]["graduated"] == 0
+
+
+def test_the_fallback_is_used_and_said(project, store, heard):
+    project_with(project, {"placer-1": "python3 -m acme.placer"})
+    log = project.orchestra.state_dir / "logs" / "machines" / "placer-1.log"
+    store.events.publish("orchestra.machine.started", {"kind": "program", "mode": "continuous", "log": str(log)},
+                         source="place_ticket")
+    heard += [{"id": "place_ticket", "kind": "program", "first_seen": time.time()},
+              {"id": "gone", "kind": "program", "processes": ["old-entry"], "first_seen": time.time()}]
+    got = machine_ages.machine_ages(project, store)
+    by = {r["id"]: r for r in got["machines"]}
+    assert by["place_ticket"]["age"] == "graduated" and by["place_ticket"]["by"] == "fallback"
+    assert by["place_ticket"]["joined"] == "by the log it announced (fallback: its announcement names no process)"
+    assert by["gone"]["by"] == "fallback" and by["gone"]["age"] == "unknown"
+    assert got["fell_back"] == ["place_ticket", "gone"] and "the fallback): place_ticket, gone" in got["note"]

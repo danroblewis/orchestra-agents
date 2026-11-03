@@ -420,7 +420,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#0a9db4cfaedb1cba5c6cbdd42cbb2a92a65a8b6a" }
+source = { git = "https://github.com/danroblewis/orchestra?rev=main#a9a9adb38e859557920d35975f84a70114923518" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },
@@ -477,7 +477,7 @@ provides-extras = ["dev"]
 [[package]]
 name = "orchestra-bridges"
 version = "0.1.0"
-source = { git = "https://github.com/danroblewis/orchestra-bridges#26078cb9977fbc5097cb0e1928a85c55456e9211" }
+source = { git = "https://github.com/danroblewis/orchestra-bridges#30d12b2de9a194846f08b165f175e30e2c0378fd" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "pytest" },
@@ -486,7 +486,7 @@ dependencies = [
 [[package]]
 name = "orchestra-scm"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-scm?rev=main#029e26f8615347b0e260efbf3a9a4be03515324c" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-scm?rev=main#ee6fced7c2f2a394a77d3c211301ef3c6d3ad780" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "orchestra-bridges" },
@@ -506,7 +506,7 @@ dependencies = [
 [[package]]
 name = "orchestra-workflows"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#c8686152ef1ca9cc1971dfc12b0218891ff33021" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-workflows#1b523c7543cc97572a1b0550d9083ee1c9a4c93f" }
 dependencies = [
     { name = "fastapi" },
     { name = "orchestra", extra = ["sd"] },

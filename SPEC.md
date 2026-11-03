@@ -790,7 +790,13 @@ Supervisor's open pull request until its commit is merged (in the checkout, or i
 one branch, so one pull request accumulates every change until it is merged, its description the
 first change's (later ones are its commits); the organisation's records (`roles.commit_orchestra_files`)
 still commit to the base branch when the checkout is clean there; and a split proposal or the
-starting spec rides on the branch with the next change's pull request.
+starting spec rides on the branch with the next change's pull request. **Open conflict with the merge gate:** a
+file changed in place is `skip-worktree` (the checkout reads clean, so the gate lands tickets that
+do not touch it), but a ticket whose commit edits `orchestra.toml` while the Supervisor's own change
+to it is unmerged cannot be fast-forwarded into the root (git refuses to overwrite the file), and
+its branch, made from the base, lacks the Supervisor's settings. `settle` readies the checkout for
+the pull once the Supervisor's pull request is merged upstream; until then such a landing waits
+(`tests/e2e/test_supervisor_operator_e2e.py` fails on it).
 
 **Guides** (tool group `guides`; the Supervisor and the Coordinator): `list_guides` (each operator's
 guide Orchestra serves, `orchestra.guides.collect`: Orchestra's own and each installed plugin's

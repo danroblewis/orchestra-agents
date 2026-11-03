@@ -291,16 +291,23 @@ TOOLS: list[ToolDef] = [
              "auth": O("With url: as [[sources]] writes it: {\"bearer_file\": \"~/path/to/token\"} for a token in a file, "
                        "{\"bearer_env\": \"WORK_TOKEN\"} for one in the environment; never the token itself")}),
     ToolDef("source_schema", "observe",
-            "What a store has: without match, every metric name with its type (or a guess from its name), and its levels (gauges "
-            "of amounts held, with what each holds); with match, those metrics in detail (series, labels, help, label values).",
+            "What a store has, always within its bound (the source's match, the owner's scope, and at most its max_series "
+            "series): without match, every metric name the bound selects with its type (or a guess from its name), and its "
+            "levels (gauges of amounts held, with what each holds); with match, those metrics in detail (series, labels, help, "
+            "label values), each selector ANDed with the bound. A store with no bound is never asked for every metric name: "
+            "the tool refuses and says so.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
+             "bound": A("With url: the owner's scope for that store, as [[sources]] match writes it (e.g. {namespace=\"team\"}); a "
+                         "declared source's own match is always its bound"),
              "match": A("PromQL selectors, e.g. {__name__=~\"http_.*\"}"), "minutes": I("The window, default 60"),
-             "limit": I("Most series read, default 20000")}),
+             "limit": I("Most series read, at most the source's max_series")}),
     ToolDef("preview_query", "observe",
             "What a PromQL query returns over a recent window: each series' labels, points, min, max, last and a sparkline. "
-            "From a source, or with neither source nor url from the project's own store.",
+            "From a source, or with neither source nor url from the project's own store. A query on a source with a bound "
+            "must name the bound's matchers in its selectors.",
             {"query": S("PromQL"), "source": S("A [[sources]] name"), "url": S("Or a store's URL"),
-             "auth": O("With url: as [[sources]] writes it"), "minutes": I("The window, default the discovery window"),
+             "auth": O("With url: as [[sources]] writes it"), "bound": A("With url: the owner's scope for that store, as [[sources]] match writes it (e.g. {namespace=\"team\"}); a "
+                         "declared source's own match is always its bound"), "minutes": I("The window, default the discovery window"),
              "step_s": I("Seconds per step, default the discovery step")}, ("query",)),
     ToolDef("infer_source", "observe",
             "What Orchestra infers to read from a store for discovery: its metric families (kind, stats, interval, labels "
@@ -320,9 +327,12 @@ TOOLS: list[ToolDef] = [
                                       "summed), a list of them (source_schema's levels as written), or \"all\": every "
                                       "level of the stores searched, each searched in turn"},
              "source": S("The level's store, a [[sources]] name (default: the first declared)"),
-             "url": S("Or the level's store by URL"), "auth": O("With url: as [[sources]] writes it"),
+             "url": S("Or the level's store by URL"), "auth": O("With url: as [[sources]] writes it"), "bound": A("With url: the owner's scope for that store, as [[sources]] match writes it (e.g. {namespace=\"team\"}); a "
+                         "declared source's own match is always its bound"),
              "sources": {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}, "description": "The stores to search: [[sources]] names, or "
-                         "{\"url\": ..., \"auth\": ...} objects (default: every declared one, and the level's)"},
+                         "{\"url\": ..., \"auth\": ..., \"bound\": ...} objects (default: every declared one, and the level's). "
+                         "Every read stays within each store's bound (its match) and max_series; a store with no bound is "
+                         "never searched for candidates"},
              "candidates": A("Test these counters instead of searching (selectors; prefix one with <store>: for another store)"),
              "max_candidates": I("Most metric names read as candidates, default 16"), "stock": S("The stock's name in the declarations"),
              "minutes": I("The window, default 60"), "step_s": I("Seconds per step, default the discovery step")},
@@ -360,9 +370,14 @@ TOOLS: list[ToolDef] = [
             "null. Say where: target overlay for the owner's own or their company's settings (identities, channels, "
             "templates, anything personal; never committed), repo for the project's settings (committed). [scm] (the "
             "provider your pull requests go through) is checked against orchestra-scm's keys: provider, repo, base, "
-            "api_url, token_file, template, protect (read_guide agents, its section on what you commit).",
+            "api_url, token_file, template, protect (read_guide agents, its section on what you commit). [discovery] "
+            "eras_from is refused when the event it adds comes faster than discovery can fit a stock in an era (half the "
+            "window, Orchestra's MIN_COVER): an era is for a change that can alter the system's behaviour, not every merge. "
+            "A change that changes nothing is not committed or announced.",
             {"key": S("section.name"),
              "value": S('The value as JSON: "#ops", 3, true, ["#a", "@me"], {"k": "v"}; null removes the key'),
+             "subject": S("What the change is for, in a few words (\"draft expiry\", \"an Outbox kind\"): the commit's "
+                          "subject and the pull request's title list it; default: named from the key"),
              "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("key", "target", "reason")),
     ToolDef("set_agent_roles", "setup",
             "Set which of the task system's roles the AI agents fill ([agents] serves). A role left out is left to other "

@@ -56,7 +56,23 @@ def plugin() -> SimpleNamespace | None:
         listing = import_module("orchestra_workflows.pages.items").items
     except (ImportError, AttributeError):
         listing = None                                    # an older plugin: list_items says so
-    return SimpleNamespace(define=define, problems=check.problems, roots=loader.roots, Record=api.Record, item_list=listing)
+    return SimpleNamespace(define=define, problems=check.problems, roots=loader.roots, Record=api.Record, item_list=listing,
+                           files=loader.files)
+
+
+def _texts(p, o) -> dict[str, str] | None:
+    """Every definition file's text, to tell a declaration that changed one from one that changed nothing."""
+    files = getattr(p, "files", None)
+    if files is None:
+        return None
+    out = {}
+    for _, root in p.roots(o):
+        for f in files(root):
+            try:
+                out[str(f)] = f.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return out
 
 
 def _plugin() -> SimpleNamespace:
@@ -86,6 +102,7 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
     project.reload_config()
     o = project.orchestra
     refusing = list(p.problems(o, definition))
+    before = _texts(p, o) if not refusing else None
     if not refusing:
         try:
             written = p.define.write(o, definition, root=root)
@@ -105,6 +122,14 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
                            "[[tasking]]Hand it to the Coordinator (hand_to_coordinator) to land it through a ticket and a pull "
                            "request. [[/tasking]]Tell the owner where it is and that it applies now in this checkout; never "
                            "ask them to commit, discard or land it.")
+    after = _texts(p, o)
+    if before is None or after is None or before.get(str(written.path)) != after.get(str(written.path)):
+        # a workflow's definition changes how the system works: config.changed about definition:<name> begins an era
+        store.events.emit("config.changed", section="workflows", change=f"declared the workflow {name}", reason=prov.get("reason"),
+                          commit=None, target=root, by=design.MACHINE, src=design.MACHINE, about=f"definition:{name}",
+                          **{"for": f"the workflow {name}"})
+    else:
+        out["unchanged"] = "the definition is the same as before: nothing written or announced"
     if runs := clock_words(definition.get("starts")):
         out["clock"] = runs + ": say this run time, and no other"
     if local:

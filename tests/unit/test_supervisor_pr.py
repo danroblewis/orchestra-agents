@@ -338,3 +338,54 @@ def test_scm_on_a_protected_base_is_refused_by_name(tmp_path, monkeypatch, forge
     out = call(project, store, "set_setting", key="scm", target="overlay", reason="the owner's own repository settings",
                value=_json.dumps(scm_value(forge, protect=[SIDE])))
     assert out["pull_request"]["number"] is None and f"refusing to push to {SIDE!r}" in out["said"]
+
+
+def _with_update_pr(monkeypatch, forge) -> list:
+    """The provider with ``update_pr`` on the fake forge (orchestra-scm's provider has none yet): it
+    rewrites the pull request's title and description as the forge keeps them."""
+    real, calls = supervisor_pr.provider, []
+
+    def provider(project, section):
+        scm = real(project, section)
+
+        def update_pr(change, *, title, body):
+            calls.append(change.number)
+            forge._pull(change.number)["title"] = title
+            forge.bodies[change.number] = body
+        scm.update_pr = update_pr
+        return scm
+    monkeypatch.setattr(supervisor_pr, "provider", provider)
+    return calls
+
+
+def test_the_pull_request_describes_the_whole_branch_and_is_updated_when_it_grows(project, store, forge, monkeypatch):
+    calls = _with_update_pr(monkeypatch, forge)
+    first = call(project, store, "set_setting", key="agents.draft_expiry", value='"12h"', target="repo",
+                 reason="the owner wants drafts to expire after twelve hours")
+    n = first["pull_request"]["number"]
+    assert forge._pull(n)["title"] == "Supervisor: draft expiry" and not calls
+    call(project, store, "set_setting", key="outbox.kinds", value='{"supervisor.pull_request": {"sender": "github.pr_open"}}',
+         target="repo", reason="the Supervisor's pull requests are drafts the owner approves")
+    last = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    assert last["pull_request"]["number"] == n and len(forge.data["pulls"]) == 1 and calls == [n, n]
+    assert forge._pull(n)["title"] == "Supervisor: draft expiry, an Outbox kind, capacity"
+    summary = forge.body_of(n).split("## Summary", 1)[1].split("## Testing", 1)[0].strip().splitlines()
+    assert len(summary) == 3 and summary[0].startswith("- draft expiry") and "twelve hours" in summary[0]
+    assert "drafts the owner approves" in summary[1] and WHY in summary[2]
+
+
+def test_a_provider_that_cannot_edit_a_pull_request_says_so(project, store, forge):
+    first = call(project, store, "set_setting", key="agents.draft_expiry", value='"12h"', target="repo",
+                 reason="the owner wants drafts to expire after twelve hours")
+    out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    assert out["pull_request"]["number"] == first["pull_request"]["number"]
+    assert "cannot edit an open pull request yet" in out["said"]
+
+
+def test_the_title_lists_what_the_branch_changes_in_sixty_characters():
+    assert supervisor_pr.title_of(["draft expiry", "[scm]", "[scm]", "an Outbox kind"]) == \
+        "Supervisor: draft expiry, [scm], an Outbox kind"
+    long = supervisor_pr.title_of([f"the collector poller_{k}" for k in range(6)])
+    assert len(long) <= supervisor_pr.TITLE_MAX and long.endswith("more") and "poller_0" in long
+    assert supervisor_pr.label_of("Supervisor: add duty x — The owner said", "") == "add duty x"
+    assert supervisor_pr.label_of("Supervisor: anything", "why\n\nSupervisor-For: [scm]") == "[scm]"

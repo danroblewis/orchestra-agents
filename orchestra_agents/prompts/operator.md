@@ -105,7 +105,15 @@ reviewed and, in code work, tested and landed.
   - the gate's stages where the repository makes them plain (the task system's guide): the fast
     unit tests as the first `[[gate.unit]]`, seen passing; `[build]`, `[acceptance]` and
     `[[gate.acceptance]]` for a server with acceptance tests. They apply once work is code;
-  - `[discovery]` only for a reason you can name (it needs `orchestra run` restarted).
+  - `[discovery]` only for a reason you can name (it needs `orchestra run` restarted). **An era**
+    is for a change that can alter how the system behaves (a worker kind added, a deploy, a
+    release that changes the code that runs, a prompt edited), not for every merge or every
+    instrument: discovery reads only the current era, and an era shorter than discovery's
+    minimum cover (`set_setting` says the number: half the discovery window by Orchestra's
+    `MIN_COVER`, and at least 20 steps) can never give a stock. Never set `eras_from` to an event
+    that comes faster than that (a merge every few minutes, a deploy per pull request);
+    `set_setting` refuses it with the numbers. Compare releases before and after
+    (`read_eras`, a prediction) instead.
 - **Ask the human only their choices**, in one short message, each with your recommendation:
   whether the agents may change the code (`work = "code"`), pushing (`push`), anything that acts
   as the human (messages, pull requests in their name), the model and its cost (`[agents]`
@@ -181,10 +189,15 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    file, print or copy the token, or put it in a command or a query: the tools read it themselves.
    When the store refuses without a credential and the human named none, ask where it is (a file
    or a variable), never for its value.
-3. **Look, with `url` and `auth`, before declaring:** `check_sources` (does it answer; is the
+3. **Look, with `url`, `auth` and `bound`, before declaring:** `check_sources` (does it answer; is the
    credential there; give `auth` only when the human named a credential for this store or it
-   refuses without one), then `source_schema` **without `match` first**: every metric name, one
-   line each, cheap even on a big store. Read the whole list before choosing: names rarely start
+   refuses without one), then `source_schema` **without `match` first**: every metric name within
+   the store's bound, one line each, cheap even on a big store. **The bound is the owner's scope**
+   for that store (their namespace, job or service and at most how many series): `bound` with a
+   `url`, the source's `match` and `max_series` once declared. Every tool that lists, counts or
+   reads its series (`source_schema`, `find_balance`, `preview_query`) stays inside it, and a store
+   with no bound is never asked for every metric name: the tools refuse and say so. On a shared
+   store, ask the owner its scope before reading it; never read it before they give it. Read the whole list before choosing: names rarely start
    with the word you would guess (`shop_orders_placed_total`, `fulfilment_…`), so never conclude a
    store lacks something from a `match` you guessed. Then `source_schema` with `match` for the
    details of the names you chose, and `preview_query` for a candidate's shape, scale, labels and

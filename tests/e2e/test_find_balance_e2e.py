@@ -60,6 +60,9 @@ def _stores(now: float):
     return FakeStore(shop, meta={}), FakeStore(biz, meta={})
 
 
+SHOP, BIZ = '__name__=~"jobs_.*|http_.*"', '__name__=~"jobs_.*"'     # the stores' bounds (their [[sources]] match)
+
+
 @pytest.fixture
 def stores():
     shop, biz = _stores(time.time())
@@ -104,7 +107,8 @@ def _mcp(project, tmp_path, role: str):
 def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(project, stores, tmp_path):
     shop, biz = stores
     sup = AgentStore(project, Events.for_project(project, source="supervisor"))
-    sources = [{"name": "shop", "url": shop.url, "infer": False}, {"name": "biz", "url": biz.url, "infer": False, "settle": "90s"}]
+    sources = [{"name": "shop", "url": shop.url, "infer": False, "match": [f"{{{SHOP}}}"]},   # each with its bound
+               {"name": "biz", "url": biz.url, "infer": False, "settle": "90s", "match": [f"{{{BIZ}}}"]}]
     tooling.handle(project, sup, "set_setting", {"key": "sources", "value": json.dumps(sources), "target": "repo",
                                                   "reason": "The shop's queue and the business store."}, role="supervisor")
 
@@ -123,11 +127,12 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     best = got["balances"][0]
     assert best["accepted"], best
     assert sorted((t["store"], t["select"], t["role"]) for t in best["terms"]) == [
-        ("biz", 'jobs_done_total{env="prod"}', "outflow"), ("shop", 'jobs_published_total{queue="jobs"}', "inflow")]
+        ("biz", f'jobs_done_total{{{BIZ},env="prod"}}', "outflow"),
+        ("shop", f'jobs_published_total{{{SHOP},queue="jobs"}}', "inflow")]                 # each read within its store's bound
     assert "jobs_done_total" in best["fit"]["on"]                     # balanced on the slow store's writes
     assert not any("staging" in k for k in got["candidates_read"])    # a staging copy is never read
     assert not any("bytes" in k for k in got["candidates_read"])      # nor a counter in another unit
-    assert best["declare"][0] == {"source": "shop", "name": "jobs_level", "query": 'sum(jobs_queue_messages{queue="jobs"})',
+    assert best["declare"][0] == {"source": "shop", "name": "jobs_level", "query": f'sum(jobs_queue_messages{{{SHOP},queue="jobs"}})',
                                   "kind": "level", "stock": "jobs", "role": "level"}
 
     # the levels source_schema lists, passed as written, are searched each in turn
@@ -137,7 +142,8 @@ def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(pro
     assert [x["level"] for x in each["balanced"]] == ['jobs_queue_messages{queue="jobs"}', 'jobs_queue_messages{queue="other"}']
     jobs, other = each["balanced"]
     assert "jobs_done_total" in jobs["balance"] and other["balance"] == "+shop:jobs_published_total"
-    assert [d["query"] for d in other["declare"]] == ['sum(jobs_queue_messages{queue="other"})', 'sum(jobs_published_total{queue="other"})']
+    assert [d["query"] for d in other["declare"]] == [f'sum(jobs_queue_messages{{{SHOP},queue="other"}})',
+                                                    f'sum(jobs_published_total{{{SHOP},queue="other"}})']
     assert sorted(d["name"] for d in each["declare_all"]) == sorted(d["name"] for d in jobs["declare"] + other["declare"])
     assert each["not_balanced"] == []
     every = tooling.handle(project, sup, "find_balance", {"level": "all", "source": "biz", "step_s": 30}, role="supervisor")

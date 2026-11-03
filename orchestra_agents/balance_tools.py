@@ -31,6 +31,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations, pairwise
 
+from . import source_bounds as bounds
 from .config import Project
 from .store import StoreError
 
@@ -105,6 +106,8 @@ class Store:
 
     def __init__(self, name: str, src, spec, declared: bool):
         self.name, self.src, self.spec, self.declared = name, src, spec, declared
+        self.bound = bounds.bound_of(spec)       # every read stays inside it (source_bounds)
+        self.cap = bounds.cap(spec, MAX_SERIES)  # the most series one listing asks for
         self.names: list[str] | None = None      # its metric names, listed once per call
         self.reads: dict = {}                    # candidate reads, by (selector, by): shared by the call's levels
         self.meta: dict = {}                     # the metadata of the names asked about
@@ -121,6 +124,14 @@ class Store:
                 pass
             self._asked |= set(missing)
         return self.meta
+
+    def sels(self, selector: str) -> list[str]:
+        """The selector within the store's bound (a list: the bound's union)."""
+        return bounds.selectors(self.bound, [selector])
+
+    def expr(self, selector: str, fn=lambda s: s) -> str:
+        """``fn`` of the selector within the store's bound, as one PromQL expression."""
+        return bounds.expr(self.bound, fn, selector)
 
 
 def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
@@ -140,7 +151,9 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
             from .source_tools import trial_name
             name = trial_name(x["url"])
             if name not in {t["name"] for t in trial}:
-                trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {})})
+                bound = x.get("bound")
+                trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {}),
+                              **({"match": [bound] if isinstance(bound, str) else list(bound)} if bound else {})})
             return name
         name = str(x or "").strip()
         if name not in declared:
@@ -150,7 +163,7 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
                              "before declaring it")
         return name
 
-    level_ref = ref({"url": a["url"], "auth": a.get("auth")} if a.get("url") else (a.get("source") or (next(iter(declared), ""))))
+    level_ref = ref({"url": a["url"], "auth": a.get("auth"), "bound": a.get("bound")} if a.get("url") else (a.get("source") or (next(iter(declared), ""))))
     names = [level_ref]
     for x in a.get("sources") or list(declared):
         n = ref(x)
@@ -211,8 +224,11 @@ def _candidates(store: Store, level_metric: str, words: set[str], unit: str, sta
                 name_unit) -> list[tuple[float, str, Store]]:
     from orchestra.sources import SourceError
     if store.names is None:
+        if store.bound is None:
+            store.names = []
+            raise TooLarge(str(bounds.unbounded(store.name, "searching it for candidates")) + "; or give candidates (selectors)")
         try:
-            store.names = sorted(set(store.src.names(['{__name__=~".+"}'], start, end, limit=store.spec.max_names + 1)))
+            store.names = sorted(set(store.src.names(store.bound, start, end, limit=store.spec.max_names + 1)))
         except SourceError:
             store.names = []
         if len(store.names) > store.spec.max_names:
@@ -238,9 +254,10 @@ def _plan(store: Store, name: str, level_labels: dict[str, str], words: set[str]
     labels as matchers where the candidate has that value, production only, and by a label whose
     values name the level's subject (a topic named for the consumer group's orders)."""
     from orchestra.sources import SourceError
-    sets = store.src.series([name], start, end, MAX_SERIES + 1)
-    if len(sets) > MAX_SERIES:
-        raise SourceError(f"more than {MAX_SERIES} series: not read; give it as a candidate with label matchers")
+    sets = store.src.series(store.sels(name), start, end, store.cap + 1)
+    if len(sets) > store.cap:
+        raise SourceError(f"more than {store.cap} series within {store.name}'s bound (its max_series): not read; give it as a "
+                          "candidate with label matchers")
     have: dict[str, set[str]] = {}
     for labels in sets:
         for k, v in labels.items():
@@ -265,7 +282,7 @@ def _plan(store: Store, name: str, level_labels: dict[str, str], words: set[str]
 def _resolution(store: Store, sel: str, end: float) -> float | None:
     from orchestra.sources import SourceError
     try:
-        got = store.src.query_range(f"max(count_over_time({sel}[10m]))", end, end, 60)
+        got = store.src.query_range(f"max({store.expr(sel, lambda s: f'count_over_time({s}[10m])')})", end, end, 60)
     except SourceError:
         return None
     vals = [v for _, pts in got for _, v in pts if v > 0]
@@ -285,12 +302,12 @@ def _read_counter(store: Store, name: str, sel: str, by: list[str], kind: str, s
     if kind == "counter":
         s = counter_step(step, res)
         t0 = math.floor(start / s) * s
-        rows = store.src.query_range(f"sum{grp}(increase({sel}[{int(s)}s]))", t0, end, s)
+        rows = store.src.query_range(f"sum{grp}({store.expr(sel, lambda x: f'increase({x}[{int(s)}s])')})", t0, end, s)
         for labels, pts in accumulate(rows, t0, s):
             out.append((labels, _held(pts, start, end, step), Declared("counter", resolution_s=s)))
     else:
         q = grid_step(step, res)
-        rows = store.src.query_range(f"sum{grp}({sel})", math.floor(start / q) * q, end, q)
+        rows = store.src.query_range(f"sum{grp}({store.expr(sel)})", math.floor(start / q) * q, end, q)
         for labels, pts in rows:
             drops = sum(1 for (_, a), (_, b) in pairwise(pts) if b < a)
             if pts and drops <= 2 and pts[-1][1] > pts[0][1]:
@@ -299,7 +316,7 @@ def _read_counter(store: Store, name: str, sel: str, by: list[str], kind: str, s
     for labels, pts, kind_ in out:
         if any(NOT_PROD.match(v) for k, v in labels.items() if k in ENV_LABELS):
             continue
-        keep.append((f"{store.name}:{name}", {k: v for k, v in labels.items() if k in by}, pts, kind_, sel, by))
+        keep.append((f"{store.name}:{name}", {k: v for k, v in labels.items() if k in by}, pts, kind_, sel, by))   # sel: unbounded; bounded where read and declared
     return keep[:MAX_GROUPS]
 
 
@@ -371,22 +388,31 @@ def expand(levels) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def all_levels(stores: list[Store], start: float, end: float) -> list[str]:
-    """Every searched store's levels, as ``source_schema`` lists them: the names that look like
-    amounts held (one request for the names), then those names' series and types alone."""
+def all_levels(stores: list[Store], start: float, end: float, notes: list[str] | None = None) -> list[str]:
+    """Every searched store's levels, as ``source_schema`` lists them: the names within the store's
+    bound that look like amounts held (one request for the names), then those names' series (within
+    the bound, at most its ``max_series``) and types alone. A store with no bound is not listed
+    (``source_bounds``), and ``notes`` says so."""
     from orchestra.sources import SourceError
-    from orchestra.sources.listing import listing
+    from orchestra.sources.listing import listing, with_names
 
     from .source_tools import _guess, _levels, level_names
+    notes = notes if notes is not None else []
     per: list[list[str]] = []
     for st in stores:
+        if st.bound is None:
+            notes.append(str(bounds.unbounded(st.name, "level \"all\"")))
+            continue
         try:
-            names = sorted(set(st.src.names(['{__name__=~".+"}'], start, end, limit=st.spec.max_names + 1)))
+            names = sorted(set(st.src.names(st.bound, start, end, limit=st.spec.max_names + 1)))
             if len(names) > st.spec.max_names:
+                notes.append(f"{st.name}: more than {st.spec.max_names} names within its bound: give its levels")
                 continue                             # a big store: its levels are given, not listed
             wanted = level_names(names)
-            got = listing(st.src, wanted, start, end, concurrency=st.spec.concurrency) if wanted else None
-        except SourceError:
+            got = (listing(st.src, [with_names(b, wanted) for b in st.bound], start, end, concurrency=st.spec.concurrency,
+                           limit=st.cap) if wanted else None)
+        except SourceError as e:
+            notes.append(f"{st.name}: {e}")
             continue
         if got is None:
             continue
@@ -411,9 +437,11 @@ def find_balance(project: Project, a: dict) -> dict:
         raise StoreError("give the level: a PromQL selector, e.g. rabbitmq_queue_messages{queue=\"email\"}, or a list of them")
     home, stores = _stores(project, a)
     if levels == ["all"]:
-        levels = all_levels(stores, time.time() - WINDOW_MIN * 60, time.time())
+        why: list[str] = []
+        levels = all_levels(stores, time.time() - WINDOW_MIN * 60, time.time(), why)
         if not levels:
-            raise StoreError("no store searched has a gauge that looks like an amount held: give the levels")
+            raise StoreError("no store searched has a gauge that looks like an amount held: give the levels"
+                             + (f" ({'; '.join(why)})" if why else ""))
     later = levels[MAX_LEVELS:]
     levels = levels[:MAX_LEVELS]
     _budget(stores, len(levels))
@@ -520,9 +548,12 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
     lv_rows, lv_sets, errors = [], [], []
     for cand in tried:
         try:
-            sets = cand.src.series([level], start, end, 2000) if metric_of(level) else []
+            sets = cand.src.series(cand.sels(level), start, end, cand.cap + 1) if metric_of(level) else []
+            if len(sets) > cand.cap:
+                raise SourceError(f"the level has more than {cand.cap} series within {cand.name}'s bound (its max_series): "
+                                  "give a narrower selector")
             level = _production(level, sets)
-            rows = cand.src.query_range(f"sum({level})", math.floor(start / step) * step, end, step)
+            rows = cand.src.query_range(f"sum({cand.expr(level)})", math.floor(start / step) * step, end, step)
         except SourceError as e:
             errors.append(f"{cand.name}: {e}")
             continue
@@ -573,6 +604,7 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
         except SourceError as e:
             return [], f"{store.name}:{name}: {e}"
     dump, kinds, refs = [], {}, {}
+    store_of = {s.name: s for s in stores}
     copies = []
     with ThreadPoolExecutor(4) as pool:
         for got, err in pool.map(read, picked):
@@ -585,7 +617,8 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
                     continue
                 dump.append((name, labels, pts))
                 kinds[key] = decl
-                refs[key] = (name.partition(":")[0], _with(sel, {k: v for k, v in labels.items()}), name.partition(":")[2], labels)
+                refs[key] = (name.partition(":")[0], store_of[name.partition(":")[0]].expr(_with(sel, dict(labels))),
+                             name.partition(":")[2], labels)
     lname = f"{home.name}:{metric_of(level) or 'level'}"
     found = flows_of((lname, {}, lv_rows[0][1]), dump, start, step, n, kinds | {lname: Declared("level")})
     stock = _stock_name(a.get("stock") or "", level)
@@ -601,7 +634,7 @@ def _one(level: str, home: Store, stores: list[Store], a: dict, window: tuple) -
                                  "(an inflow when positive, an outflow when negative), and what fills or drains the rest is not "
                                  "measured here: declare the level and that side, and name the rest as a residual")
     for b in found.balances:
-        out["balances"].append(_shown(b, refs, home, level, stock))
+        out["balances"].append(_shown(b, refs, home, home.expr(level), stock))
     if copies:
         out["copies_of_the_level"] = copies
     if found.other_units:

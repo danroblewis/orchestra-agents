@@ -36,7 +36,7 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import prompting, runs_project, scm_settings, supervisor_pr
+from . import era_guard, prompting, runs_project, scm_settings, supervisor_pr
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -66,6 +66,38 @@ class Plan:
     what: Callable[[Change], str]                 # the change -> one line saying what it does (the commit's title)
     applies: Callable[[], str]                    # after it is made: what applies now, what restarts
     then: Callable[[], None] | None = None        # after it is made: what the agents do about it
+    label: str = ""                               # what it is for, in a few words: the commit's subject, the PR's title
+    subject: str = ""                             # what it changes, the bus event's subject: machine:, collector:, source:, setting:
+
+
+# set_setting's keys, named for what they are for (the commit's subject and the pull request's title); a key not here is
+# named by its last part ("agents.draft_expiry": "draft expiry"), a whole section by its table ("scm": "[scm]")
+LABELS = {"outbox.kinds": "an Outbox kind", "discovery.eras_from": "the era filter", "sources": "[[sources]]",
+          "series": "[[series]]", "agents.serves": "the agents' roles", "project.work": "the work mode"}
+
+
+def _about(section: str, name: str) -> str:
+    """The bus subject of an entry's change: what kind of thing it is, and its name. Only a machine's
+    (``machine:<name>``) can begin an era (Orchestra's C3): a collector, a source or a setting never does."""
+    return {"machines": f"machine:{name}", "collect": f"collector:{name}", "scrape": f"collector:{name}",
+            "sources": f"source:{name}"}.get(section, f"setting:{section}.{name}")
+
+
+def _setting_about(key: str, value: Any) -> str:
+    """``set_setting``'s subject: ``source:<names>`` for [[sources]], else ``setting:<key>``."""
+    if key == "sources" and isinstance(value, list):
+        names = [str(e.get("name")) for e in value if isinstance(e, dict) and e.get("name")]
+        return "source:" + ",".join(names) if names else "setting:sources"
+    return f"setting:{key}"
+
+
+def label_for(key: str) -> str:
+    for k, v in LABELS.items():
+        if key == k or key.startswith(k + "."):
+            return v
+    if "." not in key:
+        return f"[{key}]"
+    return key.rsplit(".", 1)[1].strip('"').replace("_", " ")
 
 
 def _duration(a: dict, key: str) -> str | None:
@@ -114,7 +146,8 @@ def _set_agent_roles(project: Project, store: AgentStore, a: dict) -> Plan:
                 + (f" No other machine has been seen filling {', '.join(unfilled)}: offers for it wait until one does."
                    if unfilled else ""))
     return Plan("agents", lambda ed, kw: ed.set("agents.serves", serves, **kw),
-                lambda c: f"the AI agents fill {', '.join(serves) or 'no task role'} ([agents] serves)", applies)
+                lambda c: f"the AI agents fill {', '.join(serves) or 'no task role'} ([agents] serves)", applies,
+                label="the agents' roles", subject="setting:agents.serves")
 
 
 def _set_work_mode(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -139,7 +172,7 @@ def _set_work_mode(project: Project, store: AgentStore, a: dict) -> Plan:
         for n in residents:
             store.set_agent_state(n, restart_requested=True)
     return Plan("project", lambda ed, kw: ed.set("project.work", work, **kw),
-                lambda c: f"work is {work} ([project] work)", applies, then)
+                lambda c: f"work is {work} ([project] work)", applies, then, label="the work mode", subject="setting:project.work")
 
 
 def _set_gate_unit(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -151,7 +184,8 @@ def _set_gate_unit(project: Project, store: AgentStore, a: dict) -> Plan:
         entry["timeout"] = t
     return Plan("gate.unit", lambda ed, kw: ed.add_entry("gate.unit", entry, **kw),
                 lambda c: f"{_how(c)} the gate's test {name}: {command} ([[gate.unit]])",
-                lambda: "Live: the task system's next gate run uses it (its scheduler reads [gate] on every tick).")
+                lambda: "Live: the task system's next gate run uses it (its scheduler reads [gate] on every tick).",
+                label=f"the gate's test {name}", subject=f"setting:gate.unit.{name}")
 
 
 def _set_capacity_limit(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -165,7 +199,7 @@ def _set_capacity_limit(project: Project, store: AgentStore, a: dict) -> Plan:
                 lambda c: "at most " + " and ".join(f"{v} {k}" for k, v in given.items()) + " at once ([tasks])",
                 lambda: ("Live: the task system's scheduler reads [tasks] on every tick. A ceiling the operator "
                          "set on the Dashboard wins over this one, and a planner's dial (set_capacity) stays at "
-                         "or below it."))
+                         "or below it."), label="capacity", subject="setting:tasks")
 
 
 def _set_machine(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -185,7 +219,8 @@ def _set_machine(project: Project, store: AgentStore, a: dict) -> Plan:
             return "orchestra run restarts it within a second (its command or restart changed)." + _unless_launching(project)
         return "Nothing restarts: the new stop grace applies the next time it is stopped."
     return Plan("machines", lambda ed, kw: ed.add_entry("machines", entry, **kw),
-                lambda c: f"{_how(c)} the machine {name}: {command} ([[machines]])", applies)
+                lambda c: f"{_how(c)} the machine {name}: {command} ([[machines]])", applies,
+                label=f"the machine {name}", subject=f"machine:{name}")
 
 
 def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -210,7 +245,8 @@ def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
                 "round shows what it stored." + _unless_launching(project))
     return Plan(section, lambda ed, kw: ed.add_entry(section, entry, **kw),
                 lambda c: (f"{_how(c)} the collector {name}: {command or url}, every "
-                           f"{entry.get('every') or (before or {}).get('every') or '60s'} ([[{section}]])"), applies)
+                           f"{entry.get('every') or (before or {}).get('every') or '60s'} ([[{section}]])"), applies,
+                label=f"the collector {name}", subject=f"collector:{name}")
 
 
 def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -222,7 +258,8 @@ def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
             "scrape": "orchestra run stops reading it; a program it read is not stopped by this.",
             "gate.unit": "Live: the task system's next gate run leaves it out."}[section]
     return Plan(section, lambda ed, kw: ed.remove_entry(section, name, **kw), lambda c: f"removed {name} from [[{section}]]",
-                lambda: said + ("" if section == "gate.unit" else _unless_launching(project)))
+                lambda: said + ("" if section == "gate.unit" else _unless_launching(project)),
+                label=f"{name} removed", subject=_about(section, name))
 
 
 def _check_sources(project: Project, key: str, value: list) -> None:
@@ -253,12 +290,22 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     if key in ("sources", "series") and isinstance(value, list):
         _check_sources(project, key, value)
     caution = scm_settings.check(project, key, value)      # [scm]: orchestra-scm's schema, the token by file only
+    eras = era_guard.check(project, store, key, value)     # [discovery]: never eras faster than discovery can fit a stock in
+    caution = "; ".join(x for x in (caution, eras) if x)
+    label = " ".join(str(a.get("subject") or "").split())[:40] or label_for(key)
 
     def edit(ed, kw):
         return ed.unset(key, **kw) if value is None else ed.set(key, value, **kw)
-    return Plan(head, edit, lambda c: f"{key} {'removed' if value is None else 'set'}",
+    return Plan(head, edit, lambda c: f"{key} {'removed' if value is None else 'set to ' + _short(value)}",
                 lambda: (f"Whatever reads [{head}] sees it on its next read: Orchestra's host and launcher within a "
-                         "second, a plugin when it next reloads its configuration." + (f" Caution: {caution}" if caution else "")))
+                         "second, a plugin when it next reloads its configuration." + (f" Caution: {caution}" if caution else "")),
+                label=label, subject=_setting_about(key, value))
+
+
+def _short(value: Any, most: int = 60) -> str:
+    """A value as the commit's subject shows it: its JSON, cut at ``most`` characters."""
+    text = json.dumps(value, ensure_ascii=False, separators=(", ", ": "))
+    return text if len(text) <= most else text[:most - 1] + "…"
 
 
 HANDLERS: dict[str, Callable[[Project, AgentStore, dict], Plan]] = {
@@ -278,26 +325,28 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     if why := landing(store, role):
         raise StoreError(why)
     done = change(project, plan.edit, plan.what, a.get("reason") or "", target, store=store,
-                  quote=supervisor_pr.owner_words(store, a))
+                  quote=supervisor_pr.owner_words(store, a), label=plan.label)
     if recovered:
         done["recovered"] = recovered
     # no commit of its own to carry the branch: its pending commits, now [scm] may be set
     if not done.get("commit") and (pushed := supervisor_pr.catch_up(project, store)) is not None:
         done.update(pull_request={k: pushed.get(k) for k in ("number", "url", "draft", "pending")},
                     said=pushed["said"], branch=supervisor_pr.SIDE)
-    if not done["written"]:
-        return {"ok": True, **done, "applies": "Nothing changed, so nothing applies or restarts."}
+    if not done["written"]:           # nothing committed and nothing announced: a no-op begins no era
+        return {"ok": True, **done, "applies": "Nothing changed, so nothing was committed or announced, and nothing applies "
+                                               "or restarts."}
     # the change is made: it is announced whatever happens after, and what fails after is said
     try:
         applies = plan.applies()
     except Exception as e:  # noqa: BLE001 - the change stands; only the description of it failed
         applies = f"Changed; what applies now could not be worked out ({e}): read_config and check_setup show it."
-    data = {"section": plan.section, "change": done["announce"], "reason": a["reason"].strip(), "commit": done["commit"],
-            "target": target, "applies": applies, "by": author}
+    data = {"section": plan.section, "change": done["announce"], "for": plan.label, "reason": a["reason"].strip(),
+            "commit": done["commit"], "target": target, "applies": applies, "by": author}
     if claim_change(store, role, a.get("change")):     # the change a prediction of the Supervisor's waits for: Orchestra judges it from here
-        store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"])
+        store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"], subject=plan.subject or f"setting:{plan.section}")
     else:
-        store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED, **data)
+        store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED,
+                          about=plan.subject or f"setting:{plan.section}", **data)
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, what applies now, and the branch and its pull request as "
                     "`said` puts them (or that the pull request is pending, and why)." if target == "repo" else

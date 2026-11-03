@@ -17,6 +17,7 @@ import re
 import time
 from collections import defaultdict
 
+from . import source_bounds as bounds
 from .balance_tools import CUMULATIVE
 from .config import Project
 from .store import StoreError
@@ -47,8 +48,9 @@ def _catalogue(project: Project, a: dict):
     url = (a.get("url") or "").strip()
     if url:
         name = trial_name(url)
+        bound = a.get("bound")
         entry = {"name": name, "url": url, **({"auth": a["auth"]} if a.get("auth") else {}),
-                 **({"match": a["match"]} if a.get("match") else {})}
+                 **({"match": [bound] if isinstance(bound, str) else list(bound)} if bound else {})}
         specs = load({"sources": [entry]}, project.repo_root)
         if specs.refused:
             raise StoreError("that source cannot be read: " + "; ".join(specs.refused.values()))
@@ -77,11 +79,13 @@ def check_sources(project: Project, a: dict) -> dict:
 
 
 def source_schema(project: Project, a: dict) -> dict:
-    """What the store has over the last ``minutes`` (default 60). Without ``match``: every metric
-    name, one line each (its type from the store's metadata, or guessed from its name; how many
-    series; each label with how many values), so a big store fits in one answer. With ``match`` (a
-    PromQL selector, or a list): those metrics in detail, with the help text and a few values of
-    each label. ``limit`` caps the series read (default 20000)."""
+    """What the store has over the last ``minutes`` (default 60), always within its bound
+    (``source_bounds``: the source's ``match``, or ``bound`` for a store given by url, and at most its
+    ``max_series`` series). Without ``match``: every metric name the bound selects, one line each
+    (its type from the store's metadata, or guessed from its name; how many series; each label with
+    how many values); refused when there is no bound. With ``match`` (a PromQL selector, or a list):
+    those metrics in detail, each selector ANDed with the bound, with the help text and a few values
+    of each label. ``limit`` caps the series read (at most ``max_series``)."""
     from orchestra.sources import SourceError
     cat, name = _catalogue(project, a)
     if not name:
@@ -89,23 +93,29 @@ def source_schema(project: Project, a: dict) -> dict:
     src = cat.remotes[name]
     spec = cat.spec(name)
     detail = bool(a.get("match"))
-    now, limit = time.time(), int(a.get("limit") or LIMIT)
+    bound = bounds.bound_of(spec)
+    now, limit = time.time(), bounds.cap(spec, int(a.get("limit") or LIMIT))
     start = now - float(a.get("minutes") or 60) * 60
     from orchestra.sources.limits import Budget
-    from orchestra.sources.listing import TooManyNames, listing
+    from orchestra.sources.listing import TooManyNames, listing, with_names
     src.budget = Budget(SCHEMA_REQUESTS, time.monotonic() + SCHEMA_SECONDS, "source_schema's reads")
     try:
         if detail:
-            match = [a["match"]] if isinstance(a["match"], str) else list(a["match"])
+            match = bounds.selectors(bound, [a["match"]] if isinstance(a["match"], str) else list(a["match"]))
+            if bounds.everything(match):
+                raise bounds.unbounded(name, "this match")
             got = listing(src, match, start, now, concurrency=spec.concurrency, max_names=spec.max_names, limit=limit)
             names = sorted(got.names)
-        else:                                  # names only: one request, whatever the store's size
-            names = sorted(set(src.names(spec.match, start, now, limit=spec.max_names + 1)))
+        else:                                  # names only: one request within the bound, whatever the store's size
+            if bound is None:
+                raise bounds.unbounded(name, "listing its names")
+            names = sorted(set(src.names(bound, start, now, limit=spec.max_names + 1)))
             if len(names) > spec.max_names:
                 raise TooManyNames(f"more than {spec.max_names} metric names")
             # the levels' label values, listed for those names alone (what each holds)
             wanted = level_names(names)
-            got = listing(src, wanted, start, now, concurrency=spec.concurrency, limit=limit) if wanted else None
+            got = (listing(src, [with_names(b, wanted) for b in bound], start, now, concurrency=spec.concurrency,
+                           limit=limit) if wanted else None)
         meta = src.metadata(sorted(got.names) if detail else names)
     except TooManyNames as e:
         raise StoreError(f"the store is large: {e}. Give match, a selector per family you need (e.g. "
@@ -128,7 +138,7 @@ def source_schema(project: Project, a: dict) -> dict:
         m = meta.get(n) or meta.get(n.rsplit("_", 1)[0]) or {}
         return m.get("type") or _guess(n)
 
-    out: dict = {"ok": True, "source": name, "metrics": len(names)}
+    out: dict = {"ok": True, "source": name, "metrics": len(names), "bound": bound or "none: the match given is the only scope"}
     if not detail and (lv := _levels({n: fams.get(n, 0) for n in level_names(names)}, values, kind)):   # first: what the answer is read for
         out["levels"] = lv
         out["levels_next"] = ("these gauges hold amounts (queues, lags, connections, volumes, inventories): each may be a "
@@ -146,7 +156,8 @@ def source_schema(project: Project, a: dict) -> dict:
             out["too_big_to_list"] = [f"{n} [{kind(n)}]: not listed ({why[:120]}); narrow it with label matchers in match"
                                       for n, why in sorted(big.items())][:100]
         if sets >= limit:
-            out["capped"] = f"the read hit its limit of {limit} series: the counts are a lower bound; narrow with match"
+            out["capped"] = (f"the read hit its limit of {limit} series (the source's max_series, the owner's cap): the counts "
+                             "are a lower bound; narrow with match")
     else:
         out["names"] = [f"{n} [{kind(n)}]" for n in names][:SHOWN_NAMES]
         out["next"] = ("source_schema with match (e.g. {__name__=~\"http_.*\"}) shows those metrics' series, labels, help and "
@@ -154,7 +165,7 @@ def source_schema(project: Project, a: dict) -> dict:
     if len(names) > (SHOWN_METRICS if detail else SHOWN_NAMES):
         out["more"] = "more names than shown: narrow with match"
     probe = _probes(sorted(fams, key=lambda n: fams[n]) if fams else names)
-    if late := _lateness(src, probe, now):
+    if late := _lateness(src, probe, now, bound):
         out["newest_sample_age_s"] = late
         worst = max(late.values())
         if worst > 30:
@@ -217,7 +228,7 @@ def _probes(names: list[str], most: int = 4) -> list[str]:
     return out
 
 
-def _lateness(src, names: list[str], now: float) -> dict[str, float]:
+def _lateness(src, names: list[str], now: float, bound: list[str] | None = None) -> dict[str, float]:
     """How old each metric's newest sample is now, in seconds: how late the store writes (a store
     written a minute late needs ``settle`` above it). Empty when the store cannot say."""
     from orchestra.sources import SourceError
@@ -226,7 +237,7 @@ def _lateness(src, names: list[str], now: float) -> dict[str, float]:
         if not re.fullmatch(r"[A-Za-z_:][A-Za-z0-9_:]*", n or ""):
             continue
         try:
-            got = src.query_range(f"time() - max(timestamp({n}))", now - 120, now, 60)
+            got = src.query_range(f"time() - max(timestamp({bounds.expr(bound, lambda s: s, n)}))", now - 120, now, 60)
         except SourceError:
             continue
         pts = [v for _, p in got for _, v in p[-1:]]
@@ -261,6 +272,9 @@ def preview_query(project: Project, a: dict) -> dict:
                          "({queue=\"x\"}) or aggregate it (sum by (queue) (...))")
     cat, name = _catalogue(project, a)
     cfg = project.orchestra.config
+    if name and not bounds.holds(bound := bounds.bound_of(cat.spec(name)), query):
+        raise StoreError(f"the query reads outside {name}'s bound: name its matchers ({' or '.join(bound or [])}) in each "
+                         "selector, as the source's match keeps every read to the owner's scope")
     if name:
         from orchestra.sources.limits import Budget
         cat.remotes[name].budget = Budget(PREVIEW_REQUESTS, time.monotonic() + PREVIEW_SECONDS, "preview_query's reads")
@@ -275,7 +289,7 @@ def infer_source(project: Project, a: dict) -> dict:
     definitions it would read (each with its query, view, kind and score) and those it leaves out
     with why. This is what discovery would get; ``[[series]]`` entries pin what it does not rank."""
     from orchestra.sources import report
-    cat, name = _catalogue(project, a)
+    cat, name = _catalogue(project, {**a, "bound": a.get("bound") or a.get("match")})
     return {"ok": True, "lines": report.infer(cat, project.orchestra, name or None, refresh=bool(a.get("refresh")))}
 
 

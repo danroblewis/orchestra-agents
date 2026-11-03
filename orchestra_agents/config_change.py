@@ -98,18 +98,21 @@ def target_of(a: dict, default: str | None = REPO) -> str:
 
 
 def change(project: Project, edit: Edit, describe: Callable[[Change], str], reason: str, target: str, *,
-           store: AgentStore | None = None, quote: str | None = None) -> dict:
+           store: AgentStore | None = None, quote: str | None = None, label: str | None = None) -> dict:
     """Make the change ``edit`` asks Orchestra for, in ``target``. A change to the repository is a
     commit on the Supervisor's branch, live through the overlay, and proposed as its pull request
     (``supervisor_pr``, with ``store`` to keep what was proposed and ``quote``, the owner's words, for
-    the Jira ID). Returns ``{changed, announce, commit, target, file, written}`` and, for the
+    the Jira ID). ``label`` names what the change is for, in a few words (the commit's subject and its
+    ``Supervisor-For`` trailer, which the pull request's title lists). A change that changes nothing
+    is neither written nor committed: ``written`` is False and ``changed`` says "nothing: … already";
+    every caller announces nothing then. Returns ``{changed, announce, commit, target, file, written}`` and, for the
     repository, ``live``, ``branch``, ``pull_request`` and ``said`` (``announce``: what the bus is
     told, without the overlay's values; ``note``: when the overlay's own value still wins)."""
     reason = (reason or "").strip()
     if len(reason) < 10:
         raise StoreError("give the reason for the change in a sentence: it goes in the commit and on the bus")
     if target == REPO:
-        return _to_branch(project, edit, describe, reason, store=store, quote=quote)
+        return _to_branch(project, edit, describe, reason, store=store, quote=quote, label=label)
     ed = project.orchestra.config_edit
     try:
         c = edit(ed, {"target": target, "dry_run": True})
@@ -129,7 +132,7 @@ def change(project: Project, edit: Edit, describe: Callable[[Change], str], reas
 
 
 def _to_branch(project: Project, edit: Edit, describe: Callable[[Change], str], reason: str, *,
-               store: AgentStore | None, quote: str | None) -> dict:
+               store: AgentStore | None, quote: str | None, label: str | None = None) -> dict:
     if why := why_not_committable(project):
         raise StoreError(why)
     name, ed = file_name(project), project.orchestra.config_edit
@@ -161,7 +164,7 @@ def _to_branch(project: Project, edit: Edit, describe: Callable[[Change], str], 
     if len(refused) == 2:           # neither the checkout's file nor the overlay can take it: Orchestra's words
         raise StoreError(str(refused[-1]))
     try:
-        sha = side_branch.commit(project, f"Supervisor: {what}\n\n{reason}\n", texts={name: c.after})
+        sha = side_branch.commit(project, supervisor_pr.message(label or what, what, reason), texts={name: c.after})
     except side_branch.SideBranchError as e:
         raise StoreError(f"could not commit {name} on {side_branch.SIDE}: {e}") from None
     short = git(project, "rev-parse", "--short", sha).stdout.strip() if sha else None

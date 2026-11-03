@@ -69,7 +69,7 @@ def carry(project: Project, store: AgentStore, rec: dict, what: str, reason: str
     files = {k: v for k, v in files.items() if v.is_file()}
     title = f"Supervisor: {what}"[:120]
     try:
-        sha = side_branch.commit(project, f"{title}\n\n{reason}\n", files=files)
+        sha = side_branch.commit(project, supervisor_pr.message(f"the collector {name}", what, reason), files=files)
     except side_branch.SideBranchError as e:
         return [f"{relative(name)}/ is left uncommitted in the checkout: it could not be committed on {side_branch.SIDE} ({e})"]
     ignored = ignore_here(project, name)

@@ -863,9 +863,16 @@ call it. Then `supervisor_pr.propose`, through orchestra-scm's provider (`branch
 `[scm]` and read through Orchestra's configuration): with a remote (`origin`) and `[scm]`, the
 branch is pushed (the provider refuses main, master, the base and the default branch) and its pull
 request opened at once, the description from the provider's template (the packaged one: Summary,
-Testing, Jira ID): Summary from the change's reason, Testing from what the tool verified, the Jira ID
-from the owner's words when they name a ticket key, else "none". A pull request already open for
-the branch is updated by the push, never opened twice. With the Outbox installed (orchestra-outbox
+Testing, Jira ID). **The title and the Summary describe the whole branch** (since 2026-11-03,
+bootstrap run 4: PR #53 was titled "Supervisor: outbox.kinds set", after its last commit alone,
+over four commits): the title lists what the branch changes, each commit's `Supervisor-For` label
+once, oldest first, in at most 60 characters (`TITLE_MAX`; "Supervisor: draft expiry, [scm], an
+Outbox kind", the rest counted as "+N more"), and the Summary is one line per commit with its
+reason (`branch_story`); Testing is what the tool verified, the Jira ID the owner's words when they
+name a ticket key, else "none". A pull request already open for the branch is updated by the push,
+never opened twice, and when the branch gained a commit its title and description are rewritten
+through the provider (`update_pr(change, title=, body=)`); orchestra-scm's `branch_pr` has no
+`update_pr` yet, so until it does they stay as opened and the answer says so. With the Outbox installed (orchestra-outbox
 importable; the coordinator's decision), opening it is an outbound act its configuration approves:
 the branch is pushed and the pull request is an Outbox draft of the kind `supervisor.pull_request`
 (sender `github.pr_open`), opened when the owner approves it. Without a remote, `[scm]` or
@@ -893,8 +900,7 @@ Workflows plugin's open items now, `workflow_tools.open_count`, and never says "
 any are open: a start event opens an item with no item event, bootstrap run 3) has a line for the Supervisor's open pull request (merged, by the provider's
 `learn`, until the checkout has it). orchestra-scm is a dev dependency, imported only in
 `supervisor_pr` and `scm_settings`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
-one branch, so one pull request accumulates every change until it is merged, its description the
-first change's; the organisation's records (`roles.commit_orchestra_files`) still commit to the
+one branch, so one pull request accumulates every change until it is merged; the organisation's records (`roles.commit_orchestra_files`) still commit to the
 base branch when the checkout is clean there; a split proposal or the starting spec rides on the
 branch with the next change's pull request; and a repair by override waits for the merge.
 
@@ -935,7 +941,18 @@ script of at most 100 lines is configuration the Supervisor writes itself, to th
 through the design tools' `add_instrument` (below); only a longer one, or one the owner wants in
 the repository, goes through the Coordinator. Another store is looked at before it is declared (`check_sources`, `source_schema`,
 `preview_query`, `infer_source`, over `orchestra.sources`, by a declared name or by `url` and `auth`;
-no credential's value is shown).
+no credential's value is shown). **Every tool that lists, counts or reads another store's series
+stays inside the source's bound** (since 2026-11-03, bootstrap run 4: `find_balance` and
+`source_schema` listed all 337 names of a shared Prometheus twice and listed 327 and 351 series
+across both namespaces, after the owner said "only our namespace hackriff, at most 200 series";
+`source_bounds.py`): the bound is the source's `match` (for a store given by `url`, the `bound`
+argument) and its `max_series`. Every selector sent (`source_schema`'s listings and lateness
+probes, `find_balance`'s names, levels, candidates, reads and the `[[series]]` it declares) is
+ANDed with it, a bound of several selectors read as their union (`or`); no listing asks for more
+than `max_series` series; `preview_query` refuses a query on a bounded source that does not name
+the bound's matchers; and a store with no bound (no `match`, or the match-everything default) is
+never asked for every metric name: `source_schema` without `match` and `find_balance`'s search
+refuse and say why (`find_balance` with given `candidates` still reads them).
 
 **Seeing** (tool group `observe`; any role may be granted it; every list in these answers is its
 count and its first `answers.LISTED`, a log line at most 300 characters): `check_setup` (who fills the roles,
@@ -977,11 +994,38 @@ prompt (`prompts/operator.md`) says which goes where. Each tool:
   less well than before; nothing here opens or edits the file;
 - refuses a change whose new lines look like a secret, in either file;
 - for `repo`, commits `orchestra.toml` alone, whatever else is changed in the checkout, with the
-  message `Supervisor: <what changed>` and the reason as its body; a failed commit puts the file
-  back. A change to the overlay is never committed. A change to `orchestra.toml` that the overlay
-  overrides is answered with a `note` saying so;
-- publishes `config.changed` {section, change, reason, commit, target, applies, by} from the
-  Supervisor (for the overlay, `change` names the keys without their values);
+  message `Supervisor: <what it is for>: <what changed>` (`set_setting`'s value shown, cut at 60
+  characters), the reason as its body and a `Supervisor-For: <what it is for>` trailer, the label
+  the pull request's title lists (`set_setting`'s `subject`, else named from the key: "draft
+  expiry", "[scm]", "an Outbox kind"; since 2026-11-03, run 4's generic "outbox.kinds set"); a
+  failed commit puts the file back. A change to the overlay is never committed. A change to
+  `orchestra.toml` that the overlay overrides is answered with a `note` saying so;
+- **a change that changes nothing** (`config_change.change`'s "nothing: … already") is neither
+  committed nor announced, and the answer says so; every caller, the integrations' steps and the
+  design tools' instruments included, publishes nothing for it (run 4: four no-op
+  `config.changed` each began an era);
+- publishes `config.changed` {section, change, for, reason, commit, target, applies, by} from the
+  Supervisor (for the overlay, `change` names the keys without their values), its envelope's
+  `subject` saying what kind of thing changed, in the shapes of the core's C3 (2026-11-03: an era
+  begins only for `system.changed`, a predicted change, or a `config.changed` about
+  `machine:<name>`, `definition:<name>` or `override:<name>`): `machine:<name>` for a
+  `[[machines]]` program (`set_machine`, its removal) and for a machine's spec or duties
+  (`duties.py` publishes a `config.changed` beside its `role.changed`), `definition:<name>` for a
+  workflow declared or changed (`declare_workflow`, only when the file's text changed), and
+  `override:<name>` (`write_override`'s `system.changed`); a change that cannot alter the
+  system's behaviour is `setting:<key>` (`set_setting`, the roles, the work mode, the gate, the
+  capacity), `collector:<name>` (`[[collect]]`, `[[scrape]]`, an integration's poller),
+  `source:<name>` (`[[sources]]`) or `instrument:<name>` (the design tools' instruments), and
+  begins no era;
+- **never makes eras faster than discovery can fit a stock** (`era_guard.py`, since 2026-11-03:
+  run 4's `eras_from = ["config.changed", "github.pr.merged"]` began an era every 5.2 minutes and
+  the model stayed empty): `set_setting` on `[discovery]` reads, for each `eras_from` filter it
+  adds (each configured one when the window or step changes), how often it matched on the bus
+  (the median gap of the last 20,000 events' matches) and refuses one that comes faster than
+  discovery's minimum era, `MIN_COVER` of the window (`orchestra.sd.discover`) and at least
+  `2 * EVENTS_PER_PARAM` steps: 30 minutes on the default hour, with both numbers in the refusal.
+  A filter matched fewer than three times is allowed with a caution. An era is for a change that
+  can alter how the system behaves, not every merge; the guide says so (`operator.md`);
 - answers with what applies now and what restarts, from the readers' documented rules: the
   agents' host reads `[agents]` every second; the task system's scheduler reads `[project]`,
   `[tasks]` and `[gate]` on every tick (its own SPEC owns what they mean); Orchestra's launcher and

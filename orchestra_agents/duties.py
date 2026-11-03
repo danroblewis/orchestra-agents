@@ -152,6 +152,10 @@ def _commit(project: Project, store: AgentStore, spec: MachineSpec, files: dict,
     store.events.publish("role.changed", {"machine": spec.name, "duty": duty, "change": change, "reason": reason,
                                           "commit": done["commit"], "where": done["where"], "by": MACHINE},
                          subject=f"machine:{spec.name}")
+    # a machine's spec or duties change how it works: config.changed about machine:<name> begins an era (the core's C3)
+    store.events.publish("config.changed", {"section": "machine spec", "change": what, "for": f"the machine {spec.name}",
+                                            "reason": reason, "commit": done["commit"], "target": "repo", "by": MACHINE},
+                         subject=f"machine:{spec.name}")
     store.set_agent_state(MACHINE, restart_requested=True)
     left = project.config.spec_changes_per_day - len(changes_today(store))
     return {"ok": True, "changed": True, "duty": duty, "change": change, **done,

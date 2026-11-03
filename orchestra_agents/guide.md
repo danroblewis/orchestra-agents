@@ -252,10 +252,18 @@ section set in the overlay later, by the owner), your review round or the digest
 refused (no token, the token refused, a protected branch, the remote rejecting it), `said` gives
 the reason in the provider's and git's own words: tell the owner exactly that, and what would fix it.
 
-The pull request is opened at once, its description from the template: Summary is the change's
-reason, Testing what the tool verified, the Jira ID a ticket key in the owner's words (`ABC-123`),
-else "none". So give a reason that reads well as a summary, and quote the owner when they name a
-ticket. While it is open, each later change is pushed onto it. With the Outbox installed, opening a
+The pull request is opened at once, its description from the template, and **both its title and
+its Summary describe the whole branch**: the title lists what each commit is for, once each, in at
+most 60 characters ("Supervisor: draft expiry, [scm], an Outbox kind"), and the Summary is one line
+per commit with its reason; Testing is what the tool verified, the Jira ID a ticket key in the
+owner's words (`ABC-123`), else "none". So give each change a reason that reads well as a summary
+line and, with `set_setting`, a `subject` (what it is for, in a few words) when the key does not
+say it; quote the owner when they name a ticket. While it is open, each later change is pushed onto
+it and its title and description are rewritten for the whole branch through the provider; when the
+provider cannot edit an open pull request, `said` says so: repeat it. A change that changes nothing
+is not committed or announced, and the answer says so: say "already set", never that you changed it.
+Make the setup's changes together where you can, and never one only to try it: each announced
+configuration change may begin an era of the model. With the Outbox installed, opening a
 pull request is an outbound act its configuration approves: the branch is pushed and the pull
 request waits as an Outbox draft (`[outbox.kinds."supervisor.pull_request"] sender =
 "github.pr_open"`), opened when the owner approves it. Without a remote or `[scm]` the branch is

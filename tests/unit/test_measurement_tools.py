@@ -125,10 +125,14 @@ def remote():
 def test_another_store_is_looked_at_before_it_is_declared(project, store, remote):
     checked = call(project, store, "check_sources", url=remote.url)
     assert any("answers" in line for line in checked["lines"])
-    whole = call(project, store, "source_schema", url=remote.url)
+    with pytest.raises(StoreError, match="no bound"):
+        call(project, store, "source_schema", url=remote.url)            # never every metric name of a store with no bound
+    whole = call(project, store, "source_schema", url=remote.url, bound=['{__name__=~"http_.*|queue_.*"}'])
     assert whole["names"] == ["http_requests_total [counter]", "queue_depth [guessed: gauge]"]   # names only: one request
     assert whole["levels"] == ["queue_depth by queue: orders"]          # an amount held, with what it holds
-    schema = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
+    with pytest.raises(StoreError, match="no bound"):
+        call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
+    schema = call(project, store, "source_schema", url=remote.url, match=['{__name__=~"http_.*|queue_.*"}'])
     by = {m["name"]: m for m in schema["names"]}
     assert by["http_requests_total"]["type"] == "counter" and by["http_requests_total"]["series"] == 3
     assert by["http_requests_total"]["labels"]["pod"]["values"] == 3
@@ -154,7 +158,7 @@ def test_a_store_that_refuses_a_whole_listing_is_listed_name_by_name(project, st
     from orchestra_agents import source_tools
     monkeypatch.setattr(source_tools.time, "sleep", lambda s: None)
     remote.max_series, remote.busy = 2, 1        # three request series: too many at once; one 429 on the way
-    whole = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
+    whole = call(project, store, "source_schema", url=remote.url, match=['{__name__=~"http_.*|queue_.*"}'])
     assert [m["name"] for m in whole["names"]] == ["queue_depth"]
     assert [x.split(" [")[0] for x in whole["too_big_to_list"]] == ["http_requests_total"]   # named, with why
     narrow = call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+",queue="orders"}'])

@@ -63,9 +63,13 @@ EXISTING_FIRST = ("not added: {eid} has an existing series among its options, {o
 SIMULATED = "simulated = true, not draft: discovery reads its series like any other, and the Supervisor removes it unless kept"
 
 
-def _announce(store: AgentStore, section: str, what: str, reason: str) -> None:
+def _announce(store: AgentStore, section: str, what: str, reason: str, name: str = "", done: dict | None = None) -> None:
+    """The change on the bus, about ``section.name``; nothing when it changed nothing (``done`` unwritten)."""
+    if done is not None and not done.get("written"):
+        return
     store.events.emit(INSTRUMENTS_CHANGED, section=section, change=what, reason=reason, commit=None, target=OVERLAY,
-                      applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE)   # the host's Events has no source
+                      applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE,   # the host's Events has no source
+                      about=f"instrument:{name}" if name else f"setting:{section}", **({"for": f"the instrument {name}"} if name else {}))
 
 
 def scripts_dir(project: Project) -> Path:
@@ -240,7 +244,7 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         if path:
             path.unlink(missing_ok=True)
         raise
-    _announce(store, section, done["announce"], prov["reason"])
+    _announce(store, section, done["announce"], prov["reason"], name, done)
     rec = {"element": f"{part}:{eid}", "option": key, "section": section, "script": str(path) if path else None,
            "at": now, "until": until, "kept": False, "simulated": bool(entry.get("simulated")), "flagged": flagged,
            "series": sorted({s_["name"] for s_ in tried.get("series") or []})}
@@ -290,7 +294,7 @@ def remove(project: Project, store: AgentStore, name: str, reason: str, prov: di
         return
     if _entry(project, rec["section"], name) is not None:
         done = _entry_change(project, rec["section"], None, name, reason)
-        _announce(store, rec["section"], done.get("announce") or f"removed {name} from [[{rec['section']}]]", reason)
+        _announce(store, rec["section"], done.get("announce") or f"removed {name} from [[{rec['section']}]]", reason, name, done)
     if rec.get("script"):
         Path(rec["script"]).unlink(missing_ok=True)
     part, _, eid = rec["element"].partition(":")
@@ -355,7 +359,7 @@ def _keep(project: Project, store: AgentStore, name: str, rec: dict, prov: dict,
         except StoreError:
             _entry_change(project, rec["section"], entry, name, f"put back as it was: {prov['reason']}")
             raise
-        _announce(store, rec["section"], f"kept {name}: draft and expires taken off its entry", prov["reason"])
+        _announce(store, rec["section"], f"kept {name}: draft and expires taken off its entry", prov["reason"], name)
         said.append("draft = true and expires taken off its entry: discovery reads its series from now on")
         if _open_prediction(store):
             said.append("two configuration changes were recorded (two writes), so a prediction open now is judged interrupted "

@@ -18,6 +18,7 @@ class FakeStore:
         fake = self
         self.max_series = 0          # a listing of more series answers 422 (a per-query limit)
         self.busy = 0                # the next N listings answer 429
+        self.requests: list[tuple[str, dict]] = []   # every request: its endpoint and its form, for a test to read
 
         class H(BaseHTTPRequestHandler):
             def log_message(self, *a):
@@ -26,6 +27,7 @@ class FakeStore:
             def _go(self, form):
                 path = urllib.parse.urlsplit(self.path).path.rsplit("/", 1)[-1]
                 one = lambda k, d=None: (form.get(k) or [d])[0]
+                fake.requests.append((path, form))
                 if path in ("series", "values"):
                     seen = {}
                     for m in form.get("match[]") or ['{__name__=~".+"}']:      # none: everything

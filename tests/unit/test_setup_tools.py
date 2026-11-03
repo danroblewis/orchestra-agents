@@ -92,7 +92,7 @@ def test_set_agent_roles_commits_the_file_alone_with_the_reason_and_announces_it
     assert "# a program worker that only runs commands" in text and "# a scratch folder per ticket" in text   # comments kept
     assert len(text.splitlines()) == len(before.splitlines())                     # only the one line changed
     msg, files = last_commit(project)
-    assert files == ["orchestra.toml"] and WHY in msg and msg.startswith("Supervisor: the AI agents fill worker, reviewer")
+    assert files == ["orchestra.toml"] and WHY in msg and msg.startswith("Supervisor: the agents' roles: the AI agents fill worker, reviewer")
     assert git(project.repo_root, "status", "--porcelain").strip() == "?? notes.txt"     # the checkout untouched
     assert project.orchestra.config.raw["agents"]["serves"] == ["worker", "reviewer"]    # live through the overlay
     assert git(project.repo_root, "log", "-1", "--format=%s", "main").strip() == "init"                           # never on the base

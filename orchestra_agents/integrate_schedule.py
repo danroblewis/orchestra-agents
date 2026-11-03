@@ -75,8 +75,14 @@ def write(project: Project, store: AgentStore, steps: list[dict], reason: str) -
         done = change(project, lambda ed, kw, section=section, entry=entry: ed.add_entry(section, entry, **kw),
                       lambda c, s=s: f"{'added' if c.what.startswith('added') else 'changed'} {describe(s)} (overlay)",
                       reason, OVERLAY)
+        if not done["written"]:           # nothing changed: nothing announced, so it begins no era
+            lines.append(f"{done['changed']}: not written or announced")
+            continue
         store.events.emit(INSTRUMENTS_CHANGED if section in INSTRUMENT_SECTIONS else CHANGED, section=section,
                           change=done["announce"], reason=reason, commit=None, target=OVERLAY,
-                          applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE)
+                          applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE,
+                          # a poller, a collector or a source measures: never machine:, so it begins no era (C3)
+                          about=f"{'source' if section == 'sources' else 'collector'}:{entry['name']}",
+                          **{"for": f"the instrument {entry['name']}"})
         lines.append(done["changed"])
     return lines

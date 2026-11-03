@@ -104,10 +104,12 @@ class Events(OrchestraEvents):
                              f"never as {HOST!r} or with no source")
         return super().publish(type, data, source=src, **ext)
 
-    def emit(self, type: str, *, src: str | None = None, **data: Any) -> dict:
+    def emit(self, type: str, *, src: str | None = None, about: str | None = None, **data: Any) -> dict:
         """Publish ``type`` with ``data`` as ``src``; without one, as the instance bound to the
-        data's ``session``, or this process's own source (an agent's tool call)."""
-        subject = data.get("ticket") or data.get("milestone") or data.get("session")
+        data's ``session``, or this process's own source (an agent's tool call). ``about`` is the
+        envelope's ``subject`` (what the event is about); without it, the data's ticket, milestone
+        or session."""
+        subject = about or data.get("ticket") or data.get("milestone") or data.get("session")
         source = src or self._bound.get(data.get("session") or "")
         return flat(self.publish(type, data or None, source=source, **({"subject": str(subject)} if subject else {})))
 

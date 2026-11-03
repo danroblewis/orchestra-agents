@@ -3,12 +3,22 @@ ages"), and the counts. Read only.
 
 - **agent**: it announced its kind as ``agent`` (an AI agent machine: a prompt, tools, its events);
 - **program in .orchestra/**: a program whose ``[[machines]]`` command runs a file under the
-  project's ``.orchestra/`` (or whose directory ``.orchestra/machines/<id>/`` the project holds), being
-  proven there;
+  project's ``.orchestra/``, being proven there;
 - **graduated**: a program whose ``[[machines]]`` command is the project's own, outside
   ``.orchestra/`` (``npm run relator``, ``python3 -m acme.relator``);
 - **unknown**: a program the project holds no file or command for (it runs elsewhere, or a plugin
   runs it); a person or a service is none of these (``other``).
+
+**A machine joined to no entry, whose directory ``.orchestra/machines/<id>/`` the project holds**
+(a workflow's program, started by the Workflows plugin's program host) is in the age its directory
+says (``by_dir``), never the middle age for the directory alone: a ``machine.json`` of kind
+``universal`` or ``agent``, or an agent spec (``prompt``/``tools`` in its ``spec``, or a
+``prompt.md``/``tools.*`` file) is an **agent**; a ``spec.command`` that runs a file under
+``.orchestra/`` is a **program in .orchestra/**; a command into the repository's tree (``npm run …``,
+``cargo run …``, ``python -m …``, ``./scripts/…``: anything that resolves outside ``.orchestra/``,
+run from the repository root) is **graduated**, the directory holding only the declaration; a
+``machine.json`` with no command beside the program's own files is a program there; no
+``machine.json``, no spec and no program file is **unknown**. Every row says why in ``reason``.
 
 **How a machine is joined to its ``[[machines]]`` entry**: by the launcher's process that started
 it, first (the machines view's ``processes``, from each announcement's ``process``, which the
@@ -29,6 +39,7 @@ steps) is not measured: the answer says so rather than guess."""
 
 from __future__ import annotations
 
+import json
 import shlex
 import time
 from pathlib import Path
@@ -68,8 +79,75 @@ def paths_in(project: Project, command: str) -> list[Path]:
 
 
 def in_orchestra(project: Project, command: str) -> bool:
+    """Whether the command runs something under the project's ``.orchestra/``: a path it names that
+    exists there, or a word that names ``.orchestra/`` (a file not written yet is still there)."""
     dot = (project.repo_root / ".orchestra").resolve()
-    return any(p == dot or dot in p.parents for p in paths_in(project, command))
+    if any(p == dot or dot in p.parents for p in paths_in(project, command)):
+        return True
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        words = command.split()
+    return any(w.startswith(".orchestra/") or "/.orchestra/" in w for w in words)
+
+
+def command_age(project: Project, command: str) -> tuple[str, str]:
+    if in_orchestra(project, command):
+        return "program in .orchestra/", f"its command runs a file under .orchestra/ ({command})"
+    return "graduated", f"its command is the project's own, outside .orchestra/ ({command})"
+
+
+AGENT_KINDS = ("universal", "agent")
+AGENT_SPEC = ("prompt", "tools")
+DECLARATION_FILES = ("machine.json", "AGENTS.md", "README.md")
+
+
+def _agent_files(mdir: Path) -> list[str]:
+    return sorted(f.name for f in mdir.iterdir() if f.is_file() and (f.name == "prompt.md" or f.stem == "tools"))
+
+
+def _program_files(mdir: Path) -> list[str]:
+    return sorted(str(f.relative_to(mdir)) for f in mdir.rglob("*")
+                  if f.is_file() and f.name not in DECLARATION_FILES and "__pycache__" not in f.parts)
+
+
+def dir_age(project: Project, mid: str) -> tuple[str, str] | None:
+    """The age ``.orchestra/machines/<mid>/`` says, and why in words; None when there is no such
+    directory. Decided by what its ``machine.json`` declares and what the directory holds."""
+    mdir = project.repo_root / ".orchestra" / "machines" / mid
+    if not mdir.is_dir():
+        return None
+    where = f".orchestra/machines/{mid}/"
+    f = mdir / "machine.json"
+    body: dict | None = None
+    if f.is_file():
+        try:
+            body = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            return "unknown", f"{where}machine.json cannot be read ({e})"
+        if not isinstance(body, dict):
+            return "unknown", f"{where}machine.json is not an object"
+    spec = body.get("spec") if body and isinstance(body.get("spec"), dict) else {}
+    kind = str((body or {}).get("kind") or "")
+    if kind in AGENT_KINDS:
+        return "agent", f"{where}machine.json declares it {kind}: an agent spec"
+    if (keys := [k for k in AGENT_SPEC if spec.get(k)]) or (files := _agent_files(mdir)):
+        said = f"its spec has {' and '.join(keys)}" if keys else f"{where} holds {', '.join(files)}"
+        return "agent", f"{said}: an agent spec"
+    cmd = spec.get("command")
+    if isinstance(cmd, list) and cmd and all(isinstance(c, str) for c in cmd):
+        cmd = shlex.join(cmd)
+    if isinstance(cmd, str) and cmd.strip():
+        age, why = command_age(project, cmd)
+        if age == "graduated":
+            why += f"; {where} holds only its declaration"
+        return age, f"{where}machine.json: {why}"
+    if code := _program_files(mdir):
+        what = "machine.json names no command" if body is not None else "no machine.json"
+        return "program in .orchestra/", f"{where} holds the program ({', '.join(code[:3])}); {what}"
+    if body is not None:
+        return "unknown", f"{where}machine.json names no command and no agent spec, and the directory holds no program"
+    return "unknown", f"{where} holds no machine.json, no agent spec and no program"
 
 
 def announced_logs(store: AgentStore) -> dict[str, str]:
@@ -110,9 +188,9 @@ def age_of(project: Project, m: dict, log: str | None, ents: dict[str, str]) -> 
     mid, kind = m["id"], str(m.get("kind") or "")
     row = {"id": mid, "kind": kind or None}
     if "agent" in kind:
-        return {**row, "age": "agent"}
+        return {**row, "age": "agent", "reason": "it announced its kind as agent"}
     if kind in ("person", "service"):
-        return {**row, "age": "other"}
+        return {**row, "age": "other", "reason": f"it announced its kind as {kind}"}
     name, plugins = by_process(m, ents)
     if name is not None:
         how, by = f"by the launcher's process: [[machines]] {name}", "process"
@@ -127,19 +205,21 @@ def age_of(project: Project, m: dict, log: str | None, ents: dict[str, str]) -> 
     row["by"] = by
     if name is not None:
         cmd = ents[name]
-        age = "program in .orchestra/" if in_orchestra(project, cmd) else "graduated"
-        return {**row, "age": age, "entry": name, "command": cmd, "joined": how}
+        age, reason = command_age(project, cmd)
+        return {**row, "age": age, "entry": name, "command": cmd, "joined": how,
+                "reason": f"[[machines]] {name}: {reason}"}
+    said = dir_age(project, mid)
+    if said is not None:
+        age, reason = said
+        started = (f"started by the plugin's process {plugins[0]}, not a [[machines]] entry" if plugins
+                   else "no [[machines]] entry runs it: a workflow's program, or nothing yet")
+        return {**row, "age": age, "dir": f".orchestra/machines/{mid}/", "by_dir": True,
+                "joined": f"by its directory ({started})", "reason": reason}
     if plugins:
-        mdir = project.repo_root / ".orchestra" / "machines" / mid
-        if mdir.is_dir():
-            return {**row, "age": "program in .orchestra/", "dir": f".orchestra/machines/{mid}/",
-                    "joined": f"by its directory (started by the plugin's process {plugins[0]}, not a [[machines]] entry)"}
-        return {**row, "age": "unknown",
-                "joined": f"started by the plugin's process {plugins[0]}: a plugin runs it (the provider is never the machine)"}
-    if (project.repo_root / ".orchestra" / "machines" / mid).is_dir():
-        return {**row, "age": "program in .orchestra/", "dir": f".orchestra/machines/{mid}/",
-                "joined": "by its directory (no [[machines]] entry runs it: a workflow's program, or nothing yet)"}
-    return {**row, "age": "unknown", "joined": "it announces from no file the project holds (it runs elsewhere, or a plugin runs it)"}
+        why = f"started by the plugin's process {plugins[0]}: a plugin runs it (the provider is never the machine)"
+        return {**row, "age": "unknown", "joined": why, "reason": why}
+    why = "it announces from no file the project holds (it runs elsewhere, or a plugin runs it)"
+    return {**row, "age": "unknown", "joined": why, "reason": why}
 
 
 def due(m: dict, row: dict, now: float) -> bool:

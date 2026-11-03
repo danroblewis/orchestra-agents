@@ -2,6 +2,7 @@
 [[machines]] entries by the log it announced, its name, or its directory; the counts, who is due to
 graduate, and the digest's line. The machines view is stood in for (/api/machines' shape)."""
 
+import json
 import time
 
 import pytest
@@ -115,3 +116,61 @@ def test_the_fallback_is_used_and_said(project, store, heard):
     assert by["place_ticket"]["joined"] == "by the log it announced (fallback: its announcement names no process)"
     assert by["gone"]["by"] == "fallback" and by["gone"]["age"] == "unknown"
     assert got["fell_back"] == ["place_ticket", "gone"] and "the fallback): place_ticket, gone" in got["note"]
+
+
+# The software factory's machine.json shape (orchestra-workflows' examples/software_factory, copied):
+# a graduated worker whose directory holds only the declaration, its command into the tree.
+FACTORY_WORKER = {
+    "id": "researcher", "kind": "programmatic", "managed": "orchestra", "engagement": {"mode": "ad hoc"},
+    "spec": {"command": "python -m factory.workers.researcher --outside ../outside --hour-s 5", "role": "researcher",
+             "exit": {"0": "answered"}, "instances": 1, "timeout": "10m"},
+}
+
+
+def declare(project, mid: str, body: dict | None = None, files: dict[str, str] | None = None):
+    d = project.repo_root / ".orchestra" / "machines" / mid
+    d.mkdir(parents=True, exist_ok=True)
+    if body is not None:
+        (d / "machine.json").write_text(json.dumps(body))
+    for name, text in (files or {}).items():
+        (d / name).write_text(text)
+
+
+def test_the_age_is_what_the_directory_says(project, store, heard):
+    in_dot = {**FACTORY_WORKER, "id": "proving",
+              "spec": {**FACTORY_WORKER["spec"], "command": "python .orchestra/machines/proving/proving.py", "role": "proving"}}
+    declare(project, "researcher", FACTORY_WORKER)
+    declare(project, "status_writer", {**FACTORY_WORKER, "id": "status_writer",
+                                       "spec": {**FACTORY_WORKER["spec"], "command": "npm run --silent worker:status_writer"}})
+    declare(project, "proving", in_dot, {"proving.py": "print(1)\n"})
+    declare(project, "drafter", {"id": "drafter", "kind": "universal", "spec": {"steps": ["read", "draft"]}})
+    declare(project, "prompted", None, {"prompt.md": "You draft.\n"})
+    declare(project, "empty")
+    now = time.time()
+    procs = {"processes": ["workflows.programs"]}
+    heard += [{"id": i, "kind": "program", "first_seen": now - 9 * DAY, **procs}
+              for i in ("researcher", "status_writer", "proving", "drafter", "prompted", "empty")]
+    got = machine_ages.machine_ages(project, store)
+    by = {r["id"]: r for r in got["machines"]}
+    assert by["researcher"]["age"] == "graduated" and by["researcher"]["by_dir"]
+    assert "python -m factory.workers.researcher" in by["researcher"]["reason"]
+    assert "holds only its declaration" in by["researcher"]["reason"]
+    assert by["status_writer"]["age"] == "graduated"
+    assert by["proving"]["age"] == "program in .orchestra/" and "under .orchestra/" in by["proving"]["reason"]
+    assert by["drafter"]["age"] == "agent" and "universal" in by["drafter"]["reason"]
+    assert by["prompted"]["age"] == "agent" and "prompt.md" in by["prompted"]["reason"]
+    assert by["empty"]["age"] == "unknown"
+    assert by["empty"]["reason"] == ".orchestra/machines/empty/ holds no machine.json, no agent spec and no program"
+    assert got["counts"] == {"agent": 2, "program in .orchestra/": 1, "graduated": 2, "unknown": 1, "other": 0}
+    assert got["due_to_graduate"] == ["proving"]                      # the graduated workers are not due
+    assert got["share"] == "1 of 3 programs live in .orchestra/"
+
+
+def test_a_graduated_worker_without_a_process_is_graduated(project, store, heard):
+    declare(project, "researcher", FACTORY_WORKER)
+    declare(project, "broken", None, {"machine.json": "{not json"})
+    heard += [{"id": "researcher", "kind": "program", "first_seen": time.time()},
+              {"id": "broken", "kind": "program", "first_seen": time.time()}]
+    by = {r["id"]: r for r in machine_ages.machine_ages(project, store)["machines"]}
+    assert by["researcher"]["age"] == "graduated" and by["researcher"]["by"] == "fallback"
+    assert by["broken"]["age"] == "unknown" and "cannot be read" in by["broken"]["reason"]

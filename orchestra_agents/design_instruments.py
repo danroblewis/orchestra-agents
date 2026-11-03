@@ -43,7 +43,7 @@ from orchestra.config import ConfigError, parse_duration
 from orchestra.launcher import NAME
 from orchestra.overlay import OVERLAY
 
-from . import handoff, instruments, intended_api
+from . import handoff, instruments, intended_api, runs_project
 from .config import Project
 from .config_change import change
 from .design import MACHINE, OWNER, answer, apply
@@ -165,6 +165,7 @@ def _what_runs(project: Project, key: str, option: dict, a: dict) -> tuple[str, 
     no_secret(command, url)
     if script:
         check_script(script)
+    runs_project.refuse(command, script, project.repo_root)      # it measures; never the project's build or tests
     if named := company_named(script, command):
         raise StoreError(f"it names {', '.join(named)}, a company system: that needs the owner's approval, {UNTIL}; nothing "
                          "was run")

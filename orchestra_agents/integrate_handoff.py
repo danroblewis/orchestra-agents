@@ -132,7 +132,7 @@ def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, li
         f"Make the collector {name} for {t} work: {why}. It is a script scaffolded from the bridges plugin's {rec['kit']} kit "
         f"at {src} ({name}.py, its poller.toml, test_{name}.py against the kit's fake, and AGENTS.md, which holds the kit's "
         f"rules). The owner wants: {rec['wants']}. {where} Make it work against {t}'s real API. Keep AGENTS.md's rules: read "
-        "only, metadata only, the token by reference (a variable's name or a file outside any repository), never "
+        "only, metadata only, the token by reference (a variable's name or a file outside the project's repository that no repository tracks), never "
         "clearance or credentials in the code (poller.toml's clearance and credentials are the owner's, written by the "
         "Supervisor's approve_integration), and writes to the system only through the Outbox. Acceptance: "
         f"`python -m pytest {test} -q` passes, and {lands}"),

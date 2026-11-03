@@ -7,7 +7,7 @@ the repository, nothing committed; INTEGRATING.md §3.1):
   the ``[[collect]]`` entry that stores its measurement;
 - a measurement alone: the ``[[collect]]`` entry;
 - a store: its ``[[sources]]`` entry, with the token named in ``auth.bearer_env`` (a variable) or
-  ``auth.bearer_file`` (a file outside any repository).
+  ``auth.bearer_file`` (a file no commit can carry: ``credential_paths``).
 
 **Written only once the owner approved.** A scaffolded program reads nothing but a fake on this
 machine until its ``poller.toml`` says ``clearance = "approved"`` (the kits' compliance check): run

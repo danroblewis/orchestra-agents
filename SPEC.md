@@ -777,6 +777,50 @@ a patch to the project's own code is written in a scratch worktree and lands thr
 review and the gate; a patch to an installed plugin is a project-local override pinned to the
 installed version, with the upstream issue drafted in the outbox for the owner's approval.
 
+**The Supervisor's bounds** (2026-11-02, bootstrap run 2: a Supervisor on Opus, set up in a
+clone of the owner's repository, ran the project's Python suite and made it an hourly instrument,
+which wrote a `.venv` and `__pycache__` into the tree; probed another service's port it found in the
+code; read the owner's home directory, listed their real token files and offered to use them; and
+scaffolded a GitHub poller before the owner had named GitHub). What the Supervisor never does, in the
+fixed core of its prompt (`prompts/supervisor_core.md`, which no spec removes):
+
+- it never runs the project's own code, build or tests: it reads them, and runs Orchestra's own
+  commands and its tools (the collectors it scaffolds run under the host);
+- it never reads outside the project's tree and Orchestra's state directory for it: no `~`, no
+  `find /`, no other repository, no credential store, no environment listing; a token file the
+  owner names is read by the kit, never by the Supervisor;
+- it never probes, connects to or scans a port or a host it finds in the code: it asks the owner
+  which address to use;
+- it never scaffolds, declares or configures a system the owner has not named in words: it may
+  propose one in one line;
+- it never lists or offers credential files it finds.
+
+Where they are held besides the prompt. **Claude Code's settings** (`harness/bounds.py`): the host
+gives the Supervisor's session alone its bounds (`SessionSpec.bounds`: the project's tree, the state
+directory, its working directory; a worker runs tests in its workspace and is not bounded), and the
+Claude Code harness writes a settings file passed with `--settings`, whose `permissions.deny`
+Claude Code enforces in every mode, `--dangerously-skip-permissions` included: Read rules for the
+credential stores (`~/.config`, `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.docker`, `~/.kube`, `~/.netrc`,
+`~/.git-credentials`, keychains; Claude Code applies them to `cat` and the like in Bash too); Bash
+rules for the home directory and the disk (`cd ~`, `ls ~/.*`, `find /`, `find ~`, `env`,
+`printenv`), for probes (`curl`, `wget`, `nc`, `nmap`, `telnet`, `lsof -i`, `netstat`, `ss`, and
+WebFetch to localhost) and for the usual build and test tools (`pytest`, `uv run`, `uv sync`,
+`cargo`, `just`, `make`, `npm`, `go test` …); and a PreToolUse hook (`harness/bounds_hook.py`,
+standard library only, failing closed) that denies Read, Grep, Glob and NotebookRead outside the
+session's roots (its bounds, the installed packages, Claude Code's own directory for its saved tool
+answers, the temporary directory). Claude Code says its Bash rules are no security boundary (`sh -c
+'…'`, a full path to the binary, a script that opens files itself pass), so they are a second line,
+not the only one. **The tools**: `integrate_system` refuses a system the owner has not named in their
+words this session (`_named_by_owner`: its name, title or a usual alias in one of the session's
+messages), scaffolding nothing; `add_instrument`, `set_collector` and `try_collector` refuse a
+script or command that runs the project's build or tests (`runs_project.py`: a build or test tool at
+a command's start, directly, through a runner or in `sh -c`, the text of a repository script the
+command starts, or `orchestra.instruments.test_reports --run`), with the reason, nothing run.
+**Held by the prompt alone**: another repository reached by a relative path from the shell, a port
+read by a program the Supervisor writes, and not listing or offering credential files (the Read
+rules cover the usual stores; a file elsewhere is the prompt's). Pi, Codex and the dummy harness
+carry the prompt only.
+
 **The Supervisor's own branch and pull request** (`side_branch.py`, `supervisor_pr.py`,
 `live_layers.py`; the owner, 2026-11-02, self-improvement 5: "they probably need a pull request, but
 we can use it locally while working"; scm 6–8: "plain branch plu PR", "the provider can push to the
@@ -992,7 +1036,9 @@ model says; a `[[sources]]` store or a scrape target off this machine is another
 approval too; until data classes exist the owner cannot clear one, and the answers say so; a
 secret-looking url or command is refused; `bearer_env` names a credential's variable, never its
 value), `add_instrument` (runs only what its option proposed; refused for `existing_series`, for
-"needs approval", for a script naming or reaching a company system, and for a name an entry in the
+"needs approval", for a script naming or reaching a company system, for one that runs the
+project's build or tests (`runs_project.py`: an instrument measures, never runs the project's code;
+`set_collector` and `try_collector` refuse it too), and for a name an entry in the
 repository or the overlay (or a draft) already has, so expiry never touches the owner's
 instrument; a script of at most 100 lines tried as Orchestra runs it, written to `instruments/`, its
 `[[collect]]`/`[[scrape]]` entry in the overlay, one act, with Orchestra's `draft = true` and
@@ -1137,8 +1183,18 @@ carries `ask_owner`: the owner's approval and where the token is (a variable's N
 path), put to them in the chat. `approve_integration` takes a verified quote of the owner (refused
 otherwise), the credentials by reference (`integrate_kits.credentials`: `token_env` or
 `token_file`, and `user_env` or `user_file` for an HTTP Basic account such as Jira Cloud's email;
-a name is one the kits take, `orchestra_bridges.kits.settings.ENV_NAME`, a path is absolute and
-outside any repository, nothing that looks like a secret), the data class (`metadata only` by
+a name is one the kits take, `orchestra_bridges.kits.settings.ENV_NAME`, a path is absolute,
+nothing that looks like a secret). **A token file is refused only where a commit could carry it**
+(`credential_paths.py`, 2026-11-02; until then any `.git` in any parent refused it, so a file in a
+harness's ignored `creds/` and every path under a home directory that is itself a repository were
+refused, the refusal's own hint among them): inside the project's own repository tree (ignored or
+not), or tracked by the repository that encloses it (`git ls-files`). Under a parent repository
+that ignores it (`git check-ignore`) it is allowed; untracked and not ignored there, it is allowed
+with a caution in the answer (a `git add -A` there would take it). The refusal names the path and
+why, and its hint is a place the rule allows (`~/.config/orchestra-bridges/<file>` when it passes,
+else a description). The check runs when `integrate_system` is given where the token is (its
+optional `token_env`/`token_file`/`user_env`/`user_file`: refused before anything is scaffolded,
+recorded for the approval) and again at `approve_integration`, against the file as it is then, the data class (`metadata only` by
 default) and the site's address when the template's placeholder is still there; it writes
 `clearance = "approved"`, `data_class` and those references into `machine.toml` (dropping the
 template's `token_env` when the owner named only a file; the scaffolded test reads them from

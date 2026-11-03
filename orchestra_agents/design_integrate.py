@@ -47,7 +47,7 @@ from . import integrate_handoff as handoff
 from . import integrate_kits as kits
 from . import integrate_schedule as schedule
 from .config import Project
-from .design import MACHINE, OWNER, answer, apply
+from .design import MACHINE, OWNER, answer, apply, said_in_session, turn_of
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
 from .tasking_text import gate
@@ -70,6 +70,25 @@ def _system(a: dict) -> str:
     if not design_machines.ID.match(s):
         raise StoreError("name the system (jira, slack, pagerduty, chronosphere, jenkins): lower case letters, digits and _")
     return s
+
+
+# what the owner may call a system in words, beside its name and title
+SAID_AS = {"github": ("github", "git hub", "ghe", "gh enterprise"), "pagerduty": ("pagerduty", "pager duty"),
+           "victoriametrics": ("victoriametrics", "victoria metrics")}
+CREDENTIAL_ARGS = ("token_env", "token_file", "user_env", "user_file")
+
+
+def _named_by_owner(store: AgentStore, system: str) -> None:
+    """The owner named the system in words, in a message of this session (SPEC §10, the bounds:
+    bootstrap run 2 scaffolded a GitHub poller before the owner had said GitHub). Refused otherwise:
+    the Supervisor proposes it in one line and waits for their word; nothing is scaffolded."""
+    words = {system, system.replace("_", " "), kits.title(system).lower(), *SAID_AS.get(system, ())}
+    msgs = [r.get("message") or "" for r in said_in_session(store)] + [turn_of(store).get("message") or ""]
+    if any(re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", m.lower()) for w in words for m in msgs):
+        return
+    raise StoreError(f"the owner has not named {kits.title(system)} in their words this session: never scaffold, declare or "
+                     f"configure a system they have not named. Propose it in one line (\"{kits.title(system)} would show …; "
+                     "shall I connect it?\") and wait for their word; nothing was scaffolded")
 
 
 def _retry(store: AgentStore, name: str) -> None:
@@ -182,7 +201,8 @@ def _ask(system: str, kit_env: str | None, base_url_missing: bool, scope: str | 
              "token's scope (read-only)"),
              (f"where the token is: the NAME of the environment variable that will hold it (for example "
               f"{kit_env or system.upper() + '_TOKEN'}, set in the environment `orchestra run` starts with), or the path of a "
-              f"chmod 600 file outside any repository (~/.config/orchestra-bridges/{system}-token); never the token itself, "
+              f"chmod 600 file outside the project's repository that no repository tracks (~/.config/orchestra-bridges/"
+              f"{system}-token); never the token itself, "
               "and not in this chat")]
     if system == "jira":
         parts.append("for Jira Cloud (an atlassian.net site), also where the account's email is (a variable's name or a "
@@ -196,6 +216,9 @@ def _ask(system: str, kit_env: str | None, base_url_missing: bool, scope: str | 
 
 def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     system = _system(a)
+    if not any(r.get("system") == system for r in integrations(store).values()):   # one already begun was named then
+        _named_by_owner(store, system)
+    named = kits.credentials(a, project.repo_root, required=False) if any(a.get(k) for k in CREDENTIAL_ARGS) else {}
     wants = redact((a.get("wants") or "").strip())
     if len(wants) < 5:
         raise StoreError("say what the owner wants from it, in a sentence (issue transitions and open counts)")
@@ -227,6 +250,9 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
         raise StoreError(f"{taken} already has the name {name}: nothing was written")
     rec = {"system": system, "strategy": strategy, "wants": wants, "clearance": NEEDS, "token_env": None, "at": time.time(),
            "base_url": base_url, "root": root}
+    if named:                                    # where the owner said the token is, checked before anything is scaffolded
+        rec["named"] = {k: v for k, v in named.items() if k != "cautions"}
+        rec["cautions"] = named.get("cautions") or []
     if strategy == "source":
         return _plan_only(project, store, name, rec, settings, a, prov)
     if not kits.installed():
@@ -409,12 +435,16 @@ def _report(project: Project, name: str, rec: dict, done: dict, lines: list, kit
     planned = [schedule.describe(s) for s in rec["steps"]]
     missing_url = kits.placeholder(rec.get("base_url"))
     lines.append(f"planned, written to the owner's overlay once approved: {'; '.join(planned)}")
+    if rec.get("named"):
+        lines.append("where the owner said the credentials are, checked (no commit can carry them), recorded for the approval: "
+                     + ", ".join(f"{k} {v}" for k, v in rec["named"].items()))
+        lines += rec.get("cautions") or []
     ask = _ask(rec["system"], kit_env, missing_url, rec.get("scope"))
     lines.append("waiting for the owner's approval and where the token is, by name or path (approve_integration)")
     return answer(project, done, lines, integration=name, clearance=NEEDS, planned=planned, ask_owner=ask,
                   owner_must_set=[f"the approval, in their words, for {kits.title(rec['system'])}",
                                   ("where the token is: an environment variable's name in orchestra run's environment, or "
-                                  "a chmod 600 file outside any repository")]
+                                  "a chmod 600 file outside the project's repository that no repository tracks")]
                   + ([f"{kits.title(rec['system'])}'s base URL"] if missing_url else [])
                   + ([kits.SCOPE[rec["scope"]]] if rec.get("scope") else []),
                   next="Put ask_owner to the owner in the chat, in your words. Never ask for the token itself, and never "
@@ -439,7 +469,9 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
                          "nothing was changed")
     if rec.get("dir") != was:                       # the landed copy: the owner's settings, as they were given
         kits.fill(Path(rec["dir"]), rec.get("settings") or {}, None)
-    creds = kits.credentials(a)
+    given = {k: a[k] for k in CREDENTIAL_ARGS if a.get(k)}
+    creds = kits.credentials({**(rec.get("named") or {}), **given}, project.repo_root)    # checked again, as it is now
+    cautions = creds.pop("cautions", [])
     if rec["strategy"] == "source" and set(creds) - {"token_env", "token_file"}:
         raise StoreError("a store's [[sources]] entry takes a bearer token alone (token_env or token_file), no account")
     data_class = (a.get("data_class") or DATA_CLASS).strip()
@@ -453,7 +485,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         raise StoreError(f"{kits.title(rec['system'])}'s scope ({scope}: {kits.SCOPE[scope]}) is still the template's: ask the "
                          f"owner for it and pass it in settings.{scope}; nothing was changed")
     named = ", ".join(f"{k} {v}" for k, v in creds.items())
-    lines = []
+    lines = list(cautions)
     if rec.get("dir"):
         target = Path(rec["dir"])
         if settings:

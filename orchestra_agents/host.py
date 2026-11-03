@@ -41,6 +41,7 @@ from . import (
     parent,
     promises,
     prompting,
+    protocol,
     push_guard,
     supervisor_spec,
     tooling,
@@ -416,11 +417,19 @@ class AgentHost:
             system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            tools_via=self.cfg.tools_via, read_only=read_only))
+            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd)))
         if not ticket_id:
             self._session_models[role] = model
         self._announce(source, role)               # once it exists: a session that failed to start is no machine
         return proc
+
+    def _bounds(self, role: str, cwd: Path) -> tuple[str, ...]:
+        """Where the Supervisor's session may read (SPEC §10, its bounds): the project's tree and
+        Orchestra's state directory for it (and its own working directory). Other sessions are
+        unbounded here: a worker runs the project's tests in its ticket's workspace."""
+        if role != protocol.SUPERVISOR:
+            return ()
+        return tuple(dict.fromkeys(str(p) for p in (self.project.repo_root, self.project.orchestra.state_dir, cwd)))
 
     def _instance(self, session_id: str, role: str, ticket_id: str = "") -> str:
         """The machine instance a session runs as, which is also the source of its events. A

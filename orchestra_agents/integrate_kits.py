@@ -34,6 +34,7 @@ import tomllib
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import credential_paths
 from .config import Project
 from .integrate_settings import CREDENTIAL_KEYS, check_settings, drop_keys, set_keys
 from .secret_shapes import secret_in
@@ -234,25 +235,16 @@ def run_test(target: Path, name: str, timeout_s: float = TEST_TIMEOUT_S) -> dict
     return out
 
 
-def _outside_repositories(path: str, what: str) -> str:
-    p = Path(path).expanduser()
-    if not p.is_absolute():
-        raise StoreError(f"{what} is a file's full path (~/.config/orchestra-bridges/jira-token), not {path!r}")
-    for d in [p.parent, *p.parent.parents]:
-        if (d / ".git").exists():
-            raise StoreError(f"{what}: {path} is inside the repository at {d}: a credential's file lives outside any "
-                             "repository (~/.config/orchestra-bridges/, chmod 600); nothing was changed")
-    return path
-
-
-def credentials(a: dict) -> dict:
+def credentials(a: dict, repo_root: Path | None = None, *, required: bool = True) -> dict:
     """The owner's credentials for the program, by reference only: the token's variable
     (``token_env``) or file (``token_file``), and for HTTP Basic (Jira Cloud: the account's email)
     the account's variable (``user_env``) or file (``user_file``), the kits' own names. Never a
-    value: a name that is not a variable's, a path inside a repository, or anything that looks
-    like a secret is refused."""
+    value: a name that is not a variable's, a file a commit could carry (inside the project's
+    repository, or tracked by the repository that encloses it: ``credential_paths``), or anything
+    that looks like a secret is refused. A file allowed with a caution (untracked but not ignored
+    where it is) carries it under ``cautions``, never written to the poller."""
     got = {k: (a.get(k) or "").strip() for k in ("token_env", "token_file", "user_env", "user_file")}
-    out = {}
+    out, cautions = {}, []
     for k, v in got.items():
         if not v:
             continue
@@ -261,10 +253,18 @@ def credentials(a: dict) -> dict:
                              "value; nothing was changed")
         if k.endswith("_env") and not env_name_ok(v):
             raise StoreError(f"{k} is the NAME of an environment variable (JIRA_TOKEN), never a token: ask the owner for it")
-        out[k] = v if k.endswith("_env") else _outside_repositories(v, k)
-    if not ({"token_env", "token_file"} & set(out)):
+        if k.endswith("_env"):
+            out[k] = v
+            continue
+        out[k], caution = credential_paths.check(v, k, repo_root)
+        if caution:
+            cautions.append(caution)
+    if required and not ({"token_env", "token_file"} & set(out)):
         raise StoreError("name where the token is: token_env, the NAME of an environment variable (JIRA_TOKEN), or "
-                         "token_file, a chmod 600 file outside any repository; never the token: ask the owner for it")
+                         f"token_file, {credential_paths.hint(repo_root, 'token')} (never in the project's repository); "
+                         "never the token: ask the owner for it")
+    if cautions:
+        out["cautions"] = cautions
     return out
 
 

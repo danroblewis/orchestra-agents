@@ -408,7 +408,7 @@ def test_credentials_are_references_never_values(project, store, tmp_path):
     say(store, YES, 2)
     for bad, match in (({}, "name where the token is"),
                        ({"token_file": "jira-token"}, "full path"),
-                       ({"token_file": str(project.repo_root / "secrets" / "jira-token")}, "inside the repository"),
+                       ({"token_file": str(project.repo_root / "secrets" / "jira-token")}, "inside the project.s own repository"),
                        ({"token_env": "JIRA_TOKEN", "user_env": "me@acme.test"}, "NAME of an environment variable"),
                        ({"token_env": "ghp_" + "a" * 36}, "credential itself|NAME of an environment variable")):
         with pytest.raises(StoreError, match=match):
@@ -575,3 +575,25 @@ def test_a_relays_declared_types_are_kept_before_they_are_heard(project, store):
             "in [[publishes]])") in said
     assert "jira.issue.deleted never heard on the bus" in said
     assert "jira.issue.created" not in said                    # the kit's other types: neither added nor called unheard
+
+
+def test_a_system_the_owner_has_not_named_is_never_scaffolded(project, store):
+    say(store, "Connect our Jira so I can see issue transitions and open counts")     # Jira, never GitHub
+    with pytest.raises(StoreError, match="has not named GitHub in their words.*Propose it in one line"):
+        call(project, store, "integrate_system", system="github", wants="pull requests opened and merged", reason=WHY)
+    assert not scaffolded(project, "github_poller").exists() and "github_poller" not in design_integrate.integrations(store)
+    say(store, "Yes, our GitHub Enterprise too, for pull requests", 2)              # named in a later message: allowed
+    got = call(project, store, "integrate_system", system="github", wants="pull requests opened and merged", reason=WHY)
+    assert got["integration"] == "github_poller"
+
+
+def test_the_token_file_is_checked_before_anything_is_scaffolded(project, store, tmp_path):
+    with pytest.raises(StoreError, match=r"token_file: .*jira-token is refused: it is inside the project's own repository"):
+        connect(project, store, token_file=str(project.repo_root / ".secrets" / "jira-token"))
+    assert not scaffolded(project).exists() and "jira_poller" not in design_integrate.integrations(store)
+    f = tmp_path / "outside" / "jira-token"
+    got = connect(project, store, token_file=str(f))
+    assert any("checked (no commit can carry them)" in line and str(f) in line for line in got["said"])
+    say(store, "Yes, you may read Jira, metadata only", 2)
+    call(project, store, "approve_integration", name="jira_poller", quote="Yes, you may read Jira", reason=WHY)
+    assert machine_toml(project)["settings"]["token_file"] == str(f)              # the file named before, checked again

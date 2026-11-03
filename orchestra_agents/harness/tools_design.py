@@ -334,6 +334,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             {"element": ELEMENT, "change": S("A pending change's id, to discard only that"), "request": REQUEST, "quote": QUOTE,
              "reason": REASON}, ("element", "reason")),
     ToolDef("integrate_system", "design",
+            "Only for a system the owner named in words this session (refused otherwise: propose one in a line and wait). "
             "The first call when the owner asks to connect an outside system (\"connect our Jira so I can see issue "
             "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
             "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
@@ -359,7 +360,13 @@ DESIGN_TOOLS: list[ToolDef] = [
              "settings": INTEGRATION_SETTINGS,
              "stock": S("The stock the owner expects it to fill, in their words (Open issues): declared, with the system's "
                         "expected effect"),
-             "unit": S("The stock's unit (issues)"), "quote": QUOTE, "reason": REASON},
+             "unit": S("The stock's unit (issues)"),
+             "token_env": S("Only when the owner already said it: the NAME of the variable holding the token"),
+             "token_file": S("Only when the owner already said it: the token file's full path, checked now, before "
+                             "anything is scaffolded (refused inside the project's repository or tracked by any)"),
+             "user_env": S("HTTP Basic (Jira Cloud), when the owner said it: the account's variable's NAME"),
+             "user_file": S("HTTP Basic (Jira Cloud), when the owner said it: the account's file's full path"),
+             "quote": QUOTE, "reason": REASON},
             ("system", "wants", "reason")),
     ToolDef("approve_integration", "design",
             "The owner approved reading the system (their yes, quoted) and said where its token is: the clearance and the "
@@ -369,8 +376,9 @@ DESIGN_TOOLS: list[ToolDef] = [
             "token itself.",
             {"name": S("The integration's name, from integrate_system's answer"),
              "token_env": S("The NAME of the environment variable holding the token (JIRA_TOKEN), never its value"),
-             "token_file": S("Or: the full path of a chmod 600 file outside any repository holding the token "
-                             "(~/.config/orchestra-bridges/jira-token)"),
+             "token_file": S("Or: the full path of the chmod 600 file the owner named holding the token "
+                             "(~/.config/orchestra-bridges/jira-token): refused inside the project's repository or when "
+                             "a repository tracks it; never one you found yourself"),
              "user_env": S("HTTP Basic (Jira Cloud): the NAME of the variable holding the account (its email)"),
              "user_file": S("HTTP Basic (Jira Cloud): or the full path of a chmod 600 file holding the account's email"),
              "data_class": S("What the owner cleared it for (default: metadata only)"),

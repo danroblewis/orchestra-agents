@@ -36,7 +36,7 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import prompting, supervisor_pr
+from . import prompting, runs_project, supervisor_pr
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -194,6 +194,7 @@ def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
     if not name or bool(command) == bool(url):
         raise StoreError("a collector needs a name and either a command (a script under machines/ that prints Prometheus "
                          "text: [[collect]]) or a url that serves it ([[scrape]]), not both")
+    runs_project.refuse(command, root=project.repo_root)       # an instrument measures, never runs the project (SPEC §10)
     section = "collect" if command else "scrape"
     words: Any = shell_command(command) if command and a.get("shell") else command
     entry: dict[str, Any] = {"name": name, **({"command": words} if command else {"url": url})}

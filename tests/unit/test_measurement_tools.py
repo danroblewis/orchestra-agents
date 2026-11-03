@@ -217,3 +217,19 @@ def test_previews_are_bounded_and_trial_stores_keep_one_name(project, store, rem
     assert ok["lines"][0].startswith("3 series")
     assert trial_name(remote.url) == trial_name(remote.url + "/") and trial_name(remote.url).startswith("trial_")
     assert trial_name(remote.url) in call(project, store, "check_sources", url=remote.url)["note"]
+
+
+def test_set_collector_and_try_collector_refuse_the_projects_build_or_tests(project, store):
+    """An instrument measures, never runs the project's code (SPEC §10): the suite as a collector, a
+    script in the repository that runs it, and test_reports asked to run it are refused, nothing run."""
+    (project.repo_root / "machines").mkdir()
+    (project.repo_root / "machines" / "suite.sh").write_text("#!/bin/sh\nmake test >/dev/null && echo 'suite_ok 1'\n")
+    for command, shell in (("cd py && uv run --locked pytest -q -n 6", True), ("machines/suite.sh", False),
+                           ("python -m orchestra.instruments.test_reports --run 'pytest -q' --history h.jsonl", False)):
+        with pytest.raises(StoreError, match="not an instrument"):
+            call(project, store, "try_collector", command=command, shell=shell)
+        with pytest.raises(StoreError, match="not an instrument"):
+            call(project, store, "set_collector", name="suite", command=command, shell=shell, every="60m", reason=WHY)
+    project.reload_config()
+    assert not project.orchestra.config.raw.get("collect")
+    assert not (project.repo_root / "py").exists()

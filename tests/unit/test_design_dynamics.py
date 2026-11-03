@@ -471,3 +471,16 @@ def test_read_design_lists_what_was_declared_with_machines_and_event_edges(proje
     out = call(project, store, "read_design", role="supervisor")
     assert out["version"] == 1 and out["elements"][0]["id"] == "features" and out["kept_in"]
     assert out["machines"] == {} and out["events"] == {}
+
+
+def test_add_instrument_refuses_a_script_that_runs_the_projects_tests(project, store):
+    """An instrument measures, never runs the project's code (SPEC §10; bootstrap run 2 made the
+    project's whole Python suite an hourly instrument)."""
+    features(project, store)
+    options(project, store)
+    for script in ("cd py && uv run --locked pytest -q\necho 'acceptance_tests_passing 1'\n",
+                   "cargo test -q >/dev/null; echo 'acceptance_tests_passing 1'\n", "just check && echo 'ok 1'\n"):
+        with pytest.raises(StoreError, match="not an instrument: it runs the project's build or tests.*Nothing was run"):
+            add(project, store, script=script)
+    assert entry(project, "features.acceptance") is None
+    assert not list((project.orchestra.state_dir / "trials").glob("features.acceptance*"))

@@ -20,6 +20,7 @@ from orchestra.config import ConfigError, parse_duration
 from orchestra.metrics import for_project
 from orchestra.web.machine_logs import tail
 
+from . import runs_project
 from .config import Project
 from .store import StoreError
 
@@ -61,6 +62,7 @@ def _trial(a: dict) -> Collector:
 
 def try_collector(project: Project, a: dict) -> dict:
     """One round of the collector ``a`` describes, as Orchestra would run it, stored nowhere."""
+    runs_project.refuse((a.get("command") or "").strip(), root=project.repo_root)   # an instrument measures (SPEC §10)
     c = _trial(a)
     log = project.state_dir / "trials" / "collector.log"
     log.parent.mkdir(parents=True, exist_ok=True)

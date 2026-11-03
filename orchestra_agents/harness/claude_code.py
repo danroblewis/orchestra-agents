@@ -19,7 +19,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from . import bash_tools
+from . import bash_tools, bounds
 from .base import (
     TOOL_CALL_S,
     AgentSession,
@@ -220,6 +220,9 @@ class ClaudeCodeSession(AgentSession):
         if self.spec.model:
             args += ["--model", self.spec.model]
         args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
+        if self.spec.bounds:              # the Supervisor's bounds, as far as Claude Code's settings hold them (bounds.py)
+            own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
+            args += ["--settings", str(bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own))]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""

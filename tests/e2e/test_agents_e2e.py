@@ -67,15 +67,39 @@ class Env:
         return r["ticket"]["state"]
 
     def settle(self, *tickets: str, timeout: float = 120) -> None:
-        """Until every ticket named has reached a settled state and the host has nothing left to
-        do for what is on the bus (a ticket done: its sessions archived; a lead woken on it and
-        answered)."""
-        deadline = time.time() + timeout
+        """Until every ticket named has reached a settled state, every one done has its landing on
+        the bus, and the host has nothing left to do for what is on the bus (a ticket done: its
+        sessions archived; a lead woken on it and answered).
+
+        The gate moves a ticket to DONE before it removes the worktree and deletes the branch, and
+        says ``gate.landed`` only after: under load the bus seen at DONE may not hold the landing
+        yet, and an idle host up to it has not been woken on it (T33). The ceiling scales with the
+        machine's load: it bounds a wait on a condition, never a sleep."""
+        deadline = time.time() + scaled(timeout)
         while time.time() < deadline and not all(self.state(t) in SETTLED for t in tickets):
             time.sleep(0.5)
+        done = {t for t in tickets if self.state(t) == "DONE"}
+        while time.time() < deadline and done - landed(self.events):
+            time.sleep(0.2)
         end = self.host.events.end()
         while time.time() < deadline and not self.host.idle(end):
             time.sleep(0.2)
+
+
+def scaled(seconds: float) -> float:
+    """A wait's ceiling on this machine: ``seconds`` at a load of one per CPU, more in proportion
+    above it (T33: the owner's worker pool keeps the load at 80-160), at most ten times."""
+    try:
+        per_cpu = os.getloadavg()[0] / (os.cpu_count() or 1)
+    except OSError:
+        per_cpu = 1.0
+    return seconds * min(10.0, max(1.0, per_cpu))
+
+
+def landed(events: Events) -> set[str]:
+    """The tickets the gate has said ``gate.landed`` for, on the bus now."""
+    evs, _ = events.read(0, limit=10000)
+    return {e.get("ticket") for e in evs if e["type"] == "gate.landed"}
 
 
 # What the fakes' knobs (FAKE_PI_*) make them do, as dummy scripts: the same behaviour, from a

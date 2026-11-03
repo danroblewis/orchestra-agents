@@ -263,6 +263,27 @@ def test_claude_session_identity_and_resume(tmp_path, monkeypatch):
     assert not again.alive()
 
 
+def test_claude_session_moved_to_another_directory_is_resumed_there(tmp_path, monkeypatch):
+    """An agent whose team is created after it starts again in the team's space (T33): its
+    transcript follows it, so the next turn resumes it rather than reusing the id for a new one,
+    which Claude Code refuses ("Session ID ... is already in use")."""
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    s = ClaudeCodeSession(spec(tmp_path))
+    s.open()
+    Path(s.session_file).parent.mkdir(parents=True)
+    Path(s.session_file).write_text("{}\n")
+    moved = spec(tmp_path)
+    moved.cwd = tmp_path / "space"
+    again = ClaudeCodeSession(moved)
+    again.open()
+    assert again.uuid == s.uuid and again.session_file == str(transcript_path(tmp_path / "space", s.uuid))
+    assert Path(again.session_file).read_text() == "{}\n" and not Path(s.session_file).exists()
+    assert "--resume" in again._args() and "--session-id" not in again._args()
+    third = ClaudeCodeSession(moved)
+    third.open()
+    assert third.session_file == again.session_file          # the record says where it is now
+
+
 def test_claude_turn_without_binary_reports_error(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     (tmp_path / "wt").mkdir()

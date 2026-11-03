@@ -6,6 +6,7 @@ every metric name."""
 import json
 import subprocess
 import time
+from types import SimpleNamespace
 
 import pytest
 from conftest import agents_project
@@ -121,3 +122,56 @@ def test_a_selector_is_anded_with_the_bound():
         '(increase(x{a="1"}[60s])) or (increase(x{b="2"}[60s]))'
     assert source_bounds.holds(['{namespace="h"}'], 'sum(rate(x{namespace="h"}[1m]))')
     assert not source_bounds.holds(['{namespace="h"}'], "sum(rate(x[1m]))")
+
+
+def _bare(requests) -> list:
+    """Bootstrap run 5's rule: a metadata or label-names call names a metric or a selector, never bare."""
+    return [(path, form) for path, form in requests
+            if (path == "metadata" and not form.get("metric")) or (path in ("labels", "values") and not form.get("match[]"))]
+
+
+@pytest.fixture
+def many():
+    """One store, two namespaces, with more of hackriff's names than Orchestra asks metadata for in one
+    call (its FEW_NAMES): run 5's ``source_schema`` read the whole store's metadata, 43 KB, that way."""
+    now, step = time.time(), 15.0
+    t = [now - 30 * 60 + step * i for i in range(int(30 * 60 / step))]
+    dump = [("queue_depth", {"namespace": ns, "queue": "analyze"}, [(x, 5.0) for x in t]) for ns in ("hackriff", "other")]
+    dump += [(f"hk_part_{k}_total", {"namespace": "hackriff"}, [(x, float(i)) for i, x in enumerate(t)]) for k in range(14)]
+    dump += [(f"other_part_{k}", {"namespace": "other"}, [(x, 1.0) for x in t]) for k in range(6)]
+    s = FakeStore(dump)
+    yield s
+    s.close()
+
+
+def test_no_tool_asks_the_store_for_every_metrics_metadata(tmp_path, monkeypatch, many):
+    project, store = _project(tmp_path, monkeypatch, many.url, [f"{{{OURS}}}"])
+    names = call(project, store, "source_schema", source="prom")
+    assert len(names["names"]) == 15 and not any(n.startswith("other_") for n in names["names"])
+    call(project, store, "source_schema", source="prom", match=['{__name__=~"hk_part_.*"}'])
+    with pytest.raises(StoreError, match="no counter .* shares a word"):    # what it asked on the way is what is judged
+        call(project, store, "find_balance", level="all")
+    asked = [form["metric"] for path, form in many.requests if path == "metadata" and form.get("metric")]
+    assert asked and _bare(many.requests) == [] and _outside(many.requests) == []
+    from orchestra_agents.source_bounds import METADATA_NAMES
+
+    calls: list[list[str]] = []
+    src = SimpleNamespace(metadata=lambda names: calls.append(list(names)) or {})
+    source_bounds.metadata(src, [f"m{i}" for i in range(100)])
+    assert len(calls) == METADATA_NAMES and all(len(c) == 1 for c in calls)     # name by name, capped
+
+
+def test_a_store_given_by_url_that_a_source_declares_is_read_within_its_match(tmp_path, monkeypatch, shared):
+    """Run 5: 27 queries on the store, given by url with a ``job`` bound, named no namespace. The
+    configured source's match holds for every read of its url, whatever bound is passed."""
+    project, store = _project(tmp_path, monkeypatch, shared.url + "/", [f"{{{OURS}}}"])
+    got = call(project, store, "source_schema", url=shared.url, bound='{queue="analyze"}')
+    assert [n.split(" [")[0] for n in got["names"]] == ["analyze_jobs_enqueued_total", "analyze_jobs_processed_total",
+                                                       "queue_depth"]
+    assert got["bound"] == [f'{{{OURS},queue="analyze"}}']
+    call(project, store, "source_schema", url=shared.url)               # no bound given: the declared match is the bound
+    call(project, store, "find_balance", url=shared.url, bound='{queue="analyze"}', level="all")
+    with pytest.raises(StoreError, match="outside"):
+        call(project, store, "preview_query", url=shared.url, query='sum(queue_depth{queue="analyze"})')
+    assert shared.requests and _outside(shared.requests) == [] and _bare(shared.requests) == []
+    assert source_bounds.trial_bound([], "http://x", '{job="a"}') == ['{job="a"}']      # no source declares it: as given

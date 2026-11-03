@@ -27,9 +27,11 @@ configuration, never code: a program or a collector script is a worker's, throug
 from __future__ import annotations
 
 import json
+import shlex
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from orchestra import runtime
@@ -59,6 +61,12 @@ INSTRUMENTS_CHANGED = "instruments.changed"
 INSTRUMENT_SECTIONS = frozenset({"collect", "scrape", "sources", "series"})
 
 
+def measured(section: str, subject: str) -> bool:
+    """Whether a change is of what is measured only (``instruments.changed``): an instrument's section,
+    or a ``[[machines]]`` entry that runs a collector (its subject ``collector:``)."""
+    return section in INSTRUMENT_SECTIONS or subject.startswith(("collector:", "source:", "instrument:"))
+
+
 @dataclass
 class Plan:
     section: str                                  # what the bus event names
@@ -76,11 +84,45 @@ LABELS = {"outbox.kinds": "an Outbox kind", "discovery.eras_from": "the era filt
           "series": "[[series]]", "agents.serves": "the agents' roles", "project.work": "the work mode"}
 
 
-def _about(section: str, name: str) -> str:
+def _about(section: str, name: str, project: Project | None = None) -> str:
     """The bus subject of an entry's change: what kind of thing it is, and its name. Only a machine's
-    (``machine:<name>``) can begin an era (Orchestra's C3): a collector, a source or a setting never does."""
+    (``machine:<name>``) can begin an era (Orchestra's C3): a collector, a source or a setting never does.
+    A ``[[machines]]`` entry that runs an instrument (``measures``: a kit's poller) is ``collector:<name>``,
+    added, changed or removed (bootstrap run 5: a poller's removal said ``machine:`` and began the run's
+    only era, cutting discovery's fit to 58 minutes of a week's history)."""
+    if section == "machines" and project is not None and measures(project, name):
+        return f"collector:{name}"
     return {"machines": f"machine:{name}", "collect": f"collector:{name}", "scrape": f"collector:{name}",
             "sources": f"source:{name}"}.get(section, f"setting:{section}.{name}")
+
+
+def measures(project: Project, name: str) -> bool:
+    """Whether the ``[[machines]]`` entry ``name`` runs an instrument, not a machine: a poller
+    scaffolded from a kit (its directory holds a ``poller.toml``: under ``.orchestra/machines/``, the
+    state directory's ``machines/``, or beside the program its command runs; or the bridges list it,
+    a legacy ``machine.toml`` included), or a program with a ``[[collect]]``/``[[scrape]]`` twin of
+    the same name (an integration's pair, ``integrate_schedule.poller``). A poller only relays what
+    a system's people and bots did, as them: the provider is never the machine (Orchestra's rule 2)."""
+    if _entry(project, "collect", name) or _entry(project, "scrape", name):
+        return True
+    root = project.repo_root
+    dirs = [root / ".orchestra" / "machines" / name, project.orchestra.state_dir / "machines" / name]
+    command = (_entry(project, "machines", name) or {}).get("command")
+    try:
+        words = command if isinstance(command, list) else shlex.split(command or "")
+    except ValueError:
+        words = []
+    for w in words:
+        if str(w).endswith(".py"):
+            path = Path(str(w)).expanduser()
+            dirs.append((path if path.is_absolute() else root / path).parent)
+    if any((d / "poller.toml").is_file() for d in dirs):
+        return True
+    from . import integrate_kits
+    try:
+        return integrate_kits.installed() and any(i["name"] == name for i in integrate_kits.shipped(project))
+    except Exception:  # noqa: BLE001 - the bridges' listing is a hint; without it the files above decide
+        return False
 
 
 def _setting_about(key: str, value: Any) -> str:
@@ -220,7 +262,7 @@ def _set_machine(project: Project, store: AgentStore, a: dict) -> Plan:
         return "Nothing restarts: the new stop grace applies the next time it is stopped."
     return Plan("machines", lambda ed, kw: ed.add_entry("machines", entry, **kw),
                 lambda c: f"{_how(c)} the machine {name}: {command} ([[machines]])", applies,
-                label=f"the machine {name}", subject=f"machine:{name}")
+                label=f"the machine {name}", subject=_about("machines", name, project))
 
 
 def _set_collector(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -259,7 +301,7 @@ def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
             "gate.unit": "Live: the task system's next gate run leaves it out."}[section]
     return Plan(section, lambda ed, kw: ed.remove_entry(section, name, **kw), lambda c: f"removed {name} from [[{section}]]",
                 lambda: said + ("" if section == "gate.unit" else _unless_launching(project)),
-                label=f"{name} removed", subject=_about(section, name))
+                label=f"{name} removed", subject=_about(section, name, project))
 
 
 def _check_sources(project: Project, key: str, value: list) -> None:
@@ -345,7 +387,7 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     if claim_change(store, role, a.get("change")):     # the change a prediction of the Supervisor's waits for: Orchestra judges it from here
         store.events.publish(CHANGED, {**data, "prediction_change": a["change"]}, id=a["change"], subject=plan.subject or f"setting:{plan.section}")
     else:
-        store.events.emit(INSTRUMENTS_CHANGED if plan.section in INSTRUMENT_SECTIONS else CHANGED,
+        store.events.emit(INSTRUMENTS_CHANGED if measured(plan.section, plan.subject) else CHANGED,
                           about=plan.subject or f"setting:{plan.section}", **data)
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, what applies now, and the branch and its pull request as "

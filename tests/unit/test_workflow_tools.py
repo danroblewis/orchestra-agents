@@ -567,3 +567,49 @@ def test_an_attention_waits_why_reaches_list_items_and_explain_item(project, sto
     text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
     assert "a wait's `why`" in text and "is the cause to report" in text
     assert "never say the attention events carry no reason" in text
+
+
+JOINED = {"name": "ticket_delivery", "starts": [{"event": "jira.issue.assigned"}],
+          "steps": [{"name": "open_pr", "who": {"outside": "github"}, "done_when": {"event": "github.pr.opened", "of": "children"},
+                     "outcomes": {"done": "sail"}},
+                    {"name": "sail", "who": {"outside": "bot.github.sail-bot"},
+                     "done_when": {"event": "github.pr.labeled", "of": "children", "data": {"label": "SAILED"}},
+                     "outcomes": {"done": None}}]}
+STATUS_ONLY = {"name": "ticket_delivery", "starts": [{"event": "jira.issue.assigned"}],
+               "steps": [{"name": "in_progress", "who": {"outside": "jira"},
+                          "done_when": {"event": "jira.issue.transitioned", "data": {"to": "In Review"}},
+                          "outcomes": {"done": "in_review"}},
+                         {"name": "in_review", "who": {"outside": "jira"},
+                          "done_when": {"event": "jira.issue.transitioned", "data": {"to": "Done"}}, "outcomes": {"done": None}}]}
+
+
+def test_a_missing_link_is_asked_for_never_hidden_by_dropping_the_relation(project, store, fake):
+    """Bootstrap run 5, step 8: tickets waited at open_pr because no pull request carried its ticket's
+    key, and the Supervisor re-declared ticket_delivery to follow Jira's status only, on the feed's
+    "Proceed as you think best." That drops the owner's goal (the ticket joined to its pull requests)
+    and hides the gap: refused, with the linker to ask for; only the owner's words about the link drop it."""
+    call(project, store, "declare_workflow", definition=JOINED, reason="the owner's goal one: each ticket with its pull requests")
+    with pytest.raises(StoreError) as e:
+        call(project, store, "declare_workflow", definition=STATUS_ONLY, reason="the tickets follow Jira, each carrying the ticket key")
+    said = str(e.value)
+    assert "nothing written" in said and "github.pr.opened of its children" in said
+    assert "linker" in said and "item.related {kind: parent}" in said and "branch or title" in said and "one sentence" in said
+    path = project.orchestra.state_dir / "workflows" / "ticket_delivery" / "workflow.json"
+    assert json.loads(path.read_text()) == JOINED                        # the definition, and its gap, stay as they were
+    store.set_agent_state("supervisor", turn={"n": 2, "id": "sessions/supervisor/2", "message": "Proceed as you think best.", "at": 2.0})
+    with pytest.raises(StoreError, match="not a general go-ahead"):
+        call(project, store, "declare_workflow", definition=STATUS_ONLY, reason="the owner said to proceed",
+             quote="Proceed as you think best.")
+    kept = {**JOINED, "steps": [*JOINED["steps"][:1], {**JOINED["steps"][1], "guards": {"within": "2h"}}]}
+    assert call(project, store, "declare_workflow", definition=kept, reason="a guard on the sail step")["ok"]   # relations kept
+    store.set_agent_state("supervisor", turn={"n": 3, "id": "sessions/supervisor/3",
+                                              "message": "No linker for now: follow Jira's status only, and show the gap.", "at": 3.0})
+    out = call(project, store, "declare_workflow", definition=STATUS_ONLY, reason="the owner chose Jira's status until a linker",
+               quote="follow Jira's status only")
+    assert out["ok"] and out["author"] == "owner" and json.loads(path.read_text()) == STATUS_ONLY
+
+
+def test_the_prompt_says_to_ask_for_the_link_a_goal_needs():
+    from orchestra_agents.prompting import PROMPTS_DIR
+    text = " ".join((PROMPTS_DIR / "supervisor.md").read_text().split())
+    assert "never silently remove the goal" in text and "linker" in text and "item.related" in text

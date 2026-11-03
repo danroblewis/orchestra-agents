@@ -176,6 +176,38 @@ def test_a_change_of_what_is_measured_only_begins_no_era(project, store):
     assert [begins(e, DEFAULT_FROM) for e in envelope] == [False, False, False, True], envelope
 
 
+def test_a_pollers_machines_entry_is_a_collector_added_changed_or_removed(project, store):
+    """Bootstrap run 5: removing a duplicate GitHub poller's ``[[machines]]`` entry said
+    ``machine:github_plugins_poller`` and began the run's only era (the fit cut to 58 minutes of a
+    week). A kit's poller (its ``poller.toml``) or a program with a ``[[collect]]`` twin is an
+    instrument: ``collector:<name>`` whatever is done to it, and no era; a plain program is still a machine."""
+    from orchestra.sd.eras import DEFAULT_FROM, begins
+    call(project, store, "set_machine", name="feed", command="python tools/feed.py", reason="the feed must keep running")
+    # a program with no instrument yet is a machine; once its [[collect]] twin is there, its entry is the collector's
+    call(project, store, "set_machine", name="ops_relay", command="python tools/ops_relay.py", restart="always",
+         reason="the ops relay is measured beside its counts")
+    call(project, store, "set_collector", name="ops_relay", command="python tools/ops_relay.py measure",
+         reason="the ops relay's counts are stored")
+    call(project, store, "remove_entry", section="machines", name="ops_relay", reason="the ops relay is replaced by a kit")
+    poller = project.repo_root / ".orchestra" / "machines" / "github_plugins_poller"
+    poller.mkdir(parents=True)
+    (poller / "poller.toml").write_text('kit = "github"\n# a relay, never a machine itself\n')
+    command = "python .orchestra/machines/github_plugins_poller/github_plugins_poller.py"
+    call(project, store, "set_machine", name="github_plugins_poller", command=command, restart="always",
+         reason="the owner's GitHub plugins repository is polled")
+    call(project, store, "set_machine", name="github_plugins_poller", command=command, restart="on-failure",
+         reason="the poller should not loop on a bad token")
+    call(project, store, "remove_entry", section="machines", name="github_plugins_poller",
+         reason="the organisation's poller reads this repository already")
+    evs = [e for e in store.events.read(0, 1000)[0] if e["type"].endswith(".changed")]
+    assert [(e["type"], e["subject"]) for e in evs] == [
+        ("config.changed", "machine:feed"), ("config.changed", "machine:ops_relay"), ("instruments.changed", "collector:ops_relay"),
+        ("instruments.changed", "collector:ops_relay"), ("instruments.changed", "collector:github_plugins_poller"),
+        ("instruments.changed", "collector:github_plugins_poller"), ("instruments.changed", "collector:github_plugins_poller")]
+    envelope = [{k: e[k] for k in ("id", "type", "source", "subject")} for e in evs]
+    assert [begins(e, DEFAULT_FROM) for e in envelope] == [True, True] + [False] * 5
+
+
 def test_a_source_orchestra_would_refuse_is_never_committed(project, store):
     head = git(project.repo_root, "rev-parse", "HEAD")
     with pytest.raises(StoreError, match="metrics-lab"):

@@ -112,14 +112,18 @@ class Store:
         self.reads: dict = {}                    # candidate reads, by (selector, by): shared by the call's levels
         self.meta: dict = {}                     # the metadata of the names asked about
         self._asked: set[str] = set()
+        self._meta_left = bounds.METADATA_NAMES  # the most names asked of the store's metadata in one call, one request each
 
     def meta_for(self, names: list[str]) -> dict:
-        """The store's metadata of these names, asked once each (only the names, not the whole store's)."""
+        """The store's metadata of these names, asked once each, name by name (never the whole store's,
+        run 5), at most ``METADATA_NAMES`` in a call: the rest are typed by their names."""
         from orchestra.sources import SourceError
         missing = sorted(set(names) - self._asked)
         if missing:
+            ask = missing[:self._meta_left]
+            self._meta_left -= len(ask)
             try:
-                self.meta.update(self.src.metadata(missing))
+                self.meta.update(bounds.metadata(self.src, ask))
             except SourceError:
                 pass
             self._asked |= set(missing)
@@ -151,9 +155,9 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
             from .source_tools import trial_name
             name = trial_name(x["url"])
             if name not in {t["name"] for t in trial}:
-                bound = x.get("bound")
+                bound = bounds.trial_bound(specs.sources, x["url"], x.get("bound"))     # a declared url's match holds (run 5)
                 trial.append({"name": name, "url": x["url"], **({"auth": x["auth"]} if x.get("auth") else {}),
-                              **({"match": [bound] if isinstance(bound, str) else list(bound)} if bound else {})})
+                              **({"match": bound} if bound else {})})
             return name
         name = str(x or "").strip()
         if name not in declared:

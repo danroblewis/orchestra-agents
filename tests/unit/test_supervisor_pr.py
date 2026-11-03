@@ -375,8 +375,8 @@ def test_scm_on_a_protected_base_is_refused_by_name(tmp_path, monkeypatch, forge
 
 
 def _with_update_pr(monkeypatch, forge) -> list:
-    """The provider with ``update_pr`` on the fake forge (orchestra-scm's provider has none yet): it
-    rewrites the pull request's title and description as the forge keeps them."""
+    """The provider with an ``update_pr`` that counts its calls: it rewrites the pull request's title
+    and description as the forge keeps them."""
     real, calls = supervisor_pr.provider, []
 
     def provider(project, section):
@@ -408,12 +408,35 @@ def test_the_pull_request_describes_the_whole_branch_and_is_updated_when_it_grow
     assert "drafts the owner approves" in summary[1] and WHY in summary[2]
 
 
-def test_a_provider_that_cannot_edit_a_pull_request_says_so(project, store, forge):
+def test_orchestra_scms_provider_edits_the_open_pull_request(project, store, forge):
     first = call(project, store, "set_setting", key="agents.draft_expiry", value='"12h"', target="repo",
                  reason="the owner wants drafts to expire after twelve hours")
+    n = first["pull_request"]["number"]
     out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
-    assert out["pull_request"]["number"] == first["pull_request"]["number"]
-    assert "cannot edit an open pull request yet" in out["said"]
+    assert out["pull_request"]["number"] == n and "cannot edit" not in out["said"]
+    assert forge._pull(n)["title"] == "Supervisor: draft expiry, capacity" and WHY in forge.body_of(n)
+
+
+class _NoUpdate:
+    """A provider without ``update_pr``: every other attribute is the real one's."""
+    def __init__(self, scm):
+        self._scm = scm
+
+    def __getattr__(self, name):
+        if name == "update_pr":
+            raise AttributeError(name)
+        return getattr(self._scm, name)
+
+
+def test_a_provider_that_cannot_edit_a_pull_request_says_so(project, store, forge, monkeypatch):
+    real = supervisor_pr.provider
+    monkeypatch.setattr(supervisor_pr, "provider", lambda project, section: _NoUpdate(real(project, section)))
+    first = call(project, store, "set_setting", key="agents.draft_expiry", value='"12h"', target="repo",
+                 reason="the owner wants drafts to expire after twelve hours")
+    n = first["pull_request"]["number"]
+    out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    assert out["pull_request"]["number"] == n
+    assert "cannot edit an open pull request yet" in out["said"] and forge._pull(n)["title"] == "Supervisor: draft expiry"
 
 
 def test_the_title_lists_what_the_branch_changes_in_sixty_characters():

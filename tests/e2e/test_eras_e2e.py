@@ -105,11 +105,13 @@ def test_a_change_announced_during_a_run_begins_an_era_in_the_model(quick_demo):
     assert model()["era"] is None and model()["eras_recorded"] == []
 
     # the Supervisor's setup tools publish this when they change orchestra.toml; scripted here, with the change it
-    # announces and its subject in the core's C3 shape: a part that behaves (a setting or an instrument begins no era)
+    # announces and its subject in the core's C3 shape: a part that behaves. The change is to what sends the jobs
+    # (rate.txt), a machine; the queue is the [[collect]] that measures it, and a change named machine:queue is an
+    # instrument's, which begins no era (the core's C4)
     (queue / "rate.txt").write_text("2.0")
     project = load_project(target)
     change = Events.for_project(project, source="supervisor").publish(
-        "config.changed", {"section": "queue", "change": "arrivals 1 → 2 a second", "reason": "a test"}, subject="machine:queue")
+        "config.changed", {"section": "arrivals", "change": "arrivals 1 → 2 a second", "reason": "a test"}, subject="machine:arrivals")
 
     wait_until("the era in the model", lambda: model().get("era") == "e1", timeout_s=120)
 
@@ -121,7 +123,7 @@ def test_a_change_announced_during_a_run_begins_an_era_in_the_model(quick_demo):
     m = model()
     [era] = m["eras_recorded"]
     assert era["id"] == "e1" and era["cause"] == change["id"] and era["label"] == "config.changed from supervisor"
-    assert era["subject"] == "machine:queue"
+    assert era["subject"] == "machine:arrivals"
     assert m["current_era"] == "e1" and m["discovery"]["start"] >= era["start"] - 5, "nothing from before the era is read"
     assert m["discovery"]["era_start"] == era["start"]
     assert m["discovery"]["prior"]["era"] is None, "the era before is its prior"

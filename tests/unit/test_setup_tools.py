@@ -124,7 +124,7 @@ def test_gate_units_are_added_changed_and_removed(project, store):
     out = call(project, store, "set_gate_unit", name="unit", command="python -m compileall -q .", reason="no tests exist yet here")
     assert out["changed"].startswith("changed") and toml(project)["gate"]["unit"][0]["command"] == "python -m compileall -q ."
     call(project, store, "remove_entry", section="gate.unit", name="unit", reason="the test can never pass on this project")
-    assert toml(project)["gate"]["unit"] == []
+    assert "unit" not in toml(project).get("gate", {})
 
 
 def test_set_capacity_limit(project, store):
@@ -353,7 +353,7 @@ def test_a_task_system_that_does_not_know_the_query_does_not_stop_a_change(proje
 @pytest.mark.parametrize("written,tool,args,said", [
     ('\n[gate]\nunit = "make test"\n', "set_gate_unit", {"command": "make check"}, r"gate.unit is not an array of tables; write each entry as \[\[gate.unit\]\]"),
     ('\ncollect = "machines/x.sh"\n', "set_collector", {"name": "disk", "command": "machines/disk.sh"}, r"collect is not an array of tables"),
-    ('\nscrape = []\n', "set_collector", {"name": "app", "url": "http://127.0.0.1:9100/metrics"}, r"scrape is not an array of tables"),
+    ('\nscrape = ["app"]\n', "set_collector", {"name": "app", "url": "http://127.0.0.1:9100/metrics"}, r"scrape is not an array of tables"),
 ])
 def test_an_entry_key_that_is_not_an_array_of_tables_is_refused_with_how_to_write_it(project, store, written, tool, args, said):
     toml_path = project.repo_root / "orchestra.toml"
@@ -362,6 +362,14 @@ def test_an_entry_key_that_is_not_an_array_of_tables_is_refused_with_how_to_writ
     git(project.repo_root, "commit", "-qam", "written by hand")
     with pytest.raises(StoreError, match=said):
         call(project, store, tool, reason="the owner wants this measured", **args)
+
+
+def test_an_empty_entry_key_counts_as_no_entries(project, store):
+    toml_path = project.repo_root / "orchestra.toml"
+    toml_path.write_text("scrape = []\n" + toml_path.read_text())
+    git(project.repo_root, "commit", "-qam", "written by hand")
+    call(project, store, "set_collector", name="app", url="http://127.0.0.1:9100/metrics", reason="the owner wants this measured")
+    assert [s["name"] for s in toml(project)["scrape"]] == ["app"]
 
 
 def test_what_fails_after_the_commit_is_said_and_the_commit_is_still_announced(project, store, monkeypatch):

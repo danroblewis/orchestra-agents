@@ -38,7 +38,7 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import era_guard, prompting, runs_project, scm_settings, supervisor_pr
+from . import era_guard, prompting, runs_project, scm_settings, source_limits, supervisor_pr
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -331,6 +331,8 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     head = key.split(".")[0]
     if key in ("sources", "series") and isinstance(value, list):
         _check_sources(project, key, value)
+    if key == "sources":
+        source_limits.check_declared(project, store, value)   # a match the owner gave, never one picked here (run 6)
     caution = scm_settings.check(project, key, value)      # [scm]: orchestra-scm's schema, the token by file only
     eras = era_guard.check(project, store, key, value)     # [discovery]: never eras faster than discovery can fit a stock in
     caution = "; ".join(x for x in (caution, eras) if x)

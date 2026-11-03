@@ -262,7 +262,7 @@ def credentials(a: dict, repo_root: Path | None = None, *, required: bool = True
             cautions.append(caution)
     if required and not ({"token_env", "token_file"} & set(out)):
         raise StoreError("name where the token is: token_env, the NAME of an environment variable (JIRA_TOKEN), or "
-                         f"token_file, {credential_paths.hint(repo_root, 'token')} (never in the project's repository); "
+                         f"token_file, {credential_paths.hint()} (never in the project's repository); "
                          "never the token: ask the owner for it")
     if cautions:
         out["cautions"] = cautions

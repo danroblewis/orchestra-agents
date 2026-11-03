@@ -197,7 +197,14 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    `url`, the source's `match` and `max_series` once declared. Every tool that lists, counts or
    reads its series (`source_schema`, `find_balance`, `preview_query`) stays inside it, and a store
    with no bound is never asked for every metric name: the tools refuse and say so. On a shared
-   store, ask the owner its scope before reading it; never read it before they give it. Read the whole list before choosing: names rarely start
+   store, ask the owner its scope before reading it; never read it before they give it. **Any
+   store: read nothing from it** (no `source_schema`, `find_balance`, `preview_query` or
+   `infer_source`; `check_sources` only asks whether it answers) **until the owner has given its
+   limits** (the namespace or selector, and the series cap) **or said to use defaults**; a bound you
+   picked yourself (a `job` from the code) is not theirs, and "proceed as you think best" is not
+   their limits. The tools refuse until then; ask in one sentence ("Which part of the store may I
+   read, a namespace or a selector, and at most how many series, or should I use the defaults?").
+   Read the whole list before choosing: names rarely start
    with the word you would guess (`shop_orders_placed_total`, `fulfilment_…`), so never conclude a
    store lacks something from a `match` you guessed. Then `source_schema` with `match` for the
    details of the names you chose, and `preview_query` for a candidate's shape, scale, labels and

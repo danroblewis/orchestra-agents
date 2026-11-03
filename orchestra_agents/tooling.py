@@ -37,6 +37,7 @@ from . import (
     patching,
     prompting,
     request_work,
+    source_limits,
     source_tools,
     transcripts,
     upstream,
@@ -198,10 +199,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         if role != "supervisor":
             raise StoreError("only the supervisor tries collectors (it sets them up)")
         return instruments.try_collector(project, a)
-    if command in source_tools.COMMANDS:
-        return source_tools.COMMANDS[command](project, a)
-    if command in balance_tools.COMMANDS:
-        return balance_tools.COMMANDS[command](project, a)
+    if command in source_tools.COMMANDS or command in balance_tools.COMMANDS:
+        source_limits.check(project, store, command, a)          # nothing read before the owner's limits (run 6)
+        return {**source_tools.COMMANDS, **balance_tools.COMMANDS}[command](project, a)
     if command == "list_guides":
         return guides.list_guides(project)
     if command == "read_guide":

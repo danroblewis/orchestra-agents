@@ -993,6 +993,16 @@ asked name by name (each request a `metric`, `limit_per_metric=1`), for at most
 `metadata` asks for the whole store's when given more than a few; and a store given by `url` that a
 `[[sources]]` entry declares is read within that entry's `match`, the given `bound` ANDed into it
 (`trial_bound`). A label-names or metadata request is never sent without a selector or a metric.
+**Amended 2026-11-03** (bootstrap run 6: told only "read our Prometheus", the Supervisor read it at
+once within a `job` scope and a series cap of its own, before the owner gave "only our namespace
+hackriff, at most 200 series"): nothing is read from a store until the owner has given its limits
+(`source_limits.py`). `source_schema`, `preview_query`, `infer_source` and `find_balance` on a store
+with no `[[sources]]` entry with a `match` are refused, with the reason and the one question to ask,
+unless an owner's message this session gave a scope (a namespace, a job, a selector or a label
+matcher) and a series cap, or said to use the defaults; `set_setting` key `sources` refuses a new
+`match` on the same terms, so a scope the Supervisor picked never passes for theirs. `check_sources`
+(does it answer; reads no series) is not refused. The words are matched loosely and across the
+session, not tied to one store.
 
 **Seeing** (tool group `observe`; any role may be granted it; every list in these answers is its
 count and its first `answers.LISTED`, a log line at most 300 characters): `check_setup` (who fills the roles,
@@ -1341,8 +1351,10 @@ refused, the refusal's own hint among them): inside the project's own repository
 not), or tracked by the repository that encloses it (`git ls-files`). Under a parent repository
 that ignores it (`git check-ignore`) it is allowed; untracked and not ignored there, it is allowed
 with a caution in the answer (a `git add -A` there would take it). The refusal names the path and
-why, and its hint is a place the rule allows (`~/.config/orchestra-bridges/<file>` when it passes,
-else a description). The check runs when `integrate_system` is given where the token is (its
+why, and its hint describes the rule with a placeholder (`<path to the token file>`), never a path
+(since bootstrap run 6, 2026-11-03: the old hint, a real path under the home directory that existed
+on that machine, was passed to the owner as an example; no prompt, guide, tool description or answer
+names one, `tests/unit/test_no_token_path_example.py`). The check runs when `integrate_system` is given where the token is (its
 optional `token_env`/`token_file`/`user_env`/`user_file`: refused before anything is scaffolded,
 recorded for the approval) and again at `approve_integration`, against the file as it is then, the data class (`metadata only` by
 default) and the site's address when the owner has not given it. **An address is never guessed**

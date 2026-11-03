@@ -204,8 +204,7 @@ def _ask(system: str, kit_env: str | None, scope: str | None = None) -> str:
              "token's scope (read-only)"),
              (f"where the token is: the NAME of the environment variable that will hold it (for example "
               f"{kit_env or system.upper() + '_TOKEN'}, set in the environment `orchestra run` starts with), or the path of a "
-              f"chmod 600 file outside the project's repository that no repository tracks (~/.config/orchestra-bridges/"
-              f"{system}-token); never the token itself, "
+              "chmod 600 file outside the project's repository that no repository tracks; never the token itself, "
               "and not in this chat")]
     if system == "jira":
         parts.append("for Jira Cloud (an atlassian.net site), also where the account's email is (a variable's name or a "

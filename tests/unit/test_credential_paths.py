@@ -76,8 +76,9 @@ def test_a_home_directory_that_is_a_repository_allows_an_untracked_file_with_a_c
     assert caution and "not tracked" in caution and "nor ignored" in caution and str(f) in caution
     (home / ".gitignore").write_text(".config/orchestra-bridges/\n")    # ignored there: no caution
     assert credential_paths.check(str(f), "token_file", project_repo) == (str(f), None)
-    # the hint a refusal gives is a place the rule allows
-    assert credential_paths.hint(project_repo, "jira-token").startswith("~/.config/orchestra-bridges/jira-token")
+    # the hint a refusal gives names no place: a placeholder (run 6)
+    assert credential_paths.hint().startswith("<path to the token file>")
+    assert "~" not in credential_paths.hint() and "/" not in credential_paths.hint().replace("<path to the token file>", "")
 
 
 def test_the_hint_never_names_a_place_the_rule_refuses(tmp_path, monkeypatch):
@@ -86,7 +87,7 @@ def test_the_hint_never_names_a_place_the_rule_refuses(tmp_path, monkeypatch):
     git(home, "add", "-A")
     git(home, "commit", "-qm", "tracked")
     monkeypatch.setenv("HOME", str(home))
-    assert "orchestra-bridges" not in credential_paths.hint(tmp_path / "project", "jira-token")
+    assert "orchestra-bridges" not in credential_paths.hint()
     with pytest.raises(StoreError, match="tracks it") as e:
         credential_paths.check(str(f), "token_file", tmp_path / "project")
     assert "~/.config/orchestra-bridges" not in str(e.value)

@@ -14,6 +14,7 @@ from orchestra.metrics import Point
 from orchestra.metrics import for_project as metrics_for
 
 from orchestra_agents import guides, tooling
+from orchestra_agents.design import begin_turn
 from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore, StoreError
 
@@ -43,7 +44,9 @@ def project(tmp_path, monkeypatch):
 
 @pytest.fixture
 def store(project):
-    return AgentStore(project, Events.for_project(project, source="supervisor"))
+    s = AgentStore(project, Events.for_project(project, source="supervisor"))
+    begin_turn(s, "Read the shop's store: only the selector {__name__=~\"http_.*|queue_.*\"}, at most 200 series.")   # the owner's limits (run 6)
+    return s
 
 
 def call(project, store, tool, role="supervisor", **args):

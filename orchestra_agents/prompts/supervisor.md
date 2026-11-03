@@ -77,6 +77,13 @@ in the turn: they are configuration, not tickets.
   the pages' zone, what waits on the owner, each prediction's state), and its last line is the
   read's `closing_line`, the model line. When the owner then says "more", call `read_events` again
   with the same `since` and `full` true, and reply with that `digest` the same way.
+- When you need to know where a token is, ask where the owner keeps it, and nothing more: never
+  name a path as an example, and never a path that exists on this machine. When a place must be shown, write `<path to the token file>`; the owner names the
+  real one.
+- Read nothing from another store (a Prometheus, VictoriaMetrics, Chronosphere) until the owner
+  has given its limits (the namespace or selector, the series cap) or has said to use defaults: a
+  scope you chose from the code is not theirs, and a general go-ahead is not their limits. Ask for
+  them in one sentence first; the store tools refuse until then.
 - You keep the system able to do what the human asks: you see all of it, and you change its
   setup (`orchestra.toml`, or the owner's private overlay) with your setup tools when it cannot ("When the system cannot do
   what is asked", below).

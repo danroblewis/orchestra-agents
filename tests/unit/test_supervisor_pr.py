@@ -227,3 +227,114 @@ def test_a_spec_change_is_live_from_the_state_directory_until_merged_and_pulled(
     assert supervisor_pr.digest_line(project, store) is None
     assert not (project.state_dir / "machines" / "supervisor").exists()                 # the live copy retired
     assert load(project, "supervisor").duty("morning_note") is not None                 # from the checkout now
+
+
+# [scm] as set_setting writes it (S3): orchestra-scm's schema, the token by file only, and the branch's
+# waiting commits pushed as one pull request once it is valid
+
+def _bare(tmp_path, monkeypatch, forge):
+    """A project with a remote and no [scm] yet (the standing demo before the owner configured it)."""
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(supervisor_pr, "outbox_installed", lambda: False)
+    repo = forge.clone(tmp_path / "repo")
+    p = _project(repo)
+    git(repo, "push", "-q", "origin", "main")
+    return p, AgentStore(p, Events.for_project(p, source="supervisor"))
+
+
+def scm_value(forge, **more):
+    return {"provider": "branch_pr", "repo": forge.repo, "base": "main", "api_url": forge.url, **more}
+
+
+def test_scm_good_is_written_and_unknown_keys_are_refused_with_the_known_ones(tmp_path, monkeypatch, forge):
+    import json as _json
+
+    from orchestra_agents.store import StoreError
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    with pytest.raises(StoreError) as e:
+        call(project, store, "set_setting", key="scm", target="repo", reason="the owner named the repository for PRs",
+             value=_json.dumps(scm_value(forge, template_sections=["Summary"])))
+    assert "template_sections: not a setting" in str(e.value) and "repo" in str(e.value) and "token_file" in str(e.value)
+    with pytest.raises(StoreError, match="not a setting"):
+        call(project, store, "set_setting", key="scm.templates", value='"x"', target="repo", reason="a guessed key again")
+    assert not git(project.repo_root, "branch", "--list", SIDE).strip()                   # nothing was written
+    with pytest.raises(StoreError, match="owner/name"):
+        call(project, store, "set_setting", key="scm.repo", value='"just-a-name"', target="repo", reason="a bad repository")
+    out = call(project, store, "set_setting", key="scm", value=_json.dumps(scm_value(forge)), target="repo",
+               reason="the owner named the repository, the base and the token file")
+    assert out["ok"] and project.orchestra.config.raw["scm"]["repo"] == forge.repo
+
+
+def test_scm_a_token_in_the_value_is_refused(tmp_path, monkeypatch, forge):
+    from orchestra_agents.store import StoreError
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+    for key, value in (("scm.token", f'"{token}"'), ("scm.token_file", f'"{token}"'),
+                       ("scm.token_file", f'"{project.repo_root / "creds" / "github-token"}"')):
+        with pytest.raises(StoreError) as e:
+            call(project, store, "set_setting", key=key, value=value, target="overlay", reason="the owner's token for PRs")
+        assert token not in str(e.value) or "secret" in str(e.value)
+    assert "scm" not in (project.orchestra.config.raw or {})
+    outside = tmp_path / "creds-home" / "github-token"
+    out = call(project, store, "set_setting", key="scm.token_file", value=f'"{outside}"', target="overlay",
+               reason="the owner named the file that holds the token")
+    assert out["ok"] and project.orchestra.config.raw["scm"]["token_file"] == str(outside)
+
+
+def test_setting_scm_pushes_the_branchs_pending_commits_as_one_pull_request(tmp_path, monkeypatch, forge):
+    import json as _json
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    first = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    second = call(project, store, "set_setting", key="agents.draft_expiry", value='"12h"', target="repo",
+                  reason="the owner wants drafts to expire after twelve hours")
+    assert first["pull_request"]["number"] is None and second["pull_request"]["number"] is None
+    assert forge.ref(SIDE) is None                                                       # nothing pushed yet
+    out = call(project, store, "set_setting", key="scm", value=_json.dumps(scm_value(forge)), target="repo",
+               reason="the owner named the repository, the base and the token file")
+    pr = out["pull_request"]
+    assert pr["number"] and f"The branch's 3 pending commits are now pushed as PR #{pr['number']}" in out["said"]
+    assert forge.ref(SIDE) == git(project.repo_root, "rev-parse", SIDE).strip() and len(forge.data["pulls"]) == 1
+    assert supervisor_pr.catch_up(project, store) is None                                # nothing left to push
+    later = call(project, store, "set_capacity_limit", workers=3, reason="three workers: the queue still grows")
+    assert later["pull_request"]["number"] == pr["number"] and len(forge.data["pulls"]) == 1
+
+
+def test_scm_set_in_the_overlay_pushes_the_waiting_branch_in_that_answer(tmp_path, monkeypatch, forge):
+    import json as _json
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    call(project, store, "set_capacity_limit", workers=3, reason="three workers: the queue still grows")
+    out = call(project, store, "set_setting", key="scm", value=_json.dumps(scm_value(forge)), target="overlay",
+               reason="the owner's own repository settings for the pull requests")
+    assert out["commit"] is None and out["branch"] == SIDE
+    assert f"The branch's 2 pending commits are now pushed as PR #{out['pull_request']['number']}" in out["said"]
+    assert forge.ref(SIDE) == git(project.repo_root, "rev-parse", SIDE).strip()
+    body = forge.body_of(out["pull_request"]["number"])
+    assert "tasks.workers" in body or "workers" in body
+
+
+def test_a_refused_push_is_said_exactly_and_the_digest_pushes_once_fixed(tmp_path, monkeypatch, forge):
+    import json as _json
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    hook = forge.origin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'remote: Permission to acme/service.git denied to worker.' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    out = call(project, store, "set_setting", key="scm", value=_json.dumps(scm_value(forge)), target="overlay",
+               reason="the owner's own repository settings for the pull requests")
+    assert out["pull_request"]["number"] is None and "Permission to acme/service.git denied" in out["said"]
+    assert forge.ref(SIDE) is None
+    assert supervisor_pr.catch_up(project, store) is None                                # the same push: not tried again
+    hook.unlink()
+    monkeypatch.setattr(supervisor_pr, "RETRY_S", 0.0)                                  # the next round's time
+    line = supervisor_pr.digest_line(project, store)                                     # the digest names the branch: pushed first
+    assert line and "open on" in line and forge.ref(SIDE) is not None
+
+
+def test_scm_on_a_protected_base_is_refused_by_name(tmp_path, monkeypatch, forge):
+    import json as _json
+    project, store = _bare(tmp_path, monkeypatch, forge)
+    call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    out = call(project, store, "set_setting", key="scm", target="overlay", reason="the owner's own repository settings",
+               value=_json.dumps(scm_value(forge, protect=[SIDE])))
+    assert out["pull_request"]["number"] is None and f"refusing to push to {SIDE!r}" in out["said"]

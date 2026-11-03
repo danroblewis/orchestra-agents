@@ -2,6 +2,9 @@
 §4.3; the owner, 2026-10-28: every 30 minutes by default, cheap when nothing is wrong, with a daily
 spending cap).
 
+Before the round, the Supervisor's branch is pushed and its pull request opened when ``[scm]`` was
+set since its last commits (``supervisor_pr.catch_up``), without a model call.
+
 Every ``[review] every`` of the Supervisor's spec (default 30m, never under ``FLOOR_S``), the
 host runs the quick check without a model call:
 
@@ -21,7 +24,16 @@ from __future__ import annotations
 import contextlib
 import time
 
-from . import budget, design_passes, flow_signals, live_layers, load, prompting, split_proposal
+from . import (
+    budget,
+    design_passes,
+    flow_signals,
+    live_layers,
+    load,
+    prompting,
+    split_proposal,
+    supervisor_pr,
+)
 from .clock import parse_interval
 from .machine_spec import DEFAULT_REVIEW_EVERY
 from .machine_spec import load as load_spec
@@ -65,6 +77,11 @@ class ReviewRound:
             return None
         with contextlib.suppress(Exception):     # git unreadable: the round runs regardless
             live_layers.settle(h.project)        # a merged and pulled pull request of the Supervisor's: its live copies retire
+        pushed = None
+        with contextlib.suppress(Exception):     # the forge unreachable: the round runs regardless
+            pushed = supervisor_pr.catch_up(h.project, h.store)    # [scm] set since: the branch's waiting commits
+        if pushed is not None:
+            h.log(f"review round: {pushed['said']}")
         return self.run(agent, spec, last, now)
 
     def run(self, agent, spec, since: float, now: float) -> dict:

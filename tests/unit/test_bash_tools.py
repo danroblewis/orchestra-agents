@@ -99,7 +99,8 @@ def test_only_the_sessions_tools_are_offered_and_the_role_is_the_tokens(project,
     assert code == 1 and "needs the 'roles' tool group, and role 'worker'" in json.loads(out)["error"]   # listed, still refused
     assert not store.agent_state("supervisor").get("paused")
     code, out = run_tool(monkeypatch, capsys, env, "--list")
-    assert code == 0 and [ln.split()[0] for ln in out.splitlines()] == ["report_ticket"]
+    assert code == 0 and out.startswith("1 tool,") and out.splitlines()[1] == "report_ticket"   # every name, first
+    assert [ln.split()[0] for ln in out.split("\n\n", 1)[1].splitlines()] == ["report_ticket"]
 
 
 def test_bad_arguments_are_answered_with_what_the_tool_takes(project, monkeypatch, capsys):
@@ -406,3 +407,18 @@ def test_a_resumed_session_begun_on_the_server_is_told_the_shell_once(tmp_path, 
     assert [x["prompt"] for x in _starts(tmp_path)][2:] == ["new", "next"]           # its system prompt says it
     fresh_one.retire()
     assert fresh_one.told is None
+
+
+def test_the_tool_catalogue_is_never_cut_and_names_every_tool_first():
+    from orchestra_agents.answers import BOUND
+    from orchestra_agents.builtins import ROLES
+    from orchestra_agents.harness.bash_tools import catalogue
+    from orchestra_agents.harness.tools import TOOLS, tools_for
+    for tools in (tools_for(ROLES["supervisor"].tools), list(TOOLS)):
+        text = catalogue(tools)
+        assert len(text) <= BOUND
+        names, lines = text.split("\n\n", 1)
+        assert [n.strip() for n in names.split("\n", 1)[1].replace("\n", " ").split(",")] == [t.name for t in tools]
+        assert [ln.split()[0] for ln in lines.splitlines()] == [t.name for t in tools]
+        assert "set_setting" in text.splitlines()[1] or "set_setting" in names
+        assert len(names.splitlines()) < 40                                            # every name inside a cut at 80 lines

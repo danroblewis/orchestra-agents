@@ -356,7 +356,9 @@ TOOLS: list[ToolDef] = [
     ToolDef("set_setting", "setup",
             "Set one key of the configuration (section.name, as desk.channels or slack.me), or remove it with value "
             "null. Say where: target overlay for the owner's own or their company's settings (identities, channels, "
-            "templates, anything personal; never committed), repo for the project's settings (committed).",
+            "templates, anything personal; never committed), repo for the project's settings (committed). [scm] (the "
+            "provider your pull requests go through) is checked against orchestra-scm's keys: provider, repo, base, "
+            "api_url, token_file, template, protect (read_guide agents, its section on what you commit).",
             {"key": S("section.name"),
              "value": S('The value as JSON: "#ops", 3, true, ["#a", "@me"], {"k": "v"}; null removes the key'),
              "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("key", "target", "reason")),

@@ -151,8 +151,8 @@ def cmd_tool(args) -> int:
         if not args.name and not args.list and not args.help:
             print(json.dumps({"ok": False, "error": f"usage: {prog()} tool <name> '<json arguments>' | <name> --help | --list"}))
             return 2
-        width = max((len(t.name) for t in caller.tools), default=0)
-        print("\n".join(f"{t.name:{width}}  {t.description}" for t in caller.tools) if args.list else
+        from .harness.bash_tools import catalogue, command
+        print(catalogue(caller.tools, command()) if args.list else
               f"usage: {prog()} tool <name> '<json arguments>'   (or - and the JSON on stdin); "
               f"{prog()} tool <name> --help; {prog()} tool --list")
         return 0

@@ -17,6 +17,7 @@ import re
 import shlex
 import shutil
 import sys
+import textwrap
 from pathlib import Path
 
 MODES = ("mcp", "bash", "auto")
@@ -57,6 +58,26 @@ def _args(t) -> str:
             a += ": " + kind
         out.append(a)
     return "{" + ", ".join(out) + "}"
+
+
+def catalogue(tools, cmd: str = "orchestra agents tool") -> str:
+    """The session's own tool list (``--list``), never cut: every tool's name first, all of them in one
+    block, then one line each (its first sentence), the lines shortened until the whole is under
+    ``answers.BOUND`` (the live check, 2026-11-03: a list of whole descriptions, 34,000 characters for
+    the Supervisor's 128 tools, was cut by the product at 80 lines, and ``set_setting`` was never seen)."""
+    from ..answers import BOUND
+    tools = list(tools)
+    names = textwrap.fill(", ".join(t.name for t in tools), 100, break_long_words=False, break_on_hyphens=False)
+    head = (f"{len(tools)} tool{'s' if len(tools) != 1 else ''}, every name (`{cmd} <tool> --help` gives one's arguments and its whole "
+            f"description):\n{names}\n")
+    width = max((len(t.name) for t in tools), default=0)
+    room = BOUND - len(head) - 2
+    for limit in (LINE_MAX, 100, 70, 40, 0):
+        lines = [f"{t.name:{width}}  {_line(t.description)[:limit] if limit else ''}".rstrip() for t in tools]
+        body = "\n".join(lines)
+        if len(body) <= room:
+            break
+    return head + "\n" + body if tools else "0 tools."
 
 
 def prompt(groups: list[str] | tuple[str, ...], path: str | None = None) -> str:

@@ -208,16 +208,43 @@ the private layer, "shared" is the pull request:
 A change to the owner's overlay itself (`target = "overlay"`) is never committed.
 
 The branch becomes a pull request through orchestra-scm's provider when the repository has a remote
-(`origin`) and `[scm]` is set (in `orchestra.toml` or the owner's overlay; `set_setting`):
+(`origin`) and `[scm]` is set. This is the section exactly as orchestra-scm reads it
+(`orchestra_scm/settings.py`); there are no other keys:
+
+| key | value | |
+|---|---|---|
+| `provider` | `"branch_pr"` | optional; the only one built: a plain branch and one pull request on GitHub |
+| `repo` | `"owner/name"` | the GitHub repository, as in its URL (one `/`) |
+| `base` | `"main"` | the branch the pull request merges into (default `main`) |
+| `api_url` | `"https://github.example.com/api/v3"` | optional: a GitHub Enterprise host's API (default `https://api.github.com`) |
+| `token_file` | `"~/.config/orchestra-bridges/github-token"` | optional (this is the default): the full path of a `chmod 600` file outside the repository that holds the token; never the token |
+| `template` | `"~/work-desk/pr_template.md"` | optional: the company's pull request template by path; else the repository's `.github/pull_request_template.md`, else the packaged one (Summary, Testing, Jira ID) |
+| `protect` | `["release"]` | optional: branches never pushed, beside `main`, `master`, the base and the default branch |
 
 ```toml
 [scm]
-provider = "branch_pr"        # a plain branch and one pull request on GitHub
-repo = "acme/service"         # owner/name
+provider = "branch_pr"
+repo = "danroblewis/orchestra-live-delivery"
 base = "main"
-# token_file = "~/.config/orchestra-bridges/github-token"   the default; never a token itself
-# template = "<a private path>"                             the company's template; else Summary, Testing, Jira ID
+token_file = "/Users/me/.config/orchestra-bridges/github-token"
 ```
+
+Set it with `set_setting` when the owner names the repository, the base and the token file (ask for
+what they have not named; never look for a token file yourself): key `scm` with the whole table as an
+object (`{"provider": "branch_pr", "repo": "owner/name", "base": "main", "token_file": "/path"}`), or
+one key at a time (`scm.repo`). `target = "overlay"` when the token file or the template is the
+owner's own (a path on their machine), else `repo`. `set_setting` checks the section as orchestra-scm
+would before writing anything: an unknown key is refused with the known ones named (an earlier
+guessed key still there is named too: remove it with key `scm.<it>` and value null), and a token is
+never a value: a key that names one, a value shaped like one, and a `token_file` that a commit could
+carry (inside the repository, or tracked by one) are refused.
+
+Once `[scm]` is valid, the branch's commits that were waiting for it are pushed and the pull request
+opened (one for the branch) at once, in the answer to the change that set it: its `said` reads "the
+branch's N pending commits are now pushed as PR #…"; repeat it. If no change carries them (the
+section set in the overlay later, by the owner), your review round or the digest does. If the push is
+refused (no token, the token refused, a protected branch, the remote rejecting it), `said` gives
+the reason in the provider's and git's own words: tell the owner exactly that, and what would fix it.
 
 The pull request is opened at once, its description from the template: Summary is the change's
 reason, Testing what the tool verified, the Jira ID a ticket key in the owner's words (`ABC-123`),
@@ -227,7 +254,7 @@ pull request is an outbound act its configuration approves: the branch is pushed
 request waits as an Outbox draft (`[outbox.kinds."supervisor.pull_request"] sender =
 "github.pr_open"`), opened when the owner approves it. Without a remote or `[scm]` the branch is
 still made and nothing is refused: say the pull request is pending that configuration, and offer
-to set `[scm]` (the repository and the token file are the owner's to name). The provider never
+to set `[scm]` (the repository, the base and the token file are the owner's to name). The provider never
 pushes main, master or the base, and nothing you do merges: that is the merge gate's or the
 owner's. Every answer says the branch and the pull request (`said`); repeat it to the owner, with
 the number or the link, and the digest of what changed names it while it is open.

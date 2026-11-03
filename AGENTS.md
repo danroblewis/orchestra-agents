@@ -51,7 +51,8 @@ broken without updating the spec and saying so in the commit.
    W7; that plugin's SPEC §10) import its validated writer, loader and record API; and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
    templates and settings, and its `machine.toml` reader); and `supervisor_pr.py` (2026-11-02)
-   imports orchestra-scm's provider and the Outbox's client.
+   imports orchestra-scm's provider and the Outbox's client, and `scm_settings.py` (2026-11-03, S3)
+   orchestra-scm's `[scm]` schema.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`
    (over `orchestra.events` and `orchestra.bus`): assignments, heartbeats, reports, requests,
    wake-ups from attention, the agents' own turn events, the announcements. The ticket is the

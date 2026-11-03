@@ -508,7 +508,13 @@ which Claude Code spools an output to a file. Tools that list give a count and t
 last line saying how much was left out and how to read the rest: a tool that only reads
 (`harness/tools.PAGED`, each with a `page` argument the caller takes off before the call) is called
 again with the same arguments and `page`; one that changes something is never called again for its
-answer, so its line says the call is done and its answer is not paged.
+answer, so its line says the call is done and its answer is not paged. **The tool catalogue is
+never cut** (since 2026-11-03, S3: the Supervisor's `--list` of whole descriptions was 34,000
+characters, cut by the product at 80 lines, and it missed `set_setting`): `orchestra agents tool
+--list` (`bash_tools.catalogue`) gives every tool's name first, all in one block of a few lines, then
+one line each (its first sentence), the lines shortened until the whole is under the bound, never
+`first`'s cap; `get_role` and `get_agent` put `tool_names` before the prompt, so a long prompt never
+pushes them onto a later page.
 **No host credentials in a session** (`harness/base.session_env`): every harness starts its process
 with the host's environment minus each name that may hold a credential (`integrate_kits.CREDENTIAL_VARS`,
 or ending in `_TOKEN`/`_SECRET`/`_PASSWORD`/`_KEY`; the host's `ORCHESTRA_*` tokens among them), keeping
@@ -864,11 +870,27 @@ importable; the coordinator's decision), opening it is an outbound act its confi
 the branch is pushed and the pull request is an Outbox draft of the kind `supervisor.pull_request`
 (sender `github.pr_open`), opened when the owner approves it. Without a remote, `[scm]` or
 orchestra-scm, the branch is made, nothing is refused, and the answer says the pull request is
-pending that configuration. Merging is the merge gate's or the owner's. Every answer names the
+pending that configuration. **`[scm]` as the Supervisor sets it** (since 2026-11-03, S3, the live
+check: a Supervisor with no documentation guessed `template_sections` and its commits waited
+unpushed): `set_setting` on `scm` or `scm.<name>` checks the section as it would be after the change
+against orchestra-scm's own schema (`scm_settings.py`: the library's `settings.KEYS` and `problems`;
+the keys `provider`, `repo`, `base`, `api_url`, `token_file`, `template`, `protect`), so an unknown
+key is refused with the known ones named and nothing is written; a value shaped like a secret, a key
+that names a token, and a `token_file` T27's rule refuses (`credential_paths`) are refused, the rule's
+caution said. The guide's section on the Supervisor's own changes documents the section key by key,
+with an example. Once `[scm]` is valid, the branch's commits that waited for it go in one push and
+one pull request: carried by the change that set it (`target = "repo"`), else by
+`supervisor_pr.catch_up` (a setup change that made no commit, as `[scm]` set in the overlay; a change
+with nothing new; the review round, before its quick check; the digest, before it names the branch),
+and the answer's `said` reads "the branch's N pending commits are now pushed as PR #…". A refused
+push or pull request (no token, auth, a protected branch, the remote's hook) is said in the
+provider's and git's own words (`refused`), the pull request already open kept, and tried again at
+once when the tip or `[scm]` changes, else after `RETRY_S` (25 minutes: the next review round).
+Merging is the merge gate's or the owner's. Every answer names the
 branch and the pull request (`said`), the ledger's line repeats it, and "what changed"
 (`since_digest`) has a line for the Supervisor's open pull request (merged, by the provider's
 `learn`, until the checkout has it). orchestra-scm is a dev dependency, imported only in
-`supervisor_pr`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
+`supervisor_pr` and `scm_settings`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
 one branch, so one pull request accumulates every change until it is merged, its description the
 first change's; the organisation's records (`roles.commit_orchestra_files`) still commit to the
 base branch when the checkout is clean there; a split proposal or the starting spec rides on the

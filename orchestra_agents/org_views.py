@@ -23,8 +23,9 @@ def role_definition(project: Project, role: RoleDef) -> dict:
     repo = project.repo_root / ".orchestra" / "roles" / f"{role.name}.md"
     designed = state_machines.root(project) / role.name / "role.md"
     source = str(prompting.prompt_path(project, role.name) if role.builtin else designed if designed.exists() and not repo.exists() else repo)
-    return {"prompt": prompting.role_prompt(project, role.name), "prompt_source": source,
-            "tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools}}
+    # the tool names first: a long prompt never pushes them onto a later page (answers.cut)
+    return {"tool_names": {g: [t.name for t in tools_for([g])] for g in role.tools},
+            "prompt": prompting.role_prompt(project, role.name), "prompt_source": source}
 
 
 def agent_runs(store: AgentStore, ag: AgentDef) -> list[dict]:
@@ -55,11 +56,12 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
 def agent_definition(project: Project, store: AgentStore, ag: AgentDef) -> dict:
     roles, teams = all_roles(project), all_teams(project)
     tools = effective_tools(ag, roles, teams)
-    return {"agent": agent_view(project, store, ag), "state": store.agent_state(ag.name), "runs": agent_runs(store, ag)[:30],
+    # the tool names first: a long prompt or state never pushes them onto a later page (answers.cut)
+    return {"tool_groups": list(tools), "tool_names": {g: [t.name for t in tools_for([g])] for g in tools},
+            "agent": agent_view(project, store, ag), "state": store.agent_state(ag.name), "runs": agent_runs(store, ag)[:30],
             "roles": [{**roles[r].to_dict(), "builtin": roles[r].builtin} for r in ag.roles if r in roles],
             "team_chain": [t.name for t in team_chain(teams, ag.team)],
             "leads": [t.name for t in teams.values() if t.lead == ag.name],
-            "tool_groups": list(tools), "tool_names": {g: [t.name for t in tools_for([g])] for g in tools},
             "prompt": prompting.agent_prompt(project, ag, roles, teams), "machine": machine_view(project, store, ag.name)}
 
 

@@ -36,7 +36,7 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import prompting, runs_project, supervisor_pr
+from . import prompting, runs_project, scm_settings, supervisor_pr
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -252,12 +252,13 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     head = key.split(".")[0]
     if key in ("sources", "series") and isinstance(value, list):
         _check_sources(project, key, value)
+    caution = scm_settings.check(project, key, value)      # [scm]: orchestra-scm's schema, the token by file only
 
     def edit(ed, kw):
         return ed.unset(key, **kw) if value is None else ed.set(key, value, **kw)
     return Plan(head, edit, lambda c: f"{key} {'removed' if value is None else 'set'}",
                 lambda: (f"Whatever reads [{head}] sees it on its next read: Orchestra's host and launcher within a "
-                         "second, a plugin when it next reloads its configuration."))
+                         "second, a plugin when it next reloads its configuration." + (f" Caution: {caution}" if caution else "")))
 
 
 HANDLERS: dict[str, Callable[[Project, AgentStore, dict], Plan]] = {
@@ -280,6 +281,10 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
                   quote=supervisor_pr.owner_words(store, a))
     if recovered:
         done["recovered"] = recovered
+    # no commit of its own to carry the branch: its pending commits, now [scm] may be set
+    if not done.get("commit") and (pushed := supervisor_pr.catch_up(project, store)) is not None:
+        done.update(pull_request={k: pushed.get(k) for k in ("number", "url", "draft", "pending")},
+                    said=pushed["said"], branch=supervisor_pr.SIDE)
     if not done["written"]:
         return {"ok": True, **done, "applies": "Nothing changed, so nothing applies or restarts."}
     # the change is made: it is announced whatever happens after, and what fails after is said
@@ -296,7 +301,8 @@ def handle_setup(project: Project, store: AgentStore, command: str, a: dict[str,
     out = {"ok": True, **done, "applies": applies,
            "next": ("Tell the human what you changed and why, what applies now, and the branch and its pull request as "
                     "`said` puts them (or that the pull request is pending, and why)." if target == "repo" else
-                    "Tell the human what you changed in their private overlay (not committed) and why, and what applies now.")}
+                    "Tell the human what you changed in their private overlay (not committed) and why, and what applies now"
+                    + (", and the branch's pull request as `said` puts them." if done.get("said") else "."))}
     if plan.then:
         try:
             plan.then()

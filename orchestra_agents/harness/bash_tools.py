@@ -20,7 +20,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-MODES = ("mcp", "bash", "auto")
+MODES = ("mcp", "bash", "auto", "file")   # file: no tools at all (file_output.py)
 LINE_MAX = 140          # a tool's line in the prompt: its first sentence, cut here (`--help` has the rest)
 ENUM_SHOWN = 6          # an argument's allowed values are named in its tool's line when there are this few
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n\s*\2\s*(?:\n|$)", re.DOTALL)

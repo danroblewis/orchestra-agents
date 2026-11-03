@@ -119,8 +119,10 @@ class FloorRunner:
                 outcome, summary = floor.outcome_of(report, o.get("outcomes"))
                 if report is None and text:
                     summary = f"{summary}: {text}"[-2000:]
+                facts = ({"facts": {"set": report["fields"]}}                # a file-mode session's fields (file_output.py)
+                         if report and report.get("fields") and report.get("outcome") == outcome else {})
                 try:
-                    say(floor.FINISHED, outcome=outcome, summary=summary)
+                    say(floor.FINISHED, outcome=outcome, summary=summary, **facts)
                 except Exception as e:  # noqa: BLE001 - the lease takes it back
                     host.log(f"{oid}: could not finish: {e!r}")
             host._release(sid)

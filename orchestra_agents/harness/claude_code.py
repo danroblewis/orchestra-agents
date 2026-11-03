@@ -5,7 +5,8 @@ stdin, streaming ``--output-format stream-json`` events, and exiting. The sessio
 transcript Claude keeps under its own config directory, resumed with ``--resume``.
 The agents' tools reach the model through the MCP server in ``mcp.py``, or, with ``[agents]
 tools_via = "bash"`` (or ``auto`` once the server is found blocked), through the command the
-session runs from its Bash tool (``bash_tools.py``), with no MCP server at all."""
+session runs from its Bash tool (``bash_tools.py``), with no MCP server at all; with ``file``, with
+no tools and no MCP server (``file_output.py``)."""
 
 from __future__ import annotations
 
@@ -189,7 +190,10 @@ class ClaudeCodeSession(AgentSession):
 
     def via(self) -> str:
         """How this turn calls Orchestra's tools: ``mcp`` or ``bash`` (``auto`` is MCP until the
-        server is found not connected, then bash for every session: mcp_status.Fallback)."""
+        server is found not connected, then bash for every session: mcp_status.Fallback), or ``file``:
+        none at all (file_output.py)."""
+        if self.spec.tools_via == "file":
+            return "file"
         if self.spec.tools_via == "bash" or (self.spec.tools_via == "auto" and FALLBACK.on):
             return "bash"
         return "mcp"
@@ -208,10 +212,10 @@ class ClaudeCodeSession(AgentSession):
     def _mcp_config(self, via: str = "mcp") -> Path:
         """The MCP servers the turn may use: Orchestra's, or none at all when the tools come from the
         shell (with --strict-mcp-config, no other configured server is loaded either)."""
-        servers = {} if via == "bash" else {"orchestra": {"command": sys.executable, "args": ["-P", "-m", "orchestra_agents.harness.mcp"],
+        servers = {} if via != "mcp" else {"orchestra": {"command": sys.executable, "args": ["-P", "-m", "orchestra_agents.harness.mcp"],
                                                           "env": self._mcp_env()}}
         cfg = {"mcpServers": servers}
-        p = self._dir / f"{self.spec.session_id}.{'none' if via == 'bash' else 'mcp'}.json"
+        p = self._dir / f"{self.spec.session_id}.{'mcp' if via == 'mcp' else 'none'}.json"
         p.write_text(json.dumps(cfg, indent=1) + "\n", encoding="utf-8")
         return p
 

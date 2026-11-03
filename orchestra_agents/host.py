@@ -57,7 +57,7 @@ from .fillers import Fillers
 from .first_run import FirstRun
 from .floor_roles import served
 from .floor_runner import FloorRunner
-from .harness import AgentSession, SessionSpec, TurnResult, get_harness
+from .harness import AgentSession, SessionSpec, TurnResult, file_output, get_harness
 from .landings import Landings
 from .listening import engaged, listens_for
 from .machine_spec import load as load_spec
@@ -401,8 +401,12 @@ class AgentHost:
         prompt the session starts with is kept beside its stderr log, so a transcript can
         show what the agent was told, whatever the harness records. Every session's prompt ends
         with what to do when Orchestra's tools are missing (prompting.NO_SUBSTITUTE)."""
-        held = prompting.tools_held(tools)
-        system_prompt = f"{system_prompt.rstrip()}\n\n" + (f"{held}\n\n" if held else "") + f"{prompting.NO_SUBSTITUTE}\n"
+        if self.cfg.tools_via == file_output.MODE:    # no tools: the file it writes, acted on after the turn
+            section = file_output.prompt(file_output.path_for(self.project.sessions_dir, session_id), tools)
+            system_prompt = f"{system_prompt.rstrip()}\n\n{section}"
+        else:
+            held = prompting.tools_held(tools)
+            system_prompt = f"{system_prompt.rstrip()}\n\n" + (f"{held}\n\n" if held else "") + f"{prompting.NO_SUBSTITUTE}\n"
         prompt_file = self.project.logs_dir / "agents" / f"{session_id}.prompt.md"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")
@@ -412,12 +416,13 @@ class AgentHost:
         env = {"ORCHESTRA_ROLE": role, "ORCHESTRA_REPO": str(self.project.repo_root), "ORCHESTRA_TICKET": ticket_id,
                "ORCHESTRA_SOURCE": source, **(extra_env or {}), access.TOKEN_ENV: token}
         env |= push_guard.env(role, self.cfg.allow_push, self.project.state_dir / "no-push", {**os.environ, **env})
-        proc = self.harness.start(SessionSpec(
+        spec = SessionSpec(
             session_id=session_id, session_dir=self.project.sessions_dir, cwd=cwd,
             system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd)))
+            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd))
+        proc = file_output.start(self.harness, spec) if spec.tools_via == file_output.MODE else self.harness.start(spec)
         if not ticket_id:
             self._session_models[role] = model
         self._announce(source, role)               # once it exists: a session that failed to start is no machine

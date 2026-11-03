@@ -136,6 +136,13 @@ class AgentStore:
         """What an agent's exit tool hands to the session that runs it; it goes on the bus as is."""
         self._mutate_runtime(lambda d: d["reports"].__setitem__(ticket_id, report))
 
+    def amend_report(self, ticket_id: str, **fields: Any) -> None:
+        """Add to the report an exit tool left (a file-mode session's ``fields``, harness/file_output.py)."""
+        def fn(d):
+            if ticket_id in d["reports"]:
+                d["reports"][ticket_id] = {**d["reports"][ticket_id], **fields}
+        self._mutate_runtime(fn)
+
     def pop_report(self, ticket_id: str) -> dict | None:
         return self._mutate_runtime(lambda d: d["reports"].pop(ticket_id, None))
 

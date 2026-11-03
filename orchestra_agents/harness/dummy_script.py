@@ -22,8 +22,8 @@ Steps, played in order: ``say`` (a message), ``write`` (a file, with ``text`` an
 ``run`` (a shell command), ``commit`` (everything, with this message), ``tool`` (one of the
 agents' tools, with ``args``, and ``keep``: a name for its answer), ``sleep`` (seconds), ``fail``
 (the turn fails, with this error). In every string ``{ticket}``, ``{role}``, ``{turn}``,
-``{instance}`` and ``{message}`` (the human's message in a chat turn, else the prompt's first
-line) are replaced, and so is ``{kept.<name>.<field>...}`` (in the reply too): a field of an answer
+``{instance}``, ``{message}`` (the human's message in a chat turn, else the prompt's first
+line) and ``{output}`` (``ORCHESTRA_OUTPUT``, the file of ``tools_via = "file"``) are replaced, and so is ``{kept.<name>.<field>...}`` (in the reply too): a field of an answer
 an earlier step of the turn kept (``{kept.p.change}``; a list's item by its index, ``{kept.m.summary.0}``).
 A string that is only such a placeholder becomes the value itself, a number or a table too. A
 rule's ``prompt`` may name groups, ``(?P<request>r-[0-9a-f]+)``: each is ``{match.<group>}`` in its steps
@@ -102,6 +102,7 @@ class Turn:
     checkout: bool = False
     instance: str = ""
     tasking: bool = True                  # the task system installed (``installed.tasking``)
+    output: str = ""                      # ORCHESTRA_OUTPUT: the file a file-mode session writes (file_output.py)
 
     @property
     def message(self) -> str:
@@ -112,7 +113,7 @@ class Turn:
     def fill(self, value):
         """``value`` with the placeholders replaced, in every string inside it."""
         if isinstance(value, str):
-            for k in ("ticket", "role", "turn", "instance", "message"):
+            for k in ("ticket", "role", "turn", "instance", "message", "output"):
                 value = value.replace("{" + k + "}", str(getattr(self, k)))
             return value
         if isinstance(value, list):

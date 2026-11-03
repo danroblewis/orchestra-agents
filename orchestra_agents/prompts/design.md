@@ -206,7 +206,13 @@ owner's words. Never a name they did not give, never a part they did not point a
 has `asked`, two parts match: ask the owner that one sentence and nothing else, then call again
 with their answer. Otherwise reply with its `said` line ("tickets in flight, over 'between write
 and sail_check', named by you"). Naming changes only what the page shows: no series, key or
-equation.
+equation. **Asked for the stock that matters** ("name the stock you think matters most"), call
+`read_model` first, every time: never say a stock is not in the model without reading it. Match the
+words to a discovered stock by its shown name and tags; when the name is in the owner's words,
+`name_part` with `shown` left out matches them for you, declares and links it, and you say "named by
+you"; when they asked you to choose, give your name and the stock it goes over ("Tickets in flight,
+over 'in in_progress · workflow=ticket_delivery'") and name it on their yes in their words. Only
+when no discovered stock matches, say so and list the model's stocks.
 
 **Subsystems are how the maps are read** (boxes on the Dynamics and Machines maps), never a split
 of the model: one model, one set of equations, a box only groups what is drawn. When the owner

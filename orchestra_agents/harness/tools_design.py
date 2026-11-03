@@ -232,7 +232,10 @@ DESIGN_TOOLS: list[ToolDef] = [
             "Give a discovered stock, flow or effect the owner's own name (\"call the stock between write and sail_check "
             "'tickets in flight'\"): the Dynamics page then shows it by that name, the generated one beneath it. Only a "
             "part the owner pointed at, only the name they gave (it must be in your quote): never one you made up. Find "
-            "the part by the name the page shows (shown, with its tags after \" · \" or in tags). When two parts match, "
+            "the part by the name the page shows (shown, with its tags after \" · \" or in tags), or leave shown out to match "
+            "the owner's words to a discovered stock by its shown name and tags (\"tickets in flight\" answers to \"in "
+            "in_progress · workflow=ticket_delivery\"): call it before ever saying a stock is not in the model; when none "
+            "matches, the refusal lists the model's stocks to tell the owner. When two parts match, "
             "nothing is declared and the answer's `asked` is the one question to put to the owner. The same call with a "
             "new name renames it; drop=true takes the name off (\"drop the name\").",
             {"shown": S("The name the page shows the part by, as the owner pointed at it (between write and sail_check; "
@@ -242,7 +245,7 @@ DESIGN_TOOLS: list[ToolDef] = [
                                                     "effect\" (an effect is a discovered stock they call one)"),
              "name": S("The owner's name for it, exactly in their words (tickets in flight)"),
              "drop": B("Take the owner's name off (\"drop the name\"): the generated one is shown again"),
-             "quote": QUOTE, "reason": REASON}, ("shown", "quote", "reason")),
+             "quote": QUOTE, "reason": REASON}, ("quote", "reason")),
     ToolDef("declare_subsystem", "design",
             "Draw a box on the Dynamics and Machines maps on the owner's words: a name for a label's value (\"call the "
             "pr_watch workflow 'release watch'\": value, label if they said it), or parts gathered (\"put the stock "
@@ -339,7 +342,8 @@ DESIGN_TOOLS: list[ToolDef] = [
             "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
             "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
-            "owner's repository (.orchestra/machines/<name>/, uncommitted and live from there: a coding tool may edit it; never ask the owner to commit it), "
+            "owner's repository (.orchestra/machines/<name>/, live from there and its files committed on your branch "
+            "orchestra/supervisor for its pull request: a coding tool may edit it; never ask the owner to commit it), "
             "tested against the kit's fake, and the system is declared on the Machines page as a machine managed elsewhere. "
             "The kits speak the systems a company runs, with no code changed: Jira Data Center (settings flavour "
             "datacenter: REST API v2, a personal access token sent as Bearer) as well as Cloud, and GitHub Enterprise "
@@ -355,8 +359,10 @@ DESIGN_TOOLS: list[ToolDef] = [
              "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
                        "when the owner said their repository must stay clean"),
              "kit": E(["jira", "github", "slack", "pagerduty", "promql", "http"], "Leave out: the system's own kit, else http"),
-             "base_url": S("The system's address (its API's root URL), when the owner gave it: a Jira Data Center host "
-                           "(https://jira.acme.com), or GitHub Enterprise's API, https://<host>/api/v3"),
+             "base_url": S("The system's address (its API's root URL), only as the owner said it this session (or a "
+                           "loopback address on this machine): a Jira Data Center host, or GitHub Enterprise's API, "
+                           "https://<host>/api/v3. Never a guess, a template's default or a vendor's usual host: leave it "
+                           "out and the answer asks for it"),
              "settings": INTEGRATION_SETTINGS,
              "stock": S("The stock the owner expects it to fill, in their words (Open issues): declared, with the system's "
                         "expected effect"),
@@ -382,7 +388,8 @@ DESIGN_TOOLS: list[ToolDef] = [
              "user_env": S("HTTP Basic (Jira Cloud): the NAME of the variable holding the account (its email)"),
              "user_file": S("HTTP Basic (Jira Cloud): or the full path of a chmod 600 file holding the account's email"),
              "data_class": S("What the owner cleared it for (default: metadata only)"),
-             "base_url": S("The system's address, when it was not given before"),
+             "base_url": S("The system's address, when it was not given before: only as the owner said it this session "
+                           "(their words hold it), never a guess or a template's default"),
              "settings": INTEGRATION_SETTINGS, "quote": QUOTE, "reason": REASON},
             ("name", "quote", "reason")),
     ToolDef("graduate_machine", "design",

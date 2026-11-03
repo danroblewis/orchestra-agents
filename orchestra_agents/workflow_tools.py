@@ -342,6 +342,18 @@ def list_items(project: Project, a: dict) -> dict:
                      "closed item is in closed_recently, never waiting, and nothing waits on it."}
 
 
+def open_count(project: Project) -> int | None:
+    """How many items are open now, as the Items page counts them (the plugin's own list), or None
+    when the plugin or its list is not there: the digest's Items line (bootstrap run 3 said "none
+    started" while five were open, opened by a start event that publishes no item event)."""
+    p = plugin()
+    if p is None or getattr(p, "item_list", None) is None:
+        return None
+    o = project.orchestra
+    got = p.item_list(p.Record.for_project(o), p.define.load(o), time.time())
+    return int(got.get("open") or 0)
+
+
 def _summary(row: dict, snap: dict) -> dict:
     """The item in a few values: the index's row while it is open, else its snapshot's."""
     got = {"item": snap.get("item"), "open": bool(row), "facts": snap.get("facts"), "first": snap.get("first"),

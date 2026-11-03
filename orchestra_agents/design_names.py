@@ -9,8 +9,16 @@ that declaration, quoting the owner, and answers with what the Dynamics page wil
   place name, "between write and sail_check", or a name lent already) and the tags that tell it
   apart ("held at write · workflow=hotfix"), or its key. When more than one part answers to the
   owner's words, nothing is declared: the answer is one question (which one), never a guess.
+- **Or by the owner's words alone** (``shown`` left out; bootstrap run 3: asked for "the stock that
+  matters", the Supervisor said it was not in the model when discovery's v1 held it as "in
+  in_progress"): the name's words are matched to each discovered stock's shown name and tags
+  ("tickets in flight" answers to "in in_progress · workflow=ticket_delivery" by ``ticket``, and
+  ``flight`` reads as ``progress``); the best match is named, two equal ones are one question, and
+  none is a refusal that lists the discovered stocks, so the answer never says a stock is missing
+  without them.
 - **The name is the owner's**: the call needs their quote, and the name must be in it. Nothing
-  here makes one up.
+  here makes one up. A stock declared already under that name and not yet linked is linked, never
+  declared twice.
 - **Renaming** declares the same element again with the new name (Orchestra revises an owner's
   quoted re-declaration at once); **dropping** the name retracts the declaration, when this tool
   made it. One that means more (a declared stock with its measurements) keeps its name: the answer
@@ -74,6 +82,34 @@ def find(model, keys, lent: dict, shown: str, tags: list[str], part: str | None)
     if part:
         hits = [p for p in hits if p["part"] == ("flow" if part == "flow" else "stock")]
     return hits
+
+
+STOP = {"a", "an", "the", "in", "on", "at", "of", "to", "for", "and", "or", "is", "are", "our", "my", "your", "we", "that",
+        "this", "it", "its", "stock", "flow", "effect", "call", "name", "matters", "most", "workflow", "step"}
+SAME = {"flight": "progress", "wip": "progress", "active": "progress", "ongoing": "progress", "doing": "progress",
+        "underway": "progress", "queue": "waiting", "queued": "waiting", "pending": "waiting", "backlog": "waiting",
+        "finished": "done", "completed": "done", "shipped": "done", "closed": "done"}
+
+
+def words_of(text: str) -> set[str]:
+    """The words that tell a part apart: lower case, split on anything not a letter or digit, a plural's
+    s taken off, common words left out, and a few everyday words read as the step they mean."""
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", _norm(text)):
+        w = w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+        if w not in STOP:
+            out.add(SAME.get(w, w))
+    return out
+
+
+def by_words(model, keys, lent: dict, said: str, part: str | None) -> list[dict]:
+    """The stocks (or flows, when ``part`` says) whose shown name and tags share the most words with
+    the owner's: every one tied for the best, none when no word is shared."""
+    want = words_of(said)
+    pool = [p for p in _parts(model, keys, lent) if p["part"] == ("flow" if part == "flow" else "stock")]
+    scored = [(len(want & words_of(" ".join([p["title"], *p["tags"]]))), p) for p in pool]
+    best = max((n for n, _ in scored), default=0)
+    return [p for n, p in scored if best and n == best]
 
 
 def _which(hits: list[dict]) -> str:
@@ -146,7 +182,15 @@ def name_part(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     lent = intended_api.declared_names(layer, keys)
     shown = (a.get("shown") or "").strip()
     tags = [str(t) for t in a.get("tags") or []]
-    hits = find(model, keys, lent, shown, tags, part)
+    if not shown and not drop:                               # the owner's words alone: matched to what discovery found
+        hits = by_words(model, keys, lent, " ".join([name, *tags]), part)
+        if not hits:
+            stocks = [shown_as(p["title"], p["tags"]) for p in _parts(model, keys, lent) if p["part"] == "stock"]
+            raise StoreError(f"no discovered stock answers to {name!r} by its shown name or tags; the model's stocks now: "
+                             + ("; ".join(stocks) if stocks else "none") + ". Tell the owner so, listing them, and ask which "
+                             "they mean (or name it by what the page shows: shown). Nothing was declared")
+    else:
+        hits = find(model, keys, lent, shown, tags, part)
     if not hits:
         near = _near(model, keys, lent, shown) if shown else []
         raise StoreError(f"no {'flow' if part == 'flow' else 'stock or flow' if part is None else 'stock'} is shown as "
@@ -178,13 +222,25 @@ def name_part(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         decl = "flow"
     else:
         decl = "effect" if part == "effect" else "stock"
-        eid = _free_id(layer, name)
-        ops = [{"op": f"declare_{decl}", "id": eid, "name": name, "note": mark},
-               {"op": "link", "part": decl, "id": eid, "found_as": p["key"]}]
+        had = _declared_unlinked(layer, f"{decl}s", name)
+        eid = had or _free_id(layer, name)
+        ops = ([] if had else [{"op": f"declare_{decl}", "id": eid, "name": name, "note": mark}]) + [
+            {"op": "link", "part": decl, "id": eid, "found_as": p["key"]}]
     done = apply(project, ops, prov)
     return answer(project, done, [f"{name}, over '{title}', named by you",
                                   "the Dynamics page shows it by that name, the generated one beneath it as its identifier"],
                   id=eid, part=decl, key=p["key"], shown=title)
+
+
+def _plain(s: str) -> str:
+    return re.sub(r"[_\s]+", " ", _norm(s)).strip()
+
+
+def _declared_unlinked(layer: dict, group: str, name: str) -> str | None:
+    """A declared element of that name not linked to anything yet (the owner's earlier declaration)."""
+    return next((k for k, el in (layer.get(group) or {}).items()
+                 if _plain(el.get("name") or k) == _plain(name) and not el.get("found_as")
+                 and el.get("state") not in ("retracted", "discarded")), None)
 
 
 def _drop(project: Project, layer: dict, p: dict, old: dict | None, title: str, prov: dict) -> dict:

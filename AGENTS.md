@@ -23,7 +23,8 @@ broken without updating the spec and saying so in the commit.
    the base, and nothing here merges); what is live until the merge is the private layer
    (`live_layers.py`): `orchestra.toml` (`config_change.py`, a change that targets the repository),
    live through the same change in the owner's overlay; the Supervisor's machine spec (`spec_git.py`,
-   D20), live from its copy in the state directory; an override file under `.orchestra/overrides/`
+   D20), live from its copy in the state directory; a scaffolded collector's files
+   (`integrate_branch.py`), live from the checkout's copy, which only `.git/info/exclude` ignores; an override file under `.orchestra/overrides/`
    and a graduation (below), live only once merged; a repair to the project's code, written and committed
    in a scratch worktree in
    the state directory on its own branch `supervisor/patch-<name>`, which is removed after and
@@ -116,8 +117,11 @@ Sonnet by default (D20), where the harness takes the name; the other agents on `
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
     One the owner wants in the repository still goes through the Coordinator. A poller scaffolded
     from the bridges plugin's kit (`integrate_system`, since 2026-11-01, task I3) is the kit's code,
-    not the Supervisor's: written to the owner's repository (`.orchestra/machines/<name>/`, uncommitted:
-    the owner commits it or approves its pull request; the state directory only when the owner keeps the repository clean), adapted by
+    not the Supervisor's: written to the owner's repository (`.orchestra/machines/<name>/`, live from
+    there, its own files one commit on `orchestra/supervisor` for that branch's pull request and the
+    live copy ignored in this checkout only, `.git/info/exclude`, so `git status` stays the owner's and
+    the merged copy replaces it on pull, `integrate_branch.py`, since 2026-11-03, bootstrap run 3; the
+    state directory only when the owner keeps the repository clean), adapted by
     a coding tool or the Coordinator's worker (a failed test or a system with no template is handed
     to the Coordinator, moved out of the checkout first; the ticket's review and gate land it), never by the Supervisor, which changes only its `machine.toml` (the owner's
     settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by

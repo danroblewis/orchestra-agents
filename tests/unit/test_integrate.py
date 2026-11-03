@@ -192,7 +192,7 @@ def test_without_pytest_the_test_is_not_run_and_that_is_no_failure(project, stor
 
 
 def test_a_prometheus_store_is_a_source_written_only_on_approval(project, store):
-    say(store, "Connect Chronosphere so I can see request rates by service")
+    say(store, "Connect Chronosphere so I can see request rates by service, at https://acme-corp.chronosphere.io/data/metrics")
     got = call(project, store, "integrate_system", system="chronosphere", wants="request rates by service",
                base_url="https://acme-corp.chronosphere.io/data/metrics",
                settings={"match": ['{__name__="http_requests_total"}'], "prefix": "chrono", "rate": 2.0},
@@ -339,7 +339,7 @@ def test_the_state_directory_only_when_the_owner_keeps_the_repository_clean(proj
 
 
 def test_a_system_with_no_template_is_scaffolded_and_handed_to_the_coordinator(project, store):
-    say(store, "Connect Jenkins so I can see builds")
+    say(store, "Connect Jenkins so I can see builds, at https://ci.acme.test")
     got = call(project, store, "integrate_system", system="jenkins", wants="builds started and finished",
                base_url="https://ci.acme.test", quote="Connect Jenkins so I can see builds", reason=WHY)
     draft = draft_dir(project, "jenkins_poller")
@@ -371,6 +371,7 @@ def land(project, draft, name):
 
 
 def test_jira_cloud_is_approved_with_a_token_file_and_the_accounts_email_by_reference(project, store, tmp_path):
+    say(store, ASK + " (our site is acme.atlassian.net)")
     connect(project, store, base_url="https://acme.atlassian.net")
     keys = tmp_path / "keys"
     keys.mkdir()
@@ -417,7 +418,7 @@ def test_credentials_are_references_never_values(project, store, tmp_path):
 
 
 def test_a_store_takes_its_token_from_a_file(project, store, tmp_path):
-    say(store, "Connect Chronosphere so I can see request rates by service")
+    say(store, "Connect Chronosphere so I can see request rates by service, at https://acme-corp.chronosphere.io/data/metrics")
     call(project, store, "integrate_system", system="chronosphere", wants="request rates by service",
          base_url="https://acme-corp.chronosphere.io/data/metrics", settings={"match": ['{__name__="http_requests_total"}']},
          quote="Connect Chronosphere so I can see request rates by service", reason=WHY)
@@ -474,7 +475,7 @@ def test_a_failed_test_whose_ticket_landed_is_finished_from_the_landed_copy(proj
 
 
 def jenkins(project, store):
-    say(store, "Connect Jenkins so I can see builds")
+    say(store, "Connect Jenkins so I can see builds, at https://ci.acme.test")
     return call(project, store, "integrate_system", system="jenkins", wants="builds started and finished",
                 base_url="https://ci.acme.test", stock="Builds", quote="Connect Jenkins so I can see builds", reason=WHY)
 
@@ -550,7 +551,7 @@ def test_jira_data_center_and_github_enterprise_are_settings_never_code(project,
     got = connect(project, store, base_url="https://jira.acme.test", settings={"jql": "project = OPS", "flavour": "datacenter"})
     assert machine_toml(project)["settings"]["flavour"] == "datacenter" and not asked(store)
     assert "hand_to_coordinator" not in str(got)
-    say(store, "Connect our GitHub Enterprise so I can see pull requests, repository acme/service", 2)
+    say(store, "Connect our GitHub Enterprise so I can see pull requests, repository acme/service, at ghe.acme.test", 2)
     call(project, store, "integrate_system", system="github", wants="pull requests", settings={"repo": "acme/service"},
          base_url="https://ghe.acme.test/api/v3", quote="Connect our GitHub Enterprise so I can see pull requests",
          reason=WHY)
@@ -597,3 +598,73 @@ def test_the_token_file_is_checked_before_anything_is_scaffolded(project, store,
     say(store, "Yes, you may read Jira, metadata only", 2)
     call(project, store, "approve_integration", name="jira_poller", quote="Yes, you may read Jira", reason=WHY)
     assert machine_toml(project)["settings"]["token_file"] == str(f)              # the file named before, checked again
+
+
+SLACK = "Connect Slack so I can see the help, dev and incident channels C0HKHELP, C0HKDEV and C0HKINC"
+SLACK_YES = "Yes, you may read Slack, metadata only, the token's variable is SLACK_TOKEN"
+
+
+def slack(project, store, **over):
+    say(store, SLACK)
+    args = {"system": "slack", "wants": "threads awaiting a reply per channel",
+            "settings": {"channels": ["C0HKHELP", "C0HKDEV", "C0HKINC"]}, "quote": SLACK, "reason": WHY}
+    return call(project, store, "integrate_system", **{**args, **over})
+
+
+def test_an_address_the_owner_never_gave_is_never_used(project, store):
+    """Bootstrap run 3: Slack was approved with the template's https://slack.com, which the owner never
+    gave, and the first poll sent the test token there. A guess is refused; with no address the
+    answer asks in one sentence, naming the template's value, and nothing is approved."""
+    with pytest.raises(StoreError, match="never guessed"):
+        slack(project, store, base_url="https://slack.com")
+    assert not scaffolded(project, "slack_poller").exists()                     # nothing written
+    got = slack(project, store)
+    template = machine_toml(project, "slack_poller")["settings"]["base_url"]
+    assert f"What is Slack's address, its API's base URL (the template's default is {template}" in got["ask_owner"]
+    assert "Slack's base URL" in got["owner_must_set"]
+    say(store, SLACK_YES, 2)
+    for given in ({}, {"base_url": "https://slack.com"}):                      # the record's guess, or the Supervisor's
+        with pytest.raises(StoreError, match="nothing was changed"):
+            call(project, store, "approve_integration", name="slack_poller", token_env="SLACK_TOKEN",
+                 quote="Yes, you may read Slack", reason=WHY, **given)
+    assert machine_toml(project, "slack_poller")["clearance"] == "needs approval" and "machines" not in overlay(project)
+    say(store, "Our Slack is the usual one, https://slack.com", 3)                # the owner's words: now it is theirs
+    call(project, store, "approve_integration", name="slack_poller", token_env="SLACK_TOKEN", base_url="https://slack.com",
+         quote="Our Slack is the usual one", reason=WHY)
+    m = machine_toml(project, "slack_poller")
+    assert m["clearance"] == "approved" and m["settings"]["base_url"] == "https://slack.com"
+    rec = design_integrate.integrations(store)["slack_poller"]
+    assert rec["base_url_from"] == "the owner's words"
+
+
+def test_an_address_on_this_machine_is_no_guess(project, store):
+    got = slack(project, store, base_url="http://127.0.0.1:8931")
+    assert "address" not in got["ask_owner"]
+    say(store, SLACK_YES, 2)
+    call(project, store, "approve_integration", name="slack_poller", token_env="SLACK_TOKEN",
+         quote="Yes, you may read Slack", reason=WHY)
+    assert design_integrate.integrations(store)["slack_poller"]["base_url_from"] == "this machine"
+
+
+def test_a_scaffold_is_committed_on_the_supervisors_branch_and_the_checkout_stays_clean(project, store):
+    """Bootstrap run 3: the 7 pollers' scaffolds (28 files under .orchestra/machines/) were left
+    untracked on main. Each scaffold's own files are one commit on orchestra/supervisor; the live
+    copy is ignored in this checkout only, and git status is what the owner left."""
+    head = git(project.repo_root, "rev-parse", "HEAD")
+    got = connect(project, store)
+    assert git(project.repo_root, "status", "--porcelain") == ""
+    assert git(project.repo_root, "rev-parse", "HEAD") == head and git(project.repo_root, "branch", "--show-current").strip() == "main"
+    on_branch = set(git(project.repo_root, "ls-tree", "-r", "--name-only", "orchestra/supervisor", "--",
+                        ".orchestra/machines/jira_poller").splitlines())
+    rel = ".orchestra/machines/jira_poller/"
+    assert on_branch == {rel + f for f in ("AGENTS.md", "jira_poller.py", "poller.toml", "test_jira_poller.py")}
+    assert any("one commit on orchestra/supervisor" in line for line in got["said"])
+    assert (scaffolded(project) / "jira_poller.py").is_file()                   # still live where it runs
+    assert "/.orchestra/machines/jira_poller/" in (project.repo_root / ".git" / "info" / "exclude").read_text()
+    say(store, YES, 2)
+    call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",
+         quote="Yes, you may read Jira", reason=WHY)
+    shown = git(project.repo_root, "show", f"orchestra/supervisor:{rel}poller.toml")
+    assert 'clearance = "approved"' in shown and git(project.repo_root, "status", "--porcelain") == ""
+    git(project.repo_root, "merge", "-q", "orchestra/supervisor")             # the pull request merged and pulled
+    assert git(project.repo_root, "ls-files", rel).splitlines() and git(project.repo_root, "status", "--porcelain") == ""

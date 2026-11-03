@@ -169,9 +169,15 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             own_pr = supervisor_pr.digest_line(project, store)
         except Exception:  # noqa: BLE001 - git unreadable: the digest still stands, without the line
             own_pr = None
+        from .workflow_tools import open_count
+        try:
+            open_now = open_count(project)
+        except Exception:  # noqa: BLE001 - the item record unreadable: the Items line counts the bus alone
+            open_now = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
-                                                model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr)
+                                                model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr,
+                                                open_items=open_now)
     return {"ok": True, "count": len(picked), **window, **counted, "types": len(summary),
             "by_type": first(({**r, "sources": first(r["sources"], 10)} for r in summary), hint="give types to narrow"),
             "announced_not_heard": first({"type": t, "listened_for_by": first(s, 10)} for t, s in quiet.items()),

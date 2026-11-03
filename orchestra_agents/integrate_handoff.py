@@ -105,8 +105,9 @@ def who_lands(rec: dict) -> str:
     if rec.get("lands"):
         return (f"moved out of the owner's checkout to {rec['dir']} while the Coordinator has it: its worker commits it at "
                 f"{relative(rec['name'])}/ on a ticket, and the ticket's review and gate land it on the base branch")
-    return (f"in the owner's repository ({relative(rec['name'])}/, uncommitted, and live from there): a coding tool may edit "
-            "it there; never ask the owner to commit, discard or land it (INTEGRATING.md)")
+    return (f"in the owner's repository ({relative(rec['name'])}/, live from there, and its files on the Supervisor's branch for "
+            "its pull request): a coding tool may edit it there; never ask the owner to commit, discard or land it "
+            "(INTEGRATING.md)")
 
 
 def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, list]:

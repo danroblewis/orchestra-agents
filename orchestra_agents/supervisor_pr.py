@@ -367,11 +367,75 @@ def digest_line(project: Project, store: AgentStore) -> str | None:
     rec = store.agent_state(MACHINE).get(KEY) or {}
     if not rec.get("commit") or not side_branch.pending(project):
         return None
+    if rec.get("draft") and not rec.get("number"):
+        rec = _drafted(project, store, rec)
     if rec.get("number") and _merged(project, rec):
         return (f"The Supervisor's pull request #{rec['number']} is merged; its live copies retire once the checkout "
                 "pulls it.")
     if rec.get("number"):
-        return f"The Supervisor's pull request: #{rec['number']} open on {SIDE} ({rec.get('url')}), \"{rec.get('title')}\"."
+        where = f" ({rec['url']})" if rec.get("url") else ""
+        return f"The Supervisor's pull request: #{rec['number']} open on {SIDE}{where}, \"{rec.get('title')}\"."
     if rec.get("draft"):
-        return f"The Supervisor's pull request: the Outbox draft {rec['draft']} for {SIDE}, waiting on the owner."
+        return f"The Supervisor's pull request: the Outbox draft {rec['draft']} for {SIDE}, {_draft_words(rec)}."
     return f"The Supervisor's pull request: pending for {SIDE} ({rec.get('pending')})."
+
+
+DRAFT_WORDS = {"drafted": "waiting for your approval on the Outbox page", "approved": "approved and being sent",
+               "sending": "approved and being sent"}
+
+
+def _draft_words(rec: dict) -> str:
+    st, why = rec.get("draft_state"), rec.get("draft_why")
+    if st == "rejected":
+        return "rejected" + (f" ({why})" if why else "") + ": no pull request is open"
+    if st == "failed":
+        return "not sent: the Outbox could not send it" + (f" ({why})" if why else "")
+    if st == "sent":
+        return "sent, its pull request's number not read"
+    return DRAFT_WORDS.get(st) or "its state in the Outbox not read"
+
+
+def draft_state(project: Project, store: AgentStore, draft: str) -> dict | None:
+    """The Outbox draft's state now (T2j s16: a draft sent as #53 at 10:30Z was said "waiting on the
+    owner"): the Outbox's state API first, else the bus's own ``outbox.*`` events for it, else None.
+    ``{"state", "number", "why"}``: the state is the Outbox's (drafted, approved, sending, sent,
+    rejected, failed), the number the pull request it opened."""
+    from . import outbox_read
+    with contextlib.suppress(Exception):          # the Outbox not answering: its events on the bus say it
+        st = outbox_read.fetch(project)
+        for d in [*(st.get("waiting") or []), *(st.get("recent") or [])]:
+            if isinstance(d, dict) and d.get("id") == draft:
+                n = (d.get("remote") or {}).get("number") if isinstance(d.get("remote"), dict) else None
+                return {"state": d.get("state"), "number": n if isinstance(n, int) else None,
+                        "why": d.get("reason") or d.get("error")}
+    from .bus_reads import recent
+    from .event_tally import field
+    got = None
+    with contextlib.suppress(Exception):
+        for e in recent(store):
+            if field(e, "draft") != draft and e.get("subject") != draft:
+                continue
+            ty = str(e.get("type") or "")
+            remote = field(e, "remote")
+            n = remote.get("number") if isinstance(remote, dict) else None
+            if ty == "outbox.sent":
+                got = {"state": "sent", "number": n if isinstance(n, int) else None, "why": None}
+            elif ty == "outbox.draft.rejected":
+                got = {"state": "rejected", "number": None, "why": field(e, "reason")}
+            elif ty == "outbox.send_failed":
+                got = {"state": "failed", "number": None, "why": field(e, "error") or field(e, "reason")}
+            elif ty == "outbox.draft.approved" and (got or {}).get("state") != "sent":
+                got = {"state": "approved", "number": None, "why": None}
+            elif ty == "outbox.draft.created" and got is None:
+                got = {"state": "drafted", "number": None, "why": None}
+    return got
+
+
+def _drafted(project: Project, store: AgentStore, rec: dict) -> dict:
+    """The record with the draft's state now; a draft sent is the pull request it opened, kept so."""
+    st = draft_state(project, store, rec["draft"]) or {}
+    rec = {**rec, "draft_state": st.get("state"), "draft_why": st.get("why")}
+    if st.get("state") == "sent" and st.get("number"):
+        rec.update(number=st["number"], pending=None)
+        _keep(store, {k: v for k, v in rec.items() if k not in ("draft_state", "draft_why")})
+    return rec

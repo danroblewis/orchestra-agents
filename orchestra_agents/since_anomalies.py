@@ -2,7 +2,9 @@
 any count, so the owner sees them at a glance (R3 b: three readings of the day's board flagged
 nothing, though two Done tickets had new pull requests and a merged one was labelled REJECTED).
 
-Four kinds, each from the events alone and said as what happened, never why:
+These are the window's; what is wrong now (the open items stuck) comes before them
+(``since_state``), and a replayed event (``replayed: true``) is never among them (the digest's
+``Day`` holds none). Four kinds, each from the events alone and said as what happened, never why:
 - new work on a ticket already Done: a pull request opened, or an item requested or offered, for a
   ticket after an event said it was Done (its transition, or a ``status`` of Done on any of its
   events: a poller's replay of a closed ticket);

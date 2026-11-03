@@ -4,18 +4,30 @@ small model every fact in one tool answer, and each time it dropped some and mis
 s16: "#33 and #34 opened at 04:57" for 04:16, "all three merged at 05:12" for one, "2 opened, 2
 closed" for three tickets Done, the triage verdict and the prediction's state left out).
 
-It leads with what looks wrong (``since_anomalies``: new work on a Done ticket, a label on a merged
-pull request, attention over an hour old, an open item whose pull request closed unmerged), then
-one paragraph per class, in this order: tickets, pull requests (with each rejection and triage
-verdict), checks, labels, incidents, the Outbox, items, machines marked quiet, the other events
-counted, what waits on the owner, the predictions, the machines by age (``machine_ages``: who is due to graduate),
-the subsystems line at most once a day (``subsystem_offer``: a partition worth a name, or a proposal waiting),
-the Supervisor's own open pull request (``supervisor_pr.digest_line``), and the model line last (``closing_line``).
-Each list names at most 5 entries, then "… and K more", the count still the whole one; when the
-digest would pass ``LIMIT`` (2,500 characters) the lists name 4, then 3, down to 1, so three days of
-a sprint board read at a glance (R3: 57 hours of the owner's board, 8 tickets and 15 pull requests,
-5,791 characters uncapped, about 2,500 capped at 1). The anomalies name at least ``LOOK`` per kind,
-and what waits on the owner is never cut.
+It leads with what looks wrong now (``since_state``, from the Workflows plugin's open items,
+``item_state``: an outside result that never came, attention raised and unanswered, past a step's
+limit, longer than the step usually takes), then what the window's events say looks wrong
+(``since_anomalies``: new work on a Done ticket, a label on a merged pull request, an open item
+whose pull request closed unmerged) and its oddities (the host restarted again and again); then one
+paragraph per class, in this order: tickets, pull requests (with each rejection and triage
+verdict), checks, labels, incidents, the Outbox, items (the open ones now, named), machines marked
+quiet, the other events counted, what waits on the owner, the predictions, the machines by age
+(``machine_ages``), the subsystems line at most once a day (``subsystem_offer``), the Supervisor's
+own pull request (``supervisor_pr.digest_line``), and the model line last (``closing_line``).
+
+**Replays** (an event a poller read again at a resume, ``replayed: true``) are counted apart in the
+first line and never flagged nor listed as new; what they close stays closed. **Lists name the
+newest first**, the ones still open before the rest (T2j s16: each list showed its oldest entry,
+and the night's tickets SCRUM-45 to 50 and pull requests #49 to #55 never appeared).
+
+**The reply is bounded** to ``LIMIT`` (1,500 characters: what an owner reads in a minute; T2j's
+ran about 4,000): it leaves to "more" the other events, the machines marked quiet, the machines
+by age, the labels and the checks, then says each list by its names alone (``brief``), then
+shortens what waits on the owner to its first words, then names fewer entries, and says
+'Say "more" for the full list' before the model line whenever anything was left out. ``full`` (the
+owner's "more") names up to ``FULL`` entries per list, unbounded. What looks wrong now names at
+least ``LOOK`` per kind, and what waits on the owner is always named.
+
 Every number is counted here and every time is the event's own, in one zone, named once in the
 first line (the host's: the pages show the viewer's clock, and the owner's viewer is this host).
 
@@ -23,7 +35,8 @@ A ticket is known by the ticket system's events, and also by an Outbox send whos
 ticket (``live.create_ticket``, ``live.close_ticket``) for an item whose facts name the ticket
 (a ``ticket`` fact, its key the last part of the link): a ticket opened and closed through the
 Outbox is counted once, at the earliest time either says. Nothing here reads beyond the events,
-the facts ``since_facts`` and ``owner_waits`` read, and the model line."""
+the facts ``since_facts`` and ``owner_waits`` read, the open items ``item_state`` reads, and the
+model line."""
 
 from __future__ import annotations
 
@@ -31,12 +44,14 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from . import since_state
 from .bus_reads import _ts
 from .event_tally import DONE, field
 from .since_anomalies import anomalies
 
-CAPS = (5, 4, 3, 2, 1)       # entries named per list, the first that keeps the digest within LIMIT
-LIMIT = 2500                 # characters: three days of the owner's sprint board at a glance
+CAPS = (5, 4, 3, 2, 1)       # entries named per list (the bounded reply starts at 3)
+LIMIT = 1500                 # characters: what an owner reads in a minute (T2j: 4,000 was not read)
+FULL = 20                    # entries named per list on "more" (the full list)
 LOOK = 3                     # the anomalies name at least this many per kind, whatever the cap
 
 OWNER = ("owner", "person.owner")
@@ -59,6 +74,11 @@ def _times(n: int) -> str:
 
 def _cap(xs: list, n: int) -> list:
     return xs if len(xs) <= n else [*xs[:n], f"… and {len(xs) - n} more"]
+
+
+def _newest(xs: list, n: int) -> list:
+    """A list in time order, said newest first and capped."""
+    return _cap(list(reversed(xs)), n)
 
 
 def _n(n: int, one: str, many: str | None = None) -> str:
@@ -86,9 +106,13 @@ class Clock:
 class Day:
     """The window's events, sorted by their own time, with what the items' facts say."""
 
-    def __init__(self, events: list[dict], clock: Clock, cap: int = CAPS[0]):
-        self.clock, self.cap = clock, cap
-        self.events = sorted(((t, e) for e in events if (t := _ts(e)) is not None), key=lambda x: x[0])
+    def __init__(self, events: list[dict], clock: Clock, cap: int = CAPS[0], brief: bool = False):
+        self.clock, self.cap, self.brief = clock, cap, brief      # brief: the bounded reply's short paragraphs
+        timed = sorted(((t, e) for e in events if (t := _ts(e)) is not None), key=lambda x: x[0])
+        self.total = len(timed)
+        self.all = timed                              # with the replays: what is closed is closed, replayed or not
+        self.events = [(t, e) for t, e in timed if field(e, "replayed") is not True]    # a resume's replays: apart
+        self.replayed = self.total - len(self.events)
         self.ticket: dict[str, str] = {}             # item -> its ticket's key
         self.pr: dict[str, int] = {}                 # item -> its pull request's number
         for _, e in self.events:
@@ -101,6 +125,7 @@ class Day:
             if str(e.get("type") or "").endswith(".pr.opened") and isinstance(field(e, "number"), int) and subject:
                 self.pr[subject] = field(e, "number")
         self.used: set[int] = set()
+        self.flagged: set[str] = set()               # the open items "Look first" named (the Items line: "above")
 
     def of(self, *suffixes: str):
         for t, e in self.events:
@@ -121,14 +146,19 @@ class Day:
         key = self.key_of(subject) if subject else None
         return f"#{n}" + (f" ({key})" if key else f" ({subject})" if subject and subject != str(n) else "")
 
-    def runs(self, pairs: list[tuple[str, float]]) -> str:
-        """``A and B at 04:11, C at 04:57``: labels at one minute said together, in time order."""
+    def runs(self, pairs: list[tuple[str, float]], first: set[str] | None = None) -> str:
+        """``C at 04:57, A and B at 04:11``: newest first, labels at one minute said together; those in
+        ``first`` (the ones still open) before the rest (T2j: the oldest first hid the night's work)."""
         groups: list[tuple[str, list[str]]] = []
         more = len(pairs) - self.cap
+        pairs = sorted(pairs, key=lambda x: (x[0] not in (first or ()), -x[1]))
+        if self.brief:                                    # the bounded reply: the names alone
+            return ", ".join(_cap([label for label, _ in pairs], self.cap))
         for label, ts in pairs[:self.cap]:
             t = self.clock.at(ts)
             if groups and groups[-1][0] == t:
-                groups[-1][1].append(label)
+                if label not in groups[-1][1]:           # the same one twice in a minute (a replay): said once
+                    groups[-1][1].append(label)
             else:
                 groups.append((t, [label]))
         return ", ".join(f"{_and(ls)} at {t}" for t, ls in groups) + (f", … and {more} more" if more > 0 else "")
@@ -149,6 +179,12 @@ def _ticket_kind(kind: str) -> str | None:
     if "ticket" not in last:
         return None
     return "opened" if any(w in last for w in OPENS) else "closed" if any(w in last for w in CLOSES) else None
+
+
+def _shut(e: dict) -> bool:
+    ty = str(e.get("type") or "")
+    return ty.endswith((".issue.closed", ".issue.resolved")) or (
+        ".issue." in ty and str(field(e, "to") or field(e, "status") or "").lower() in DONE)
 
 
 def tickets(d: Day) -> str | None:
@@ -173,15 +209,23 @@ def tickets(d: Day) -> str | None:
     if not (opened or closed or assigned):
         return None
 
+    shut = {str(e.get("subject") or "") for _, e in d.all if _shut(e)}
+    still = {k for k in opened if k not in closed and k not in shut}
+
     def told(book, what):
-        pairs = sorted(((k + (" (through the Outbox)" if via.get((what, k)) else ""), t) for k, t in book.items()),
-                       key=lambda x: x[1])
-        return d.runs(pairs)
+        pairs = [(k + (" (through the Outbox)" if via.get((what, k)) else ""), t) for k, t in book.items()]
+        return d.runs(pairs, {k + (" (through the Outbox)" if via.get((what, k)) else "") for k in still})
     parts = [f"{len(opened)} opened: {told(opened, 'opened')}" if opened else "none opened"]
-    if assigned:
+    done = "Done" if d.brief else "closed (Done)"
+    if assigned and not d.brief:
         parts.append(f"{len(assigned)} assigned: {d.runs(assigned)}")
-    parts.append(f"{len(closed)} closed (Done): {told(closed, 'closed')}" if closed else "none closed")
+    parts.append(f"{len(closed)} {done}: {told(closed, 'closed')}" if closed else "none closed")
     return "Tickets: " + "; ".join(parts) + "."
+
+
+def _bare(pairs: list[tuple[str, float]], d: Day) -> list[tuple[str, float]]:
+    """In the bounded reply a pull request by its number alone once its ticket was named."""
+    return [(x.split(" ", 1)[0], t) for x, t in pairs] if d.brief else pairs
 
 
 def pull_requests(d: Day) -> str | None:
@@ -203,14 +247,26 @@ def pull_requests(d: Day) -> str | None:
         offer, item = str(field(e, "offer") or ""), str(e.get("subject") or "")
         if e.get("type") == "offer.finished" and item and offer.startswith(item + ".") and "triage" in offer[len(item):]:
             why = field(e, "summary")
-            triage.append(f"{d.item(item)} at {d.clock.at(t)}: {field(e, 'outcome') or '?'}" + (f" ({why})" if why else ""))
+            triage.append((d.item(item), d.clock.at(t), field(e, "outcome") or "?", why))
     if not (opened or merged or rejected or comments or pushed or triage):
         return None
-    parts = [f"{len(opened)} opened: {d.runs(opened)}" if opened else "none opened",
-             f"{len(merged)} merged: {d.runs(merged)}" if merged else "none merged",
-             f"{len(rejected)} rejected (labelled REJECTED): {d.runs(rejected)}" if rejected else "none rejected"]
+    done = {d.pull(e) for _, e in d.all if str(e.get("type") or "").endswith((".pr.closed", ".pr.merged"))}
+    parts = [f"{len(opened)} opened: {d.runs(opened, {x for x, _ in opened if x not in done})}" if opened else "none opened",
+             f"{len(merged)} merged: {d.runs(_bare(merged, d))}" if merged else "none merged",
+             (f"{len(rejected)} rejected: {d.runs(_bare(rejected, d))}" if d.brief else
+              f"{len(rejected)} rejected (labelled REJECTED): {d.runs(rejected)}") if rejected else "none rejected"]
     if triage:
-        parts.append(f"{_n(len(triage), 'triage verdict')}: {'; '.join(_cap(triage, d.cap))}")
+        if d.brief:                                   # by verdict: "local twice (SCRUM-49, SCRUM-48)"
+            by: dict[str, list[str]] = {}
+            for who, _, outcome, _ in reversed(triage):
+                by.setdefault(str(outcome), []).append(who.split(" ", 1)[0])
+            parts.append(f"{_n(len(triage), 'triage verdict')}: " +
+                         "; ".join(f"{o} {_times(len(ws))} ({', '.join(_cap(ws, d.cap))})" for o, ws in by.items()))
+        else:
+            said = [f"{who} at {at}: {outcome}" + (f" ({why})" if why else "") for who, at, outcome, why in triage]
+            parts.append(f"{_n(len(triage), 'triage verdict')}: {'; '.join(_newest(said, d.cap))}")
+    if d.brief:
+        return "Pull requests: " + "; ".join(parts) + "."
     if pushed:
         parts.append(f"new commits pushed: {d.runs(pushed)}")
     if comments:
@@ -235,8 +291,8 @@ def checks(d: Day) -> str | None:
         whys = {w for _, w in xs}
         if len(whys) == 1 and len(xs) > 1:
             w = whys.pop()
-            return ", ".join(_cap([x for x, _ in xs], d.cap)) + (f" (each: {w})" if w else "")
-        return ", ".join(_cap([x + (f" ({w})" if w else "") for x, w in xs], d.cap))
+            return ", ".join(_newest([x for x, _ in xs], d.cap)) + (f" (each: {w})" if w else "")
+        return ", ".join(_newest([x + (f" ({w})" if w else "") for x, w in xs], d.cap))
     return "Checks: " + "; ".join(f"{what} {_times(len(xs))}: {said(xs)}" for what, xs in rows.items()) + "."
 
 
@@ -270,7 +326,7 @@ def incidents(d: Day) -> str | None:
     out = []
     for inc, row in seen.items():
         about = ", ".join(str(x) for x in (row["service"], row["urgency"]) if x)
-        out.append(f"{inc}" + (f" ({about})" if about else "") + " " + ", ".join(row["what"]) +
+        out.append(f"{inc}" + (f" ({about})" if about else "") + ("" if d.brief else " " + ", ".join(row["what"])) +
                    ("" if row["resolved"] else ", not resolved in this window"))
     opened = sum(1 for r in seen.values() if any(w.startswith("opened") for w in r["what"]))
     done = sum(1 for r in seen.values() if r["resolved"])
@@ -299,16 +355,24 @@ def outbox(d: Day, state: str | None) -> str | None:
     if not (kind or state):
         return None
     n = sum(len(x) for x in sent.values())
-    parts = [f"{n} sent" + (": " + "; ".join(f"{k} {_times(len(ts))} ({', '.join(_cap(ts, d.cap))})" for k, ts in sent.items()) if n else "")]
+    if d.brief:
+        how = ("all approved by configuration" if by_config == n and not by_owner and n else
+               f"{by_config} approved by configuration, {len(by_owner)} by you" if by_config or by_owner else "")
+        bad = ", ".join(x for x in (f"{len(rejected)} rejected" if rejected else "",
+                                    f"{len(failed)} failed to send" if failed else "") if x)
+        return ("The Outbox: " + f"{n} sent" + (f" ({', '.join(f'{k} {len(ts)}' for k, ts in sent.items())})" if n else "") +
+                "".join(f"; {x}" for x in (how, bad) if x) + "." +
+                (f" Now: {re.sub(r'; \d+ sent since then( \([^)]*\))?', '', state)}." if state else ""))
+    parts = [f"{n} sent" + (": " + "; ".join(f"{k} {_times(len(ts))} ({', '.join(_newest(ts, d.cap))})" for k, ts in sent.items()) if n else "")]
     if by_config or by_owner:
         parts.append(f"{by_config} approved by configuration, {len(by_owner)} by you" +
-                     (f" ({', '.join(_cap(by_owner, d.cap))})" if by_owner else ""))
-    parts.append(f"{len(rejected)} rejected" + (f" ({', '.join(_cap(rejected, d.cap))})" if rejected else ""))
-    parts.append(f"{len(failed)} failed to send" + (f" ({', '.join(_cap(failed, d.cap))})" if failed else ""))
+                     (f" ({', '.join(_newest(by_owner, d.cap))})" if by_owner else ""))
+    parts.append(f"{len(rejected)} rejected" + (f" ({', '.join(_newest(rejected, d.cap))})" if rejected else ""))
+    parts.append(f"{len(failed)} failed to send" + (f" ({', '.join(_newest(failed, d.cap))})" if failed else ""))
     return "The Outbox: " + "; ".join(parts) + "." + (f" Its state now: {state}." if state else "")
 
 
-def items(d: Day, open_now: int | None = None) -> str | None:
+def items(d: Day, open_now: int | None = None, rows: list[dict] | None = None) -> str | None:
     """Items started (``item.requested``, ``item.opened``), closed and raised; and how many are open
     now (``open_now``, the Workflows plugin's own count): never "none started" while any are open
     (bootstrap run 3: a start event opens an item and publishes no item event)."""
@@ -325,17 +389,35 @@ def items(d: Day, open_now: int | None = None) -> str | None:
         else:
             why = field(e, "reason")
             attention.append(f"{d.item(item)} at {d.clock.at(t)}" + (f" ({why})" if why else ""))
+    if rows:
+        from .since_state import spoken
+        now = sorted(rows, key=lambda r: r.get("age_s") or 0)             # the newest first
+        above = [r for r in now if d.brief and str(r.get("item")) in d.flagged]
+        now = [r for r in now if r not in above]
+        named = [f"{d.item(str(r.get('item')))} at {r.get('step')}" +
+                 (f" {spoken(r['age_s'])}" if isinstance(r.get("age_s"), int | float) else "") for r in now]
+        open_now = len(rows)
     if not (started or closed or attention or open_now):
         return None
-    parts = [f"{len(started)} started: {'; '.join(_cap(started, d.cap))}" if started else
-             (f"{open_now} open now (a workflow's start event opens one with no item event; the Items page lists them)"
-              if open_now else "none started"),
-             f"{len(closed)} closed: {'; '.join(_cap(closed, d.cap))}" if closed else "none closed"]
-    if attention:
-        parts.append(f"attention raised {_times(len(attention))}: {'; '.join(_cap(attention, d.cap))}")
-    if started and open_now:
-        parts.append(f"{open_now} open now")
-    return "Items: " + "; ".join(parts) + "."
+    parts = []
+    if rows:
+        parts.append(f"{open_now} open now" + (f": {', '.join(_cap(named, max(d.cap, LOOK)))}" if named else "") +
+                     (f"{' and' if named else ':'} the {len(above)} above" if above else ""))
+    elif open_now:
+        parts.append(f"{open_now} open now" + ("" if started else
+                     " (a workflow's start event opens one with no item event; the Items page lists them)"))
+    if d.brief:                                       # the open ones named; attention is in "Look first"
+        started = [x.split(" by ", 1)[0].split(" on its schedule", 1)[0] for x in started]
+        closed = [x.split(" (", 1)[0] if x.count(" (") > 1 or not x.startswith(x.split(" ")[0] + " (") else x
+                  for x in closed]
+        closed = [re.sub(r" \([a-z_]+: [a-z_]+\)$", "", x) for x in closed]
+    parts.append(f"{len(started)} started" + ("" if d.brief and rows else f": {'; '.join(_newest(started, d.cap))}")
+                 if started else "" if open_now else "none started")
+    parts.append(f"{len(closed)} closed" + (f": {'; '.join(_newest(closed, d.cap))}" if not d.brief else "")
+                 if closed else "none closed")
+    if attention and not d.brief:
+        parts.append(f"attention raised {_times(len(attention))}: {'; '.join(_newest(attention, d.cap))}")
+    return "Items: " + "; ".join(x for x in parts if x) + "."
 
 
 def quiet(d: Day) -> str | None:
@@ -345,7 +427,7 @@ def quiet(d: Day) -> str | None:
         who.setdefault(name, []).append((name, t))
     if not who:
         return None
-    said = [f"{name} at {', '.join(_cap([d.clock.at(t) for _, t in xs], d.cap))}" for name, xs in who.items()]
+    said = [f"{name} at {', '.join(_newest([d.clock.at(t) for _, t in xs], d.cap))}" for name, xs in who.items()]
     return ("Marked quiet (not heard for a while; not that it stopped): " + "; ".join(_cap(said, d.cap)) + ".")
 
 
@@ -361,7 +443,14 @@ def others(d: Day) -> str | None:
     return "Also on the bus: " + ", ".join(_cap(counted, d.cap)) + "."
 
 
-def owner(w: dict | None, clock: Clock) -> str:
+SHORT = 40                   # a disabled machine's reason in the bounded reply, at most (the rest on "more")
+
+
+def _short(text: str, short: bool) -> str:
+    return text if not short or len(text) <= SHORT else text[:SHORT - 1].rstrip() + "…"
+
+
+def owner(w: dict | None, clock: Clock, short: bool = False) -> str:
     if not isinstance(w, dict):
         return "Waiting on you: not read."
     parts, nothing = [], True
@@ -370,7 +459,8 @@ def owner(w: dict | None, clock: Clock) -> str:
         parts.append(f"the machines were {m}")
     elif m:
         nothing = False
-        parts += [f"{x.split(': ', 1)[0]} is disabled" + (f" ({x.split(': ', 1)[1]})" if ": " in x else "") for x in m]
+        parts += [f"{x.split(': ', 1)[0]} is disabled" + (f" ({_short(x.split(': ', 1)[1], short)})" if ": " in x else "")
+                  for x in m]
     o = w.get("outbox")
     if isinstance(o, str):
         parts.append(f"the Outbox was {o}")
@@ -402,12 +492,42 @@ def owner(w: dict | None, clock: Clock) -> str:
     return "Waiting on you: " + "; ".join(parts) + "."
 
 
-def first(d: Day) -> str | None:
-    found = anomalies(d, d.clock.now)
-    if not found:
+RESTARTS = 3                 # the host started this many times in the window: said among the oddities
+
+
+def oddities(d: Day) -> list[tuple[str, list[str]]]:
+    """The window's oddities beside its anomalies: the host restarted again and again."""
+    starts = [t for t, e in d.events if e.get("type") == "orchestra.host.started"]
+    if len(starts) >= RESTARTS:
+        return [("the host restarted", [f"{_times(len(starts))}, the last at {d.clock.at(starts[-1])}"])]
+    return []
+
+
+def _named(line: str) -> str:
+    """A window anomaly by what it is about alone (the bounded reply; the rest on "more")."""
+    return line.split(" (", 1)[0].split(" at ", 1)[0]
+
+
+def first(d: Day, state: dict | None = None, look: int = LOOK) -> str | None:
+    """What is wrong now (``since_state``: the open items stuck, from the Workflows plugin), then what
+    the window's events say looks wrong (``since_anomalies``), then its oddities; never a replay.
+    With the plugin read, its open items say which attention is unanswered, not the bus."""
+    now = since_state.stuck(d, state)
+    day = [(k, xs) for k, xs in anomalies(d, d.clock.now) if not (state and k.startswith("attention over"))]
+    odd = oddities(d)
+    if not (now or day or odd):
         return None
-    n = max(d.cap, LOOK)
-    return "Look first: " + "; ".join(f"{what}: {'; '.join(_cap(xs, n))}" for what, xs in found) + "."
+    lines = []
+    for what, xs in now if d.brief else now + day + odd:
+        xs = list(dict.fromkeys(xs))                   # one line once (T2j: a REJECTED said twice)
+        lines.append(f"- {what[0].upper()}{what[1:]}: {'; '.join(_cap(xs, look))}.")
+    if d.brief and (day or odd):                       # the day's oddities in one line, each by what it is about
+        said = [f"{what} ({', '.join(_cap(list(dict.fromkeys(_named(x) for x in xs)), 2))})" for what, xs in day]
+        said += [f"{what} {xs[0].split(',', 1)[0]}" for what, xs in odd]
+        lines.append(f"- {'Also today' if now else 'Today'}: {'; '.join(said)}.")
+    text = "Look first:\n" + "\n".join(lines)
+    d.flagged = {str(r.get("item")) for r in (state or {}).get("rows") or [] if f"{d.item(str(r.get('item')))} at " in text}
+    return text
 
 
 def predictions(p) -> str:
@@ -420,18 +540,51 @@ def predictions(p) -> str:
     return f"Predictions ({len(rows)}): " + "; ".join(rows) + "."
 
 
+MORE = 'Say "more" for the full list.'
+EXTRA = ("others", "quiet", "ages", "labels", "checks")     # left to "more" first, in this order
+
+
 def digest(events: list[dict], start: float, now: float, tz: str | None, *, outbox_state: str | None = None,
            waiting: dict | None = None, preds=None, model: str | None = None, ages: str | None = None,
-           subsystems: str | None = None, own_pr: str | None = None, open_items: int | None = None) -> str:
+           subsystems: str | None = None, own_pr: str | None = None, open_items: int | None = None,
+           state: dict | None = None, full: bool = False) -> str:
+    """The reply: bounded to about ``LIMIT`` characters (an owner reads it in a minute), the rest on
+    "more" (``full``: every entry of every list, unbounded). The bounded reply leaves out, in turn,
+    the paragraphs of ``EXTRA``, then names fewer entries per list, then shortens the reasons of what
+    waits on the owner, then fewer per kind of what looks wrong; never the head, what looks wrong,
+    what waits on the owner, the Supervisor's own pull request or the model line, which is last."""
     clock = Clock(tz, now)
-    for cap in CAPS:
-        d = Day(events, clock, cap)
-        head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} "
-                f"{clock.local(start):%H:%M} (all times {clock.named()}): {_n(len(d.events), 'event')} on the bus.")
-        paras = [head, first(d), tickets(d), pull_requests(d), checks(d), labels(d), incidents(d),
-                 outbox(d, outbox_state), items(d, open_items), quiet(d), others(d), owner(waiting, clock), predictions(preds), ages,
-                 subsystems, own_pr, model]
-        text = "\n\n".join(p for p in paras if p)
+    rows = (state or {}).get("rows")
+    if full:
+        return _text(Day(events, clock, FULL), start, outbox_state, waiting, preds, model, ages, subsystems, own_pr,
+                     open_items, state, rows, (), False, FULL, more=False)
+    ladder = [(CAPS[2], EXTRA[:k], False, False, LOOK) for k in range(len(EXTRA) + 1)]
+    ladder += [(CAPS[2], EXTRA, True, False, LOOK)] + [(c, EXTRA, True, True, LOOK) for c in CAPS[2:]]
+    ladder += [(1, EXTRA, True, True, 2), (1, EXTRA, True, True, 1)]
+    text = ""
+    for cap, drop, brief, short, look in ladder:
+        text = _text(Day(events, clock, cap, brief), start, outbox_state, waiting, preds, model, ages, subsystems, own_pr,
+                     open_items, state, rows, drop, short, look, more=True)
         if len(text) <= LIMIT:
             break
     return text
+
+
+def _text(d: Day, start, outbox_state, waiting, preds, model, ages, subsystems, own_pr, open_items, state, rows,
+          drop, short: bool, look: int, *, more: bool) -> str:
+    clock = d.clock
+    replays = (f", {d.replayed} of them replayed at a resume (read again by a poller: counted apart, never flagged)"
+               if d.replayed and not d.brief else f", {d.replayed} replayed at a resume (counted apart)" if d.replayed else "")
+    zone = (clock.local(clock.now).tzname() or clock.named()) if d.brief else clock.named()
+    head = (f"Since {clock.local(start):%a} {clock.local(start).day} {clock.local(start):%b} "
+            f"{clock.local(start):%H:%M} (all times {zone}): {_n(d.total, 'event')} on the bus{replays}.")
+    paras = [("head", head), ("look", first(d, state, look)), ("tickets", tickets(d)), ("prs", pull_requests(d)),
+             ("checks", checks(d)), ("labels", labels(d)), ("incidents", incidents(d)), ("outbox", outbox(d, outbox_state)),
+             ("items", items(d, open_items, rows)), ("quiet", quiet(d)), ("others", others(d)),
+             ("owner", owner(waiting, clock, short)), ("predictions", predictions(preds)), ("ages", ages),
+             ("subsystems", subsystems), ("own_pr", own_pr)]
+    kept = [p for name, p in paras if p and name not in drop]
+    cut = any(p and name in drop for name, p in paras) or any("… and" in p for p in kept)
+    if more and cut:
+        kept.append(MORE)
+    return "\n\n".join([*kept, *([model] if model else [])])

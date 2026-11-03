@@ -898,7 +898,11 @@ branch and the pull request (`said`), the ledger's line repeats it, and "what ch
 (`since_digest`; its Items line counts `item.requested` and `item.opened` in the window and the
 Workflows plugin's open items now, `workflow_tools.open_count`, and never says "none started" while
 any are open: a start event opens an item with no item event, bootstrap run 3) has a line for the Supervisor's open pull request (merged, by the provider's
-`learn`, until the checkout has it). orchestra-scm is a dev dependency, imported only in
+`learn`, until the checkout has it). A pull request that is an Outbox draft is said by the draft's
+state now (`supervisor_pr.draft_state`: the Outbox's state API, else its `outbox.*` events on the
+bus): sent, it is the pull request it opened (`#N`, kept in the record); rejected or failed, with the
+Outbox's reason; waiting for the owner's approval only while it is `drafted`; never "waiting" once
+sent (since 2026-11-03, T2j s16: draft d938f2ac sent as #53 at 10:30Z was said "waiting on the owner"). orchestra-scm is a dev dependency, imported only in
 `supervisor_pr` and `scm_settings`, like the Outbox; the provider's own state is Orchestra's `<state>/scm/`. Limits:
 one branch, so one pull request accumulates every change until it is merged; the organisation's records (`roles.commit_orchestra_files`) still commit to the
 base branch when the checkout is clean there; a split proposal or the starting spec rides on the
@@ -973,6 +977,30 @@ server reads one), `list_metrics` (the project's store, as the Core page's catal
 over the bus: each machine's kind, engagement and announced notes, `disabled` first,
 `machines_read.py`), `machine_ages` (each machine's age, below), and `read_outbox` (the outbox plugin's state API through Orchestra's web server:
 the drafts waiting, sent and rejected, with how each was approved; `outbox_read.py`). All of it reads through Orchestra as a library; nothing is written.
+
+**"What changed since"** (`read_events` with `since`: its `digest`, `since_digest.py`, which the
+Supervisor replies with as it is; since 2026-11-03, T2j s16, the morning after on the standing demo).
+**An owner reads it in a minute:** the reply is bounded to 1,500 characters (`LIMIT`; T2j's ran
+about 4,000), leaving to "more" first the other events, the machines marked quiet, the machines by
+age, the labels and the checks, then naming each list by its entries' names alone, then cutting
+each disabled machine's reason to its first words, then naming fewer entries; whenever anything is
+left out it says `Say "more" for the full list` before the model line, which stays last. The
+owner's "more" is `read_events` with the same `since` and `full` (up to 20 entries per list,
+unbounded). **What is wrong now comes first** ("Look first"), from the Workflows plugin's open items
+(`item_state.py`: its Items list, each step's `within` guard, and each pile's typical stay, the
+median of at least three stays measured by the plugin's own position view over the items' records):
+an outside result that never came (an item at a step on an outside system three times the step's
+typical stay, at least 30 minutes, or 6 hours with no typical stay yet, with the last thing the
+window heard of it: "SCRUM-47 (#51) at sail_check 12 h, waiting on github (usually 6 min), last
+heard: SAIL put on #51 at 19:59, nothing since"), attention raised and unanswered, past the step's
+limit, and longer than the step usually takes (`since_state.py`); then the window's anomalies
+(`since_anomalies.py`) and oddities (the host started three times or more), in the bounded reply in
+one line by what each is about. **Replays are never anomalies:** an event a poller marked
+`replayed: true` (read again at a resume) is counted apart in the first line ("N replayed at a
+resume") and never flagged or listed as new, though what it closes stays closed. **Lists name the
+newest first**, the ones still open before the rest, and the Items line names the open items now
+with their step and age (those "Look first" named are "the N above"). Without the Workflows plugin
+"Look first" says what the bus says alone.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),

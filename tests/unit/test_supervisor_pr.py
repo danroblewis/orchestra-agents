@@ -132,7 +132,41 @@ def test_with_the_outbox_installed_the_pull_request_is_a_draft_for_the_owner(pro
     [(kind, kw)] = drafts
     assert kind == supervisor_pr.KIND and kw["target"] == {"repo": forge.repo, "head": SIDE, "base": "main"}
     assert headings(kw["content"]) == ["Summary", "Testing", "Jira ID"] and WHY in kw["content"]
-    assert "waiting on the owner" in supervisor_pr.digest_line(project, store)
+    from orchestra_agents import outbox_read
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: {"ok": True, "waiting": [{"id": "d-1", "state": "drafted"}],
+                                                                "recent": []})
+    assert "waiting for your approval on the Outbox page" in supervisor_pr.digest_line(project, store)
+
+
+def test_a_draft_the_outbox_sent_is_the_pull_request_it_opened_never_waiting(project, store, forge, monkeypatch):
+    """T2j s16: draft d938f2ac was sent as #53 at 10:30Z, and the digest said "waiting on the owner"."""
+    from orchestra_agents import outbox_read
+
+    class Outbox:
+        def draft(self, kind, **kw):
+            return {"id": "d938f2ac5272f458", "state": "drafted"}
+
+    monkeypatch.setattr(supervisor_pr, "outbox_installed", lambda: True)
+    monkeypatch.setattr(supervisor_pr, "outbox_client", lambda project, drafter: Outbox())
+    call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    sent = {"id": "d938f2ac5272f458", "kind": supervisor_pr.KIND, "state": "sent", "approved_by": "policy",
+            "remote": {"repo": forge.repo, "number": 53}}
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: {"ok": True, "waiting": [], "recent": [sent]})
+    line = supervisor_pr.digest_line(project, store)
+    assert f"#53 open on {SIDE}, " in line and "waiting" not in line
+    assert store.agent_state("supervisor")["pull_request"]["number"] == 53              # kept: the next read knows it
+    monkeypatch.setattr(outbox_read, "fetch", lambda project: {"ok": True, "waiting": [],
+                                                                "recent": [{**sent, "state": "rejected", "reason": "not now"}]})
+    rec = store.agent_state("supervisor")["pull_request"]
+    store.set_agent_state("supervisor", pull_request={**rec, "number": None})
+    assert "rejected (not now): no pull request is open" in supervisor_pr.digest_line(project, store)
+
+    def down(project):
+        raise outbox_read.StoreError("the Outbox's state did not answer")
+    monkeypatch.setattr(outbox_read, "fetch", down)                                    # the bus says it instead
+    store.events.emit("outbox.sent", subject="d938f2ac5272f458", draft="d938f2ac5272f458", kind=supervisor_pr.KIND,
+                      remote={"repo": forge.repo, "number": 53})
+    assert f"#53 open on {SIDE}" in supervisor_pr.digest_line(project, store)
 
 
 def test_the_digest_names_the_open_pull_request(project, store):

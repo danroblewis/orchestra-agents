@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -121,16 +122,31 @@ class ClaudeCodeSession(AgentSession):
         return "claude_code"
 
     def open(self) -> None:
-        """Create or load the session's uuid. Claude writes the transcript on the first turn."""
+        """Create or load the session's uuid. Claude writes the transcript on the first turn.
+
+        Claude Code keeps a transcript under the folder named for the directory it ran in, and
+        refuses a new session under an id already in use. A session that ran in one directory and
+        is now started in another (an agent whose team was created after it: it moves into the
+        team's space, T33) has its transcript moved to the new directory's folder, so it is
+        resumed there, never begun again under the same id."""
         if self._meta_path.exists():
             meta = json.loads(self._meta_path.read_text(encoding="utf-8"))
             self.uuid, self.told = meta["uuid"], meta.get("tools")
             self.cost_total = float(meta.get("cost_total") or 0.0)
             self.context_window, self.start_tokens = meta.get("context_window"), int(meta.get("start_tokens") or 0)
+            if meta.get("cwd") and Path(meta["cwd"]) != Path(self.spec.cwd):
+                self._moved(Path(meta["cwd"]))
         else:
             self.uuid = str(uuid.uuid4())
             self._write_meta()
         self.session_file = str(transcript_path(self.spec.cwd, self.uuid))
+
+    def _moved(self, was: Path) -> None:
+        old, new = transcript_path(was, self.uuid), transcript_path(self.spec.cwd, self.uuid)
+        if old.exists() and not new.exists():
+            new.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(old, new)
+        self._write_meta()
 
     def _write_meta(self) -> None:
         meta = {"uuid": self.uuid, "cwd": str(self.spec.cwd), "session_id": self.spec.session_id}

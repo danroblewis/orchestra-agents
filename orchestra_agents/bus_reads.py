@@ -18,9 +18,10 @@ state with who changed it and when, from the version's own record, T2f s16), so 
 ("running; N sent, M waiting") and each prediction's state (``since_facts``, T2e s16), and what waits
 on the owner now (``owner_waits``: disabled machines, Outbox drafts, the Supervisor's open
 questions; T2f s16), and ``closing_line``: the line the reply ends on, verbatim (the model line).
-And ``digest`` (``since_digest``): the whole answer as plain text, written from all of it, which
-the Supervisor replies with as it is (T2g s16: given every fact, the model still misstated times
-and counts)."""
+And ``digest`` (``since_digest``): the whole answer as plain text, written from all of it and from
+the Workflows plugin's open items now (``item_state``), which the Supervisor replies with as it is
+(T2g s16: given every fact, the model still misstated times and counts); bounded to what an owner
+reads in a minute, and with ``full`` every list (the owner's "more")."""
 
 from __future__ import annotations
 
@@ -174,10 +175,16 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             open_now = open_count(project)
         except Exception:  # noqa: BLE001 - the item record unreadable: the Items line counts the bus alone
             open_now = None
+        from . import item_state
+        try:
+            subjects = list(dict.fromkeys(str(e.get("subject")) for e in picked if e.get("subject")))
+            now_state = item_state.read(project, subjects)
+        except Exception:  # noqa: BLE001 - the plugin's record unreadable: "Look first" says what the bus says alone
+            now_state = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
                                                 model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr,
-                                                open_items=open_now)
+                                                open_items=open_now, state=now_state, full=bool(a.get("full")))
     return {"ok": True, "count": len(picked), **window, **counted, "types": len(summary),
             "by_type": first(({**r, "sources": first(r["sources"], 10)} for r in summary), hint="give types to narrow"),
             "announced_not_heard": first({"type": t, "listened_for_by": first(s, 10)} for t, s in quiet.items()),

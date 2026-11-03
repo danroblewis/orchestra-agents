@@ -174,13 +174,14 @@ TOOLS: list[ToolDef] = [
             "model is the model's state now: its version, who changed it and when (the version's recorded origin: "
             "the only cause of a model change to give), its stocks and flows counted; or why there is none, or that it "
             "could not be read; and digest is the whole answer to \"what changed since\", written from all of it, "
-            "times in the pages' zone: reply with it as it is.",
+            "times in the pages' zone, bounded to what the owner reads in a minute (full: every list): reply with it as it is.",
             {"minutes": I("How far back, default 60 (since overrides it)"),
              "since": S("From when: an ISO time (2026-11-01T22:40:00Z) or a time back (30m, 2h, 1d)"),
              "types": A("Event types to include, or prefixes ending in . for every type under one (pagerduty.); empty for all"),
              "order": {"type": "string", "enum": ["newest", "oldest"],
                        "description": "newest (default: the newest first) or oldest (from since on, in the order they happened)"},
-             "limit": I("How many events to show: default 20, at most 100 (by_type counts them all)")}),
+             "limit": I("How many events to show: default 20, at most 100 (by_type counts them all)"),
+             "full": B("With since: the digest with every list in full, when the owner says \"more\" after it")}),
     # team: reading the organisation, and talking down or up the tree (leads and the supervisor)
     ToolDef("list_teams", "team", "All teams: lead, agents, sub-teams, access, paused state."),
     ToolDef("get_team", "team", "One team in full: responsibilities (own and inherited), agents, access, space.",

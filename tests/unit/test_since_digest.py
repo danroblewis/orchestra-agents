@@ -39,7 +39,7 @@ class Reads:
         return {"ok": True, "predictions": [PREDICTION]}
 
 
-def t2g(project, store, monkeypatch) -> dict:
+def t2g(project, store, monkeypatch, **more) -> dict:
     monkeypatch.setattr(bus_reads, "recent", lambda store, n=bus_reads.SCAN: DAY)
     monkeypatch.setattr(bus_reads, "time", SimpleNamespace(time=lambda: NOW))
     monkeypatch.setattr(clock, "host_zone", lambda: "America/Los_Angeles")
@@ -53,7 +53,7 @@ def t2g(project, store, monkeypatch) -> dict:
          "about": {"disabled": "needs a bot token (xoxb-…) with chat:write"}}]})
     monkeypatch.setattr(intended_api, "current", lambda project: {"machines": {
         "review_nudger": {"pending": [C8]}, "worker": {"pending": []}}})
-    return call(project, store, "read_events", since="24h", order="oldest")
+    return call(project, store, "read_events", since="24h", order="oldest", **more)
 
 
 def paragraph(digest: str, head: str) -> str:
@@ -61,17 +61,16 @@ def paragraph(digest: str, head: str) -> str:
 
 
 def test_the_digest_tells_t2g_s16_as_it_happened(project, store, monkeypatch):
-    monkeypatch.setattr(since_digest, "LIMIT", 10_000)                 # every list named in full (the cap: below)
-    out = t2g(project, store, monkeypatch)
+    out = t2g(project, store, monkeypatch, full=True)                  # every list named in full (the owner's "more")
     d = out["digest"]
     assert d.startswith("Since Sun 1 Nov 05:34 (all times PST, America/Los_Angeles):")
     assert d.count("PST") == 1                                          # the zone named once
     tickets = paragraph(d, "Tickets:")
-    assert "3 closed (Done): SCRUM-36 at 04:56, SCRUM-35 at 05:07, SCRUM-37 (through the Outbox) at 05:17" in tickets
-    assert "3 opened: SCRUM-35 and SCRUM-36 at 04:11, SCRUM-37 (through the Outbox) at 04:57" in tickets
+    assert "3 closed (Done): SCRUM-37 (through the Outbox) at 05:17, SCRUM-35 at 05:07, SCRUM-36 at 04:56" in tickets
+    assert "3 opened: SCRUM-37 (through the Outbox) at 04:57, SCRUM-36 and SCRUM-35 at 04:11" in tickets
     prs = paragraph(d, "Pull requests:")
-    assert "3 opened: #33 (SCRUM-35) and #34 (SCRUM-36) at 04:16, #35 (SCRUM-37) at 04:57;" in prs
-    assert "3 merged: #34 (SCRUM-36) at 04:51, #33 (SCRUM-35) at 05:01, #35 (SCRUM-37) at 05:12;" in prs
+    assert "3 opened: #35 (SCRUM-37) at 04:57, #34 (SCRUM-36) and #33 (SCRUM-35) at 04:16;" in prs
+    assert "3 merged: #35 (SCRUM-37) at 05:12, #33 (SCRUM-35) at 05:01, #34 (SCRUM-36) at 04:51;" in prs
     assert prs.count("at 05:12") == 1                                   # one merge at 05:12, not three
     assert "1 rejected (labelled REJECTED): #34 (SCRUM-36) at 04:31" in prs
     assert ("1 triage verdict: SCRUM-36 (#34) at 04:36: local (SCRUM-36: no incident open on PSVC003: the failure is "
@@ -162,10 +161,12 @@ def test_three_days_of_the_board_read_at_a_glance_and_keep_their_counts():
     assert len(d) <= since_digest.LIMIT
     assert "Look first" not in d                                     # nothing wrong, nothing flagged
     tickets = paragraph(d, "Tickets:")
-    assert "24 opened:" in tickets and "24 closed (Done):" in tickets and "… and 19 more." in tickets
+    assert "24 opened: SCRUM-123 at 10:34, SCRUM-122 at 07:34" in tickets            # the newest first (T2j)
+    assert "24 closed (Done):" in tickets and "… and 21 more." in tickets
     assert "24 merged:" in paragraph(d, "Pull requests:")
     t2g_day = since_digest.digest(DAY, NOW - 86400, NOW, "America/Los_Angeles", waiting=WAIT, preds=[], model="M")
-    assert len(t2g_day) <= since_digest.LIMIT and "3 closed (Done): SCRUM-36 at 04:56, SCRUM-35 at 05:07, … and 1 more" in t2g_day
+    assert len(t2g_day) <= since_digest.LIMIT and "3 Done: SCRUM-37 (through the Outbox), SCRUM-35, SCRUM-36" in t2g_day
+    assert "PT224836 (PSVC003, high)" in paragraph(t2g_day, "Incidents:")                       # step 16 (d) keeps it
 
 
 def test_a_small_window_names_everything():
@@ -191,13 +192,13 @@ def test_the_anomalies_come_first():
     d = since_digest.digest(events, NOW - 86400, NOW, "UTC", waiting=WAIT, preds=[], model="M")
     paras = d.split("\n\n")
     look = paras[1]
-    assert look.startswith("Look first: new work on a ticket already Done: SCRUM-42 (Done at ")
+    assert look.startswith("Look first:\n- New work on a ticket already Done: SCRUM-42 (Done at ")
     assert "#47 opened at" in look and "1 offer" in look
-    assert "a label on a merged pull request: REJECTED on #200 (SCRUM-100) at" in look
+    assert "- A label on a merged pull request: REJECTED on #200 (SCRUM-100) at" in look
     assert "SAILED" not in look                                    # put on seconds after the merge: not this
-    assert "attention over an hour old, the item open: SCRUM-7 (#43) since" in look
+    assert "- Attention over an hour old, the item open: SCRUM-7 (#43) since" in look
     assert "SCRUM-8" not in look and "SCRUM-9" not in look
-    assert "an open item whose pull request closed unmerged: SCRUM-7 (#43) on #43 (closed at" in look
+    assert "- An open item whose pull request closed unmerged: SCRUM-7 (#43) on #43 (closed at" in look
     assert paras[2].startswith("Tickets:")
 
 

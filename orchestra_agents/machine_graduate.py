@@ -11,23 +11,21 @@ code that name its old path. The plan is kept in the Supervisor's state.
 
 **The move is a change to the system**, so it is the owner's: ``dry_run: false`` with their quoted
 yes from this turn (``author: owner``, as ``approve_integration``), and only the plan the dry run
-showed (worked out again, it must be the same). Then: ``git mv`` of the directory (a plain move when
-git does not track it, as a scaffolded collector), the language's wiring, and each entry's
-``command`` changed through Orchestra's configuration objects (``config_edit``, never the file as
-text): in ``orchestra.toml`` written in place, and in the owner's overlay as any overlay change. All
-of it is live at once, and the move, the wiring, the manifest and ``orchestra.toml`` are **one
-commit on the Supervisor's branch** ``orchestra/supervisor`` (``side_branch``; a commit of
-``orchestra.toml`` alone would name code its commit does not hold), never on the base branch, which
-becomes a pull request for the owner or the merge gate to merge (``supervisor_pr``; since
-2026-11-02, the owner's self-improvement 5). The program's code is not changed, so its announcement and
-its events stay the same: the answer says which source to hear again (the launcher restarts a
-process whose command changed within a second of reading the configuration)."""
+showed (worked out again, it must be the same). Then **one commit on the Supervisor's branch**
+``orchestra/supervisor`` (``side_branch``; since 2026-11-02, the owner's self-improvement 5): the
+directory's files under their new path, unchanged, the language's wiring, the manifest's entry, and
+each ``orchestra.toml`` entry's ``command``, worked out by Orchestra's editor on the branch's own file
+(``config_change.branch_editor``), proposed as a pull request for the owner or the merge gate to
+merge (``supervisor_pr``). **The checkout is not touched and there is no live copy**: the launcher
+keeps running the old command until the pull request is merged and pulled, and the answer says so.
+An entry whose command is in the owner's overlay is changed there once the moved program is in the
+checkout (``live_layers.settle``). The program's code is not changed, so its announcement and its
+events stay the same: the answer says which source to hear again."""
 
 from __future__ import annotations
 
 import json
 import shlex
-import shutil
 import subprocess
 import time
 import tomllib
@@ -37,12 +35,11 @@ from orchestra.config import ConfigError
 from orchestra.overlay import OVERLAY, REPO
 
 from . import graduate_wiring as wiring
-from . import machine_ages, side_branch, supervisor_pr
+from . import live_layers, machine_ages, side_branch, supervisor_pr
 from .config import Project
-from .config_change import change, no_secret, someone_editing
+from .config_change import branch_editor, no_secret, someone_editing
 from .design import MACHINE, OWNER
 from .design_machines import ID
-from .setup_tools import CHANGED, INSTRUMENT_SECTIONS, INSTRUMENTS_CHANGED
 from .store import AgentStore, StoreError
 
 KEY = "graduations"
@@ -173,7 +170,7 @@ def _heard(project: Project, store: AgentStore) -> list[dict]:
 
 
 def said(p: dict, done: bool) -> list[str]:
-    verb = "moved" if done else "would move"
+    verb = "moves, on the branch orchestra/supervisor," if done else "would move"
     lines = [f"{p['from']}/ {verb} to {p['to']}/ ({p['how']}, {len(p['files'])} files, its code unchanged)",
              *[f"[[{e['section']}]] {e['name']} ({'orchestra.toml' if e['target'] == REPO else 'the owner overlay'}): "
                f"{e['command']} -> {e['new_command']}" for e in p["entries"]]]
@@ -194,44 +191,36 @@ def verify(p: dict) -> str:
             f"read_machine_log {p['entries'][0]['name']}.")
 
 
-def _move(project: Project, p: dict) -> None:
-    src, dst = project.repo_root / p["from"], project.repo_root / p["to"]
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if p["how"] == "git mv":
-        r = _git(project.repo_root, "mv", p["from"], p["to"])
-        if r.returncode != 0:
-            raise StoreError(f"git mv failed: {(r.stderr or r.stdout).strip()}; nothing was moved")
-    else:
-        shutil.move(str(src), str(dst))
-
-
-def _unmove(project: Project, p: dict) -> None:
-    if p["how"] == "git mv":
-        _git(project.repo_root, "mv", p["to"], p["from"])
-    else:
-        shutil.move(str(project.repo_root / p["to"]), str(project.repo_root / p["from"]))
-
-
-def _set_command(project: Project, store: AgentStore, e: dict, reason: str) -> str:
-    entry = {"name": e["name"], "command": e["new_command"]}
-    if e["target"] == OVERLAY:
-        done = change(project, lambda ed, kw: ed.add_entry(e["section"], entry, **kw),
-                      lambda c: f"changed [[{e['section']}]] {e['name']}'s command (overlay)", reason, OVERLAY)
-        what = done["changed"]
-    else:                     # orchestra.toml: written, carried with the move (the module's docstring)
-        ed = project.orchestra.config_edit
-        try:
-            c = ed.add_entry(e["section"], entry, target=REPO, dry_run=True)
+def _branch_texts(project: Project, p: dict, parent: str | None) -> tuple[dict, dict]:
+    """The graduation as the branch's commit holds it: ``(texts, files)`` for ``side_branch.commit``:
+    the program's files under their new path (their bytes from the checkout, unchanged), the old
+    paths removed, the runner written, the manifest's entry, and orchestra.toml's commands (worked
+    out by Orchestra's editor on the branch's own file)."""
+    root, mdir = project.repo_root, project.repo_root / p["from"]
+    files = {f"{p['to']}/{f.relative_to(mdir)}": f for f in wiring.files_of(mdir)}
+    texts: dict[str, str | None] = {f: None for f in side_branch.tree_files(project, parent, p["from"])}
+    for w in p["writes"]:
+        if not (w.get("if_missing") and (w["path"] in files or side_branch.version(project, w["path"], parent) is not None)):
+            texts[w["path"]] = w["text"]
+    if m := p["manifest"]:
+        have = side_branch.version(project, m["file"], parent)
+        if have is None and (root / m["file"]).is_file():
+            have = (root / m["file"]).read_text(encoding="utf-8")
+        texts[m["file"]] = wiring.manifest_text(have or "", m)
+    repo = [e for e in p["entries"] if e["target"] == REPO]
+    if repo:
+        name = project.orchestra.config_file.name
+        text = side_branch.version(project, name, parent) or project.orchestra.config_edit.text(REPO) or ""
+        for e in repo:
+            try:
+                c = branch_editor(project, text).add_entry(e["section"], {"name": e["name"], "command": e["new_command"]},
+                                                           target=REPO, dry_run=True)
+            except ConfigError as err:
+                raise StoreError(f"{err}; nothing was moved") from err
             no_secret(c.before or "", c.after)
-            ed.apply(c)
-        except ConfigError as err:
-            raise StoreError(str(err)) from err
-        project.reload_config()
-        what = f"changed [[{e['section']}]] {e['name']}'s command in orchestra.toml (carried with the move on orchestra/supervisor)"
-    store.events.emit(INSTRUMENTS_CHANGED if e["section"] in INSTRUMENT_SECTIONS else CHANGED, section=e["section"],
-                      change=what, reason=reason, commit=None, target=e["target"],
-                      applies="orchestra run reads it within a second", by=MACHINE, src=MACHINE)
-    return what
+            text = c.after
+        texts[name] = text
+    return texts, files
 
 
 def _same(p: dict) -> str:
@@ -258,39 +247,37 @@ def graduate_machine(project: Project, store: AgentStore, a: dict, prov: dict) -
     if _same(shown) != _same(p):
         raise StoreError("the plan changed since the dry run the owner saw (the configuration or the tree changed): "
                          "dry-run it again and put it to them; nothing was moved")
-    _move(project, p)
-    try:
-        for w in p["writes"]:
-            f = project.repo_root / w["path"]
-            if not (w.get("if_missing") and f.exists()):
-                f.write_text(w["text"], encoding="utf-8")
-        wrote = wiring.apply_manifest(project.repo_root, p["manifest"])
-        changed = [_set_command(project, store, e, prov["reason"]) for e in p["entries"]]
-    except (StoreError, OSError) as err:
-        _unmove(project, p)
-        raise StoreError(f"{err}; the directory was moved back to {p['from']}/") from err
     carried = _carry(project, store, p, prov)
     rec = {"plan": p, "at": time.time(), "graduated": True, "quote": prov.get("quote"), "turn": prov.get("turn"),
            "commit": carried.get("commit")}
     store.update_agent_state(MACHINE, KEY, lambda d: {**(d or {}), p["name"]: rec})
-    told = [*said(p, True), *([wrote] if wrote else []), *changed, carried["said"]]
+    waits = [e for e in p["entries"] if e["target"] == OVERLAY]
+    told = [*said(p, True), carried["said"],
+            (f"nothing changes in the checkout until the pull request is merged and pulled: the launcher keeps running "
+             f"{p['from']}/ on its old command until then"),
+            *[f"[[{e['section']}]] {e['name']}'s command in the owner's overlay changes to {e['new_command']} once "
+              f"{p['to']}/ is in the checkout" for e in waits]]
     return {"ok": True, "dry_run": False, "plan": p, "said": told, "branch": carried["branch"],
             "commit": carried.get("commit"), "pull_request": carried["pull_request"],
-            "verify": verify(p), "next": "Tell the owner where it is now, its command, and the branch and pull request; then check it is heard again "
-                                         "(machine_ages) and say so."}
+            "verify": ("Once the pull request is merged and pulled: " + verify(p)),
+            "next": ("Tell the owner it is on the branch and its pull request (number or link), that the launcher keeps "
+                     "the old command until they merge it, and the new command it will run with.")}
 
 
 def _carry(project: Project, store: AgentStore, p: dict, prov: dict) -> dict:
-    """The graduation as one commit on the Supervisor's branch, and its pull request."""
-    paths = [p["from"], p["to"], *([p["manifest"]["file"]] if p["manifest"] else []), *[w["path"] for w in p["writes"]],
-             *([project.orchestra.config_file.name] if any(e["target"] == REPO for e in p["entries"]) else [])]
+    """The graduation as one commit on the Supervisor's branch, and its pull request; the checkout is not touched."""
     title = f"Supervisor: graduate {p['name']} to {p['to']}/"
+    parent = side_branch.parent(project)
+    texts, files = _branch_texts(project, p, parent)
     try:
         sha = side_branch.commit(project, f"{title}\n\n{prov['reason']}\n\nThe owner: {prov.get('quote') or ''}\n",
-                                 paths=list(dict.fromkeys(paths)))
+                                 texts=texts, files=files)
     except side_branch.SideBranchError as e:
-        return {"branch": side_branch.SIDE, "commit": None, "pull_request": None,
-                "said": f"the move is made and live, but its commit on {side_branch.SIDE} failed ({e}): tell the owner"}
+        raise StoreError(f"the graduation's commit on {side_branch.SIDE} failed ({e}); nothing was moved") from None
+    for e in p["entries"]:
+        if e["target"] == OVERLAY and sha:
+            live_layers.wait_graduation(project, {"section": e["section"], "name": e["name"], "command": e["new_command"]},
+                                        p["to"], sha)
     return {"commit": sha, **supervisor_pr.carried(
         project, store, sha, title=title, reason=prov["reason"], quote=prov.get("quote"),
         verified=(f"the owner's yes on the dry run, worked out again unchanged; {len(p['files'])} files moved unchanged; "

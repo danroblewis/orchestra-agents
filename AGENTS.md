@@ -15,16 +15,16 @@ broken without updating the spec and saying so in the commit.
    each is the Supervisor's or the organisation's own: committing the organisation's own files
    under `.orchestra/`, only when the checkout is on the base branch and otherwise clean; **every
    change the Supervisor makes to the repository as one commit on its own branch
-   `orchestra/supervisor`, never on the base branch** (since 2026-11-02, the owner's
-   self-improvement 5; `side_branch.py`: git's plumbing on a private index, the checkout never
-   switched), and that branch pushed and proposed as a pull request through orchestra-scm's
-   provider, or an Outbox draft of one, when the repository has a remote and `[scm]` is configured
-   (`supervisor_pr.py`; the provider never pushes main, master or the base, and nothing here merges):
-   `orchestra.toml` alone (`config_change.py`), when a change targets the repository, only when the
-   checkout is on the base branch and that file has no uncommitted change but the Supervisor's own,
-   written in place and staged as committed; the Supervisor's machine spec (`spec_git.py`, D20),
-   never touching the working tree; an override file under `.orchestra/overrides/`, written in
-   place and staged; and a graduation (below); a repair to the project's code, written and committed
+   `orchestra/supervisor`, never on the base branch, and the checkout never touched** (since
+   2026-11-02, the owner's self-improvement 5; `side_branch.py`: git's plumbing on a private index;
+   the checkout is not switched, written or staged), that branch pushed and proposed as a pull
+   request through orchestra-scm's provider, or an Outbox draft of one, when the repository has a
+   remote and `[scm]` is configured (`supervisor_pr.py`; the provider never pushes main, master or
+   the base, and nothing here merges); what is live until the merge is the private layer
+   (`live_layers.py`): `orchestra.toml` (`config_change.py`, a change that targets the repository),
+   live through the same change in the owner's overlay; the Supervisor's machine spec (`spec_git.py`,
+   D20), live from its copy in the state directory; an override file under `.orchestra/overrides/`
+   and a graduation (below), live only once merged; a repair to the project's code, written and committed
    in a scratch worktree in
    the state directory on its own branch `supervisor/patch-<name>`, which is removed after and
    whose branch only a ticket takes onward (`patching.py`). A change to the
@@ -39,8 +39,8 @@ broken without updating the spec and saying so in the commit.
    program proven in `.orchestra/machines/<name>/` moves into the project's own tree) is a `git mv`
    of that one directory (a plain move when git does not track it), the one manifest entry its
    language needs, and its `[[machines]]`/`[[collect]]` commands through `config_edit`, on the
-   owner's quoted yes after a dry run: live in the checkout, and one commit on `orchestra/supervisor`
-   with its pull request, for the owner or the merge gate to merge.
+   owner's quoted yes after a dry run: one commit on `orchestra/supervisor` with its pull request,
+   for the owner or the merge gate to merge; the checkout and the running command change only then.
 3. **The contract is `protocol.py`.** The event names the task system and the agents share live
    there, once; the task system implements the same names (`tasking/assignments.py`,
    `tasking/requests.py`). Change them deliberately, on both sides, and say so in the commit.

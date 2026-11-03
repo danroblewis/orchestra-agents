@@ -12,9 +12,10 @@ Two ways a repair reaches the project, and neither edits the owner's checkout:
 - ``write_override``: a bug in an installed plugin, which the project does not own. An override
   under ``.orchestra/overrides/<name>.py`` in Orchestra's format (Orchestra's ``overrides.py``:
   ``TARGET``, ``PACKAGE`` pinned to the installed version, ``KIND`` wrap or replace, ``ISSUE``,
-  and ``def override``), written in place (live at once) and committed alone on the Supervisor's
-  branch ``orchestra/supervisor`` (``side_branch``), never on the base branch, which becomes a pull
-  request (``supervisor_pr``; the tool says the branch and the pull request, or why it is pending).
+  and ``def override``), committed alone on the Supervisor's branch ``orchestra/supervisor``
+  (``side_branch``), never on the base branch, and proposed as a pull request (``supervisor_pr``;
+  the tool says the branch and the pull request, or why it is pending). The checkout is not
+  touched, and Orchestra loads overrides only from it, so the repair applies once merged and pulled.
   Orchestra applies it in every process that loads plugins, only on that exact version, so it
   stops when the package changes. Announced as ``system.changed`` (subject ``override:<name>``),
   which begins an era. The upstream issue is ``draft_upstream_issue`` (``upstream.py``)."""
@@ -162,19 +163,17 @@ def write_override(project: Project, store: AgentStore, a: dict, name: str, reas
             f'{dist}=={version}; it stops applying when the package changes."""\n\n'
             f"TARGET = {target!r}\nPACKAGE = {f'{dist}=={version}'!r}\nKIND = {kind!r}\nISSUE = {issue!r}\n\n{code.strip()}\n")
     rel = f".orchestra/overrides/{name}.py"
-    path = project.repo_root / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
     title = f"Supervisor: override {name} of {target} — {reason.splitlines()[0][:100]}"
     try:
-        sha = side_branch.commit(project, f"{title}\n\n{a['why'].strip()}\n\nPinned to {dist}=={version}.\n", paths=[rel])
+        sha = side_branch.commit(project, f"{title}\n\n{a['why'].strip()}\n\nPinned to {dist}=={version}.\n", texts={rel: text})
     except side_branch.SideBranchError as e:
-        raise StoreError(f"the override is written and live at {rel}, but its commit on {side_branch.SIDE} failed: {e}") from None
+        raise StoreError(f"the override's commit on {side_branch.SIDE} failed: {e}; nothing was written") from None
     pr = supervisor_pr.carried(project, store, sha, title=title, reason=reason, quote=supervisor_pr.owner_words(store, a),
                                verified=(f"the override parses and defines override(); {target} resolves in the installed "
                                          f"{dist}=={version}, which it is pinned to"))
-    note = (f"written and live at {rel}; " + (f"committed on {side_branch.SIDE}, never on {project.config.base_branch}"
-                                              if sha else f"{side_branch.SIDE} already holds it as it is"))
+    note = ((f"committed as {rel} on {side_branch.SIDE}, never on {project.config.base_branch}; the checkout is not "
+             "touched, so it applies once the pull request is merged and pulled") if sha else
+            f"{side_branch.SIDE} already holds {rel} as it is")
     data = {"override": name, "target": target, "package": f"{dist}=={version}", "kind": kind, "commit": sha, "reason": reason,
             "by": "supervisor"}
     if claim_change(store, "supervisor", a.get("change")):
@@ -182,8 +181,10 @@ def write_override(project: Project, store: AgentStore, a: dict, name: str, reas
     else:
         store.events.publish("system.changed", data, subject=f"override:{name}")
     return {"ok": True, "file": rel, "package": f"{dist}=={version}", "commit": sha, "note": note, **pr,
-            "applies": ("Orchestra applies it the next time a process loads its plugins: orchestra run's host when the "
-                        "configuration changes, and each plugin process (the agents' host, the task scheduler) and "
-                        "orchestra web when they start again. Read the Core page's local overrides to see it applied."),
+            "applies": ("Not yet: Orchestra loads overrides only from the checkout's .orchestra/overrides/, so it applies once "
+                        "the pull request is merged and pulled, the next time a process loads its plugins (orchestra run's "
+                        "host when the configuration changes; each plugin process and orchestra web when they start "
+                        "again). Read the Core page's local overrides to see it applied. Tell the owner that merging it "
+                        "is what applies the repair."),
             "next": ("Draft the upstream issue with draft_upstream_issue (override: this name), then tell the owner, with the "
                      "branch and pull request as `said` puts them.")}

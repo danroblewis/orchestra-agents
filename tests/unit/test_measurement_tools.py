@@ -92,7 +92,7 @@ def test_a_trial_round_says_what_would_be_stored_and_what_is_wrong(project, stor
 def test_a_one_liner_is_declared_as_configuration_and_read_back_with_its_points(project, store):
     out = call(project, store, "set_collector", name="todos", command=TODOS, shell=True, every="60s", timeout="20s", reason=WHY)
     assert out["commit"] and "read_instrument todos" in out["applies"]
-    [entry] = tomllib.loads((project.repo_root / "orchestra.toml").read_text())["collect"]
+    [entry] = tomllib.loads(git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml"))["collect"]
     assert entry["command"][:2] == ["sh", "-c"] and "git grep" in entry["command"][2] and entry["every"] == "60s"
 
     seen = call(project, store, "read_instrument", name="todos")
@@ -172,7 +172,7 @@ def test_a_token_in_a_file_is_declared_by_its_path_and_never_shown(project, stor
     assert "present" in seen and "tok-9f8e7d6c5b4a" not in seen
     entry = json.dumps([{"name": "shop", "url": remote.url, "auth": auth, "match": ['{__name__="queue_depth"}']}])
     assert call(project, store, "set_setting", key="sources", value=entry, target="repo", reason="The shop's queue.")["commit"]
-    toml = (project.repo_root / "orchestra.toml").read_text()
+    toml = git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml")
     assert str(token) in toml and "tok-9f8e7d6c5b4a" not in toml
     assert "tok-9f8e7d6c5b4a" not in json.dumps(call(project, store, "read_config"))
 

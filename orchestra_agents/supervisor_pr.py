@@ -26,7 +26,7 @@ import contextlib
 import importlib.util
 import time
 
-from . import side_branch
+from . import live_layers, side_branch
 from .config import Project
 from .side_branch import SIDE, git, ref
 from .store import AgentStore
@@ -90,7 +90,7 @@ def _keep(store: AgentStore | None, rec: dict) -> None:
 def propose(project: Project, store: AgentStore | None, *, title: str, reason: str, verified: str,
             quote: str | None = None) -> dict:
     """The branch's pull request after a change: ``{branch, commit, number, url, draft, pending, said}``."""
-    side_branch.settle(project)
+    live_layers.settle(project)
     sha = ref(project.repo_root, f"refs/heads/{SIDE}")
     rec = {"branch": SIDE, "commit": sha, "title": title, "at": time.time(), "number": None, "url": None,
            "draft": None, "pending": None}
@@ -142,6 +142,21 @@ def _through(project, store, scm, section, sha, *, title, reason, verified, quot
                                             f"{CONFIG_HINT!r}")}
 
 
+def _merged(project: Project, rec: dict) -> bool:
+    """Whether the forge says the pull request merged (``learn``), when the provider can ask; a squash
+    merge leaves the branch's commit out of the base, so the branch alone cannot tell."""
+    section = dict((project.orchestra.config.raw or {}).get("scm") or {})
+    if not section:
+        return False
+    try:
+        from orchestra_scm import Change
+        scm = provider(project, section)
+        return scm.learn(Change(scm.name, MACHINE, SIDE, scm.base, rec.get("commit") or "", rec["number"],
+                                rec.get("url"))).state == "merged"
+    except Exception:  # noqa: BLE001 - the forge unreachable: not known to be merged
+        return False
+
+
 def said(rec: dict) -> str:
     """One sentence for the Supervisor's answer: the branch, and the pull request or why it waits."""
     if rec.get("number"):
@@ -164,14 +179,13 @@ def carried(project: Project, store: AgentStore | None, sha: str | None, *, titl
 
 def digest_line(project: Project, store: AgentStore) -> str | None:
     """The Supervisor's open pull request, for "what changed": None when it has none open."""
-    side_branch.settle(project)
+    live_layers.settle(project)
     rec = store.agent_state(MACHINE).get(KEY) or {}
     if not rec.get("commit") or not side_branch.pending(project):
         return None
-    base = project.config.base_branch
-    tip = ref(project.repo_root, f"refs/remotes/origin/{base}")
-    if tip and git(project.repo_root, "merge-base", "--is-ancestor", rec["commit"], tip).returncode == 0:
-        return None                                       # merged upstream, not pulled yet
+    if rec.get("number") and _merged(project, rec):
+        return (f"The Supervisor's pull request #{rec['number']} is merged; its live copies retire once the checkout "
+                "pulls it.")
     if rec.get("number"):
         return f"The Supervisor's pull request: #{rec['number']} open on {SIDE} ({rec.get('url')}), \"{rec.get('title')}\"."
     if rec.get("draft"):

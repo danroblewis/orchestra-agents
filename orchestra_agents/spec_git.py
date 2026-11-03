@@ -4,10 +4,12 @@
 
 The specs are the files under ``.orchestra/machines/`` in the project's repository
 (``machine_spec.py`` reads them). A change is one commit on the branch ``orchestra/supervisor``
-(``side_branch.py``: git's plumbing on a private index, from the branch's tip or the base branch's;
-the working tree and the owner's index are not touched), which ``supervisor_pr`` proposes as a pull
-request. Until it is merged into the checkout, the specs are read from the branch (``read_files``),
-so the host runs what was committed at once, never a dirty checkout.
+(``side_branch.py``: git's plumbing on a private index; the checkout is never touched), which
+``supervisor_pr`` proposes as a pull request, and **its live copy**: the machine's whole spec as
+changed, written to the state directory (``<state>/agents/machines/<name>/`` with a ``.pending.json``
+marker), which ``machine_spec.load_all`` reads before the repository's. The live copy is retired
+(``retire_live``) once the checkout's files are the same, that is, once the pull request is merged
+and pulled.
 
 A checkout that is not a git repository has no history to revert to: changes are refused there
 (``SpecGitError``), except the first spec written by the plugin, which is only written.
@@ -17,7 +19,9 @@ project; the other is the scratch worktree a code patch is written in (``patchin
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -46,31 +50,10 @@ def side_pending(project: Project) -> str | None:
     return side_branch.pending(project)
 
 
-def _may_have_side(root: Path) -> bool:
-    """Whether the side branch may exist, without starting git when it plainly does not: the
-    agents read the specs on every tool call and every tick."""
-    gitdir = root / ".git"
-    if not gitdir.exists():
-        return False
-    if not gitdir.is_dir():
-        return True                          # a worktree's .git file: ask git
-    packed = gitdir / "packed-refs"
-    try:
-        in_packed = packed.exists() and f"refs/heads/{SIDE}" in packed.read_text(encoding="utf-8")
-    except OSError:
-        in_packed = True
-    return in_packed or (gitdir / "refs" / "heads" / SIDE).exists()
-
-
 def read_files(project: Project) -> dict[str, str]:
-    """Every file under ``.orchestra/machines/`` as the host should run it: from the side branch
-    while it holds commits the checkout does not, else from the working tree. Paths are relative
-    to the repository."""
+    """Every file under ``.orchestra/machines/`` in the working tree (the live copy of a change not
+    merged yet is the state directory's, ``live_copies``). Paths are relative to the repository."""
     root = project.repo_root
-    tip = side_pending(project) if _may_have_side(root) else None
-    if tip:
-        names = _git(root, "ls-tree", "-r", "--name-only", tip, "--", ROOT).stdout.splitlines()
-        return {n: _git(root, "show", f"{tip}:{n}").stdout for n in names}
     base = root / ROOT
     if not base.is_dir():
         return {}
@@ -87,9 +70,10 @@ def read_files(project: Project) -> dict[str, str]:
 def commit(project: Project, changes: dict[str, str | None], message: str, *, allow_plain: bool = False,
            not_base: str | None = None) -> dict:
     """Write ``changes`` (path under ``.orchestra/machines/`` -> text, or None to delete) as one
-    commit with ``message`` on the Supervisor's branch. Returns ``{commit, where, note}``: ``where``
-    is ``side``, or ``files`` (written without git, only with ``allow_plain``). ``not_base`` (why the
-    base branch must not move now) is kept for its callers: the base branch never moves here."""
+    commit with ``message`` on the Supervisor's branch, and as the machine's live copy. Returns
+    ``{commit, where, note}``: ``where`` is ``side``, or ``files`` (written without git, only with
+    ``allow_plain``). ``not_base`` (why the base branch must not move now) is kept for its callers:
+    the base branch never moves here."""
     for path in changes:
         if not path.startswith(ROOT + "/") or ".." in Path(path).parts:
             raise SpecGitError(f"refused: {path} is not under {ROOT}/")
@@ -105,9 +89,71 @@ def commit(project: Project, changes: dict[str, str | None], message: str, *, al
         raise SpecGitError(str(e)) from None
     if sha is None:
         return {"commit": None, "where": "side", "note": "nothing changed"}
+    names = _write_live(project, changes, sha)
     return {"commit": sha, "where": "side", "branch": SIDE,
-            "note": (f"committed on the Supervisor's branch {SIDE}, never on {project.config.base_branch}; the agents run "
-                     "the specs from it until it is merged (through its pull request)")}
+            "note": (f"committed on the Supervisor's branch {SIDE}, never on {project.config.base_branch}, and live at once "
+                     f"from the state directory ({', '.join(str(live_root(project) / n) for n in names)}) until its pull "
+                     "request is merged and pulled")}
+
+
+PENDING = ".pending.json"
+
+
+def live_root(project: Project) -> Path:
+    return project.state_dir / "machines"
+
+
+def _dir_files(d: Path) -> dict[str, str]:
+    out = {}
+    for p in sorted(d.rglob("*")) if d.is_dir() else []:
+        if p.is_file() and p.name != PENDING:
+            try:
+                out[str(p.relative_to(d))] = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+    return out
+
+
+def live_copies(project: Project) -> dict[str, dict[str, str]]:
+    """The live copies of spec changes not merged yet: machine name -> its files (relative to its directory)."""
+    base = live_root(project)
+    if not base.is_dir():
+        return {}
+    return {d.name: _dir_files(d) for d in sorted(base.iterdir()) if (d / PENDING).is_file()}
+
+
+def _write_live(project: Project, changes: dict[str, str | None], sha: str) -> list[str]:
+    """Each changed machine's whole spec, as changed, to its live copy."""
+    by: dict[str, dict[str, str | None]] = {}
+    for path, text in changes.items():
+        name, _, inner = path[len(ROOT) + 1:].partition("/")
+        by.setdefault(name, {})[inner] = text
+    for name, inner in by.items():
+        d = live_root(project) / name
+        files = _dir_files(d) if (d / PENDING).is_file() else _dir_files(project.repo_root / ROOT / name)
+        for k, v in inner.items():
+            if v is None:
+                files.pop(k, None)
+            else:
+                files[k] = v
+        shutil.rmtree(d, ignore_errors=True)
+        for k, v in files.items():
+            (d / k).parent.mkdir(parents=True, exist_ok=True)
+            (d / k).write_text(v, encoding="utf-8")
+        d.mkdir(parents=True, exist_ok=True)
+        (d / PENDING).write_text(json.dumps({"branch": SIDE, "commit": sha}), encoding="utf-8")
+    return list(by)
+
+
+def retire_live(project: Project) -> list[str]:
+    """The live copies whose files the checkout now holds the same (the pull request merged and
+    pulled), removed; their names."""
+    gone = []
+    for name, files in live_copies(project).items():
+        if _dir_files(project.repo_root / ROOT / name) == files:
+            shutil.rmtree(live_root(project) / name, ignore_errors=True)
+            gone.append(name)
+    return gone
 
 
 def _write_tree(root: Path, changes: dict[str, str | None]) -> None:

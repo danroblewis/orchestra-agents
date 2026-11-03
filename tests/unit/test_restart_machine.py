@@ -131,7 +131,8 @@ def test_a_restart_the_agents_were_killed_in_is_put_back_by_the_next_setup_chang
                          role="supervisor")
     assert out["ok"] and out["commit"] and "sleeper" in out["recovered"]
     assert [m["name"] for m in project.orchestra.config.raw["machines"]] == ["sleeper"]
-    assert not project.orchestra.overlay_file.exists() and "workers = 2" in (project.repo_root / "orchestra.toml").read_text()
+    assert "workers = 2" in git(project.repo_root, "show", "orchestra/supervisor:orchestra.toml")
+    assert project.orchestra.config.raw["tasks"]["workers"] == 2                     # live through the overlay
     assert not (project.state_dir / "pending-restart.json").exists()
     assert recover(project) is None                                                # nothing left to do
 

@@ -71,12 +71,12 @@ def test_a_change_is_a_branch_commit_live_at_once_and_a_pull_request_with_the_te
     out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
     assert git(project.repo_root, "rev-parse", "main").strip() == base                 # never on the base
     assert git(project.repo_root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
-    assert "workers = 2" in (project.repo_root / "orchestra.toml").read_text()          # live, in place
+    assert project.orchestra.config.raw["tasks"]["workers"] == 2                         # live, through the overlay
+    assert "workers" not in (project.repo_root / "orchestra.toml").read_text()          # the checkout untouched
     tip = git(project.repo_root, "rev-parse", SIDE).strip()
     assert out["branch"] == SIDE and tip.startswith(out["commit"])
     assert git(project.repo_root, "show", "--name-only", "--format=", SIDE).split() == ["orchestra.toml"]
     assert git(project.repo_root, "status", "--porcelain").strip() == ""                  # clean, so the merge gate lands
-    assert git(project.repo_root, "ls-files", "-v", "orchestra.toml").startswith("S ")      # skip-worktree: HEAD's in the index
     pr = out["pull_request"]
     assert pr["number"] and pr["url"].endswith(f"/pull/{pr['number']}") and f"#{pr['number']}" in out["said"]
     assert forge.ref(SIDE) == tip and forge.ref("main") == base                         # the branch pushed, main not
@@ -146,14 +146,14 @@ def test_the_digest_names_the_open_pull_request(project, store):
 
 def test_a_merged_pull_request_leaves_the_digest(project, store, forge):
     out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    assert "workers" in project.orchestra.config_edit.text("overlay")                    # live through the overlay
     forge.merge(out["pull_request"]["number"])
-    git(project.repo_root, "fetch", "-q", "origin")
-    assert supervisor_pr.digest_line(project, store) is None                           # merged upstream: settled for the pull
-    assert git(project.repo_root, "status", "--porcelain").strip() == "M  orchestra.toml"
-    git(project.repo_root, "pull", "-q", "--ff-only", "origin", "main")                # goes through
+    git(project.repo_root, "pull", "-q", "--ff-only", "origin", "main")                # goes through: the checkout is untouched
+    assert supervisor_pr.digest_line(project, store) is None                           # merged and pulled
+    assert "workers" not in (project.orchestra.config_edit.text("overlay") or "")       # the overlay's copy retired
+    project.reload_config()
+    assert project.orchestra.config.raw["tasks"]["workers"] == 2                         # from orchestra.toml now
     assert git(project.repo_root, "status", "--porcelain").strip() == ""
-    assert "workers = 2" in (project.repo_root / "orchestra.toml").read_text()
-    assert not git(project.repo_root, "ls-files", "-v", "orchestra.toml").startswith("S ")
 
 
 CODE = "def override(original):\n    def cpu_count(*a, **kw):\n        return original(*a, **kw) or 1\n    return cpu_count\n"
@@ -166,7 +166,7 @@ def test_write_override_is_live_on_the_branch_never_the_base_and_a_pull_request(
                why="psutil.cpu_count returns None in the container, and the host divides by it",
                reason="the host crashes on every tick without it")
     rel = ".orchestra/overrides/cpu_count_fallback.py"
-    assert (project.repo_root / rel).is_file()                                          # live where Orchestra loads it
+    assert not (project.repo_root / rel).exists() and "merged" in got["applies"]       # the checkout untouched: once merged
     assert git(project.repo_root, "rev-parse", "main").strip() == base                 # never committed to the base
     assert git(project.repo_root, "show", "--name-only", "--format=", SIDE).split() == [rel]
     pr = got["pull_request"]
@@ -199,16 +199,31 @@ def test_a_graduation_is_one_commit_on_the_branch_and_its_pull_request(project, 
     files = set(git(root, "show", "--no-renames", "--name-only", "--format=", SIDE).split())
     assert {".orchestra/machines/relator/relator.py", "acme_tools/relator/relator.py", "orchestra.toml"} <= files
     pr = done["pull_request"]
-    assert pr["number"] and f"#{pr['number']}" in done["said"][-1]
+    assert pr["number"] and any(f"#{pr['number']}" in x for x in done["said"])
     body = forge.body_of(pr["number"])
     assert reason in body and "files moved unchanged" in body
     assert forge.data["pulls"][0]["title"] == "Supervisor: graduate relator to acme_tools/relator/"
 
 
-def test_someone_elses_edit_to_a_flagged_orchestra_toml_is_still_refused(project, store):
-    from orchestra_agents.store import StoreError
-    call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+def test_an_edit_in_progress_in_the_checkout_is_never_swept_into_the_branch(project, store):
     toml = project.repo_root / "orchestra.toml"
-    toml.write_text(toml.read_text() + "\n# the owner's edit in progress\n")      # hidden from git status by the flag
-    with pytest.raises(StoreError, match="someone is editing it"):
-        call(project, store, "set_capacity_limit", workers=3, reason="three workers: the queue still grows")
+    toml.write_text(toml.read_text() + "\n# the owner's edit in progress\n")
+    typed = toml.read_text()
+    out = call(project, store, "set_capacity_limit", workers=2, reason=WHY)
+    assert out["commit"] and toml.read_text() == typed
+    assert "edit in progress" not in git(project.repo_root, "show", f"{SIDE}:orchestra.toml")
+
+
+def test_a_spec_change_is_live_from_the_state_directory_until_merged_and_pulled(project, store, forge):
+    from orchestra_agents import supervisor_spec
+    from orchestra_agents.machine_spec import load
+    supervisor_spec.ensure(project)
+    out = call(project, store, "add_duty", name="morning_note", text="Every morning, tell the owner what waits on them.",
+               about="a morning note", listens=[], tools=["observe"], reason="the owner asked for a morning note")
+    assert out["changed"] and not (project.repo_root / ".orchestra").exists()           # the checkout untouched
+    assert load(project, "supervisor").duty("morning_note") is not None                 # live from the state directory
+    forge.merge(out["pull_request"]["number"])
+    git(project.repo_root, "pull", "-q", "--ff-only", "origin", "main")
+    assert supervisor_pr.digest_line(project, store) is None
+    assert not (project.state_dir / "machines" / "supervisor").exists()                 # the live copy retired
+    assert load(project, "supervisor").duty("morning_note") is not None                 # from the checkout now

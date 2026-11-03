@@ -21,7 +21,7 @@ from __future__ import annotations
 import contextlib
 import time
 
-from . import budget, design_passes, flow_signals, load, prompting, side_branch, split_proposal
+from . import budget, design_passes, flow_signals, live_layers, load, prompting, split_proposal
 from .clock import parse_interval
 from .machine_spec import DEFAULT_REVIEW_EVERY
 from .machine_spec import load as load_spec
@@ -64,7 +64,7 @@ class ReviewRound:
         if now - last < every:
             return None
         with contextlib.suppress(Exception):     # git unreadable: the round runs regardless
-            side_branch.settle(h.project)        # a merged pull request of the Supervisor's: ready the checkout for the pull
+            live_layers.settle(h.project)        # a merged and pulled pull request of the Supervisor's: its live copies retire
         return self.run(agent, spec, last, now)
 
     def run(self, agent, spec, since: float, now: float) -> dict:

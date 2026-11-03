@@ -68,9 +68,10 @@ def test_an_installed_plugin_is_patched_by_an_override_and_the_issue_is_drafted_
     got = call(project, store, "write_override", name="cpu_count_fallback", target="psutil:cpu_count", kind="wrap", code=CODE,
                why=WHY, reason=REASON)
     version = importlib.metadata.version("psutil")
-    assert got["package"] == f"psutil=={version}" and "committed on orchestra/supervisor, never on main" in got["note"]
+    assert got["package"] == f"psutil=={version}" and "on orchestra/supervisor, never on main" in got["note"]
     assert got["branch"] == "orchestra/supervisor" and "pull request is pending" in got["said"]
-    text = (project.repo_root / ".orchestra/overrides/cpu_count_fallback.py").read_text()
+    assert not (project.repo_root / ".orchestra/overrides").exists() and "merged" in got["applies"]   # the checkout untouched
+    text = git(project.repo_root, "show", "orchestra/supervisor:.orchestra/overrides/cpu_count_fallback.py")
     assert "TARGET = 'psutil:cpu_count'" in text and f"PACKAGE = 'psutil=={version}'" in text and "KIND = 'wrap'" in text
     assert git(project.repo_root, "show", "--name-only", "--format=", "orchestra/supervisor").split() == [
         ".orchestra/overrides/cpu_count_fallback.py"]
@@ -78,18 +79,18 @@ def test_an_installed_plugin_is_patched_by_an_override_and_the_issue_is_drafted_
     assert git(project.repo_root, "rev-parse", "main") == head                                  # never committed to the base
     [ev] = [e for e in store.events.read(0, 100)[0] if e["type"] == "system.changed"]
     assert ev["subject"] == "override:cpu_count_fallback" and ev["source"] == "supervisor"     # an announced change: an era
-    overrides = pytest.importorskip("orchestra.overrides")                                     # Orchestra applies it by file
+    overrides = pytest.importorskip("orchestra.overrides")                     # once merged, Orchestra applies it by file
+    merged = project.repo_root.parent / "merged"
+    git(project.repo_root, "worktree", "add", "-q", "--detach", str(merged), "orchestra/supervisor")
     try:
-        [rep] = [r for r in overrides.apply(project.repo_root) if r.get("name") == "cpu_count_fallback"]
+        [rep] = [r for r in overrides.apply(merged) if r.get("name") == "cpu_count_fallback"]
         assert rep["status"] == "applied"
     finally:
-        (project.repo_root / ".orchestra/overrides/cpu_count_fallback.py").unlink()
-        overrides.apply(project.repo_root)                                                     # and puts the original back
+        (merged / ".orchestra/overrides/cpu_count_fallback.py").unlink()
+        overrides.apply(merged)                                                                # and puts the original back
 
     outbox = FakeOutbox()
     monkeypatch.setattr(upstream, "outbox_client", lambda project, drafter: outbox)
-    (project.repo_root / ".orchestra/overrides/cpu_count_fallback.py").write_text(          # back, as its branch holds it
-        git(project.repo_root, "show", "orchestra/supervisor:.orchestra/overrides/cpu_count_fallback.py"))
     got = call(project, store, "draft_upstream_issue", repo="giampaolo/psutil", title="cpu_count raises in containers",
                body="cpu_count raises OSError in a container without /proc/cpuinfo; it should fall back.", override="cpu_count_fallback")
     [d] = outbox.drafts

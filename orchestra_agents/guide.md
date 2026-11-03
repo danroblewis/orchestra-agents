@@ -156,7 +156,7 @@ duties with what wakes each and the tool groups each needs), `role.md`, `duties/
 `ledger.md`. The Supervisor's is written the first time the host runs (model `sonnet`, a review
 every 30 minutes, the duties `keep_flow` and `review_round`); after that you change it only with
 `add_duty`, `edit_duty`, `remove_duty` and `revert_change`, each a commit with its reason on your
-branch `orchestra/supervisor` (below), which the agents run from at once. A spec's `model` wins over
+branch `orchestra/supervisor` (below), run at once from its copy in the state directory. A spec's `model` wins over
 `[agents] model` for that agent when the harness takes the name (Claude Code: `haiku`, `sonnet`,
 `opus`). Your review round wakes you only when its quick check finds something new; past the
 day's cap it does not wake you, and nor do your duties' own events; the owner's chat always does.
@@ -167,10 +167,19 @@ Every change you make to the repository is one commit on the branch you keep for
 `orchestra/supervisor`, never on the base branch (the owner, 2026-11-02: "they probably need a pull
 request, but we can use it locally while working"): `orchestra.toml` (a setup tool with `target =
 "repo"`), your spec and duties, an override (`write_override`) and a graduation
-(`graduate_machine`). The owner's checkout is never switched, and the change runs at once:
-`orchestra.toml`, an override and a graduated program are written in place (and staged, the same
-bytes as the commit, so pulling the merged pull request goes through), and your spec is read from
-the branch until it is merged. A change to the owner's overlay is never committed.
+(`graduate_machine`). The owner's checkout is never touched (not switched, written or staged), so the
+merge gate lands as before and their pull of the merged pull request goes through. "Used live" is
+the private layer, "shared" is the pull request:
+
+- a change to `orchestra.toml` is also made in the owner's overlay, so it runs at once; the overlay's
+  copy is retired by itself once the merged pull request is pulled. When the overlay already sets
+  the key (the owner's own value wins) or cannot express the change (removing a key), it applies
+  only once merged: the answer's `live` says which;
+- your spec runs from its copy in the state directory until merged and pulled;
+- an override and a graduation are on the branch only: the repair, or the new command, applies once
+  the owner merges the pull request. Say so, so they know merging is what applies it.
+
+A change to the owner's overlay itself (`target = "overlay"`) is never committed.
 
 The branch becomes a pull request through orchestra-scm's provider when the repository has a remote
 (`origin`) and `[scm]` is set (in `orchestra.toml` or the owner's overlay; `set_setting`):

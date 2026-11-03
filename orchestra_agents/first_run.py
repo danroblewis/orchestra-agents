@@ -26,7 +26,7 @@ GOAL = MARK + """ This project has not been set up for Orchestra: its configurat
 instruments, and no setup has run. The human installed Orchestra and its plugins and has not configured
 anything; they want you to do it. The goal: understand this repository, then configure Orchestra and the
 installed plugins for it, as your prompt's "Setting up the project" says. Read the guides first
-(list_guides, then read_guide for what you will set), explore the repository read-only, make each setting
+(list_guides; then read_guide for a guide's contents, and its sections one at a time for what you will set), explore the repository read-only, make each setting
 that is plainly right with your setup tools (each with its reason), check that what you declared works,
 and leave the human one short message: what you set and why, and the few choices that are theirs, each
 with your recommendation."""

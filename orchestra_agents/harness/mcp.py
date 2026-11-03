@@ -41,9 +41,9 @@ class Server:
         self.tools = self.caller.tools
 
     def call(self, name: str, args: dict) -> dict:
-        from .caller import error, text
+        from .caller import error
         try:
-            return {"content": [{"type": "text", "text": text(self.caller.call(name, args))}]}
+            return {"content": [{"type": "text", "text": self.caller.answer(name, args)}]}
         except Exception as e:  # noqa: BLE001 - the model gets the error text, like the Pi extension
             return {"content": [{"type": "text", "text": error(e)}], "isError": True}
 

@@ -10,9 +10,11 @@ import time
 from orchestra.metrics import for_project
 from orchestra.web.dynamics import model_view
 
+from .answers import LISTED, first
 from .config import Project
 
 LABEL_VALUES = 8          # values shown per label
+METRICS_SHOWN = 50        # names in one answer (with "and N more"; prefix narrows it)
 
 
 def list_metrics(project: Project, a: dict) -> dict:
@@ -46,7 +48,9 @@ def list_metrics(project: Project, a: dict) -> dict:
              "last_written_s_ago": round(now - d["last"]) if d["last"] else None, "points_last_hour": d["last_hour"],
              **({"note": "Orchestra's own: discovery leaves it out"} if n.startswith("orchestra_") else {})}
             for n, d in sorted(names.items())]
-    out = {"ok": True, "store": backend or project.orchestra.config.metrics_url or "file", "names": len(rows), "metrics": rows}
+    out = {"ok": True, "store": backend or project.orchestra.config.metrics_url or "file", "names": len(rows),
+           "series": sum(r["series"] for r in rows), "shown": min(len(rows), METRICS_SHOWN),
+           "metrics": first(rows, METRICS_SHOWN, "give prefix to see the rest")}
     if by_label:
         out["note"] = (f"no series name starts with {prefix!r}; these carry it in their name or a label value: name the one "
                        "you mean with its labels (series{label=\"value\"})")
@@ -80,10 +84,11 @@ def get_model(project: Project) -> dict:
     d = m.get("discovery") or {}
     eq = lambda f: f.get("current") or {}
     return {"ok": True, "version": m.get("version"), "live": m.get("live"), "as_of": m.get("as_of"),
-            "stocks": [{"id": s["id"], "name": s["name"], "series": _ref(s.get("series"))} for s in m["stocks"]],
+            "stocks_count": len(m["stocks"]), "flows_count": len(m["flows"]),
+            "stocks": first({"id": s["id"], "name": s["name"], "series": _ref(s.get("series"))} for s in m["stocks"]),
             "flows": [{"id": f["id"], "name": f["name"], "from": f.get("from"), "to": f.get("to"), "machine": f.get("machine"),
                        "equation": eq(f).get("form"), "params": eq(f).get("params"), "origin": eq(f).get("origin")}
-                      for f in m["flows"]],
-            "machines": [{"id": x["id"], "kind": x["kind"], "flows": x.get("attributed")} for x in m.get("machines") or []],
+                      for f in m["flows"][:LISTED]] + first(m["flows"][LISTED:], 0, "read_model has them all"),
+            "machines": first({"id": x["id"], "kind": x["kind"], "flows": x.get("attributed")} for x in m.get("machines") or []),
             "discovery": {k: d[k] for k in ("start", "end", "step", "looked_at", "series") if k in d},
             "left_out": d.get("left_out") or {}}

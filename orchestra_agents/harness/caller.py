@@ -8,7 +8,8 @@ the host issued the token in the environment to (``access.identify``, on every c
 that has ended is refused), and it runs as that role (``tooling.handle``, which checks the role's
 groups again). The project and the session come from the environment (``ORCHESTRA_REPO``,
 ``ORCHESTRA_SESSION_TOKEN``), never from the working directory, which may be a ticket's worktree
-or another repository. ``ORCHESTRA_TOOLS`` only chooses which tools are offered."""
+or another repository. ``ORCHESTRA_TOOLS`` only chooses which tools are offered. Every answer is
+bounded here (``answer``, ``answers.cut``): no harness gets one over ``answers.BOUND`` characters."""
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import json
 import os
 from collections.abc import Mapping
 
-from .tools import TOOLS, ToolDef, tools_for
+from .tools import PAGE, TOOLS, ToolDef, tools_for
 
 
 def groups_of(env: Mapping[str, str]) -> list[str] | None:
@@ -50,6 +51,21 @@ class Caller:
             self._store = AgentStore(self._project, Events.for_project(self._project))
         return self._project, self._store
 
+    def answer(self, name: str, args: dict | None) -> str:
+        """The tool's answer as the model reads it: its text, at most ``answers.BOUND`` characters
+        (cut with a line saying how to read the rest; a read tool's ``page`` is the page asked for,
+        never passed to the tool). Raises with the reason when the call is refused or fails."""
+        from ..answers import cut
+        tool = self.tool(name)
+        args = dict(args or {})
+        pageable = PAGE in tool.properties
+        page = args.pop(PAGE, None) if pageable else None
+        try:
+            page = int(page) if page not in (None, "") else 1
+        except (TypeError, ValueError):
+            raise ValueError(f"page is a number, 1 for the first page; not {page!r}") from None
+        return cut(text(self.call(name, args)), tool.name, page, pageable)
+
     def call(self, name: str, args: dict | None):
         """The tool's answer; raises with the reason when the call is refused or fails."""
         from .. import access, tooling
@@ -67,4 +83,6 @@ def text(result) -> str:
 
 
 def error(e: BaseException) -> str:
-    return json.dumps({"ok": False, "error": str(e)})
+    """A refusal or failure as the model reads it, bounded like any answer."""
+    from ..answers import cut
+    return cut(json.dumps({"ok": False, "error": str(e)}), "the tool", 1, pageable=False)

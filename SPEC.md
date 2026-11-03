@@ -464,7 +464,15 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
 - **Claude Code** (`claude_code.py`): `claude -p` per turn, resumed by session id, the
   transcript under `$CLAUDE_CONFIG_DIR`; tools through the MCP server `harness/mcp.py`, or from
   the shell (`[agents] tools_via`, below). It
-  compacts its own context (`--autocompact`). `CLAUDE_BINARY` names the binary to run.
+  compacts its own context (`--autocompact`), at a window set from the model's context in one place
+  (`claude_code.compact_window`, since 2026-11-02, T26): 40% of it, never within 100,000 tokens of the
+  session's starting context (its first request: the prompt, the project's CLAUDE.md and rules, the
+  tools), never past the context; the context is the model's as a turn's result says it
+  (`modelUsage.contextWindow`), 1,000,000 before the first (200,000 for Haiku), both kept in the
+  session's metadata. (Run 1 passed 100,000 on a 1M model whose Supervisor started at 81,000 tokens:
+  every tool answer crossed the trigger and no compaction got back under it.) A turn's cost is the
+  change in Claude Code's `total_cost_usd`, which is a running total over a resumed session (the last
+  total kept in the session's metadata; a lower one is a new session's). `CLAUDE_BINARY` names the binary to run.
 - **Codex** (`codex.py`): `codex exec --json` per turn, resumed by thread id, the rollout under
   `$CODEX_HOME`; tools through the same MCP server, or from the shell with `tools_via = "bash"`.
 
@@ -493,6 +501,14 @@ its token, `tooling.handle`), and the token reaches the command only through the
 environment, never its prompt or output. A transcript shows a call from the shell as the tool it
 called (`bash_tools.parse`). Pi calls its tools through its extension, which runs the same
 command, and the dummy harness in-process; the setting changes neither.
+**Every answer is bounded** (`answers.py`, since 2026-11-02, T26): `Caller.answer` gives no harness an
+answer, or a refusal, over `answers.BOUND` (24,000 characters, set there alone), under the size at
+which Claude Code spools an output to a file. Tools that list give a count and their first
+`answers.LISTED` with "… and N more" (`answers.first`); what is still over the bound is cut with a
+last line saying how much was left out and how to read the rest: a tool that only reads
+(`harness/tools.PAGED`, each with a `page` argument the caller takes off before the call) is called
+again with the same arguments and `page`; one that changes something is never called again for its
+answer, so its line says the call is done and its answer is not paged.
 **No host credentials in a session** (`harness/base.session_env`): every harness starts its process
 with the host's environment minus each name that may hold a credential (`integrate_kits.CREDENTIAL_VARS`,
 or ending in `_TOKEN`/`_SECRET`/`_PASSWORD`/`_KEY`; the host's `ORCHESTRA_*` tokens among them), keeping
@@ -627,7 +643,8 @@ hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 4
 rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
-compacted), `prompts` (per-role prompt file overrides,
+compacted; Claude Code compacts at its own window, from the model's context, section 6; set to 0 it
+is not asked to), `prompts` (per-role prompt file overrides,
 relative to the repository), `control_port` (default any free port; a host that cannot bind it
 exits with status 1). Every interval (`coordinator_every`, an agent's `every`, a probe's `every`;
 `clock.py`) is written as Orchestra writes durations, a bare number of seconds or a number with
@@ -815,9 +832,13 @@ branch with the next change's pull request; and a repair by override waits for t
 
 **Guides** (tool group `guides`; the Supervisor and the Coordinator): `list_guides` (each operator's
 guide Orchestra serves, `orchestra.guides.collect`: Orchestra's own and each installed plugin's
-`Plugin.guide`, this package's `guide.md` among them, with what it is about, its size and its
-sections) and `read_guide` (one whole, or one section). They total about 100 KB, so they are read on
-demand; the Supervisor's prompt says to read the part a setting is in before changing it.
+`Plugin.guide`, this package's `guide.md` among them, with what it is about, its size and how many
+sections) and `read_guide` (without `section`: the guide's contents, each `##` and `###` heading with
+its section's size, and its opening, the text before its second `##`; with `section`: that section,
+a `##` with its `###`). A piece is at most `guides.SECTION_CHARS` (16,000) characters; a longer one
+ends with where to read on (`offset`) and, for a `##`, its subsections to ask for. They total about
+100 KB, so they are read on demand, a section at a time; the Supervisor's prompt says to read the
+contents first and the part a setting is in before changing it.
 
 **Setting up** (`first_run.py`, `prompts/operator.md` "Setting up the project"). Orchestra wakes the
 Supervisor once on a project that is not set up (section 4), and the human may ask any time ("set up
@@ -848,7 +869,8 @@ the repository, goes through the Coordinator. Another store is looked at before 
 `preview_query`, `infer_source`, over `orchestra.sources`, by a declared name or by `url` and `auth`;
 no credential's value is shown).
 
-**Seeing** (tool group `observe`; any role may be granted it): `check_setup` (who fills the roles,
+**Seeing** (tool group `observe`; any role may be granted it; every list in these answers is its
+count and its first `answers.LISTED`, a log line at most 300 characters): `check_setup` (who fills the roles,
 as `fillers.py` observes them; the work mode; the gate's tests; the capacity limit; what the
 launcher runs; each collector's last round; what each installed plugin's `Plugin.check` says against
 the merged configuration, in its own words, a check that raises reported as `its check failed: <error>`

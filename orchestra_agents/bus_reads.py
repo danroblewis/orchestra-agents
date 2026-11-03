@@ -27,6 +27,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 
+from .answers import first
 from .event_tally import NOTE as TALLY_NOTE
 from .event_tally import tally
 from .store import AgentStore, StoreError
@@ -171,8 +172,9 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
                                                 model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr)
-    return {"ok": True, "count": len(picked), **window, **counted, "by_type": summary,
-            "announced_not_heard": [{"type": t, "listened_for_by": s} for t, s in quiet.items()],
+    return {"ok": True, "count": len(picked), **window, **counted, "types": len(summary),
+            "by_type": first(({**r, "sources": first(r["sources"], 10)} for r in summary), hint="give types to narrow"),
+            "announced_not_heard": first({"type": t, "listened_for_by": first(s, 10)} for t, s in quiet.items()),
             "events": shown, "shown": len(shown),
             "note": (f"{which} (limit {limit}, at most {MAX_LIMIT}){more}; by_type counts them all. A type in "
                      "announced_not_heard is known: a machine announced it, so it may be named")}

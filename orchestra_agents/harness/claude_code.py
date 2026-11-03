@@ -62,6 +62,27 @@ EDITS = ("Edit", "Write", "NotebookEdit")
 TURN_USD = (("haiku", 0.03), ("sonnet", 0.12), ("opus", 0.60))    # taken from a read-only agent: it reads, searches and runs read-only commands
 
 
+# Claude Code compacts its own context past the --autocompact window. The window is set from the
+# model's context, here and only here (``compact_window``): a fraction of it, never closer than a
+# margin to what the session starts with. Bootstrap run 1 (2026-11-02) passed 100,000 on a model of
+# 1,000,000 while the Supervisor started at about 81,000 (its prompt, the project's CLAUDE.md and
+# rules, the tools): every tool answer crossed the trigger and no compaction got back under it.
+COMPACT_FRACTION = 0.4
+COMPACT_MARGIN = 100_000          # tokens of room above the session's starting context, at least
+WINDOW_DEFAULT, WINDOW_SMALL = 1_000_000, 200_000      # until a turn's result says the model's own (contextWindow)
+
+
+def model_window(model: str | None) -> int:
+    """The model's context in tokens, before a turn has said it: Haiku's is the small one."""
+    return WINDOW_SMALL if "haiku" in (model or "").lower() and "[1m]" not in (model or "").lower() else WINDOW_DEFAULT
+
+
+def compact_window(context_window: int, start_tokens: int = 0) -> int:
+    """The --autocompact window: COMPACT_FRACTION of the model's context, raised to the starting
+    context plus COMPACT_MARGIN when that is more, and never past the context itself."""
+    return min(context_window, max(int(context_window * COMPACT_FRACTION), start_tokens + COMPACT_MARGIN))
+
+
 def claude_config_dir() -> Path:
     return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
@@ -91,6 +112,9 @@ class ClaudeCodeSession(AgentSession):
         self.session_file = None
         self.uuid: str | None = None
         self.told: str | None = None     # how the session's system prompt says to call the tools: mcp or bash
+        self.cost_total = 0.0            # Claude Code's total_cost_usd so far: a running total over a resumed session
+        self.context_window: int | None = None   # the model's context, as the last turn's result said it
+        self.start_tokens = 0            # the context of the session's first request (its prompt, tools, CLAUDE.md)
 
     @property
     def harness_name(self) -> str:
@@ -101,6 +125,8 @@ class ClaudeCodeSession(AgentSession):
         if self._meta_path.exists():
             meta = json.loads(self._meta_path.read_text(encoding="utf-8"))
             self.uuid, self.told = meta["uuid"], meta.get("tools")
+            self.cost_total = float(meta.get("cost_total") or 0.0)
+            self.context_window, self.start_tokens = meta.get("context_window"), int(meta.get("start_tokens") or 0)
         else:
             self.uuid = str(uuid.uuid4())
             self._write_meta()
@@ -110,6 +136,7 @@ class ClaudeCodeSession(AgentSession):
         meta = {"uuid": self.uuid, "cwd": str(self.spec.cwd), "session_id": self.spec.session_id}
         if self.told:
             meta["tools"] = self.told
+        meta |= {"cost_total": self.cost_total, "context_window": self.context_window, "start_tokens": self.start_tokens}
         self._meta_path.write_text(json.dumps(meta) + "\n", encoding="utf-8")
 
     def _resuming(self) -> bool:
@@ -179,7 +206,11 @@ class ClaudeCodeSession(AgentSession):
         transcript (``context``)."""
         if not self.spec.compact_tokens:
             return None
-        return {"mode": "auto", "limit": max(100_000, int(self.spec.compact_tokens))}
+        return {"mode": "auto", "limit": self.autocompact()}
+
+    def autocompact(self) -> int:
+        """The window this session compacts at (``compact_window``), from the model's context."""
+        return compact_window(self.context_window or model_window(self.spec.model), self.start_tokens)
 
     def _args(self, via: str | None = None) -> list[str]:
         via = via or self.via()
@@ -190,7 +221,7 @@ class ClaudeCodeSession(AgentSession):
             args += ["--model", self.spec.model]
         args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
         if self.spec.compact_tokens:
-            args += ["--autocompact", str(max(100_000, int(self.spec.compact_tokens)))]
+            args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""
         if via == "bash":
             system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self._env().get('PATH'))}"
@@ -275,6 +306,7 @@ class ClaudeCodeSession(AgentSession):
                         return result, "init" if stop == "switch" else None
                 emit(ev)
                 if t == "assistant":
+                    self._first_context(ev)
                     for part in (ev.get("message") or {}).get("content") or []:
                         if part.get("type") == "text" and part.get("text", "").strip():
                             last_text = part["text"]
@@ -287,8 +319,7 @@ class ClaudeCodeSession(AgentSession):
                         result.text = last_text
                         return result, stop if self.spec.tools_via == "auto" else None
                 elif t == "result":
-                    if isinstance(ev.get("total_cost_usd"), int | float):
-                        result.cost_usd = float(ev["total_cost_usd"])
+                    self._settle(ev, result)
                     if ev.get("is_error"):
                         result.error = str(ev.get("result") or ev.get("subtype") or "error")
                     else:
@@ -303,6 +334,30 @@ class ClaudeCodeSession(AgentSession):
         finally:
             self.proc = None
             stderr.close()
+
+    def _settle(self, ev: dict, result: TurnResult) -> None:
+        """A turn's result: its cost is the change in Claude Code's running total (``total_cost_usd``
+        counts every turn of a resumed session; a total lower than the last is a new session's), and
+        the model's context as it says it (``modelUsage``' ``contextWindow``), kept for the next turn's
+        window."""
+        if isinstance(ev.get("total_cost_usd"), int | float):
+            total = float(ev["total_cost_usd"])
+            result.cost_usd = round(total - self.cost_total if total >= self.cost_total else total, 6)
+            self.cost_total = total
+        windows = [u.get("contextWindow") for u in (ev.get("modelUsage") or {}).values() if isinstance(u, dict)]
+        if windows := [w for w in windows if isinstance(w, int) and w > 0]:
+            self.context_window = max(windows)
+        self._write_meta()
+
+    def _first_context(self, ev: dict) -> None:
+        """The session's starting context: the tokens of its first request, once."""
+        if self.start_tokens:
+            return
+        u = (ev.get("message") or {}).get("usage") or {}
+        n = sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+        if n:
+            self.start_tokens = n
+            self._write_meta()
 
     def _policy_files(self) -> list[Path]:
         return policy_files(claude_config_dir()) + self._project_settings()

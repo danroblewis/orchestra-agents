@@ -456,10 +456,14 @@ TOOLS: list[ToolDef] = [
     # guides: how to configure Orchestra and each installed plugin (orchestra.guides)
     ToolDef("list_guides", "guides",
             "The operator's guides to configuring Orchestra and each installed plugin: each one's name, what it is about, "
-            "its size and its sections. Read the one you need with read_guide before you change a setting it covers."),
-    ToolDef("read_guide", "guides", "One guide in full, or one of its sections.",
+            "its size and how many sections. read_guide gives one's contents, then the sections you need, before you change a "
+            "setting it covers."),
+    ToolDef("read_guide", "guides",
+            "One guide: without section, its contents (each section's heading and size) and its opening section; with "
+            "section, that section. A long piece ends with where to read on (offset) and the subsections to ask for.",
             {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
-             "section": S("A section's heading (or part of it), to read only that part")}, ("name",)),
+             "section": S("A section's heading (or part of it), from the guide's contents"),
+             "offset": I("Where to read on in a long section, as its last answer says (default 0)")}, ("name",)),
     # handoff: the Supervisor passes the human's requirements to the Coordinator, who plans them
     ToolDef("hand_to_coordinator", "handoff",
             "Hand the human's requirements to the Coordinator, who plans them into a milestone and tickets and reports "
@@ -539,6 +543,22 @@ from .tools_design import DESIGN_TOOLS
 from .tools_workflows import WORKFLOW_TOOLS
 
 TOOLS += DESIGN_TOOLS + WORKFLOW_TOOLS
+
+# The tools that only read, whose answer may be read again page by page: an answer over the bound
+# (answers.BOUND) is cut, and the same call with ``page`` gives the next part (harness/caller.Caller,
+# which takes ``page`` off before the call). A tool that changes something is never called again for
+# its answer, so it takes no page.
+PAGE = "page"
+PAGED = frozenset({
+    "project_status", "list_milestones", "list_tickets", "get_ticket", "get_project_context", "get_gate_run",
+    "list_gate_runs", "get_staging_status", "get_capacity", "read_events", "list_teams", "get_team", "list_agents",
+    "get_agent", "list_roles", "get_role", "org_guide", "list_duties", "check_setup", "read_config", "list_processes",
+    "read_machine_log", "list_metrics", "get_model", "read_instrument", "check_sources", "source_schema",
+    "preview_query", "infer_source", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
+    "read_design", "find_balance", "modeling_guide", "read_model", "read_series", "read_eras", "read_observability",
+    "check_equation", "read_predictions", "list_guides", "read_guide", "list_workflows", "list_items", "explain_item"})
+PAGE_ARG = I("The answer's page, when it came back cut (its last line says so): 2 for the second; default 1")
+TOOLS[:] = [replace(t, properties={**t.properties, PAGE: PAGE_ARG}) if t.name in PAGED else t for t in TOOLS]
 BY_NAME = {t.name: t for t in TOOLS}
 
 

@@ -6,6 +6,9 @@ check it took, and which choices are the human's. The agents are AI agents as Or
 the Supervisor (you), the Coordinator, and the workers and reviewers that fill the task system's
 roles. One process, the host (`agents.host`, which `orchestra run` keeps running), runs them all.
 
+Read this guide by its contents (`read_guide` agents, no section), then the sections you need, one
+at a time; never all of it at once, and never from a spooled tool-results file.
+
 ## Where the settings live
 
 `[agents]` in `orchestra.toml`, or in the owner's private overlay. **The section is optional**: with

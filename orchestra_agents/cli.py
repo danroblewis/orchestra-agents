@@ -144,7 +144,7 @@ def cmd_tools(args) -> int:
 def cmd_tool(args) -> int:
     """One of the session's tools, called from its shell: the same call as the MCP server's
     (harness/caller.py). The answer on stdout; a refusal or failure as JSON, exit 1."""
-    from .harness.caller import Caller, error, groups_of, text
+    from .harness.caller import Caller, error, groups_of
     env = {**os.environ, **({"ORCHESTRA_REPO": args.repo} if args.repo else {})}
     caller = Caller(env, groups_of(env))
     if args.list or not args.name:
@@ -165,7 +165,7 @@ def cmd_tool(args) -> int:
         payload = json.loads(raw or "{}")
         if not isinstance(payload, dict):
             raise TypeError("the arguments are one JSON object, as {\"name\": \"value\"}")
-        print(text(caller.call(args.name, payload)))
+        print(caller.answer(args.name, payload))
     except Exception as e:  # noqa: BLE001 - the session reads why, as the MCP server would answer it
         print(error(e))
         return 1

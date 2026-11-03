@@ -46,6 +46,8 @@ def _args(t) -> str:
     allowed values of one that has a few, and the type of one that is not a string."""
     out = []
     for name, schema in (t.properties or {}).items():
+        if name == "page":                  # every read tool's; the prompt says it once
+            continue
         a = name + ("*" if name in (t.required or ()) else "")
         schema = schema if isinstance(schema, dict) else {}
         values, kind = schema.get("enum"), schema.get("type")
@@ -62,6 +64,7 @@ def prompt(groups: list[str] | tuple[str, ...], path: str | None = None) -> str:
     command, how to pass arguments, and each tool by name with its arguments' names and one line
     (schemas on ``--help``)."""
     # the catalogue is imported here, not at the top: the harness package loads without it
+    from ..answers import BOUND
     from .tools import tools_for
     cmd = command(path)
     tools = tools_for(groups)
@@ -90,7 +93,10 @@ JSON
 One call per command. `{cmd} <tool> --help` prints a tool's arguments and what each means;
 `{cmd} --list` lists your tools. The answer is printed on stdout; a call that is refused or fails
 prints `{{"ok": false, "error": ...}}` and exits non-zero: read the error, fix the call, and try
-again. The command knows who you are from this session's environment: run it as given, never set,
+again. No answer is longer than {BOUND:,} characters: one that would be ends with a line saying how much
+was left out and how to read the rest (a read tool takes `page`: the same call with `"page": 2`). Never
+run several calls in one command, and never read a tool-results file your product spooled an output to:
+call the tool again for the part you need. The command knows who you are from this session's environment: run it as given, never set,
 change or print any ORCHESTRA_ variable, and never use another task or todo list, or a review or task tool
 of the product you run in, in its place.
 

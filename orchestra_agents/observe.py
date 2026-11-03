@@ -21,6 +21,7 @@ from orchestra.events import machine_and_instance
 from orchestra.overlay import describe
 from orchestra.web.machine_logs import readable, tail
 
+from .answers import LISTED, first
 from .config import Project
 from .config_change import file_name, git, why_not_committable
 from .fillers import Fillers
@@ -30,6 +31,7 @@ from .store import AgentStore, StoreError
 
 STARTED = "orchestra.machine.started"
 LOOK_BACK = 5000
+LINE_CHARS = 300           # a log line in an answer, at most
 
 
 def read_config(project: Project) -> dict:
@@ -63,7 +65,17 @@ def _collectors(project: Project) -> tuple[list[dict], list[str]]:
 
 def list_processes(project: Project) -> dict:
     """The launcher's runtime record: who launches, and every process with its state, restarts,
-    last exit code and log; and the collectors the file declares, with the last line of each log."""
+    last exit code and log; and the collectors the file declares, with the last line of each log
+    (the first LISTED of each, and how many more)."""
+    got = _processes(project)
+    procs, collectors = got["processes"], got["collectors"]
+    return {**got, "processes_count": len(procs), "collectors_count": len(collectors),
+            "processes": first(procs, LISTED, "read_machine_log names one"),
+            "collectors": first(({**c, "last_log_line": c["last_log_line"][:LINE_CHARS]} for c in collectors), LISTED),
+            "entries_left_out": first(got["entries_left_out"])}
+
+
+def _processes(project: Project) -> dict:
     rec = runtime.read(project.orchestra)
     holder = runtime.launcher(rec)
     now = time.time()
@@ -103,8 +115,9 @@ def read_machine_log(project: Project, store: AgentStore, a: dict) -> dict:
     for c in candidates:
         real, why = readable(str(c), [project.repo_root, o.state_dir])
         if real is not None:
-            return {"ok": True, "name": name, "log": str(real), "lines": tail(real, lines)}
-    known = sorted(p.stem for p in (o.logs_dir / "machines").glob("*.log"))
+            return {"ok": True, "name": name, "log": str(real),
+                    "lines": [x if len(x) <= LINE_CHARS else x[:LINE_CHARS] + " …" for x in tail(real, lines)]}
+    known = first(sorted(p.stem for p in (o.logs_dir / "machines").glob("*.log")))
     raise StoreError(f"no readable log for {name!r} ({why}); the machines with logs: {', '.join(known) or 'none'}, "
                      "and orchestra-host")
 
@@ -136,22 +149,27 @@ def check_setup(project: Project, store: AgentStore) -> dict:
     (``plugin_findings``: a missing tool a setting needs, a dirty worktree, a bad setting)."""
     raw = project.orchestra.config.raw
     p, t, g = raw.get("project") or {}, raw.get("tasks") or {}, raw.get("gate") or {}
-    procs = list_processes(project)
+    procs = _processes(project)
     fillers = Fillers(store.events)
     plugins = plugin_findings(project)
+    procs_shown = [f"{x['name']}: {x['state']}" + (f", last exit {x['last_exit_code']}" if x["last_exit_code"] else "")
+                   for x in procs["processes"]]
     return {"ok": True,
             "work": p.get("work", "tasks") + (" (a branch per ticket, reviewed and landed through the merge gate)"
                                               if p.get("work") == "code" else
                                               " (a scratch folder per ticket; nothing a worker makes lands in the repository)"),
-            "roles": fillers.lines(project.config.serves),
-            "not_launched": _not_launched(project, fillers, procs),
-            "gate_tests": [{"name": u.get("name"), "command": u.get("command")} for u in g.get("unit") or []],
+            "roles": first(fillers.lines(project.config.serves)),
+            "not_launched": first(_not_launched(project, fillers, procs)),
+            "gate_tests": first({"name": u.get("name"), "command": u.get("command")} for u in g.get("unit") or []),
             "capacity_limit": {"workers": t.get("workers", 1), "reviewers": t.get("reviewers", 1)},
             "launcher": procs["launcher"],
-            "processes": [f"{x['name']}: {x['state']}" + (f", last exit {x['last_exit_code']}" if x["last_exit_code"] else "")
-                          for x in procs["processes"]],
-            "collectors": [f"{c['name']}: {c['last_log_line']}" for c in procs["collectors"]],
-            "entries_left_out": procs["entries_left_out"],
-            "plugin_checks": plugins["plugins"],
-            "plugins_not_checked": plugins["not_checked"],
+            "processes_count": len(procs_shown),
+            "processes": first(procs_shown, hint="list_processes has them all"),
+            "collectors_count": len(procs["collectors"]),
+            "collectors": first((f"{c['name']}: {c['last_log_line'][:LINE_CHARS]}" for c in procs["collectors"]),
+                                hint="list_processes has them all"),
+            "entries_left_out": first(procs["entries_left_out"]),
+            "plugin_checks": [{**c, "findings": first(c.get("findings") or [])} if isinstance(c, dict) else c
+                              for c in first(plugins["plugins"])],
+            "plugins_not_checked": first(plugins["not_checked"]),
             "config_can_change": why_not_committable(project) or "yes"}

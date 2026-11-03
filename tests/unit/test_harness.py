@@ -234,8 +234,8 @@ def spec(tmp_path, **kw) -> SessionSpec:
     return SessionSpec(session_id=kw.get("session_id", "worker-T-1"), session_dir=tmp_path / "sessions", cwd=tmp_path / "wt",
                        system_prompt="be good", role="worker", tool_groups=("report_ticket",),
                        env={"ORCHESTRA_ROLE": "worker", "ORCHESTRA_REPO": str(tmp_path), "ORCHESTRA_TICKET": "T-1"},
-                       log_path=tmp_path / "logs" / "x.log", model="haiku", compact_tokens=kw.get("compact_tokens", 50_000),
-                       read_only=kw.get("read_only", False))
+                       log_path=tmp_path / "logs" / "x.log", model=kw.get("model", "haiku"), compact_tokens=kw.get("compact_tokens", 50_000),
+                       read_only=kw.get("read_only", False), tools_via=kw.get("tools_via", "mcp"))
 
 
 def test_claude_session_identity_and_resume(tmp_path, monkeypatch):
@@ -248,7 +248,7 @@ def test_claude_session_identity_and_resume(tmp_path, monkeypatch):
     assert args[:2] == [s.binary, "-p"] and "--session-id" in args and "--resume" not in args
     assert "--model" in args and args[args.index("--model") + 1] == "haiku"
     assert "--strict-mcp-config" in args and "--dangerously-skip-permissions" in args
-    assert args[args.index("--autocompact") + 1] == "100000" and s.compact() == {"mode": "auto", "limit": 100000}   # the CLI's floor
+    assert args[args.index("--autocompact") + 1] == "100000" and s.compact() == {"mode": "auto", "limit": 100000}   # Haiku: 200K
     cfg = json.loads(Path(args[args.index("--mcp-config") + 1]).read_text())["mcpServers"]["orchestra"]
     assert cfg["command"] == sys.executable and cfg["env"]["ORCHESTRA_TOOLS"] == "report_ticket"
     # Same session id later: same uuid; once Claude has written the transcript, we resume it.
@@ -543,3 +543,54 @@ print(json.dumps({{"type": "result", "subtype": "success", "result": os.environ.
     f.chmod(0o755)
     res = ClaudeCodeSession(spec(tmp_path), binary=str(f)).prompt("hi", timeout=10)
     assert res.error is None and res.text == "none"
+
+
+def test_the_compaction_window_follows_the_models_context():
+    """Run 1 (2026-11-02): --autocompact 100000 on a 1M model whose Supervisor starts at 81K tokens
+    compacted after every tool answer, and no compaction got back under it."""
+    from orchestra_agents.harness.claude_code import compact_window, model_window
+    assert compact_window(1_000_000, 81_000) == 400_000                       # 40% of a 1M context
+    assert compact_window(200_000, 0) == 100_000                              # the margin above the start
+    assert compact_window(200_000, 150_000) == 200_000                        # never past the context
+    assert compact_window(1_000_000, 380_000) == 480_000                      # never within the margin of the start
+    assert model_window("haiku") == 200_000 and model_window("claude-opus-5-5") == 1_000_000 == model_window(None)
+
+
+def _claude_with_running_total(tmp_path, totals: list[float]) -> str:
+    """A `claude` whose each run ends with Claude Code's result: total_cost_usd a running total over
+    the resumed session (the next of ``totals`` each run), and the model's context."""
+    f = tmp_path / "fake-claude"
+    n = tmp_path / "runs"
+    f.write_text(f"""#!{sys.executable}
+import json, pathlib, sys
+sys.stdin.read()
+n = pathlib.Path({str(n)!r})
+i = int(n.read_text()) if n.exists() else 0
+n.write_text(str(i + 1))
+print(json.dumps({{"type": "system", "subtype": "init", "session_id": "u", "mcp_servers": [], "tools": ["Bash"]}}), flush=True)
+print(json.dumps({{"type": "assistant", "message": {{"content": [{{"type": "text", "text": "ok"}}],
+                   "usage": {{"input_tokens": 2, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 81135}}}}}}), flush=True)
+print(json.dumps({{"type": "result", "result": "ok", "total_cost_usd": {totals!r}[i],
+                   "modelUsage": {{"claude-opus-5-5": {{"contextWindow": 1000000}}}}}}), flush=True)
+""")
+    f.chmod(0o755)
+    return str(f)
+
+
+def test_a_resumed_sessions_cost_is_the_change_in_its_running_total(tmp_path, no_backoff):
+    """Claude Code's total_cost_usd counts every turn of a resumed session: run 1's three turns said
+    2.07, 3.33 and 3.36, and adding them made $8.76 of $3.36."""
+    binary = _claude_with_running_total(tmp_path, [2.07, 3.33, 3.36])
+    s = ClaudeCodeSession(spec(tmp_path, model="opus", tools_via="bash"), binary=binary)
+    costs = []
+    for _ in range(3):
+        r = s.prompt("hi", timeout=30)
+        assert not r.error, r.error
+        Path(s.session_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(s.session_file).touch()                           # Claude wrote the transcript: the next turn resumes
+        costs.append(r.cost_usd)
+    assert costs == [2.07, 1.26, 0.03]
+    again = ClaudeCodeSession(spec(tmp_path, model="opus", tools_via="bash"), binary=binary)
+    again.open()                                               # a new host process: the total and the context kept
+    assert again.cost_total == 3.36 and again.context_window == 1_000_000 and again.start_tokens == 81_137
+    assert again.autocompact() == 400_000

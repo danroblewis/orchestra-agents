@@ -58,10 +58,11 @@ def test_the_guides_are_listed_with_their_sections_and_read_whole_or_by_section(
     out = call(project, store, "list_guides")
     by = {g["name"]: g for g in out["guides"]}
     assert {"orchestra", "agents"} <= set(by)
-    assert by["orchestra"]["about"] and "Naming series" in by["orchestra"]["sections"]
-    assert "What the human decides" in by["agents"]["sections"] and by["agents"]["chars"] > 2000
-    whole = call(project, store, "read_guide", name="agents")["text"]
-    assert whole.startswith("# Configuring the agents")
+    assert by["orchestra"]["about"] and by["orchestra"]["sections"] > 5
+    assert by["agents"]["chars"] > 2000
+    opening = call(project, store, "read_guide", name="agents")
+    assert opening["text"].startswith("# Configuring the agents")
+    assert any(c.startswith("What the human decides (") for c in opening["contents"])
     part = call(project, store, "read_guide", name="orchestra", section="naming series")
     assert part["section"] == "Naming series" and part["text"].startswith("## Naming series") and "## Pitfalls" not in part["text"]
     with pytest.raises(StoreError, match="no section"):

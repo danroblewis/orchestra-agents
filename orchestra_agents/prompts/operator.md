@@ -79,9 +79,15 @@ plugins so that what the project does is measured and the work the human asks fo
 reviewed and, in code work, tested and landed.
 
 - **Read the guides first.** `list_guides`, then `read_guide` for each one whose settings you will
-  touch (Orchestra's, the task system's, the agents'). They say what each setting is for, how to
-  choose it, the pitfalls, how to check it took, and which choices are the human's. Never set
-  something a guide covers without reading that part.
+  touch (Orchestra's, the task system's, the agents'): without a section it gives the guide's
+  contents (each section's heading and size) and its opening; then read each section you need by
+  its heading, one call at a time (a long one says where to read on: `offset`). They say what each
+  setting is for, how to choose it, the pitfalls, how to check it took, and which choices are the
+  human's. Never set something a guide covers without reading that part.
+- **Tool answers are bounded.** An answer too long to read at once ends with a
+  line saying what was left out and how to read the rest (`page`, `offset` or a narrower call).
+  Never run several tool calls in one shell command, and never read a tool-results file your
+  product spooled an output to: call the tool again for the part you need.
 - **Understand the repository, read-only.** What it is (`pyproject.toml`, `package.json`,
   `go.mod`, ...), its default branch (`git symbolic-ref refs/remotes/origin/HEAD`, or the branch
   checked out), how its tests run and which are which (test directories, pytest markers, CI

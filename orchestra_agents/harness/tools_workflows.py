@@ -202,6 +202,17 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "(step, pile, wait reason), the facts not counted toward a step and why, and its last facts.",
             {"item": S("The item's id (its subject: ORC-12, task_loop@2026-11-01T00:00Z)"),
              "last": I("How many of its latest facts to show (default 15)")}, ("item",)),
+    ToolDef("retry_step", "workflows",
+            "Ask the Workflows floor to offer an item's step again now, after you fixed what failed it: a step whose turn "
+            "finished blocked or error (the floor retries it after 1, 5, 15 minutes, then hourly) or the step an item was "
+            "moved to stalled from once its tries were spent. Only after the cause is fixed, never before: retried "
+            "unfixed it fails again. Publishes item.retry_requested as you, the item's planner, with the reason; the "
+            "floor enters the step again (tries counted from nothing) and offers it on its next tick. Refused, nothing "
+            "published, for an item not blocked or stalled at that step. Tell the owner what you fixed.",
+            {"item": S("The item's id (SCRUM-56), as list_items shows it"),
+             "step": S("The step to offer again: the one it is blocked at, or the one it was moved to stalled from (write)"),
+             "reason": S("What failed the step and what you fixed, in a sentence (git push refused over ssh: the ssh "
+                         "agent's key is loaded again)")}, ("item", "step", "reason")),
     ToolDef("request_work", "work",
             "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
             "with the fields, if any). The Supervisor asks only for the owner: quote their words, and the request goes "

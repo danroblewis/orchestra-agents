@@ -152,6 +152,8 @@ def test_the_copied_names_match_the_workflows_contract():
     assert (floor.MADE, floor.CLAIMED, floor.ALIVE, floor.FINISHED, floor.WITHDRAWN, floor.BLOCKED) == (
         contract.MADE, contract.CLAIMED, contract.ALIVE, contract.FINISHED, contract.WITHDRAWN, contract.BLOCKED)
     assert tuple(contract.LISTENS_FOR) == floor.LISTENS_FOR
+    if hasattr(contract, "RETRY_REQUESTED"):                            # W17: the planner's retry
+        assert floor.RETRY_REQUESTED == contract.RETRY_REQUESTED
     acts = pytest.importorskip("orchestra_workflows.floor.acts")
     assert floor.ATTENTION_NEEDED == acts.ATTENTION                       # the floor's attention event
     assert floor.CLOSED == acts.CLOSED                                    # an item's end

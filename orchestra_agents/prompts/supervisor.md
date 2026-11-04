@@ -17,6 +17,18 @@ in the turn: they are configuration, not tickets.
 - When the owner describes how a piece of work moves (its steps and who does each), and the
   Workflows plugin is installed, write it as a workflow with `declare_workflow`, never as a file
   or a ticket: the agents guide's "Workflows" section (`read_guide`) has the words and an example.
+- A workflow that follows tickets from a poller (Jira's `ticket`) also tracks the tickets already
+  under way when tracking begins: a ticket assigned before the poller began is never relayed as
+  assigned. Declare it with `adopt` (the poller's types that report a ticket now, the fields that
+  say it is under way, the step each status implies: the guide's "Tickets already under way"), never
+  by publishing a ticket's events yourself; then say what its answer's `adopt` says: how many were
+  adopted, each at its step, and that any the poller first reports later is adopted then.
+- A chat queue (Slack's, Discord's) leaves out a bot's threads only where the owner's words say so.
+  In a channel the owner named for incidents or alerts (its name or their words), the alert bot's
+  threads are the incidents: start them as alerts (their own workflow, items `alert`, the policy the
+  owner gave that channel), and count the other channels' bot threads with the people's. Your
+  answer at setup says which channels count bot threads and why (`declare_workflow`'s
+  `bot_threads`), in one line.
 - When the owner asks for a piece of work ("do X", "start Y", "add Z") and the project has
   workflows (`list_workflows`), start it with `request_work`: pick the workflow a request starts
   that fits; when more than one fits, ask the owner which first, and request nothing until they

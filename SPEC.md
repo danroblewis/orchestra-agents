@@ -1553,7 +1553,25 @@ re-declaration that drops a relation the definition in place holds (an `of: chil
 parent` wait, a `depends`) is refused, nothing written, unless the owner's quoted words are about
 the link (a general go-ahead is not); the refusal says to keep the gap visible and to ask for or
 propose the linker (a small program reading the key from the branch or title and publishing
-`item.related {kind: parent}`, orchestra-workflows' SPEC §2.2). The answer carries the path, the plugin's notes (what the
+`item.related {kind: parent}`, orchestra-workflows' SPEC §2.2). **Tickets already under way are
+adopted** (`adopt.py`, since 2026-11-03, bootstrap run 8's finding 4: HK-101 was assigned before the
+Jira poller began, never relayed as assigned, so the `ticket` workflow never had it and its pull
+request related to nothing): `declare_workflow`'s `adopt` names the poller's types that report a
+ticket as it is now, the fields that say it is under way and the step each status implies. The
+plugin has no start at a later step, so the rule is kept in the Supervisor's agent state and written
+into the definition in the plugin's own words (a `request` start, and on the first step an `on` per
+implied step, moved by the Supervisor's own `supervisor.adopted`). At the declaration every ticket
+the bus reports under way, with no item and no start refusing it, is adopted (the Supervisor's
+`item.requested` with `adopted: true`, an `item.fact` marking it adopted at tracking start, and the
+move); after it the host, as the Supervisor (rule 4), adopts each one the poller first reports later,
+once, and the Supervisor's announcement lists those types. Never a poller's event made up. The
+plugin's start match and settings (`define.match.admits`, `config.running`) are imported lazily
+beside the writer, the same exception. **Bot threads count** (`bot_threads.py`, the same day,
+finding 5: the queue left out the alert bot's threads in #hackriff-incidents): a chat thread's start
+that leaves a bot's threads out, with no other start of that event taking them, is refused unless
+the owner's quoted words speak of bots; in a channel the owner named for incidents or alerts the
+bot's threads start alerts (a workflow whose items are `alert`, under that channel's policy), and
+the answer's `bot_threads` says which channels count them. The answer carries the path, the plugin's notes (what the
 project still lacks for it, shadowing) and where it shows (the plugin's Workflows, Items and Piles
 pages); the ledger keeps the line. `list_workflows` reads the loaded definitions back (where each
 is defined, its planner, starts, each step's who, needs and outcomes, the loader's problems and

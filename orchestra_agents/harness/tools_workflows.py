@@ -132,6 +132,21 @@ DEFINITION = {"type": "object", "description": "The workflow, in the vocabulary'
                  "{\"label\": {\"type\": \"string\", \"default\": \"SAIL\"}}"},
 }, "required": ["name", "steps"]}
 
+ADOPT = {"type": ["object", "boolean", "null"], "description": (
+    "For a workflow whose items are already under way when tracking begins (tickets assigned before the poller "
+    "began are never relayed as assigned): which of the poller's events report a ticket as it is now, which fields "
+    "say it is under way, and which step each status implies. Every such ticket the bus reports with no item yet "
+    "is adopted (the Supervisor's item.requested, adopted: true, never a poller's event made up) at that step, now "
+    "and when the poller first reports one later; a ticket a start refused (assigned to someone else) is not. "
+    "A ticket board's: {\"event\": [\"jira.issue.transitioned\", \"jira.issue.created\", \"jira.comment.added\"], "
+    "\"data\": {\"category\": {\"not\": [\"new\", \"done\"]}}, \"at\": {\"status\": {\"In Review\": \"review\"}}}. "
+    "Left out on a re-declaration, the rule in place is kept; false drops it"),
+    "properties": {"event": A("The poller's event types that carry the ticket as it is now (jira.issue.transitioned)"),
+                   "data": {"type": "object", "description": "Fields of the report that say it is under way: a value "
+                            "or {\"not\": [values]} ({\"category\": {\"not\": [\"new\", \"done\"]}})"},
+                   "at": {"type": "object", "description": "One field and the step each value implies "
+                          "({\"status\": {\"In Review\": \"review\"}}); any other value: the first step"}}}
+
 WORKFLOW_TOOLS: list[ToolDef] = [
     ToolDef("declare_workflow", "workflows",
             "Write a workflow the owner describes (the Workflows plugin's definition): the plugin's checks first; with any "
@@ -143,11 +158,15 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "owner for the owner's own act (only theirs counts, never offered); who: outbox: owner with a draft for "
             "any write to another system as the owner (the Outbox performs it after the owner's approval, never the "
             "floor or a machine; its text from an item field an earlier role step wrote); done_when after for a "
-            "pause before a retry; no who on a fan-in or an after step; depends for an item waiting on another.",
+            "pause before a retry; no who on a fan-in or an after step; depends for an item waiting on another. "
+            "A ticket workflow takes adopt, so the tickets already under way are tracked too. A chat queue leaves out "
+            "bot threads only on the owner's words about bots; in a channel the owner named for incidents or alerts "
+            "the alert bot's threads start alerts (their own workflow, items alert, the owner's policy for that "
+            "channel), and the answer's bot_threads says which channels count them.",
             {"definition": DEFINITION,
              "root": E(["state", "repository"], "state (default): the state directory, never committed; repository: "
                                                 "the repository's .orchestra/, only when the owner says so (quote them)"),
-             "quote": QUOTE, "reason": REASON}, ("definition", "reason")),
+             "adopt": ADOPT, "quote": QUOTE, "reason": REASON}, ("definition", "reason")),
     ToolDef("declare_program", "workflows",
             "Declare a program the Workflows plugin ships (relate_prs: relates each pull request to its ticket by the key in "
             "its branch or title) for a workflow's program step, on the owner's quoted yes: writes machines/<id>/machine.json "

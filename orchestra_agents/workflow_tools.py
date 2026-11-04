@@ -31,7 +31,7 @@ from types import SimpleNamespace
 
 from orchestra.config import ConfigError
 
-from . import design, program_tools, relation_guard
+from . import adopt, bot_threads, design, program_tools, relation_guard
 from .clock import resolve_tz
 from .config import Project
 from .store import AgentStore, StoreError
@@ -58,8 +58,14 @@ def plugin() -> SimpleNamespace | None:
         listing = import_module("orchestra_workflows.pages.items").items
     except (ImportError, AttributeError):
         listing = None                                    # an older plugin: list_items says so
+    try:          # a start's own match and the settings' values, for adopting what was under way (adopt.py)
+        admits = import_module("orchestra_workflows.define.match").admits
+        running = import_module("orchestra_workflows.config").running
+    except (ImportError, AttributeError):
+        admits = running = None
     return SimpleNamespace(define=define, problems=check.problems, roots=loader.roots, Record=api.Record, item_list=listing,
-                           files=loader.files)
+                           files=loader.files, admits=admits,
+                           settings=(lambda o: running(o.config.raw)[0].settings) if running else None)
 
 
 def _texts(p, o) -> dict[str, str] | None:
@@ -101,6 +107,8 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
     if not isinstance(definition, dict):
         raise StoreError("definition is the workflow as an object: {name, starts, steps: [{name, who, ...}], ...}")
     definition, local = _local_zone(definition)
+    definition, rule, adopting = _adopt_rule(store, a, definition)
+    bot_threads.check(definition, prov, design.OWNER)
     project.reload_config()
     o = project.orchestra
     refusing = list(p.problems(o, definition))
@@ -137,6 +145,12 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
                           **{"for": f"the workflow {name}"})
     else:
         out["unchanged"] = "the definition is the same as before: nothing written or announced"
+    if adopting:
+        first = definition["steps"][0]["name"]
+        took = adopt.declared(p, o, store, name, first, rule)
+        out["adopt"] = _adopt_said(rule, took, first) if rule else "no adopt rule: only the starts make items"
+    if bots := bot_threads.said(definition):
+        out["bot_threads"] = bots
     if runs := clock_words(definition.get("starts")):
         out["clock"] = runs + ": say this run time, and no other"
     if local:
@@ -150,6 +164,34 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
         out["say"] = ("Tell the owner each notes line and this status as they are: the goal this workflow serves is not "
                       "running until each step's program is declared")
     return out
+
+
+def _adopt_rule(store: AgentStore, a: dict, definition: dict) -> tuple[dict, dict | None, bool]:
+    """The definition compiled with its adopt rule (``adopt.py``): the argument's, or one inside the
+    definition (taken out: the plugin refuses the word), or the one kept from the last declaration;
+    ``false`` drops it. Whether there is a rule to keep or drop."""
+    definition = dict(definition)
+    inside = definition.pop("adopt", None)
+    given = a.get("adopt", inside)
+    if given is None and "adopt" not in a:
+        given = adopt.kept(store, definition.get("name"))
+        if given is None:
+            return definition, None, False
+        rule = adopt.rule_of({k: given[k] for k in ("event", "data", "at") if given.get(k)}, definition)
+    else:
+        rule = adopt.rule_of(given, definition) if given else None
+    return adopt.compiled(definition, rule), rule, True
+
+
+def _adopt_said(rule: dict, took: list[dict], first: str) -> dict:
+    field = next(iter(rule["at"]), None) if rule.get("at") else None
+    return {"adopted": took, "count": len(took),
+            "rule": f"a ticket the poller reports ({', '.join(rule['event'])}) under way, with no item yet, is adopted at "
+                    f"the step its {field or 'report'} implies (else {first}): now for those already reported, and "
+                    "for each the poller first reports later",
+            "say": ("Tell the owner how many tickets already under way when tracking began are now tracked, each at "
+                    "the step its status implies (adopted at tracking start, not a new assignment), and that any the "
+                    "poller first reports later is adopted then")}
 
 
 def _local_zone(definition: dict) -> tuple[dict, tuple | None]:

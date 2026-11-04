@@ -1,6 +1,6 @@
 """What runs an integration, planned by ``integrate_system`` and written by ``approve_integration``
 (``design_integrate.py``), always to the owner's private overlay through ``config_change`` (never
-the repository, nothing committed; INTEGRATING.md §3.1):
+the repository, nothing committed; Orchestra's guide, "Rules for every collector"):
 
 - a poller: a ``[[machines]]`` entry with ``restart = "always"`` that keeps its interval loop
   running (a process the launcher keeps, never an announced machine: the poller only relays), and

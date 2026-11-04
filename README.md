@@ -67,7 +67,7 @@ Install Orchestra with the agents beside it, once, as one tool (no clone):
 
 `workflows` brings the Workflows plugin, which moves the work you ask for (below); `bridges` brings the integration kits the Supervisor builds a connection to another system from
 (`integrate_system`), and `dev` brings pytest, which runs each scaffolded poller's own test in
-Orchestra's Python (as Orchestra's `docs/INTEGRATING.md` §4 installs them); add `tasking` for the
+Orchestra's Python (as Orchestra's guide, `orchestra/guide.md`, section "Without the kits: `minikit.py` and a one-file poller", installs them); add `tasking` for the
 tasking plugin's milestones and tickets instead. That puts one executable on your PATH,
 `orchestra`. The agents' command line comes with it as `orchestra agents …` and the task system's
 as `orchestra tasks …`; neither has an executable of its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.

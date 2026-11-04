@@ -1318,8 +1318,8 @@ observed rate of what wakes it, and at least what discovery needs to see an era)
 each event type's declared and heard publishers and listeners).
 
 **Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
-I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
-the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
+I3, Orchestra's guide (`orchestra/guide.md`, its sections from "Connecting another system: the strategies" to "Confirming an integration, and what goes wrong") as a flow). `integrate_system` takes the system's name, what
+the owner wants from it, and the strategy (the guide's "Connecting another system: the strategies"; by default `source` for a
 Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone; the bridges are a
 library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
 scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
@@ -1392,8 +1392,8 @@ and its PromQL `query` (and `help`), names unique; each of `selectors` and `matc
 promql kit's own `bounded` (never the whole store); `cadence` a channel's id to a duration;
 `max_backoff` a duration. What is written is read back by TOML and then by the bridges' reader, and
 put back as it was when either refuses it.
-Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
-bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
+Without the kits nothing is written, and the answer says so and names the guide's routes (the
+bridges plugin installed, or the one-file poller of its "Without the kits: `minikit.py` and a one-file poller", which is code and goes to the
 Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer
 carries `ask_owner`: the owner's approval and where the token is (a variable's NAME or a file's
 path), put to them in the chat. `approve_integration` takes a verified quote of the owner (refused
@@ -1427,7 +1427,7 @@ template's `token_env` when the owner named only a file; the scaffolded test rea
 there, so it is not run again), says whether each variable is set and each file is there and
 `chmod 600` (never reading it), then the plan to the owner's overlay through `config_change`: a
 `[[machines]]` entry with `restart = "always"` (a process Orchestra's launcher keeps, never an
-announced machine: the poller only relays, Orchestra's rule 2; INTEGRATING.md §5.5's Workflows
+announced machine: the poller only relays, Orchestra's rule 2; the guide's Workflows
 route is not taken for that reason) and a `[[collect]]` entry for the series, or the `[[sources]]`
 entry with `auth.bearer_env` or `auth.bearer_file`, each announced (`instruments.changed` or
 `config.changed`). **The entries are written at the approval** (a deviation from the task's

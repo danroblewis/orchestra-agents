@@ -1,9 +1,9 @@
-"""Connecting an outside system (Orchestra's ``docs/INTEGRATING.md``, task I3): the Supervisor's
+"""Connecting an outside system (Orchestra's guide, ``orchestra/guide.md``, "Connecting another system: the strategies" on; task I3): the Supervisor's
 ``integrate_system`` and ``approve_integration``, in the ``design`` group (``design.handle``: the
 Supervisor's alone, each with its reason and provenance).
 
 ``integrate_system`` takes the system's name and what the owner wants from it, and the strategy
-(INTEGRATING.md §2; ``integrate_kits.choose`` when none is given):
+(the guide's "Connecting another system: the strategies"; ``integrate_kits.choose`` when none is given):
 
 - **poller** (events and series) or **collect** (series alone): the bridges plugin's kit (a
   library: the owner, 2026-11-01) is scaffolded into the owner's repository
@@ -22,7 +22,7 @@ Supervisor's alone, each with its reason and provenance).
   ``bot.<system>`` joined to it (``alias``), and each actor its poller relays once heard
   (``integrate_heard``), with its expected effect when the owner named the
   stock it fills: the poller is a relay and never a machine (Orchestra's rule 2). Without the kits
-  nothing is written and the answer proposes INTEGRATING.md's no-kit route;
+  nothing is written and the answer proposes the guide's no-kit route ("Without the kits");
 - **source**: a ``[[sources]]`` entry for a Prometheus-API store, planned (no code).
 
 Nothing reads the real system yet: the program's ``poller.toml`` stays ``clearance = "needs
@@ -150,7 +150,7 @@ def _no_kits(system: str) -> dict:
     return {"ok": True, "integrated": False, "said": [
         (f"the bridges plugin's kits (orchestra_bridges.kits) are not installed in Orchestra's Python, so nothing was "
         f"scaffolded, declared or written for {kits.title(system)}"),
-        "the routes (" + kits.INTEGRATING + " §4): with the kits, the owner's coding tool installs the bridges plugin into "
+        "the routes (" + kits.INTEGRATING + ", \"Without the kits: `minikit.py` and a one-file poller\"): with the kits, the owner's coding tool installs the bridges plugin into "
         f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
         "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so " + gate(
             "[[tasking]]hand it to the Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the "
@@ -229,7 +229,7 @@ def integrate_system(project: Project, store: AgentStore, a: dict, prov: dict) -
         raise StoreError("say what the owner wants from it, in a sentence (issue transitions and open counts)")
     strategy = a.get("strategy") or kits.choose(system)
     if strategy not in kits.STRATEGIES:
-        raise StoreError(f"strategy is one of {', '.join(kits.STRATEGIES)} (INTEGRATING.md §2; the bridges have no readers "
+        raise StoreError(f"strategy is one of {', '.join(kits.STRATEGIES)} (Orchestra's guide, \"Connecting another system: the strategies\"; the bridges have no readers "
                          "of their own: a collector is a script built from a kit)")
     root = (a.get("root") or "repository").strip()
     if root not in kits.ROOTS:
@@ -435,7 +435,7 @@ def _plan_only(project: Project, store: AgentStore, name: str, rec: dict, settin
         raise StoreError("base_url: the store's address is needed to plan it")
     entry = {"name": name, "url": rec["base_url"], "prefix": settings.pop("prefix", system), **settings}
     if not entry.get("match"):
-        raise StoreError("settings.match: the PromQL selectors to read (INTEGRATING.md §8: never a whole tenant)")
+        raise StoreError("settings.match: the PromQL selectors to read (Orchestra's guide, \"The systems\": never a whole tenant)")
     rec["steps"] = schedule.source(entry)
     lines: list = [f"planned the [[sources]] entry {name} for {rec['base_url']}: read in place, nothing copied, no code"]
     sid, said, ids = _stock(project, store, a, prov)

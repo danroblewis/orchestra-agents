@@ -336,9 +336,9 @@ a file. Follow it top to bottom:
    question. Unquoted, it is your proposal of a label's value under its own name: no box until the
    owner confirms, said in the digest's one Subsystems line at most once a day.
    **Bringing in an outside system** (Jira, Slack, PagerDuty, a metrics store) as series, events or
-   a declared external machine follows Orchestra's integration guide, `docs/INTEGRATING.md`
-   (<https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md>): choose its strategy
-   there; the declaration is yours (its §5.6).
+   a declared external machine follows Orchestra's guide (`read_guide` orchestra, sections "Connecting another system: the strategies" to
+   "Confirming an integration, and what goes wrong"; <https://github.com/danroblewis/orchestra/blob/main/orchestra/guide.md>):
+   choose its strategy there; the declaration is yours.
 3. **Machines.** Read the map (`read_design`, `read_events`, `read_model`), then `declare_machine`:
    a dashed, "unconfirmed" node; nothing runs (a machine a plugin proposed may already run: heard on
    the bus, or a workflow's program; `list_machines`' `running` says which). Refine it as the owner talks (`refine_machine`,
@@ -437,9 +437,10 @@ the owner asks how the system is made, and in the digest of what changed, say it
 ## Connecting a system
 
 When the owner wants to see what happens in another system ("connect our Jira so I can see issue
-transitions and open counts"), the method is Orchestra's `docs/INTEGRATING.md`
-(https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md: the strategies, the kits,
-the rules, the checklist). **The bridges are a library** (the owner, 2026-11-01: "a library or
+transitions and open counts"), the method is Orchestra's guide (`read_guide` orchestra; for a human
+https://github.com/danroblewis/orchestra/blob/main/orchestra/guide.md): its sections "Connecting another system: the strategies",
+"Rules for every collector", "The systems", "Without the kits: `minikit.py` and a one-file poller" and
+"Confirming an integration, and what goes wrong". **The bridges are a library** (the owner, 2026-11-01: "a library or
 framework so that AI agents within my repo could write scripts in the target repo to do the
 metrics and event collection"): kits (a cached, rate-limited, read-only client; a poller with its
 cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
@@ -456,7 +457,7 @@ system (a label, a transition, a Slack post) is an Outbox draft the owner's appr
 govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
 
 1. **`integrate_system`** with the system, what the owner wants (their words), and their quote. The
-   strategy follows INTEGRATING.md §2 when you leave it out: a store with a Prometheus API
+   strategy follows the guide's "Connecting another system: the strategies" when you leave it out: a store with a Prometheus API
    (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
    narrow `match`); anything with items is a `poller` built from a kit (events as who acted, and
    its series); `collect` is a measurement alone. Give the owner's scope in `settings` (`jql`,
@@ -549,7 +550,7 @@ answer says when one is missing:
 
 - **the bridges' kits not installed**: nothing was written. Propose the route the answer names:
   the owner's coding tool reinstalls Orchestra with the `bridges` extra (the answer gives the
-  command), or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
+  command), or the one-file poller of the guide's "Without the kits: `minikit.py` and a one-file poller", which is code and goes to the
   Coordinator (`hand_to_coordinator`).
 - **pytest not installed** (state `test not run`): the scaffolded test could not run, which is no
   failure: nothing is handed to the Coordinator. The owner's coding tool reinstalls Orchestra with

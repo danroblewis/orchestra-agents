@@ -30,7 +30,7 @@ options), ``design_clearance.py`` (whether an option needs the owner's approval)
 owner's own name for a discovered stock, flow or effect), ``design_subsystems.py`` (the owner's
 subsystems in words: a label's value named, parts gathered, one dropped), ``design_passes.py`` (the
 refinement passes), ``design_integrate.py`` (connecting an outside system: Orchestra's
-``docs/INTEGRATING.md`` as a flow, on the bridges plugin's kits)."""
+guide (``orchestra/guide.md``, "Connecting another system: the strategies" on) as a flow, on the bridges plugin's kits)."""
 
 from __future__ import annotations
 

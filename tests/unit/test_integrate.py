@@ -668,3 +668,38 @@ def test_a_scaffold_is_committed_on_the_supervisors_branch_and_the_checkout_stay
     assert 'clearance = "approved"' in shown and git(project.repo_root, "status", "--porcelain") == ""
     git(project.repo_root, "merge", "-q", "orchestra/supervisor")             # the pull request merged and pulled
     assert git(project.repo_root, "ls-files", rel).splitlines() and git(project.repo_root, "status", "--porcelain") == ""
+
+
+def _core_machines(project) -> dict:
+    """The Machines page's answer as Orchestra builds it: the bus's machines, with the declared layer merged."""
+    from orchestra.events import Events as CoreEvents
+    from orchestra.sd.intended.machines_view import merge
+    from orchestra.web.machines import machines_view
+    ev = CoreEvents.for_project(project.orchestra)
+    out = machines_view(ev.bus.read(0, 10_000)[0])
+    merge(out, project.orchestra.intended)
+    return {m["id"]: m for m in out["machines"]}
+
+
+def test_a_relayed_system_is_heard_once_its_poller_publishes_as_its_actors(project, store, tmp_path):
+    """Bootstrap run 7, finding 3: Jira, GitHub and Slack were "declared · never heard" beside some 120
+    of their events, published as person.<system>.<account> and bot.<system>.<account>, never as the
+    guessed bot.<system>. The poller publishes as who acted; each actor heard is joined to the system."""
+    from orchestra.events import Events as CoreEvents
+    from orchestra_bridges.kits.poller import Poller, actor_source
+
+    from orchestra_agents import integrate_heard
+    connect(project, store)
+    seen = _core_machines(project)
+    assert seen["jira"]["unseen"] and seen["jira"]["comparison"]                 # nothing of Jira on the bus yet
+    p = Poller("jira_poller", 300, tmp_path / "poll", events=CoreEvents.for_project(project.orchestra), project=project.orchestra)
+    p.emit("jira.issue.assigned", "OPS-1", {"assignee": "amara"}, source=actor_source("jira", "amara"))
+    p.emit("jira.issue.transitioned", "OPS-1", {"to": "Done"}, source=actor_source("jira", "sail", bot=True))
+    assert _core_machines(project)["jira"].get("unseen")                        # the guessed alias alone is never heard
+    said = integrate_heard.sweep(project, store)
+    assert said == ["machine jira heard as bot.jira.sail, person.jira.amara"]
+    assert layer(project)["machines"]["jira"]["aliases"] == ["bot.jira", "bot.jira.sail", "person.jira.amara"]
+    seen = _core_machines(project)
+    assert "jira" not in seen                                                   # no "declared · never heard" card
+    assert seen["bot.jira.sail"]["comparison"] == "heard" and seen["bot.jira.sail"]["intent"]   # on its first alias heard
+    assert integrate_heard.sweep(project, store) == []                           # each joined once

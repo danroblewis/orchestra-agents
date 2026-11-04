@@ -73,9 +73,40 @@ def misstated(text: str, now: dict[str, str]) -> dict[str, str]:
     return wrong
 
 
-def correction(text: str, did: list[str], now: dict[str, str]) -> str | None:
+_RUNNING = re.compile(r"\b(?:fully (?:running|live|working|set up)|(?:running|live|working) end[- ]to[- ]end|"
+                      r"(?:is|are|now) (?:now |all |also |already )?(?:running|live|up and running|working)|"
+                      r"all (?:\w+ )?(?:running|live)|everything(?:'s| is) (?:running|live))\b", re.IGNORECASE)
+_ABOUT = re.compile(r"\b(?:goals?|workflows?|tracking|tracked|everything|fully)\b", re.IGNORECASE)
+
+
+def says_running(text: str) -> bool:
+    """Whether ``text`` says anything runs (what the workflows' check is read for)."""
+    return bool(_RUNNING.search(text or ""))
+
+
+def overclaimed(text: str, lacks: dict[str, list[dict]]) -> str | None:
+    """The first sentence of ``text`` that calls a workflow, a goal or tracking running while a
+    workflow's program step has no program declared (``lacks``: ``program_tools.lacking``), or None."""
+    if not lacks:
+        return None
+    names = [re.escape(w).replace("_", "[ _-]") for w in lacks]
+    for m in _SENTENCES.finditer(text or ""):
+        s = m.group(0)
+        if not _RUNNING.search(s) or re.search(r"\bnot (?:yet )?(?:fully )?(?:running|live)\b", s, re.IGNORECASE):
+            continue
+        if _ABOUT.search(s) or any(re.search(rf"\b{n}\b", s, re.IGNORECASE) for n in names):
+            return s.strip()
+    return None
+
+
+def correction(text: str, did: list[str], now: dict[str, str], lacks: dict[str, list[dict]] | None = None) -> str | None:
     """Orchestra's correction to append to ``text``, or None when the reply agrees with the facts."""
     out = []
+    claim = overclaimed(text, lacks or {})
+    if claim:
+        from .program_tools import waits_line
+        out.append(f"The reply says \"{claim}\", but not every workflow runs: "
+                   + "; ".join(waits_line(w, rows) for w, rows in (lacks or {}).items()) + ".")
     said = denies_doing(text) if did else None
     if said:
         out.append(f"The reply says \"{said}\", but Orchestra's record shows these changes by the Supervisor in this turn:\n"

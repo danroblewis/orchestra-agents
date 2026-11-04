@@ -31,7 +31,7 @@ from types import SimpleNamespace
 
 from orchestra.config import ConfigError
 
-from . import design, relation_guard
+from . import design, program_tools, relation_guard
 from .clock import resolve_tz
 from .config import Project
 from .store import AgentStore, StoreError
@@ -144,6 +144,11 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
                        "that, and do not ask for the zone again")
     if written.notes:
         out["lacks"] = "What the project still lacks for it is in notes: nothing is offered for such a step until it is there."
+    lacks = program_tools.lacking(project)
+    out["status"] = program_tools.status(project, name, lacks)
+    if lacks.get(name):
+        out["say"] = ("Tell the owner each notes line and this status as they are: the goal this workflow serves is not "
+                      "running until each step's program is declared")
     return out
 
 
@@ -208,6 +213,7 @@ def list_workflows(project: Project, a: dict) -> dict:
         return "?"
 
     workflows = []
+    lacks = program_tools.lacking(project, defs)
     for w in defs.workflows:
         steps = []
         for s in w.steps:
@@ -221,7 +227,8 @@ def list_workflows(project: Project, a: dict) -> dict:
                     step[k] = raw[k]
             steps.append(step)
         runs = clock_words(w.raw.get("starts"))
-        workflows.append({"name": w.name, "where": where(w.name), "planner": w.planner,
+        workflows.append({"name": w.name, "where": where(w.name), "status": program_tools.status(project, w.name, lacks),
+                          "planner": w.planner,
                           "starts": w.raw.get("starts") or [], **({"clock": runs} if runs else {}), "steps": steps})
     return {"ok": True, "workflows": workflows, "problems": list(defs.problems), "notes": list(defs.notes),
             "shown": "The Items page (/items) shows their items; the Dynamics page shows their piles as stocks."}
@@ -396,10 +403,12 @@ def _summary(row: dict, snap: dict) -> dict:
 
 
 READS = {"list_workflows": list_workflows, "list_items": list_items, "explain_item": explain_item}
-COMMANDS = frozenset({"declare_workflow", *READS})
+COMMANDS = frozenset({"declare_workflow", "declare_program", *READS})
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:
     if command == "declare_workflow":
         return declare_workflow(project, store, a, role)
+    if command == "declare_program":
+        return program_tools.declare_program(project, store, a, role)
     return READS[command](project, a)

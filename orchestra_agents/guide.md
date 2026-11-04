@@ -493,9 +493,10 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    for any. A value is a string, a number, true/false, a list of them, a table of them or a list of
    such tables; a token, its variable or its file is never a setting (that is
    `approve_integration`'s, by reference). The script is scaffolded into the repository, its own test is run against the kit's fake, and the
-   system is declared on the Machines page as a machine managed elsewhere, heard as
-   `bot.<system>`, with its expected effect on the stock. **The poller is never a machine**: it
-   relays what the system's people and bots did, as them. The answer names the directory: tell
+   system is declared on the Machines page as a machine managed elsewhere, heard as the actors its
+   poller relays (`bot.<system>`, `bot.<system>.<account>`, `person.<system>.<account>`, each joined
+   to it as it is heard), with its expected effect on the stock. **The poller is never a machine**:
+   it relays what the system's people and bots did, as them, and never publishes as itself. The answer names the directory: tell
    the owner a coding tool (theirs, or the Coordinator's worker) may now edit the script there.
    **When the test fails, or the kits have no template for the system** (Jenkins: the generic
    `http` kit's guess), the answer has already handed the script to the Coordinator as work
@@ -528,7 +529,7 @@ govern, never the collector's. You do it with two `design` tools, and the owner 
    would fail every round. If the answer says the script does not log in with an account yet (a
    script edited away from the template), hand that change to the Coordinator before saying it reads.
    Then **confirm it is heard**: the answer says whether the system's actors (`bot.<system>`,
-   `person.<system>.<account>`) are on the bus yet; if not, after its first poll `read_design`
+   `bot.<system>.<account>`, `person.<system>.<account>`) are on the bus yet; if not, after its first poll `read_design`
    shows the machine running. Tell the owner it is heard, or what its log says.
 
 **Removing or changing a collector** (a duplicate poller, a superseded one): `remove_entry` on its
@@ -597,9 +598,12 @@ not installed: tell the owner, and write nothing.
   (`of: children`: a ticket's pull requests) moves only once something relates them, an
   `item.related {kind: parent}` from a machine that knows the link. When items wait there because
   nothing does, the data lacks the link, not the definition: keep the definition (the waiting is
-  the visible gap) and ask the owner in one sentence for, or propose, the small program that makes
-  it: a linker that reads the key from each pull request's branch or title and publishes the
-  relation. `declare_workflow` refuses a re-declaration that drops a relation the definition in
+  the visible gap) and propose, in one sentence, the linker the Workflows plugin ships, `relate_prs`:
+  it reads the key from each pull request's branch or title and publishes the relation. On the
+  owner's yes, `declare_program` declares it (`program: relate_prs`, `args`: `--projects`, GitHub's
+  API address with `--github`, and the token file's path the owner gave with `--token-file`), in the
+  state directory's `machines/relate_prs/machine.json`, which the plugin's program host runs. Never
+  ask for one to be written. `declare_workflow` refuses a re-declaration that drops a relation the definition in
   place holds, unless the owner's quoted words are about the link ("follow Jira's status only").
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
@@ -608,7 +612,13 @@ not installed: tell the owner, and write nothing.
 - **How**: only with `declare_workflow`, never by writing a file. It checks the definition first;
   a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
   what the project still lacks (a program or a resource kind no one declares): say them to the
-  owner. `list_workflows` reads them all back; `explain_item` says why an item is where it is.
+  owner. Its `status` (and `list_workflows`') says whether the workflow runs: while a program step
+  has no program declared, it is "declared but not running", and so is the goal it serves; say so,
+  never "fully running" (Orchestra corrects a reply that does). `declare_program` declares a
+  program the plugin ships, on the owner's quoted yes.
+- **Confirming machines**: `confirm` of a machine takes the owner's yes that names it, or all of
+  them ("confirm all three"); "Start tracking" or "go ahead" confirms none. Ask in one sentence
+  and confirm on their answer. `list_workflows` reads them all back; `explain_item` says why an item is where it is.
 - **The owner reads them** on the Items page (`/items`: every item, its step and who holds it) and
   the Dynamics page (each pile a stock). Nothing there changes anything.
 

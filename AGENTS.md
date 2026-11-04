@@ -34,7 +34,8 @@ broken without updating the spec and saying so in the commit.
    a confirmed Universal Machine's spec and its role and agent records are written to the state
    directory (`machines/<name>/`, `state_machines.py`), never to `.orchestra/`, and read beside it. (`restart_machine` takes one entry out in the
    overlay and puts the overlay back byte for byte; it commits nothing.) A workflow definition
-   (`declare_workflow`, 2026-11-01) goes to the state directory; one the owner asks for in the
+   (`declare_workflow`, 2026-11-01) goes to the state directory, and so does a shipped program's
+   `machines/<id>/machine.json` (`declare_program`, 2026-11-03), never committed; one the owner asks for in the
    repository is written to `.orchestra/workflows/<name>/` and left uncommitted, for the
    Coordinator to land through a ticket. A graduation (`graduate_machine`, 2026-11-02, the owner: a
    program proven in `.orchestra/machines/<name>/` moves into the project's own tree) is a `git mv`
@@ -49,7 +50,8 @@ broken without updating the spec and saying so in the commit.
    way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin for
    that contract. The exceptions, each a lazy import of an optional dependency that says the plugin
    is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
-   W7; that plugin's SPEC §10) import its validated writer, loader and record API; and
+   W7; that plugin's SPEC §10) import its validated writer, loader and record API, and `program_tools.py`
+   its programs reader (`programs.machines`, 2026-11-03, for `declare_program`); and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
    templates and settings, and its `machine.toml` reader); and `supervisor_pr.py` (2026-11-02)
    imports orchestra-scm's provider and the Outbox's client, and `scm_settings.py` (2026-11-03, S3)

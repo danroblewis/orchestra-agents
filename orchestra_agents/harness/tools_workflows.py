@@ -148,6 +148,22 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "root": E(["state", "repository"], "state (default): the state directory, never committed; repository: "
                                                 "the repository's .orchestra/, only when the owner says so (quote them)"),
              "quote": QUOTE, "reason": REASON}, ("definition", "reason")),
+    ToolDef("declare_program", "workflows",
+            "Declare a program the Workflows plugin ships (relate_prs: relates each pull request to its ticket by the key in "
+            "its branch or title) for a workflow's program step, on the owner's quoted yes: writes machines/<id>/machine.json "
+            "in the state directory, which the plugin's program host runs each time the step is offered. The plugin's reader "
+            "checks it; with a problem nothing stays written. A token only by its file's path (--token-file) or variable's "
+            "name (--token-env), never its value. A workflow step whose program has no machine.json waits there: its goal is "
+            "not running until this is done.",
+            {"program": S("The shipped program: relate_prs"),
+             "id": S("The program's id as the step names it (who: {program: <id>}); default: the program's name"),
+             "args": A("The program's arguments, as words. relate_prs: --projects HK,PLAT (the Jira projects whose keys "
+                       "count), --github <GitHub's API URL> and --token-file <the path the owner gave> to read titles"),
+             "exit": {"type": "object", "description": "Exit code -> outcome; relate_prs's default: {\"0\": \"related\", "
+                      "\"3\": \"unrelated\"}"},
+             "timeout": S("A duration bounding one run (relate_prs: 1m)"),
+             "role": S("The role it runs as (default: its id)"),
+             "quote": QUOTE, "reason": REASON}, ("program", "quote", "reason")),
     ToolDef("list_workflows", "workflows",
             "The project's workflows as the plugin loads them: each with where it is defined, its planner, starts and "
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),

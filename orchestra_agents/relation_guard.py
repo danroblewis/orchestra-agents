@@ -69,8 +69,9 @@ def check(before: dict | None, after: dict, prov: dict, owner: str) -> None:
         f"declare_workflow refused, nothing written: the workflow {after.get('name')} in place relates its items "
         f"({'; '.join(dropped)}) and this definition drops that. The relation is the owner's goal: when items wait at "
         "such a step, the data lacks the link (nothing publishes item.related), not the definition. Keep the definition, "
-        "so the gap stays visible (list_items shows who waits), and ask the owner in one sentence for the small program "
-        "that makes the link, or propose it: a linker machine that reads each item's key (a ticket's key from a pull "
-        "request's branch or title) and publishes item.related {kind: parent}, the Workflows plugin's relating. Drop the "
+        "so the gap stays visible (list_items shows who waits), and propose the linker in one sentence: the relator the "
+        "Workflows plugin ships, relate_prs, reads each pull request's ticket key from its branch or title and publishes "
+        "item.related {kind: parent}; on the owner's yes, declare_program declares it (never ask for one to be written). "
+        "Drop the "
         "relation only on the owner's quoted words saying so (about the link, not a general go-ahead), and never claim "
         "a field the items do not carry: explain_item shows what they hold")

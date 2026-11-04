@@ -1170,6 +1170,13 @@ for each request the layer still holds open, so a click made while it was down i
 `confirm`, `discard` and `switch_kind` needs the owner's quote or such a request; changing what the
 owner declared (a target on it, unmarking their expect mark, retracting it) needs their quote or
 their request, as Orchestra's `guard_owners` says.
+**A machine is confirmed only on words that name it** (`confirm_words.py`, since 2026-11-03,
+bootstrap run 7: Jira, GitHub and Slack were confirmed as machines on "Start tracking."). A quoted
+confirm of a machine needs the owner's message to say yes (confirm, approve, accept, yes, ok, go
+ahead) and to say to what: the machine by its id, its title or what they call its system, or all of
+them ("all three", "both", "them"); a bare "it", "this" or "that" with a yes confirms one machine a
+turn. Anything else is refused, nothing confirmed, and the Supervisor asks in one sentence. A
+request from the page is checked as before.
 
 The tools: `declare_stock`, `declare_effect`, `set_target` (`compare`: below, above, within),
 `declare_stock` and `declare_effect` take a `description` (what the owner says it means); `propose_measurements` (options in order with `cost`, `caveat`, and the
@@ -1289,7 +1296,13 @@ left out of its environment, and only then fills the owner's words and settings 
 `machine.toml` (the fake serves the template's world; a `token`, `token_env` or clearance in the
 settings is refused). A poller's system is declared as a machine managed elsewhere (`managed:
 external`, programmatic, continuous, `spec.source` `bot.<system>`, joined to that observed source by
-Orchestra's `alias` op), with an `appears` expected effect into the stock the owner named (declared
+Orchestra's `alias` op, and to every actor its poller is heard relaying, as each is heard
+(`integrate_heard.py`, since 2026-11-03, bootstrap run 7's finding 3: a kit's poller never publishes as
+itself, only as who acted, `person.<system>.<account>`, `bot.<system>.<account>`, `bot.<system>`, or a
+mapped `person.<key>` that published the system's own types; the core counts a declared machine heard
+only by its id or an alias, exactly, so "declared · never heard" stood beside some 120 of their
+events. The join runs when the system is declared and approved, and once a minute in the host, one
+`alias` op per actor, the Supervisor's), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
 plans nothing and hands the script to the Coordinator (`integrate_handoff.hand_on`, `work.requested`
 naming the directory, the failure and the kit's rules); so does a system with no template of its
@@ -1324,7 +1337,8 @@ scaffolds. A store whose strategy was left out, with such a collector, is measur
 store's name (no machine is declared for it). An adopted directory is never removed or moved: one
 git tracks, whose test fails, is handed to the Coordinator to adapt where it is, in the worker's own
 worktree. `approve_integration` then says whether the system's actors (`bot.<system>`,
-`person.<system>.<account>`) are heard on the bus (`heard`, from the Machines page's view), and,
+`bot.<system>.<account>`, `person.<system>.<account>`) are heard on the bus (`heard`, from the Machines
+page's view; each joined to the machine), and,
 when not yet, how to confirm it after the first poll (`next`).
 **The settings' shapes** (`integrate_settings.py`: `check_settings`, `set_keys`): a string, number, boolean, a list of
 them, a table of them (written inline: the Slack kit's per-channel `cadence`, the promql kit's
@@ -1488,7 +1502,23 @@ Supervisor writes it with `declare_workflow`, the only way a definition is writt
 Workflows plugin is an **optional dependency**, imported lazily in that one module for its
 validated writer (`define.check`, `define.write`), its loader (`define.load`) and its record's
 read API (`record.api.Record`): the one exception to rule 3's "nothing is imported from that
-plugin". Without the plugin each tool says it is not installed. `declare_workflow` takes the
+plugin". Without the plugin each tool says it is not installed. **A step's program** (`program_tools.py`,
+since 2026-11-03, bootstrap run 7's finding 1: every pull request waited at `relate` because nothing
+could write the relator's `machine.json`, while `confirm` said "nothing is to be written"):
+`declare_program`, the Supervisor's on the owner's quoted yes, writes
+`<state>/machines/<id>/machine.json`, the file the plugin's program host reads (its guide,
+"Programs"), for a program **the plugin ships** (`spec.program`, its `SHIPPED`: `relate_prs`, with
+its defaults `timeout 1m` and `exit {0: related, 3: unrelated}`), never for code of the project's
+own; its `args` name a token only by its file's path (`--token-file`, absolute) or variable, an
+argument shaped like a secret refused. The plugin's programs reader (`programs.machines`, imported
+lazily beside the writer, the same exception) reads it back, and a problem it finds takes the file
+out again and refuses the call. A repository copy of that id wins and is never shadowed; nothing is
+committed. A workflow's **status** comes from its steps (`program_tools.lacking`: each program step
+whose program no root declares): `declare_workflow` and `list_workflows` answer it ("running" only
+when none lacks), `confirm` of such a step's machine says the step waits for its program and which
+tool declares it, and the host's check of each reply (`truth.overclaimed`, beside its other
+corrections) appends Orchestra's correction to a reply that calls a goal, a workflow or tracking
+running while a step lacks its program. `declare_workflow` takes the
 definition in §7.1's shape (its schema spells out each key), a `reason` and an optional `quote`
 (verified as the design tools verify one); the plugin's checks run first and any refusing problem
 refuses the call, every problem said, nothing written; otherwise it is written to the state

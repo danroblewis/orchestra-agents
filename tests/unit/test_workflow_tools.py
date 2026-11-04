@@ -594,6 +594,7 @@ def test_a_missing_link_is_asked_for_never_hidden_by_dropping_the_relation(proje
     said = str(e.value)
     assert "nothing written" in said and "github.pr.opened of its children" in said
     assert "linker" in said and "item.related {kind: parent}" in said and "branch or title" in said and "one sentence" in said
+    assert "relate_prs" in said and "declare_program" in said and "never ask for one to be written" in said
     path = project.orchestra.state_dir / "workflows" / "ticket_delivery" / "workflow.json"
     assert json.loads(path.read_text()) == JOINED                        # the definition, and its gap, stay as they were
     store.set_agent_state("supervisor", turn={"n": 2, "id": "sessions/supervisor/2", "message": "Proceed as you think best.", "at": 2.0})
@@ -613,3 +614,5 @@ def test_the_prompt_says_to_ask_for_the_link_a_goal_needs():
     from orchestra_agents.prompting import PROMPTS_DIR
     text = " ".join((PROMPTS_DIR / "supervisor.md").read_text().split())
     assert "never silently remove the goal" in text and "linker" in text and "item.related" in text
+    assert "`relate_prs`" in text and "`declare_program`" in text and "Never ask for one to be written" in text
+    assert "may I have one written" not in text and 'never "fully running"' in text

@@ -21,8 +21,10 @@ CHECK_WAIT_S = 5.0        # how long the check after a reply waits for the task 
 
 
 class SupervisorFacts:
-    def __init__(self, store, ticket_prefix: str, snapshot: Callable[[float], dict]):
+    def __init__(self, store, ticket_prefix: str, snapshot: Callable[[float], dict],
+                 lacking: Callable[[], dict] | None = None):
         self.store, self.prefix, self.snapshot = store, ticket_prefix, snapshot   # snapshot(wait_s), as the Supervisor asks it
+        self.lacking = lacking            # program_tools.lacking: each workflow's steps with no program behind them
 
     def before(self, snap: dict, message: str = "") -> tuple[str, float]:
         """The facts a turn's prompt carries (the changes since the previous turn began), and when
@@ -45,4 +47,11 @@ class SupervisorFacts:
                  *truth.ticket_ids("\n".join(did), self.prefix), *ids]
         self.store.set_agent_state(SUPERVISOR, tickets_named=list(dict.fromkeys(reversed(named)))[:NAMED_KEPT][::-1])
         now = truth.states(self.snapshot(CHECK_WAIT_S), ids) if ids else {}
-        return truth.correction(reply, did, now)
+        lacks = self._lacks() if self.lacking is not None and truth.says_running(reply) else {}
+        return truth.correction(reply, did, now, lacks)
+
+    def _lacks(self) -> dict:
+        try:
+            return self.lacking() or {}
+        except Exception:  # noqa: BLE001 - without the plugin's answer nothing is corrected
+            return {}

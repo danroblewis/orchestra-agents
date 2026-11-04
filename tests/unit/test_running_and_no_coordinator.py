@@ -4,6 +4,7 @@ proposed "don't run" (each was heard on the bus) and that the nudger's program s
 tools now say how each declared machine runs, and without the task system no prompt or tool text
 names a Coordinator."""
 
+import json
 import re
 from types import SimpleNamespace
 
@@ -93,11 +94,32 @@ def test_confirming_a_workflows_program_hands_nothing_on(project, store, monkeyp
         [{"op": "propose_machine", "id": "review_nudger", "title": "review_nudger", "kind": "programmatic",
           "description": "Named by workflow review_nudger: the program review_nudger.", "receives": ["offer.made"],
           "engagement": {"mode": "ad hoc"}}], PROPOSED)
+    d = project.orchestra.state_dir / "machines" / "review_nudger"
+    d.mkdir(parents=True)
+    (d / "machine.json").write_text(json.dumps({"id": "review_nudger", "kind": "programmatic", "managed": "orchestra",
+                                                "spec": {"command": "true", "role": "review_nudger"}}))
     say(store, "Then confirm it", 1)
     out = call(project, store, "confirm", element="review_nudger", quote="Then confirm it", reason=WHY)
     said = " ".join(out["said"])
-    assert "runs as the workflow's program (review_nudger)" in said and "nothing is to be written" in said
+    assert "runs as the workflow's program (review_nudger)" in said and "its machine.json is declared" in said
     assert "Coordinator" not in said and "hand_to_coordinator" not in said and "never heard" not in said
+
+
+def test_confirming_a_workflows_program_with_no_machine_json_says_the_step_waits_for_it(project, store, monkeypatch,
+                                                                                       no_tasking):
+    """Bootstrap run 7, finding 1: confirm said "nothing is to be written" of relate_prs, whose
+    machine.json no root held, so every pull request waited at its first step."""
+    fake_plugin(monkeypatch, {"pull_request": [("program", "relate_prs")]})
+    intended_api.layer(project).apply(
+        [{"op": "propose_machine", "id": "relate_prs", "title": "relate_prs", "kind": "programmatic",
+          "description": "Named by workflow pull_request: the program relate_prs.", "engagement": {"mode": "ad hoc"}}],
+        PROPOSED)
+    say(store, "Then confirm it", 1)
+    out = call(project, store, "confirm", element="relate_prs", quote="Then confirm it", reason=WHY)
+    said = " ".join(out["said"])
+    assert "nothing is to be written" not in said and out["waits_for_program"] == "relate_prs"
+    assert "waits for its program" in said and "machines/relate_prs/machine.json" in said and "declare_program" in said
+    assert "not running" in said
 
 
 def test_the_prompt_says_a_proposal_may_run(project):

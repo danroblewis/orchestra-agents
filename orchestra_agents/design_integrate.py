@@ -19,7 +19,8 @@ Supervisor's alone, each with its reason and provenance).
   failed one is called again by the same name once the worker's test passes (its test is run
   again where the script is now, nothing scaffolded again). A poller's system is declared on the
   Machines page as a machine managed elsewhere (``managed: external``), its actor source
-  ``bot.<system>`` joined to it (``alias``), with its expected effect when the owner named the
+  ``bot.<system>`` joined to it (``alias``), and each actor its poller relays once heard
+  (``integrate_heard``), with its expected effect when the owner named the
   stock it fills: the poller is a relay and never a machine (Orchestra's rule 2). Without the kits
   nothing is written and the answer proposes INTEGRATING.md's no-kit route;
 - **source**: a ``[[sources]]`` entry for a Prometheus-API store, planned (no code).
@@ -43,7 +44,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import design_dynamics, design_machines
+from . import design_dynamics, design_machines, integrate_heard
 from . import integrate_address as address
 from . import integrate_branch as branch
 from . import integrate_handoff as handoff
@@ -159,7 +160,8 @@ def _no_kits(system: str) -> dict:
         "next": f"tell the owner the kits are missing and which route you propose for {kits.title(system)}"}
 
 
-def _declare(project: Project, system: str, name: str, every: str, emits: list[str], prov: dict) -> tuple[dict, list]:
+def _declare(project: Project, system: str, name: str, every: str, emits: list[str], prov: dict,
+             store: AgentStore | None = None) -> tuple[dict, list]:
     """The system as a machine managed elsewhere, its actor source joined to it; never the poller."""
     mid, actor = system, f"bot.{system}"
     m = {"id": mid, "title": kits.title(system), "kind": "programmatic", "managed": "external",
@@ -170,11 +172,14 @@ def _declare(project: Project, system: str, name: str, every: str, emits: list[s
     known = mid in (design_machines.intended_api.current(project).get("machines") or {})
     ops = ([] if known else [{"op": "propose_machine", **m, "guessed": []}]) + [{"op": "alias", "machine": mid, "observed": actor}]
     done = apply(project, ops, prov)
+    joined = integrate_heard.join(project, store, system) if store is not None else []
     who = "added by you (from your message)" if prov["author"] == OWNER else "proposed by the Supervisor"
     lines = [(f"machine {mid} ({m['title']}) {'already declared; ' if known else 'declared, programmatic, managed elsewhere, ' + who + '; '}"
-             f"heard as {actor} (and its people as person.{system}.<account>)"),
-             ("the Machines page draws it dashed, \"unconfirmed\", until its events are heard and the owner "
-              "confirms it")]
+             f"heard as the actors its poller relays: {actor}, person.{system}.<account> and bot.{system}.<account>, each "
+             "joined to it as it is heard (the poller never publishes as itself)"
+             + (f"; heard already as {', '.join(joined)}" if joined else "")),
+             ("the Machines page draws it dashed, \"unconfirmed\", until the owner confirms it, and \"never heard\" only "
+              "while none of those actors is on the bus")]
     return done, lines
 
 
@@ -399,7 +404,7 @@ def _declarations(project: Project, store: AgentStore, a: dict, prov: dict, rec:
     sid = mid = None
     try:
         if events:
-            done, said = _declare(project, system, name, every, kits.publishes(target), prov)
+            done, said = _declare(project, system, name, every, kits.publishes(target), prov, store)
             ids = [c["change"] for c in done.get("changes") or [] if c.get("change")]
             changes += ids
             lines += said
@@ -538,7 +543,7 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
             lines.append(f"{v}: {state} (its content is never read here)")
             if state != "there, chmod 600":
                 missing.append(f"{v}: the file, chmod 600" if state == "not there yet" else f"chmod 600 {v}")
-    said, more = _confirm_heard(store, rec)
+    said, more = _confirm_heard(store, rec, project)
     lines += said
     return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds, **more,
                   token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
@@ -552,7 +557,7 @@ def heard(store: AgentStore, system: str) -> list[str]:
     return sorted(s for s in seen if s in (system, f"bot.{system}") or s.startswith((f"bot.{system}.", f"person.{system}.")))
 
 
-def _confirm_heard(store: AgentStore, rec: dict) -> tuple[list[str], dict]:
+def _confirm_heard(store: AgentStore, rec: dict, project: Project | None = None) -> tuple[list[str], dict]:
     """What the answer says of whether the system is heard yet, and what to do next to confirm it."""
     system, every = rec["system"], rec.get("every") or "5m"
     if not rec.get("events"):
@@ -561,11 +566,13 @@ def _confirm_heard(store: AgentStore, rec: dict) -> tuple[list[str], dict]:
                 {"next": f"After {every}, confirm its series with list_metrics (the queries' names) and tell the owner."})
     got = heard(store, system)
     if got:
-        return [f"{kits.title(system)} is heard on the bus already: {', '.join(got[:5])}"], {"heard": got}
+        joined = integrate_heard.join(project, store, system) if project is not None else []
+        return [f"{kits.title(system)} is heard on the bus already: {', '.join(got[:5])}"
+                + (f"; joined to machine {system}" if joined else "")], {"heard": got}
     return ([(f"{kits.title(system)} is not heard on the bus yet: its first poll is within {every} of orchestra run reading "
              "the overlay")],
             {"heard": [], "next": (f"Confirm it is heard: after {every}, read_design shows machine {system} running, its "
-                                   f"events heard from bot.{system} or person.{system}.<account>. Tell the owner it is heard, "
+                                   f"events heard from bot.{system}, bot.{system}.<account> or person.{system}.<account>. Tell the owner it is heard, "
                                    "or, if not, read the collector's log (its [[machines]] process) and say why.")})
 
 

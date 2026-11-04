@@ -41,11 +41,13 @@ import uuid
 from datetime import datetime
 
 from . import (
+    confirm_words,
     design_asked,
     design_named,
     intended_api,
     machine_sends,
     machines_running,
+    program_tools,
     state_machines,
 )
 from .clock import next_at, zone
@@ -156,6 +158,7 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     m = current(project, eid)
     if m.get("state") == "declared":
         raise StoreError(f"machine {eid} is confirmed already")
+    confirm_words.check(store, prov, eid, m)                # their words name it, or all of them (bootstrap run 7)
     design_asked.check_expectation_recorded(store, m)
     stock_as_flow(project, (m.get("expected_effect") or {}).get("edits") or [])   # before anything is confirmed
     here = m.get("managed") != "external"
@@ -165,7 +168,9 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     change = uuid.uuid4().hex                            # the id of the system.changed its first turn will publish
     done = apply(project, [{"op": "confirm", "part": "machine", "id": eid}], prov)
     m = current(project, eid)
-    programs, seen = machines_running.workflow_programs(project), last_seen(store).get(eid)
+    heard = last_seen(store)
+    programs = machines_running.workflow_programs(project)
+    seen = max((heard[n] for n in (eid, *(m.get("aliases") or [])) if n in heard), default=None)   # heard as an alias too
     lines = [f"machine {eid} confirmed", "the Machines page draws it solid" + ("" if seen is not None or eid in programs
                                                                              else ", \"declared · never heard\"")]
     if seen is not None or eid in programs:
@@ -181,9 +186,14 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         lines.append(f"its spec, role and agent records are at {dst}, on {state_machines.runs_on(project)}; "
                      f"{_first_run(m)}. Nothing was committed, and the host runs it from there")
         extra["spec"] = str(dst)
+    elif here and eid in programs and eid not in (program_tools.declared(project) or set()):
+        lines.append(f"its program is the workflow's ({', '.join(programs[eid])}), but no root declares it "
+                     f"(machines/{eid}/machine.json), so that step waits for its program and nothing runs it yet: "
+                     f"{program_tools.NEXT}. Until then the workflow is not running: say so")
+        extra["waits_for_program"] = eid
     elif here and eid in programs:
         lines.append("its program is the workflow's: the Workflows plugin's program host runs it when the step is offered "
-                     "(not a launcher process, so list_processes does not list it); nothing is to be written")
+                     "(not a launcher process, so list_processes does not list it); its machine.json is declared")
     elif here:
         lines.append(gate("next: the program is a worker's to write ([[tasking]]hand_to_coordinator[[/tasking]][[no-tasking]]"
                           "code work is not handed on here; say so[[/no-tasking]]) unless it exists; when it does, "

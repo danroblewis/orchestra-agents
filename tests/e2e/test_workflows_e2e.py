@@ -165,3 +165,38 @@ def test_explain_item_reads_the_real_record(tmp_path, monkeypatch):
     assert [f["id"] for f in last] == [f["id"] for f in got["last_facts"][-2:]]           # trimmed to the newest
     with pytest.raises(Exception, match="holds no item 'I-2'"):
         tooling.handle(project, store, "explain_item", {"item": "I-2"}, role="supervisor")
+
+
+PULL_REQUEST = {"name": "pull_request", "starts": [{"event": "github.pr.opened", "fields": {"branch": {"data": "branch"}}}],
+                "steps": [{"name": "relate", "who": {"program": "relate_prs"},
+                           "outcomes": {"related": "open", "unrelated": "open"}},
+                          {"name": "open", "who": {"outside": "github"}, "done_when": {"event": "github.pr.merged"},
+                           "outcomes": {"done": None}}]}
+
+
+def test_the_shipped_relator_is_declared_and_the_program_host_would_run_it(chat, tmp_path):
+    """Bootstrap run 7, finding 1: the pull requests' workflow waited at relate because nothing
+    could write relate_prs's machine.json. Through the real MCP server and the real plugin: the
+    workflow says it is not running until the relator is declared; on the owner's yes,
+    declare_program writes it, the plugin's reader runs it, and it relates a branch's key."""
+    import os
+
+    from orchestra_workflows.programs import machines
+    say, project, repo = chat
+    (declared,) = say("Track each pull request to its ticket.", [
+        {"tool": "declare_workflow", "args": {"definition": PULL_REQUEST, "reason": "the owner's goal: pull requests to tickets"}}])
+    assert declared["ok"] and "not running" in declared["status"] and "declare_program" in declared["status"]
+    assert any("no root declares the program 'relate_prs'" in n for n in declared["notes"])
+    token = tmp_path / "github.token"
+    token.write_text("x")
+    yes = "Yes, declare the relator for HK please"
+    (got,) = say(yes, [{"tool": "declare_program", "args": {
+        "program": "relate_prs", "args": ["--projects", "HK", "--token-file", str(token)], "quote": yes,
+        "reason": "the owner said yes to the shipped relator"}}])
+    assert got["ok"] and got["steps"] == ["pull_request.relate"] and got["status"]["pull_request"].startswith("running")
+    (prog,), problems = machines.load(project.orchestra)
+    assert prog.id == "relate_prs" and not problems and prog.outcome(3) == "unrelated"
+    env = {**os.environ, "ORCHESTRA_ITEM": "acme/app#5", "ORCHESTRA_FIELDS": json.dumps({"branch": "HK-7-fix-login"})}
+    ran = subprocess.run(list(prog.command), env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert prog.outcome(ran.returncode) == "related" and '"ticket": "HK-7"' in ran.stdout
+    assert not git(repo, "status", "--porcelain").strip()                  # nothing in the checkout

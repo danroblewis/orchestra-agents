@@ -36,9 +36,11 @@ from . import (
     floor,
     handoff,
     handoff_overdue,
+    integrate_heard,
     intended_api,
     machine_spec,
     parent,
+    program_tools,
     promises,
     prompting,
     protocol,
@@ -130,7 +132,8 @@ class AgentHost:
         self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
         self.fillers = Fillers(events)                 # who is seen filling the task system's roles, for the planners
         self.landings = Landings(store)                # the human's tickets, followed until they are done
-        self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s))
+        self.facts = SupervisorFacts(store, self.cfg.ticket_prefix, lambda wait_s: tooling.snapshot(store, "supervisor", wait_s),
+                                     lambda: program_tools.lacking(project))
         self.runner = AgentRunner(self)                # answers the task system's assignments
         self.floor = FloorRunner(self)                 # answers the Workflows floor's offers
         self.residents = Residents(self)               # the resident sessions
@@ -708,7 +711,8 @@ class AgentHost:
 
     def _expire_drafts(self) -> None:
         """Once a minute: draft instruments the owner did not keep, past their expiry, removed
-        (design_instruments.py); and a confirmed machine's expected edits that waited for a series
+        (design_instruments.py); a relayed system's actors heard on the bus joined to its declared
+        machine (integrate_heard.sweep); and a confirmed machine's expected edits that waited for a series
         published once it is linked (design_confirm.publish_waiting); a kept instrument whose option
         could not be marked chosen, marked again (design_instruments.retry_chosen). Skipped for
         ``intended_api.BACKOFF_S`` after an endpoint timeout, so the tick never stalls on it."""
@@ -722,6 +726,8 @@ class AgentHost:
                 for said in design_confirm.publish_waiting(self.project, self.store):
                     log(said)
                 for said in design_instruments.retry_chosen(self.project, self.store):
+                    log(said)
+                for said in integrate_heard.sweep(self.project, self.store):     # a relayed system's actors, once heard
                     log(said)
         except Exception as e:  # noqa: BLE001 - tried again in a minute
             log(f"design: {e!r}")

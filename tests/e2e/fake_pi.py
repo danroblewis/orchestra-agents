@@ -15,12 +15,19 @@ Otherwise, on `prompt` it plays the role given by ORCHESTRA_ROLE:
   time if FAKE_PI_REJECT_FIRST is set (tracked by a marker file in the worktree).
 - supervisor / coordinator: replies with text only.
 
+Without ``--extension`` (``[agents] tools_via = "bash"``) each tool is called as Pi's bash tool
+would run it: the command the appended system prompt gives, through a shell with this process's
+environment, recorded as a ``bash`` toolCall with its ``command``. Each assistant message carries
+``usage.cost.total`` (FAKE_PI_COST dollars, default 0.01), as Pi reports it.
+
 It writes a Pi-format session file so transcripts work."""
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -41,10 +48,18 @@ def emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
+SHELL: dict = {}      # bash mode: {"cmd": the command the system prompt gives, "calls": the commands run}
+
+
 def api(cmd: str, args: dict) -> dict:
-    py = os.environ.get("ORCHESTRA_PYTHON", sys.executable)
-    p = subprocess.run([py, "-P", "-m", "orchestra", "agents", "tool", cmd, json.dumps(args)],
-                       capture_output=True, text=True, cwd=os.environ.get("ORCHESTRA_REPO"), check=False)
+    if SHELL:
+        command = f"{SHELL['cmd']} {cmd} {shlex.quote(json.dumps(args))}"
+        SHELL["calls"].append(command)
+        p = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env=dict(os.environ), check=False)
+    else:
+        py = os.environ.get("ORCHESTRA_PYTHON", sys.executable)
+        p = subprocess.run([py, "-P", "-m", "orchestra", "agents", "tool", cmd, json.dumps(args)],
+                           capture_output=True, text=True, cwd=os.environ.get("ORCHESTRA_REPO"), check=False)
     try:
         return json.loads(p.stdout)
     except (IndexError, ValueError):
@@ -53,6 +68,11 @@ def api(cmd: str, args: dict) -> dict:
 
 def main() -> None:
     argv = sys.argv[1:]
+    if "--extension" not in argv:
+        system = argv[argv.index("--append-system-prompt") + 1] if "--append-system-prompt" in argv else ""
+        found = re.search(r"^    (.+) <tool> '<arguments as one JSON object>'$", system, re.MULTILINE)
+        if found:
+            SHELL.update(cmd=found.group(1), calls=[])
     session_dir = Path(argv[argv.index("--session-dir") + 1])
     session_id = argv[argv.index("--session-id") + 1]
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +89,9 @@ def main() -> None:
 
     def record(role_: str, text: str, tool: str | None = None) -> None:
         content = [{"type": "text", "text": text}]
-        if tool:
+        if tool and SHELL:                    # Pi's bash tool ran it
+            content.append({"type": "toolCall", "name": "bash", "arguments": {"command": SHELL["calls"][-1] if SHELL["calls"] else tool}})
+        elif tool:
             content.append({"type": "toolCall", "name": tool, "arguments": {}})
         with session_file.open("a") as f:
             f.write(json.dumps({"type": "message", "timestamp": time.time(),
@@ -133,7 +155,8 @@ def main() -> None:
             else:
                 text = f"{role} acknowledges: {cmd.get('message', '')[:60]}"
             record("assistant", text, tool)
-            emit({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+            usage = {"totalTokens": 1000, "cost": {"total": float(os.environ.get("FAKE_PI_COST", "0.01"))}}
+            emit({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": text}], "usage": usage}})
             emit({"type": "agent_settled"})
         else:
             emit({"type": "response", "command": t, "success": True})

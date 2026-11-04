@@ -4,7 +4,17 @@ Pi stays resident between turns (the process is the session), takes one JSON com
 per line on stdin and streams events on stdout; ``agent_settled`` ends a turn. Tools
 come from the Orchestra extension (``pi_extension.ts``), which registers the tool
 definitions in ``tools.py`` and runs each call through ``<this interpreter> -m orchestra agents tool`` (ORCHESTRA_PYTHON); with ``[agents]
-tools_via = "file"`` the extension is not loaded (``file_output.py``)."""
+tools_via = "file"`` the extension is not loaded (``file_output.py``). With ``tools_via = "bash"`` it is
+not loaded either: the session calls the same tools as ``orchestra agents tool <name> '<json>'`` from
+Pi's own bash tool, told how by the same system prompt section as Claude Code's and Codex's bash
+mode (``bash_tools.prompt``), and its transcript shows each such call as the tool it ran
+(``bash_tools.parse``). ``auto`` loads the extension: Pi has no MCP server for a policy to block.
+
+The model: ``--provider`` and ``--model`` as configured (``[agents] provider`` and ``model``; Pi
+takes ``provider/id`` in ``model`` too, and for Anthropic the API's ids, ``claude-sonnet-4-5``,
+``claude-sonnet-5``: ``pi --list-models`` lists those its credentials reach). Each assistant
+message's ``usage.cost.total`` is the turn's cost, added up (``TurnResult.cost_usd``), so the day's
+caps (``budget.py``) count Pi's turns in dollars as they do Claude Code's."""
 
 from __future__ import annotations
 
@@ -17,6 +27,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import bash_tools
 from .base import (
     TOOL_CALL_S,
     AgentSession,
@@ -51,7 +62,7 @@ class PiSession(AgentSession):
         self.spec = spec
         args = [resolve_binary(pi_binary or os.environ.get("PI_BINARY", "pi")), "--mode", "rpc",
                 "--session-dir", str(spec.session_dir), "--session-id", spec.session_id]
-        if spec.tools_via != "file":              # file: no Orchestra tools at all (file_output.py)
+        if spec.tools_via not in ("file", "bash"):  # file: no Orchestra tools at all (file_output.py); bash: from the shell
             args += ["--extension", str(EXTENSION_PATH)]
         if spec.provider:
             args += ["--provider", spec.provider]
@@ -61,10 +72,13 @@ class PiSession(AgentSession):
             args += ["--exclude-tools", "edit,write"]
         if spec.thinking:
             args += ["--thinking", spec.thinking]
-        if spec.system_prompt:
-            args += ["--append-system-prompt", spec.system_prompt]
         full_env = {**session_env(PI_AUTH), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
                     "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
+        system = spec.system_prompt or ""
+        if spec.tools_via == "bash":              # the tools as a command Pi's bash tool runs, in this environment
+            system = f"{system.rstrip()}\n\n{bash_tools.prompt(spec.tool_groups, full_env.get('PATH'))}"
+        if system:
+            args += ["--append-system-prompt", system]
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr = spec.log_path.open("a", encoding="utf-8")
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr, text=True,
@@ -143,6 +157,7 @@ class PiSession(AgentSession):
             self._send({"type": "prompt", "message": text})
             clock = _Deadlines(timeout, idle_timeout)
             last_text = ""
+            cost: float | None = None
             while True:
                 why = clock.expired()
                 if why:
@@ -169,6 +184,9 @@ class PiSession(AgentSession):
                         txt = assistant_text(msg.get("content"))
                         if txt.strip():
                             last_text = txt
+                        if (c := message_cost(msg)) is not None:
+                            cost = round((cost or 0.0) + c, 6)
+                            result.cost_usd = cost
                 elif t == "agent_settled":
                     result.text = last_text
                     emit.settled(last_text)
@@ -239,6 +257,20 @@ class PiSession(AgentSession):
         return archive(self.session_file)
 
 
+def message_cost(msg: dict) -> float | None:
+    """What one assistant message cost, as Pi reports it (``usage.cost.total``, dollars), or None."""
+    total = ((msg.get("usage") or {}).get("cost") or {}).get("total") if isinstance(msg.get("usage"), dict) else None
+    return float(total) if isinstance(total, int | float) and not isinstance(total, bool) else None
+
+
+def shown_call(name: str, args) -> tuple[str, dict]:
+    """A tool call as a transcript shows it: Pi's bash tool running ``orchestra agents tool <name>``
+    (``tools_via = "bash"``) is the Orchestra tool it ran, with its arguments."""
+    if name == "bash" and isinstance(args, dict) and (called := bash_tools.parse(str(args.get("command") or ""))):
+        return called
+    return name, args
+
+
 def archive(session_file: str | None) -> str | None:
     """Move a Pi session file beside its siblings under ``archive/``; the new path, or None."""
     if not session_file or not Path(session_file).exists():
@@ -265,13 +297,14 @@ class _Normalizer(_NormalizerBase):
             kind = {"text_delta": "text", "thinking_delta": "thinking"}.get(u.get("type"))
             self._emit({"type": "token", "kind": kind, "delta": u.get("delta") if kind else None})
         elif t == "tool_execution_start":
-            self._emit({"type": "tool_start", "name": ev.get("toolName") or ev.get("name", "?"),
-                        "args": ev.get("args") or ev.get("arguments") or {}})
+            name, args = shown_call(ev.get("toolName") or ev.get("name", "?"), ev.get("args") or ev.get("arguments") or {})
+            self._emit({"type": "tool_start", "name": name, "args": args})
         elif t == "tool_execution_end":
             self._emit({"type": "tool_end", "name": ev.get("toolName") or ev.get("name", "?")})
         elif t == "message_end" and msg.get("role") == "assistant":
             content = msg.get("content")
-            calls = [p.get("name", "?") for p in content if isinstance(p, dict) and p.get("type") == "toolCall"] \
+            calls = [shown_call(p.get("name", "?"), p.get("arguments"))[0] for p in content
+                     if isinstance(p, dict) and p.get("type") == "toolCall"] \
                 if isinstance(content, list) else []
             self._emit({"type": "assistant_end", "text": assistant_text(content), "tool_calls": calls})
 
@@ -333,7 +366,8 @@ class PiHarness(Harness):
                                 args = json.loads(args)
                             except json.JSONDecodeError:
                                 pass
-                        tools.append({"name": part.get("name"), "args": args})
+                        name, args = shown_call(part.get("name"), args)
+                        tools.append({"name": name, "args": args})
             entry = {"role": role, "text": text, "tool_calls": tools, "ts": e.get("timestamp")}
             if role == "toolResult":
                 entry["text"] = text[:6000]

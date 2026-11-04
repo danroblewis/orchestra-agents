@@ -123,7 +123,10 @@ enabled = true            # false: no host, no agents
   has and logged in once (`claude` by hand). The default when `claude` is found, with Haiku. It
   compacts its own context. The Supervisor and the Coordinator run without its editing tools.
 - **`pi`**: the Pi coding agent (`pi`), any provider and model it supports (`provider`, `model`,
-  `thinking`).
+  `thinking`). Anthropic's Sonnet on Pi: `provider = "anthropic"`, `model = "claude-sonnet-5"` (Pi
+  takes the API's ids, `claude-sonnet-4-5` and `claude-sonnet-4-6` too, or `anthropic/<id>` in `model`;
+  `pi --list-models sonnet` lists those its credentials reach: `ANTHROPIC_API_KEY` in `orchestra
+  run`'s environment, or Pi's own login). It reports each turn's cost, so the day's caps count it.
 - **`codex`**: OpenAI's Codex CLI (`codex exec`); its MCP tools need OpenAI's own API.
 - **`dummy`**: scripted agents with no model, no network and no cost: a worker commits a token file
   and reports ready, a reviewer approves, the Supervisor hands a chat message to the Coordinator,
@@ -157,9 +160,20 @@ enabled = true            # false: no host, no agents
   work (no reads, no tickets, no setup): fit for workers and machines on offers, not for you.
   `docs/policy-modes.md` compares the three for a policy reviewer.
 
-The sessions start again on the new setting after their turn. Pi always calls the tools through
-its extension and the dummy harness in-process: the setting changes nothing there; Codex takes
-`bash`, and `auto` is the MCP server on Codex.
+The sessions start again on the new setting after their turn. Pi calls the tools through its
+extension with `mcp` or `auto` (it has no MCP server to block), and with `bash` from its own bash
+tool, exactly as Claude Code does (no extension loaded, the same system prompt section, the same
+tools); the dummy harness calls them in-process; Codex takes `bash`, and `auto` is the MCP server
+on Codex. Pi in bash mode, on Anthropic's Sonnet, is what an organisation that allows shell
+commands and no unapproved MCP server or extension can run:
+
+```toml
+[agents]
+harness = "pi"
+provider = "anthropic"
+model = "claude-sonnet-5"
+tools_via = "bash"
+```
 
 The harness the host runs on is on the Agents page and in `orchestra agents status`; when it was
 chosen by default, both say so and how to change it.

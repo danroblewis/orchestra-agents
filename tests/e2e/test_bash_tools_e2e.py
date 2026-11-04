@@ -79,3 +79,38 @@ def test_auto_switches_to_the_shell_when_a_hook_refuses_the_servers_calls(tmp_pa
         sup = agent_store(env).find_session("supervisor") or {}
         told = [m["text"] for m in read_transcript(sup) if m["role"] == "user" and "Orchestra notice" in m["text"]]
         assert len(told) == 1 and "MCP server is not in the whitelist" in told[0]
+
+
+def test_pi_in_bash_mode_calls_the_same_tools_from_its_shell(tmp_path, monkeypatch):
+    """Pi with ``tools_via = "bash"`` (an organisation that allows shell commands and no unapproved
+    extension or server): no Orchestra extension is loaded, the system prompt carries the same
+    section as Claude Code's bash mode, every tool call is Pi's bash tool running the command, and a
+    transcript shows it as the tool it ran. Each turn's cost is Pi's ``usage.cost.total``."""
+    from orchestra_agents.harness import bash_tools
+    from orchestra_agents.harness.pi import PiSession
+
+    started = []
+    real_init = PiSession.__init__
+
+    def spy(self, spec, pi_binary=None):
+        real_init(self, spec, pi_binary)
+        started.append((spec, list(self.proc.args)))
+    monkeypatch.setattr(PiSession, "__init__", spy)
+    with make_env(tmp_path, monkeypatch, "pi", tools_via="bash") as env:
+        t = env.create(title="Do the thing", description="x", acceptance="y")
+        env.settle(t)
+        assert env.state(t) == "DONE"
+        check_protocol(env.events, t, WORK_READY, APPROVED)
+        archived = agent_store(env).runtime()["archived_sessions"]
+        for kind, tool in (("worker", "report_ticket"), ("reviewer", "report_review")):
+            calls = [c for m in read_transcript(archived[f"{kind}-{t}"]) for c in m.get("tool_calls") or []]
+            assert [c["name"] for c in calls] == [tool]                       # Pi's bash call, shown as the tool it ran
+            raw = Path(archived[f"{kind}-{t}"]["session_file"]).read_text()
+            assert '"name": "bash"' in raw and "agents tool " + tool in raw
+        assert started and all("--extension" not in args for _, args in started)
+        for spec, args in started:
+            system = args[args.index("--append-system-prompt") + 1]
+            assert bash_tools.prompt(spec.tool_groups, None).split("\n", 1)[0] in system
+            assert "Your tools, each with its arguments" in system
+        spend = agent_store(env).agent_state("supervisor").get("spend") or {}
+        assert all(isinstance(d.get("usd"), float) for d in spend.values())

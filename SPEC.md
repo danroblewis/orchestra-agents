@@ -1001,7 +1001,11 @@ with no `[[sources]]` entry with a `match` are refused, with the reason and the 
 unless an owner's message this session gave a scope (a namespace, a job, a selector or a label
 matcher) and a series cap, or said to use the defaults; `set_setting` key `sources` refuses a new
 `match` on the same terms, so a scope the Supervisor picked never passes for theirs. `check_sources`
-(does it answer; reads no series) is not refused. The words are matched loosely and across the
+(does it answer; reads no series) is not refused. Since core C14 (2026-11-03) a source needs a match:
+the core refuses a `[[sources]]` entry without one, or with a match-everything selector, so
+`set_setting` writes none, a declared one is shown as refused in the core's words, and a store given
+by url is looked at (`check_sources` included) only with a `bound` (or `source_schema`'s and
+`infer_source`'s `match`), refused otherwise with the core's reason. The words are matched loosely and across the
 session, not tied to one store.
 
 **Seeing** (tool group `observe`; any role may be granted it; every list in these answers is its

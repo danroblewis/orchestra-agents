@@ -125,27 +125,34 @@ def remote():
     s.close()
 
 
+SCOPE = ['{__name__=~"http_.*|queue_.*"}']   # the owner's scope for the shop's store: its requests and queues
+API = ['{service="api"}']                     # or its api service's series: a preview names the bound's matchers
+
+
 def test_another_store_is_looked_at_before_it_is_declared(project, store, remote):
-    checked = call(project, store, "check_sources", url=remote.url)
-    assert any("answers" in line for line in checked["lines"])
-    with pytest.raises(StoreError, match="no bound"):
+    with pytest.raises(StoreError, match="a source needs a match .* pass that scope as bound"):
+        call(project, store, "check_sources", url=remote.url)            # the core reads no store without the owner's scope
+    with pytest.raises(StoreError, match="a source needs a match"):
         call(project, store, "source_schema", url=remote.url)            # never every metric name of a store with no bound
-    whole = call(project, store, "source_schema", url=remote.url, bound=['{__name__=~"http_.*|queue_.*"}'])
+    checked = call(project, store, "check_sources", url=remote.url, bound=SCOPE)
+    assert any("answers" in line for line in checked["lines"])
+    whole = call(project, store, "source_schema", url=remote.url, bound=SCOPE)
     assert whole["names"] == ["http_requests_total [counter]", "queue_depth [guessed: gauge]"]   # names only: one request
     assert whole["levels"] == ["queue_depth by queue: orders"]          # an amount held, with what it holds
-    with pytest.raises(StoreError, match="no bound"):
+    with pytest.raises(StoreError, match="a source needs a match"):
         call(project, store, "source_schema", url=remote.url, match=['{__name__=~".+"}'])
     schema = call(project, store, "source_schema", url=remote.url, match=['{__name__=~"http_.*|queue_.*"}'])
     by = {m["name"]: m for m in schema["names"]}
     assert by["http_requests_total"]["type"] == "counter" and by["http_requests_total"]["series"] == 3
     assert by["http_requests_total"]["labels"]["pod"]["values"] == 3
     assert by["queue_depth"]["type"].startswith("guessed: gauge")
-    preview = call(project, store, "preview_query", url=remote.url, query="sum(rate(http_requests_total[1m]))", minutes=10, step_s=15)
+    preview = call(project, store, "preview_query", url=remote.url, query='sum(rate(http_requests_total{service="api"}[1m]))', bound=API,
+                   minutes=10, step_s=15)
     assert preview["lines"][0].startswith("1 series")
-    inferred = call(project, store, "infer_source", url=remote.url)
+    inferred = call(project, store, "infer_source", url=remote.url, match=SCOPE)
     assert any("families" in line for line in inferred["lines"])
     assert "not declared yet" in checked["note"]
-    entry = json.dumps([{"name": "shop", "url": remote.url, "machine": "service", "match": ['{__name__=~"http_.*|queue_.*"}']}])
+    entry = json.dumps([{"name": "shop", "url": remote.url, "machine": "service", "match": SCOPE}])
     out = call(project, store, "set_setting", key="sources", value=entry, target="repo", reason="The shop's request and queue metrics.")
     assert out["commit"]
     assert call(project, store, "infer_source", source="shop")["lines"][0].startswith("shop:")
@@ -154,7 +161,7 @@ def test_another_store_is_looked_at_before_it_is_declared(project, store, remote
     with pytest.raises(StoreError, match="no source 'work'"):
         call(project, store, "source_schema", source="work")
     with pytest.raises(StoreError, match="literal secret|user:pass"):
-        call(project, store, "check_sources", url="http://me:pw@127.0.0.1:1")
+        call(project, store, "check_sources", url="http://me:pw@127.0.0.1:1", bound=SCOPE)
 
 
 def test_a_store_that_refuses_a_whole_listing_is_listed_name_by_name(project, store, remote, monkeypatch):
@@ -176,7 +183,7 @@ def test_a_token_in_a_file_is_declared_by_its_path_and_never_shown(project, stor
     token.parent.mkdir()
     token.write_text("tok-9f8e7d6c5b4a\n")
     auth = {"bearer_file": str(token)}
-    seen = json.dumps(call(project, store, "check_sources", url=remote.url, auth=auth))
+    seen = json.dumps(call(project, store, "check_sources", url=remote.url, auth=auth, bound=['{__name__="queue_depth"}']))
     assert "present" in seen and "tok-9f8e7d6c5b4a" not in seen
     entry = json.dumps([{"name": "shop", "url": remote.url, "auth": auth, "match": ['{__name__="queue_depth"}']}])
     assert call(project, store, "set_setting", key="sources", value=entry, target="repo", reason="The shop's queue.")["commit"]
@@ -219,11 +226,12 @@ def test_how_late_a_store_writes_is_measured_from_its_newest_samples():
 def test_previews_are_bounded_and_trial_stores_keep_one_name(project, store, remote):
     from orchestra_agents.source_tools import trial_name
     with pytest.raises(StoreError, match="no aggregation and no label matcher"):
-        call(project, store, "preview_query", url=remote.url, query="http_requests_total")
-    ok = call(project, store, "preview_query", url=remote.url, query='http_requests_total{service="api"}', minutes=10, step_s=15)
+        call(project, store, "preview_query", url=remote.url, query="http_requests_total", bound=API)
+    ok = call(project, store, "preview_query", url=remote.url, query='http_requests_total{service="api"}', bound=API,
+              minutes=10, step_s=15)
     assert ok["lines"][0].startswith("3 series")
     assert trial_name(remote.url) == trial_name(remote.url + "/") and trial_name(remote.url).startswith("trial_")
-    assert trial_name(remote.url) in call(project, store, "check_sources", url=remote.url)["note"]
+    assert trial_name(remote.url) in call(project, store, "check_sources", url=remote.url, bound=SCOPE)["note"]
 
 
 def test_set_collector_and_try_collector_refuse_the_projects_build_or_tests(project, store):

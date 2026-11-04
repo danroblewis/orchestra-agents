@@ -40,15 +40,24 @@ def trial_name(url: str) -> str:
     return f"{TRIAL}_{hashlib.sha256(url.strip().rstrip('/').encode()).hexdigest()[:8]}"
 
 
+def _list(x) -> list[str]:
+    return [x] if isinstance(x, str) else list(x or [])
+
+
 def _catalogue(project: Project, a: dict):
     from orchestra.metrics import for_project as metrics_for
     from orchestra.sources.catalogue import Catalogue
-    from orchestra.sources.spec import for_project, load
+    from orchestra.sources.spec import NO_MATCH, for_project, load
 
     url = (a.get("url") or "").strip()
     if url:
         name = trial_name(url)
         bound = bounds.trial_bound(for_project(project.orchestra).sources, url, a.get("bound"))   # a declared url's match holds
+        if not bound and a.get("match") and not bounds.everything(m := _list(a["match"])):
+            bound = m                                             # the match given is the only scope
+        if not bound:                                             # the core reads no store without a match (spec.NO_MATCH)
+            raise StoreError(f"that source cannot be read: {NO_MATCH}; then pass that scope as bound "
+                             "(e.g. {namespace=\"team\"}), as [[sources]] match will write it")
         entry = {"name": name, "url": url, **({"auth": a["auth"]} if a.get("auth") else {}),
                  **({"match": bound} if bound else {})}
         specs = load({"sources": [entry]}, project.repo_root)

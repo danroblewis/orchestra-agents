@@ -102,15 +102,17 @@ def test_the_tools_stay_inside_the_sources_match_on_a_store_of_two_namespaces(tm
 
 
 def test_a_store_with_no_bound_is_never_asked_for_every_metric_name(tmp_path, monkeypatch, shared):
-    project, store = _project(tmp_path, monkeypatch, shared.url, None)
-    with pytest.raises(StoreError, match="no bound .* never done"):
+    project, store = _project(tmp_path, monkeypatch, shared.url, None)   # declared without a match: the core refuses it
+    with pytest.raises(StoreError, match="prom: refused: a source needs a match"):
         call(project, store, "source_schema", source="prom")
-    with pytest.raises(StoreError, match="no bound"):
+    with pytest.raises(StoreError, match="prom: refused: a source needs a match"):
         call(project, store, "source_schema", source="prom", match=['{__name__=~".+"}'])
-    with pytest.raises(StoreError, match="no bound"):
+    with pytest.raises(StoreError, match="a source needs a match"):
+        call(project, store, "source_schema", url=shared.url)
+    with pytest.raises(StoreError, match="prom: refused: a source needs a match"):
         call(project, store, "find_balance", level="all")
     assert not [r for r in shared.requests if r[0] == "values"]          # no listing of every name was sent
-    narrowed = call(project, store, "source_schema", source="prom", match=[f'{{{OURS}}}'])   # a match of its own bounds it
+    narrowed = call(project, store, "source_schema", url=shared.url, match=[f'{{{OURS}}}'])   # a match of its own bounds it
     assert narrowed["series_read"] == 3
 
 

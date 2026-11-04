@@ -10,6 +10,7 @@ from conftest import agents_project
 from fake_tasks import FakeTasks
 
 from orchestra_agents import tooling
+from orchestra_agents.design import begin_turn
 from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore, StoreError
 
@@ -165,7 +166,8 @@ def test_a_change_of_what_is_measured_only_begins_no_era(project, store):
     capacity included) begin no era; a machine's change does."""
     from orchestra.sd.eras import DEFAULT_FROM, begins
     call(project, store, "set_collector", name="disk", command="machines/disk.sh", every="60s", reason="the owner wants disk usage")
-    call(project, store, "set_setting", key="sources", value='[{"name": "shop", "url": "http://127.0.0.1:9"}]', target="repo", reason="the shop's store")
+    begin_turn(store, 'Read the shop\'s store, {job="shop"}, at most 50 series.')     # the owner's limits (T36)
+    call(project, store, "set_setting", key="sources", value='[{"name": "shop", "url": "http://127.0.0.1:9", "match": ["{job=\\"shop\\"}"]}]', target="repo", reason="the shop's store")
     call(project, store, "set_capacity_limit", workers=2, reason="the owner wants two at once")
     call(project, store, "set_machine", name="feed", command="python feed.py", reason="the feed must keep running")
     evs = [e for e in store.events.read(0, 1000)[0] if e["type"].endswith(".changed")]

@@ -160,6 +160,8 @@ def _stores(project: Project, a: dict) -> tuple[Store, list[Store]]:
                               **({"match": bound} if bound else {})})
             return name
         name = str(x or "").strip()
+        if not name and specs.refused:                            # none declared but some refused: say why (spec.NO_MATCH)
+            raise StoreError("no source can be read: " + "; ".join(f"[[sources]] {k}: refused: {v}" for k, v in specs.refused.items()))
         if name not in declared:
             refused = specs.refused.get(name)
             raise StoreError(f"[[sources]] {name}: refused: {refused}" if refused else

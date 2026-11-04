@@ -289,6 +289,8 @@ TOOLS: list[ToolDef] = [
             "Another time-series store ([[sources]], or a url before declaring one): where it is, whether its credentials "
             "are present (never their values), whether it answers and which API endpoints work.",
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL, to look before declaring it"),
+             "bound": A("With url: the owner's scope for that store, as [[sources]] match writes it (e.g. {namespace=\"team\"}); "
+                        "a store is never read without one"),
              "auth": O("With url: as [[sources]] writes it: {\"bearer_file\": \"<path to the token file>\"} for a token in a file, "
                        "{\"bearer_env\": \"WORK_TOKEN\"} for one in the environment; never the token itself")}),
     ToolDef("source_schema", "observe",

@@ -199,7 +199,8 @@ selection and wait for a go-ahead; they redirect you afterwards if they want som
    with no bound is never asked for every metric name: the tools refuse and say so. On a shared
    store, ask the owner its scope before reading it; never read it before they give it. **Any
    store: read nothing from it** (no `source_schema`, `find_balance`, `preview_query` or
-   `infer_source`; `check_sources` only asks whether it answers) **until the owner has given its
+   `infer_source`; `check_sources` only asks whether it answers, and takes a `bound` too: Orchestra
+   reads no store without a match) **until the owner has given its
    limits** (the namespace or selector, and the series cap) **or said to use defaults**; a bound you
    picked yourself (a `job` from the code) is not theirs, and "proceed as you think best" is not
    their limits. The tools refuse until then; ask in one sentence ("Which part of the store may I

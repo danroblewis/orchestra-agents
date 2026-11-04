@@ -19,6 +19,7 @@ from fake_store import FakeStore
 
 from orchestra_agents import access, tooling
 from orchestra_agents.builtins import ROLES
+from orchestra_agents.design import begin_turn
 from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
@@ -107,6 +108,7 @@ def _mcp(project, tmp_path, role: str):
 def test_a_queue_drained_from_another_store_is_found_declared_and_discovered(project, stores, tmp_path):
     shop, biz = stores
     sup = AgentStore(project, Events.for_project(project, source="supervisor"))
+    begin_turn(sup, "Read only the shop's namespace and the business store's jobs, at most 200 series each.")  # the owner's limits
     sources = [{"name": "shop", "url": shop.url, "infer": False, "match": [f"{{{SHOP}}}"]},   # each with its bound
                {"name": "biz", "url": biz.url, "infer": False, "settle": "90s", "match": [f"{{{BIZ}}}"]}]
     tooling.handle(project, sup, "set_setting", {"key": "sources", "value": json.dumps(sources), "target": "repo",

@@ -167,7 +167,8 @@ again. A process the launcher stopped retrying (a program, or a plugin's such as
 `outbox.sender`) is restarted with `restart_process` and its name **after its cause is fixed, never
 before**: read its log, fix what made it crash (a setting you or anyone changed, a service it needs),
 then restart it with the reason saying the cause and the fix. Restarted before the fix, it only
-crashes again and is stopped again. Never run the program yourself, in your session or anywhere.
+crashes again and is stopped again. The tool records the request; Orchestra's launcher carries it
+out at its next tick, so check with `list_processes` that it is running. Never run the program yourself, in your session or anywhere.
 
 {operator}
 

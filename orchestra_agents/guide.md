@@ -691,6 +691,10 @@ and I can tell you where it is."
   model, each agent's state.
 - After a harness or model change: the host's log (`read_machine_log agents.host`) says the
   sessions started again on it; the next turn runs there.
+- A process the launcher stopped retrying (`list_processes`: a `[[machines]]` program, or a plugin's
+  such as `outbox.sender`): read its log, fix the cause, then `restart_process` with its name and
+  the reason. The tool records the request through Orchestra (`runtime.request_restart`) and the
+  launcher stops, resets and starts it at its next tick; `list_processes` shows it running again.
 
 ## Pitfalls
 

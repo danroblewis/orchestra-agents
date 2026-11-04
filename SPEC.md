@@ -1133,14 +1133,18 @@ removed), which starts it again; `orchestra.toml` is not touched and nothing is 
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
 someone else changes the overlay in between, the entry is not put back and the answer says so.
 
-`restart_process` (2026-11-04, T41; `process_restart.py`) restarts one of the launcher's processes by
-its name in the runtime record, a plugin's too (`outbox.sender`), through Orchestra, never a signal
-or a launcher file: with Orchestra's `runtime.request_restart` when the core has it (asked of the
-core's coordinator: a request under the record's lock that the launcher acts on at its next tick),
-else a project's program the way `restart_machine` does, and a plugin's process is refused, saying
-it starts again when `orchestra run` restarts. It is the Supervisor's (the `setup` group), on the bus
-as `process.restarted` {name, owner, reason, by, pid_before, pid} (or `machine.restarted`) and in its
-ledger. Its prompt says a stopped process is restarted after its cause is fixed, never before.
+`restart_process` (2026-11-04, T41; through the core's call since T42; `process_restart.py`)
+restarts one of the launcher's processes by its name in the runtime record, a project's
+`[[machines]]` program or a plugin's (`outbox.sender`), through Orchestra, never a signal or a
+launcher file: it records the request with `runtime.request_restart(project, name, by="supervisor",
+reason=)`, and at its next tick the launcher stops the process if it runs, resets its crash budget,
+starts it and publishes `orchestra.process.restart_requested`. A `[[machines]]` program is a
+launcher process like a plugin's, so the one call serves both; `restart_machine` keeps its overlay
+mechanism. The tool does not wait for the tick: its answer says the restart is requested and how it
+happens. The core's refusals (no `orchestra run`, no process of that name) are said in the tool's
+words. It is the Supervisor's (the `setup` group), on the bus as `process.restart_requested` {name,
+owner, reason, by, pid} and in its ledger. Its prompt says a stopped process is restarted after its
+cause is fixed, never before, and that the launcher carries it out at its next tick.
 
 Limits: since 2026-11-02 the Supervisor commits to its own branch, never the base, and never touches
 the checkout, so its changes neither move the base under a landing nor block one; the setup tools

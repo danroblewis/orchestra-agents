@@ -431,8 +431,9 @@ TOOLS: list[ToolDef] = [
             {"name": S("The [[machines]] entry's name"), "reason": S("Why, in a sentence")}, ("name", "reason")),
     ToolDef("restart_process", "setup",
             "Restart one of the launcher's processes by its name in list_processes (a [[machines]] program or a plugin's, "
-            "such as outbox.sender), through Orchestra's launcher, never a signal: for one it stopped retrying, only after "
-            "the cause of its crashes is fixed. The reason goes on the bus as your act.",
+            "such as outbox.sender), through Orchestra's launcher, never a signal: the restart is requested and the launcher "
+            "carries it out at its next tick. For one it stopped retrying, only after the cause of its crashes is fixed. "
+            "The reason goes on the bus as your act.",
             {"name": S("The process's name, as list_processes has it"), "reason": S("What caused it to stop and how it was fixed, in a sentence")},
             ("name", "reason")),
     # model: read the system dynamics model and what was done with it (modeling.py)

@@ -169,6 +169,12 @@ before**: read its log, fix what made it crash (a setting you or anyone changed,
 then restart it with the reason saying the cause and the fix. Restarted before the fix, it only
 crashes again and is stopped again. The tool records the request; Orchestra's launcher carries it
 out at its next tick, so check with `list_processes` that it is running. Never run the program yourself, in your session or anywhere.
+A workflow's step whose turn finished blocked or error is tried again by the floor after 1, 5, 15
+minutes, then hourly, and moved to `stalled` when its tries are spent. Once you fixed what failed it
+(a refused push, a missing credential, a service down), `retry_step` with the item and the step asks
+the floor to offer it again now, **only after the cause is fixed, never before**: the reason says what
+failed and what you fixed, and your reply tells the owner what you fixed. Retried before the fix, it
+only fails again and spends a try. When you cannot fix the cause, say what it is and what fixes it.
 
 {operator}
 

@@ -295,7 +295,9 @@ not done yet, first check whether the system can do it at all:
    whose rounds fail: read its log. A cause in its entry (a wrong command or path, a timeout too
    short) is yours: `set_machine` or `set_collector`. A cause in its code is a bug for a worker:
    [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]]. Once the cause is gone, `restart_machine` starts a program again, and `restart_process` any process
-   the launcher stopped retrying (a plugin's too): never before the cause is fixed.
+   the launcher stopped retrying (a plugin's too): never before the cause is fixed. A workflow item
+   whose step failed (blocked or error: in retry, or `stalled`) is offered again now with
+   `retry_step` once you fixed its cause; the reason, and your reply, say what you fixed.
 5. **Is anything offered at all?** A capacity limit of 0 offers nothing: `set_capacity_limit`.
 
 Fix the setup with your tools, then tell the human in your reply what you changed, why, and the

@@ -1150,6 +1150,20 @@ words. It is the Supervisor's (the `setup` group), on the bus as `process.restar
 owner, reason, by, pid} and in its ledger. Its prompt says a stopped process is restarted after its
 cause is fixed, never before, and that the launcher carries it out at its next tick.
 
+`retry_step` (2026-11-04, T48; `retry_step.py`; the `workflows` group, the Supervisor's) asks the
+Workflows floor to offer an item's step again now, once its cause is fixed (the standing demo's
+SCRUM-56 sat at `write` blocked on a refused git push, and the floor's back-off, orchestra-workflows
+W16, waits up to an hour between tries). It publishes the plugin's `item.retry_requested` (W17, the
+name copied in `floor.py`) about the item as `supervisor`, the item's planner, with `step`,
+`workflow` and `reason`: that event is the act on the bus, and the ledger's line. The floor enters
+the step again (tries from nothing) and offers it on the tick that reads it. It is refused, nothing
+published, unless the plugin's record (`Record.items`, the item's positions) has the item open and
+the step blocked or errored there (`retry`, `last_try`) or the step it was moved to `stalled` from
+(`came_from`), and unless the workflow's planner is the Supervisor. The prompt says to retry only
+after the cause is fixed and to say what was fixed. The "since" digest names items in retry ("SCRUM-56
+at write: 3 tries, next at 14:05, last: git push refused (publickey)") and, first after what died,
+the stalled ones (`since_state.py`).
+
 Limits: since 2026-11-02 the Supervisor commits to its own branch, never the base, and never touches
 the checkout, so its changes neither move the base under a landing nor block one; the setup tools
 still refuse while one lands. A commit to

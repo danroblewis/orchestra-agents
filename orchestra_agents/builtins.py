@@ -26,7 +26,8 @@ Tool groups:
                declared (an instrument written to the state directory, its entry in the owner's overlay), refine
                machines, confirm or discard at the owner's word, expected effects (the Supervisor only)
   workflows    write a workflow the owner describes through the Workflows plugin's validated writer (the
-               Supervisor only), read the loaded definitions back, explain an item (workflow_tools.py)
+               Supervisor only), read the loaded definitions back, explain an item (workflow_tools.py), and
+               offer a blocked or stalled step again once its cause is fixed (retry_step.py)
   work         request_work: start a piece of work on a workflow (item.requested), the Supervisor for the
                owner (as owner, on their quoted words) and the Coordinator as the planner (request_work.py)
   setup        change the configuration through Orchestra, in orchestra.toml or the owner's private

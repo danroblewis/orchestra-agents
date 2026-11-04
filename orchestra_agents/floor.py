@@ -9,6 +9,9 @@ MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN = "offer.made", "offer.claimed", "offe
 LISTENS_FOR = (MADE, WITHDRAWN)          # what the host watches on behalf of an agent that serves a floor role
 ATTENTION_NEEDED = "attention.needed"    # the floor asks a planner (``to``) to look: a guard passed
 CLOSED = "item.closed"                   # an item's end, by anyone; nothing waits on a closed item
+RETRY_REQUESTED = "item.retry_requested"  # the item's planner: offer a blocked or stalled step again now (W17)
+RETRIED = ("blocked", "error")           # a turn's outcomes the floor tries the step again on (W16)
+STALLED = "stalled"                      # the step a workflow moves an item to when its tries are spent (W15, W16)
 PROTOCOL = (MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN, ATTENTION_NEEDED, CLOSED)
 """The floor's protocol types, as this copy names them: the plugin's, never the owner's. A machine the
 Workflows plugin proposed carries them in its receives whether or not each was heard yet (T2d s10:

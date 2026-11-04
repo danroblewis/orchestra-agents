@@ -114,6 +114,9 @@ def test_a_new_project_is_set_up_by_the_supervisor_with_no_configuration(fresh):
     sup = store.find_session("supervisor")
     assert sup["last_text"] == "I set the project up: the instrument todos stores todo_comments = 3.0.", sup["last_text"]
     assert store.agent_state("supervisor")["setup"]["harness"] == "dummy"
+    from orchestra_agents.first_run import CHECKLIST                         # no store declared: the owner's checklist first
+    asked = [m["text"] for m in read_transcript(sup) if m["role"] == "user"]
+    assert CHECKLIST in asked[0] and store.agent_state("supervisor")["setup"]["asked"] == "checklist"
     tools = [a["tool"] for a in store.agent_state("supervisor").get("actions") or []]
     assert tools == ["set_collector"]                                       # the one change, on the record
 

@@ -958,6 +958,12 @@ instrument, a `[[scrape]]` of an existing `/metrics`, the gate's stages), ask th
 choices in one message with a recommendation for each (`work = "code"`, `push`, anything acting as
 the human, the model and its cost), check what it declared works, and report what it set and why.
 It creates no tickets.
+With no `[[sources]]` (the owner, 2026-11-04: a short discussion, then an automated exploration and
+setup) the wake-up adds `first_run.CHECKLIST`, and the Supervisor's first message is it, in one
+message, before any store is read: which systems, where each token file is (a path or a variable's
+name, never the token's value), the `match` and the wider `explore` of each, the caps, and that it
+stays read-only. From the owner's answer it declares the stores and explores within them on its
+own (`explore_round.py`); the record notes `setup.asked = "checklist"`.
 
 **Measurements** (`instruments.py`, `source_tools.py`, `prompts/operator.md` "Measurements"). Adding a
 collector is the Supervisor's, from one chat message: it reads Orchestra's guide, finds where the

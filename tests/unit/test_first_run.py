@@ -80,3 +80,20 @@ def test_a_configured_project_is_not_set_up_again(fresh):
     fresh.reload_config()
     _host, store, harness = run_once(fresh)
     assert not [p for s in harness.sessions for p in s.prompts] and "setup" not in store.agent_state("supervisor")
+
+
+def test_with_no_store_declared_the_first_run_opens_with_the_owner_s_checklist(fresh):
+    """The owner, 2026-11-04: a short discussion first, then the Supervisor explores and sets up alone.
+    With no [[sources]] its first turn asks one message's checklist: the systems, where each token
+    file is (never the token), the match and the wider explore, the caps, and read-only."""
+    assert first_run.wants_checklist({}) and not first_run.wants_checklist({"sources": [{"name": "w"}]})
+    assert first_run.CHECKLIST in first_run.goal({}) and first_run.CHECKLIST not in first_run.goal({"sources": [{"name": "w"}]})
+    c = first_run.CHECKLIST.lower()
+    for point in ("which systems", "token", "path of the file", "`match`", "`explore`", "series", "a second and a day",
+                  "read-only", "in one short message"):
+        assert point in c, point
+    assert "never ask for the token itself" in c and "paste" not in c and "what is the token" not in c
+    _host, store, harness = run_once(fresh)
+    [sup] = [s for s in harness.sessions if s.spec.role == "supervisor"]
+    assert first_run.CHECKLIST in sup.prompts[0]
+    assert store.agent_state("supervisor")["setup"]["asked"] == "checklist"

@@ -78,6 +78,15 @@ what is right. The goal: understand the repository, and configure Orchestra and 
 plugins so that what the project does is measured and the work the human asks for can be done,
 reviewed and, in code work, tested and landed.
 
+- **No store declared yet: the owner's checklist first.** When the first run's wake-up carries
+  the checklist (the project has no `[[sources]]`), your first message is that checklist, all of it
+  in one short message: which systems to read, where each one's token file is (a path or a
+  variable's name; never the token, which you never ask for, read or print), which part of each
+  store the model may read (`match`) and the wider part you may survey (`explore`), the caps, and
+  that it all stays read-only. Read no store before they answer. Their answer is the short
+  discussion; what follows is yours: declare each store with their `match`, `explore`, caps and
+  credential path (`set_setting` key `sources`, quoting them), set the rest up, and explore within
+  it ("Exploring the stores") without asking again, except to widen `match` beyond their words.
 - **Read the guides first.** `list_guides`, then `read_guide` for each one whose settings you will
   touch (Orchestra's, the task system's, the agents'): without a section it gives the guide's
   contents (each section's heading and size) and its opening; then read each section you need by

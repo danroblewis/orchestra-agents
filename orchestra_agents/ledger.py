@@ -77,8 +77,7 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
             return f"changed the owner's private overlay (not committed): {result.get('announce')}"
         return None
     if command == "restart_process":
-        return (f"restarted the process {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> "
-                f"{result.get('pid')}): {a.get('reason')}")
+        return f"asked orchestra run to restart the process {result.get('requested') or a.get('name')}: {a.get('reason')}"
     if command == "restart_machine":
         return f"restarted the program {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> {result.get('pid')})"
     if command == "update_project_context":

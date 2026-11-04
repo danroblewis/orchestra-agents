@@ -65,9 +65,11 @@ def test_the_owners_words_give_limits_only_with_a_scope_and_a_cap_or_the_default
 def test_a_store_is_read_only_after_the_owner_gave_its_limits(setup, prom):
     project, store = setup
     begin_turn(store, RUN6_1_1)
-    assert call(project, store, "check_sources", url=prom.url)["ok"]          # whether it answers: no series read
-    sent = len(prom.requests)
     scope = ['{job=~"hk-api|hk-stream|hk-store"}']                             # a scope of its own, from the code
+    with pytest.raises(StoreError, match="a source needs a match"):              # no store is looked at without one
+        call(project, store, "check_sources", url=prom.url)
+    assert call(project, store, "check_sources", url=prom.url, bound=scope)["ok"]   # whether it answers: no series read
+    sent = len(prom.requests)
     for tool, args in (("source_schema", {"bound": scope}), ("preview_query", {"query": 'sum(queue_depth{job="hk-api"})'}),
                        ("infer_source", {"match": scope}), ("find_balance", {"level": "queue_depth", "bound": scope})):
         with pytest.raises(StoreError, match="has not given this store's limits") as e:

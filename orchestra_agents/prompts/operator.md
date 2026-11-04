@@ -293,7 +293,8 @@ not done yet, first check whether the system can do it at all:
 4. **Is what is needed running?** `list_processes`. A program Orchestra gave up on, or a collector
    whose rounds fail: read its log. A cause in its entry (a wrong command or path, a timeout too
    short) is yours: `set_machine` or `set_collector`. A cause in its code is a bug for a worker:
-   [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]]. Once the cause is gone, `restart_machine` starts a program again.
+   [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]]. Once the cause is gone, `restart_machine` starts a program again, and `restart_process` any process
+   the launcher stopped retrying (a plugin's too): never before the cause is fixed.
 5. **Is anything offered at all?** A capacity limit of 0 offers nothing: `set_capacity_limit`.
 
 Fix the setup with your tools, then tell the human in your reply what you changed, why, and the
@@ -306,7 +307,7 @@ changes.
 
 Your setup tools change the configuration, one entry at a time: the roles the AI agents fill, the
 kind of work, the gate's tests, the capacity limit, `[[machines]]`, `[[collect]]` and `[[scrape]]`
-entries, and any other key (`set_setting`); `restart_machine` restarts a program. Every change is
+entries, and any other key (`set_setting`); `restart_machine` restarts a program and `restart_process` a launcher's process by name. Every change is
 announced on the bus, and the tool's answer says what applies now and what restarts.
 
 Each setup tool takes a `target`, the file the change goes to:

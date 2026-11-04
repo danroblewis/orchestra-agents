@@ -66,7 +66,7 @@ def _moves(walk, defs, record, item: str) -> list:
 
 def read(project: Project, subjects: list[str]) -> dict | None:
     """``{"rows": [open item rows], "typical": {(workflow, pile): s}, "within": {(workflow, step): s},
-    "outside": {(workflow, step): system}}``, or None without the plugin or its Items list."""
+    "outside": {(workflow, step): system}, "actors": {(workflow, step): (kind, name)}}``, or None without the plugin or its Items list."""
     from .workflow_tools import _outside_steps, plugin
     p = plugin()
     if p is None or getattr(p, "item_list", None) is None:
@@ -85,4 +85,16 @@ def read(project: Project, subjects: list[str]) -> dict | None:
         for item in names:
             for k, xs in stays(_moves(walk, defs, record, item)).items():
                 samples.setdefault(k, []).extend(xs)
-    return {"rows": rows, "typical": typical(samples), "within": within, "outside": _outside_steps(defs)}
+    return {"rows": rows, "typical": typical(samples), "within": within, "outside": _outside_steps(defs),
+            "actors": actors(defs)}
+
+
+def actors(defs) -> dict[tuple[str, str], tuple[str, str]]:
+    """(workflow, step) -> (its actor's kind, its name): which process serves it (``since_dead``)."""
+    out = {}
+    for w in getattr(defs, "workflows", None) or []:
+        for st in w.steps:
+            a = getattr(st, "actor", None)
+            if getattr(a, "kind", None):
+                out[(w.name, st.name)] = (str(a.kind), str(getattr(a, "name", "") or ""))
+    return out

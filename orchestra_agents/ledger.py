@@ -25,7 +25,7 @@ KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
-           | frozenset({"restart_machine", "update_project_context", "escalate_to_supervisor", "announce_change",
+           | frozenset({"restart_machine", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
                          "draft_upstream_issue", "declare_workflow", "declare_program"}))
 
@@ -76,6 +76,9 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         if result.get("written") and result.get("target") == "overlay":
             return f"changed the owner's private overlay (not committed): {result.get('announce')}"
         return None
+    if command == "restart_process":
+        return (f"restarted the process {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> "
+                f"{result.get('pid')}): {a.get('reason')}")
     if command == "restart_machine":
         return f"restarted the program {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> {result.get('pid')})"
     if command == "update_project_context":

@@ -11,7 +11,9 @@ These are the window's; what is wrong now (the open items stuck) comes before th
 - a label put on a pull request more than a minute after it merged (the label and the merge that
   one check caused arrive seconds apart, and are not this);
 - attention raised more than an hour ago on an item not closed since;
-- an item still open whose pull request was closed unmerged (``*.pr.closed``)."""
+- an item still open whose pull request was closed unmerged (``*.pr.closed``).
+
+Each kind names its cases newest first (T2k s16)."""
 
 from __future__ import annotations
 
@@ -77,13 +79,15 @@ def anomalies(d, now: float) -> list[tuple[str, list[str]]]:
     out: list[tuple[str, list[str]]] = []
     if after_done:
         out.append(("new work on a ticket already Done", [
-            f"{k} (Done at {d.clock.at(done_at[k])}): {_work(d, xs)}" for k, xs in after_done.items()]))
+            f"{k} (Done at {d.clock.at(done_at[k])}): {_work(d, xs)}"
+            for k, xs in sorted(after_done.items(), key=lambda kv: -kv[1][-1][1])]))
     if late_labels:
-        out.append(("a label on a merged pull request", late_labels))
-    old = [f"{d.item(i)} since {d.clock.at(t)}" for i, t in attention.items() if now - t > HOUR]
+        out.append(("a label on a merged pull request", late_labels[::-1]))
+    old = [f"{d.item(i)} since {d.clock.at(t)}" for i, t in sorted(attention.items(), key=lambda x: -x[1]) if now - t > HOUR]
     if old:
         out.append(("attention over an hour old, the item open", old))
-    waiting = [f"{d.item(i)} on #{n} (closed at {d.clock.at(closed_pr[n])})" for i, n in d.pr.items()
+    waiting = [f"{d.item(i)} on #{n} (closed at {d.clock.at(closed_pr[n])})"
+               for i, n in sorted(d.pr.items(), key=lambda x: -closed_pr.get(x[1], 0))
                if n in closed_pr and n not in merged_at and i not in closed_item]
     if waiting:
         out.append(("an open item whose pull request closed unmerged", waiting))

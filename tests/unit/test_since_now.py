@@ -55,9 +55,9 @@ def test_the_morning_leads_with_what_is_wrong_now():
     assert look[0] == "Look first:"
     assert look[1] == ("- An outside result that never came: SCRUM-47 (#51) at sail_check 12 h, waiting on github (usually "
                        "6 min), last heard: SAIL put on #51 at Mon 2 Nov 19:59, nothing since.")
-    assert look[2].startswith("- Attention raised, unanswered (not past step ci of delivery_live within 30 min): "
-                              "SCRUM-34 at ci 26 h")
-    assert look[-1].startswith("- Also today: new work on a ticket already Done (SCRUM-42, SCRUM-43)")   # the replays, last
+    assert look[2] == ("- Attention raised, unanswered (not past step ci of delivery_live within 30 min): "      # newest first
+                       "SCRUM-39 at ci 24 h; SCRUM-41 at ci 24 h; SCRUM-34 at ci 26 h.")
+    assert look[-1].startswith("- Also today: new work on a ticket already Done (SCRUM-43, SCRUM-42)")   # newest first, last
     assert "the host restarted 15 times" in look[-1]
     assert "SCRUM-50" not in "\n".join(look)                      # five minutes at review: not stuck
 
@@ -103,11 +103,13 @@ def test_replayed_events_are_counted_apart_and_never_anomalies():
     assert "1 opened: #48 (SCRUM-44)" in paragraph(d, "Pull requests:")       # opened for real; its replayed close still shuts it
 
 
-def test_lists_name_the_newest_and_the_open_ones_first():
+def test_lists_name_the_newest_first_and_say_how_many_they_leave_out():
+    # T2k s16: the open ones put first broke the order ("SCRUM-51, SCRUM-47, SCRUM-54"); every list is
+    # newest first now, and a cut one says how many more it has
     d = morning()
-    assert paragraph(d, "Tickets:").startswith("Tickets: 6 opened: SCRUM-50, SCRUM-47, … and 4 more; 6 Done: SCRUM-49,")
+    assert paragraph(d, "Tickets:") == "Tickets: 6 opened: SCRUM-50, SCRUM-49, … and 4 more; 6 Done: SCRUM-49, SCRUM-48, … and 4 more."
     prs = paragraph(d, "Pull requests:")
-    assert prs.startswith("Pull requests: 11 opened: #55 (SCRUM-50), #51 (SCRUM-47)") and "#44" not in prs
+    assert prs.startswith("Pull requests: 11 opened: #55 (SCRUM-50), #54 (SCRUM-49), … and 9 more;") and "#44" not in prs
     assert "7 merged: #54, #52, … and 5 more" in prs and "2 triage verdicts: local twice (SCRUM-49, SCRUM-48)" in prs
     assert paragraph(d, "Items:").startswith("Items: 5 open now: SCRUM-50 (#55) at review 5 min and the 4 above;")
     full = paragraph(morning(full=True), "Items:")

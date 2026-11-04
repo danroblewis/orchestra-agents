@@ -151,7 +151,11 @@ when it has that flag). A merged change to the program or its entry makes Orches
 A DONE ticket is never reopened: the fix is always new work, naming the ticket that added the
 program. When the cause was
 outside the program and is gone now (a service it needs is back), `restart_machine` starts it
-again. Never run the program yourself, in your session or anywhere.
+again. A process the launcher stopped retrying (a program, or a plugin's such as the Outbox's sender,
+`outbox.sender`) is restarted with `restart_process` and its name **after its cause is fixed, never
+before**: read its log, fix what made it crash (a setting you or anyone changed, a service it needs),
+then restart it with the reason saying the cause and the fix. Restarted before the fix, it only
+crashes again and is stopped again. Never run the program yourself, in your session or anywhere.
 
 {operator}
 

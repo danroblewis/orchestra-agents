@@ -162,7 +162,7 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         from . import machine_ages
         return machine_ages.machine_ages(project, store, a)
     if command == "read_outbox":
-        return outbox_read.read_outbox(project, a)
+        return outbox_read.read_outbox(project, a, bus_reads.recent(store))
 
     if command in ORG_COMMANDS:
         return handle_org(project, store, command, a, author, role)
@@ -179,6 +179,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handle_setup(project, store, command, a, author, role)
     if command == "restart_machine":
         return restart_machine(project, store, a, author, role)
+    if command == "restart_process":
+        from .process_restart import restart_process
+        return restart_process(project, store, a, author, role)
     if command == "check_setup":
         return observe.check_setup(project, store)
     if command == "read_config":
@@ -241,7 +244,7 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
 PLANNERS = set(PLANNER_ROLES)
 # they read the setup (observe.py, restart.py)
-SYSTEM_COMMANDS = frozenset({"restart_machine", "check_setup", "read_config", "list_processes", "read_machine_log",
+SYSTEM_COMMANDS = frozenset({"restart_machine", "restart_process", "check_setup", "read_config", "list_processes", "read_machine_log",
                              "list_metrics", "get_model", "read_instrument", "try_collector", *source_tools.COMMANDS,
                              *balance_tools.COMMANDS})
 PLANNING = frozenset({"create_ticket", "create_milestone", "update_milestone", "close_milestone"})   # the Coordinator's

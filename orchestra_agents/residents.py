@@ -29,8 +29,17 @@ class Residents:
         self.procs: dict[str, AgentSession] = {}        # agent name -> its resident session
 
     def start(self, agent: AgentDef) -> None:
+        """The agent's resident session, opened under its turn lock: a turn that holds it (the
+        Supervisor's chat, which opens the session itself when there is none) is never raced. Two
+        sessions of one id would each be issued a token, and the earlier one's tool calls refused
+        (access.issue); so while a turn runs, the next tick starts what is still missing."""
         host = self.host
+        lock = host._turn_lock(agent.name)
+        if not lock.acquire(blocking=False):
+            return
         try:
+            if agent.name in self.procs:
+                return
             proc = host._session_for(agent, agent.session_id)
             proc.open()
             self.procs[agent.name] = proc
@@ -39,6 +48,8 @@ class Residents:
             host.log(f"{agent.session_id}: session resident ({host.harness.name})")
         except Exception as e:  # noqa: BLE001 - one agent that cannot start never stops the others
             host.log(f"{agent.session_id}: could not start: {e}")
+        finally:
+            lock.release()
 
     def start_missing(self, states: dict) -> None:
         """A resident session for every resident agent that has none: at start-up, after a crash,
@@ -58,16 +69,22 @@ class Residents:
             gone = name not in agents or st.get("deleted")
             if not (gone or st.get("restart_requested") or st.get("reset_requested") or st.get("paused")):
                 continue
-            if name in host.agent_threads:
-                continue  # let the current turn finish first
-            proc = self.procs.pop(name)
-            try:
-                proc.close()
-            except Exception as e:  # noqa: BLE001 - the session is dropped either way
-                host.log(f"{proc.session_id}: close: {e!r}")
+            lock = host._turn_lock(name)
+            if name in host.agent_threads or not lock.acquire(blocking=False):
+                continue  # let the current turn finish first (a chat about to start holds the lock already)
             sid = _session_id(name)
-            access.revoke(host.store, sid)                # a paused or deleted agent's token ends with its session
-            host.store.set_session(sid, status="idle", pid=None)
+            try:                                          # closed and its token revoked before a chat may open another
+                proc = self.procs.pop(name, None)
+                if proc is None:
+                    continue
+                try:
+                    proc.close()
+                except Exception as e:  # noqa: BLE001 - the session is dropped either way
+                    host.log(f"{proc.session_id}: close: {e!r}")
+                access.revoke(host.store, sid)            # a paused or deleted agent's token ends with its session
+                host.store.set_session(sid, status="idle", pid=None)
+            finally:
+                lock.release()
             if st.get("reset_requested"):
                 archived = host.store.retire_session(sid, proc.retire())
                 host.store.set_agent_state(name, reset_requested=False, context_hash=None, turn_depth=0, said=None, session_machines=None)

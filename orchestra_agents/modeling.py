@@ -54,6 +54,17 @@ def reads(project: Project):
     return ModelReads(project.orchestra)
 
 
+def _levels(project: Project, x, view: dict, version) -> None:
+    """Each stock's level as the Dynamics page has it, and where it came from (``model_levels``)."""
+    models = getattr(x, "models", None)
+    if models is None:
+        return
+    from orchestra.sd.reads import base_model
+
+    from . import model_levels
+    model_levels.attach(project, base_model(models, version)[0], view, version)
+
+
 def seconds(v, what: str) -> float:
     """A duration: seconds, or text such as 90s, 30m, 2h, 1d."""
     if isinstance(v, str) and v.strip().endswith("d") and v.strip()[:-1].replace(".", "", 1).isdigit():
@@ -112,6 +123,7 @@ def _handle(project: Project, store: AgentStore, command: str, a: dict, role: st
             raise
         except Exception as e:  # noqa: BLE001 - a model that cannot be read is said so, never as no model
             return not_read(500, e)
+        _levels(project, x, m, a.get("version"))
         return answer(T.model_lines(m), {"model": m} if raw else None, state=model_state(m))
     if command == "read_series":
         return read_series(x, a)

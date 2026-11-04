@@ -82,6 +82,17 @@ def flow_line(f: dict, unit: str | None = None) -> str:
     return line
 
 
+def stock_line(s: dict) -> str:
+    """A stock's level now and where it came from, in the Dynamics page's words (``model_levels``)."""
+    by = s.get("measured_by")
+    said = f" (measured by {by})" if by and by.startswith("source ") else f" ({by})" if by else ""
+    if "level" in s:
+        return f"  {s['id']}: {(num(s['level']) + ' ' + (s.get('unit') or '')).rstrip()}{said}"
+    if s.get("level_unread"):
+        return f"  {s['id']}: level not read{said}: {s['level_unread']}"
+    return f"  {s['id']}: no level read{said}"
+
+
 def model_lines(model: dict) -> list[str]:
     """A model as ``GET /model`` gives it (``orchestra.sd.reads``)."""
     out = [label_line(model) if "label" in model else f"rates are per {model.get('time_unit')}", "stocks (level now):"]
@@ -89,7 +100,7 @@ def model_lines(model: dict) -> list[str]:
         if s.get("hidden"):
             out.append(f"  {s['id']}: hidden (no series measures it), starts at {num(s.get('initial'))}")
         else:
-            out.append(f"  {s['id']}: {num(s['level']) + ' ' + (s.get('unit') or '') if 'level' in s else 'no level read'}".rstrip())
+            out.append(stock_line(s))
     flows = model.get("flows") or []
     out.append(f"flows (rate = equation [parameters]; origin and error; per {model.get('time_unit')}):")
     out += [flow_line(f) for f in flows[:FLOWS_SHOWN]]

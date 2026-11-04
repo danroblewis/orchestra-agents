@@ -8,8 +8,12 @@ model changes nothing in the system.
 ## What the words mean
 
 - **Stock**: something that accumulates and is measured as a level: tickets waiting, jobs in a
-  queue, money in an account. `read_model` gives each stock's level now. A **hidden** stock is
-  one no series measures; the model starts it at an assumed initial level.
+  queue, money in an account. `read_model` gives each stock's level now and where it came from,
+  as the Dynamics page does: `(own store)`, or `(measured by source <name>)` for a stock fed by
+  another store, read through that source by Orchestra's web server. A level that could not be
+  read says why (`level not read (measured by source rig): ...`): the source failing, the web
+  server not running, or not read yet. A **hidden** stock is one no series measures; the model
+  starts it at an assumed initial level.
 - **Flow**: what moves material into or out of a stock, or between two, as a rate per the
   model's time unit (`rates are per minute`). `outside` is the world beyond the model. A flow
   measured by a counter (`jobs_done_total`) is checked against what was counted.

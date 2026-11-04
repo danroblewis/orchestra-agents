@@ -434,7 +434,8 @@ TOOLS: list[ToolDef] = [
             "How to read the system dynamics model: what stocks, flows, equations, eras, trust and verdicts mean, the "
             "equation language, and how to state a prediction. Read it before your first prediction."),
     ToolDef("read_model", "model",
-            "The system dynamics model Orchestra discovered from the metrics, summarised: each stock with its level now, each "
+            "The system dynamics model Orchestra discovered from the metrics, summarised: each stock with its level now and "
+            "where it came from (the own store, or the source that measures it, as the Dynamics page reads it), each "
             "flow with its ends, its equation in the equation language, its origin and error, and whether to trust it.",
             {"version": I("A saved version (default: the current era's latest discovery)"), "raw": RAW}),
     ToolDef("read_series", "model",

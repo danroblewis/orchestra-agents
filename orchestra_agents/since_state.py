@@ -13,7 +13,9 @@ Four kinds, one line per item (the first kind that fits it), each said as what i
 - **longer than its step usually takes**: ``FACTOR`` times the step's typical time, at least ``FLOOR``.
 
 Each line names the item with its ticket and pull request, the step, how long, and the measure it
-passed. The longest wait comes first."""
+passed. **The newest first** within each kind (the shortest wait: T2k s16 named the three
+day-old attentions and hid the night's under "… and 1 more"); an item ``skip`` names (one a stopped
+process blocks, said above it by ``since_dead``) is left out here."""
 
 from __future__ import annotations
 
@@ -49,7 +51,7 @@ def _last_heard(d, item: str) -> str | None:
     return None
 
 
-def stuck(d, state: dict | None) -> list[tuple[str, list[str]]]:
+def stuck(d, state: dict | None, skip: set[str] | frozenset = frozenset()) -> list[tuple[str, list[str]]]:
     """``[(what, [line])]`` for the kinds that have any, in the order above; [] without the plugin."""
     if not state:
         return []
@@ -58,7 +60,7 @@ def stuck(d, state: dict | None) -> list[tuple[str, list[str]]]:
     for r in state.get("rows") or []:
         item, wf, step, pile = str(r.get("item") or "?"), r.get("workflow"), r.get("step"), r.get("pile")
         age = r.get("age_s")
-        if not isinstance(age, int | float):
+        if not isinstance(age, int | float) or item in skip:
             continue
         wait = r.get("wait") if isinstance(r.get("wait"), dict) else {}
         usual = typical.get((wf, pile))
@@ -83,7 +85,7 @@ def stuck(d, state: dict | None) -> list[tuple[str, list[str]]]:
     out = []
     for k in order:
         if k in kinds:
-            rows = sorted(kinds[k], key=lambda x: -x[0])
+            rows = sorted(kinds[k], key=lambda x: x[0])                # the newest first
             whys = {w for _, _, w in rows}
             if len(rows) > 1 and len(whys) == 1 and (w := whys.pop()):     # one cause for all: said once
                 out.append((f"{k} ({w})", [line for _, line, _ in rows]))

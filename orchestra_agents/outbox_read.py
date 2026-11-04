@@ -6,7 +6,11 @@ kind's policy), with the kinds and how each is approved. Read only: nothing is a
 or sent here, and a draft's text is shortened, never copied whole.
 
 The web server's port is the one it recorded in Orchestra's runtime record (``web``); without a
-running web server the answer says so."""
+running web server the answer says so.
+
+With the bus's events (``events``), a waiting nudge about a pull request the bus says merged or
+closed is withdrawn (``stale_nudges``): listed under ``withdrawn``, never among the drafts waiting,
+so it is not offered to the owner for approval."""
 
 from __future__ import annotations
 
@@ -71,11 +75,15 @@ def row(d: dict) -> dict:
     return {k: v for k, v in out.items() if v not in (None, "", [], {})}
 
 
-def read_outbox(project: Project, a: dict | None = None) -> dict:
+def read_outbox(project: Project, a: dict | None = None, events: list[dict] | None = None) -> dict:
     st = fetch(project)
     if not st.get("ok", True):
         return {"ok": False, "error": st.get("error") or "the Outbox's state did not answer"}
     waiting = [row(d) for d in st.get("waiting") or []]
+    withdrawn: list[dict] = []
+    if events is not None:
+        from .stale_nudges import split
+        waiting, withdrawn = split(waiting, events)
     recent = [row(d) for d in (st.get("recent") or [])[:RECENT]]
     kinds = [{"name": k.get("name"), "approval": k.get("approval"), "unedited_streak": k.get("unedited_streak")}
              for k in st.get("kinds") or []]
@@ -83,7 +91,10 @@ def read_outbox(project: Project, a: dict | None = None) -> dict:
     summary = [f"{len(waiting)} waiting; of the latest {len(recent)} decided: {count('sent')} sent, {count('rejected')} rejected, "
                f"{count('failed')} failed" + ("" if st.get("running", True) else "; the outbox machine is not running")]
     summary += [f"waiting {d['id']} {d.get('kind')} to {json.dumps(d.get('target'))} from {d.get('drafter')}" for d in waiting[:10]]
+    summary += [f"withdrawn {d['id']} {d.get('kind')}: #{d['number']} is {d['state']}, so it is never offered for approval; "
+                "the owner rejects it on the Outbox page to clear it" for d in withdrawn]
     summary += [f"{d.get('state')} {d['id']} {d.get('kind')} to {json.dumps(d.get('target'))}: {d.get('how')}" for d in recent[:10]]
-    return {"ok": True, "summary": summary, "waiting": waiting, "recent": recent, "kinds": kinds,
+    return {"ok": True, "summary": summary, "waiting": waiting, **({"withdrawn": withdrawn} if withdrawn else {}),
+            "recent": recent, "kinds": kinds,
             "configured": st.get("configured"), "running": st.get("running"), "owner": st.get("owner"),
             "note": "read only: the owner approves or rejects on the Outbox page; nothing here changes a draft"}

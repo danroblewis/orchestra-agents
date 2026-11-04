@@ -33,7 +33,7 @@ from .store import AgentStore
 
 BOUNCES = 3
 DAY = 86_400.0
-FIX_TOOLS = frozenset({"restart_machine", "set_setting", "set_capacity_limit", "set_gate_unit", "set_machine", "unblock_ticket",
+FIX_TOOLS = frozenset({"restart_machine", "restart_process", "set_setting", "set_capacity_limit", "set_gate_unit", "set_machine", "unblock_ticket",
                        "restart_agent", "resume_pipeline", "propose_patch", "write_override", "remove_entry"})
 BACK = ("changes.requested", "gate.rejected", "gate.conflict")
 

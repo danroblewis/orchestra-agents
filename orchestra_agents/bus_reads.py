@@ -17,9 +17,10 @@ counted, for "what changed since", and the ``model`` line (``modeling.model_line
 state with who changed it and when, from the version's own record, T2f s16), so the answer has the model from its first call (T2d s16), with the ``outbox``
 ("running; N sent, M waiting") and each prediction's state (``since_facts``, T2e s16), and what waits
 on the owner now (``owner_waits``: disabled machines, Outbox drafts, the Supervisor's open
-questions; T2f s16), and ``closing_line``: the line the reply ends on, verbatim (the model line).
-And ``digest`` (``since_digest``): the whole answer as plain text, written from all of it and from
-the Workflows plugin's open items now (``item_state``), which the Supervisor replies with as it is
+questions; T2f s16; a nudge about a pull request the bus says is done withdrawn, ``stale_nudges``), and ``closing_line``: the line the reply ends on, verbatim (the model line).
+And ``digest`` (``since_digest``): the whole answer as plain text, written from all of it, from
+the Workflows plugin's open items now (``item_state``) and from Orchestra's runtime record (``since_dead``:
+what the launcher stopped retrying, the instruments that cannot fetch), which the Supervisor replies with as it is
 (T2g s16: given every fact, the model still misstated times and counts); bounded to what an owner
 reads in a minute, and with ``full`` every list (the owner's "more")."""
 
@@ -126,7 +127,8 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
         raise StoreError("order is newest (the default: the newest first) or oldest (from since on, in the order they happened)")
     start = since_of(a["since"]) if a.get("since") not in (None, "") else time.time() - minutes * 60
     picked, by_type, announced = [], {}, {}
-    for e in recent(store):
+    scanned = recent(store)
+    for e in scanned:
         ty = e.get("type")
         if ty == ANNOUNCED:
             for t in _announced_types(e):
@@ -152,7 +154,8 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
         from .modeling import model_line
         counted["outbox"] = since_facts.outbox(project, start)
         counted["predictions"] = since_facts.predictions(project)
-        counted["waiting_on_owner"] = owner_waits.waiting_on_owner(project, store)
+        from .stale_nudges import withdraw_stale
+        counted["waiting_on_owner"] = withdraw_stale(owner_waits.waiting_on_owner(project, store), scanned)
         counted["model"] = model_line(project, start)
         counted["closing_line"] = counted["model"]       # the reply's last line, verbatim (closing_line.py)
         from . import clock, machine_ages, since_digest
@@ -181,10 +184,16 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             now_state = item_state.read(project, subjects)
         except Exception:  # noqa: BLE001 - the plugin's record unreadable: "Look first" says what the bus says alone
             now_state = None
+        from . import since_dead
+        try:
+            record = since_dead.record(project)
+        except Exception:  # noqa: BLE001 - the runtime record unreadable: "Look first" without what died
+            record = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
                                                 model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr,
-                                                open_items=open_now, state=now_state, full=bool(a.get("full")))
+                                                open_items=open_now, state=now_state, record=record,
+                                                full=bool(a.get("full")))
     return {"ok": True, "count": len(picked), **window, **counted, "types": len(summary),
             "by_type": first(({**r, "sources": first(r["sources"], 10)} for r in summary), hint="give types to narrow"),
             "announced_not_heard": first({"type": t, "listened_for_by": first(s, 10)} for t, s in quiet.items()),

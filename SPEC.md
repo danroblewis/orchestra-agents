@@ -1032,7 +1032,13 @@ age, the labels and the checks, then naming each list by its entries' names alon
 each disabled machine's reason to its first words, then naming fewer entries; whenever anything is
 left out it says `Say "more" for the full list` before the model line, which stays last. The
 owner's "more" is `read_events` with the same `since` and `full` (up to 20 entries per list,
-unbounded). **What is wrong now comes first** ("Look first"), from the Workflows plugin's open items
+unbounded). **What has died comes first of all** (since 2026-11-04, T2k s16, `since_dead.py`, from
+Orchestra's runtime record): a process the launcher stopped retrying (`gave_up`, or its record saying
+it stopped after N crashes, or an exit code with no pid and no start pending), named with when it
+died (its `orchestra.process.gave_up`, else its last exit) and the open items waiting at a step it
+serves, read from the step's actor ("SCRUM-47 (#51) waits at close_ticket on the stopped
+outbox.sender since 01:16"), and an instrument whose last round failed after its last write. **Then
+what is wrong now** ("Look first"), from the Workflows plugin's open items
 (`item_state.py`: its Items list, each step's `within` guard, and each pile's typical stay, the
 median of at least three stays measured by the plugin's own position view over the items' records):
 an outside result that never came (an item at a step on an outside system three times the step's
@@ -1043,10 +1049,15 @@ limit, and longer than the step usually takes (`since_state.py`); then the windo
 (`since_anomalies.py`) and oddities (the host started three times or more), in the bounded reply in
 one line by what each is about. **Replays are never anomalies:** an event a poller marked
 `replayed: true` (read again at a resume) is counted apart in the first line ("N replayed at a
-resume") and never flagged or listed as new, though what it closes stays closed. **Lists name the
-newest first**, the ones still open before the rest, and the Items line names the open items now
+resume") and never flagged or listed as new, though what it closes stays closed. **Every list names
+the newest first** (the attention list too; since T2k s16 the open ones no longer go first), a list
+cut short says how many it leaves out, and the Items line names the open items now
 with their step and age (those "Look first" named are "the N above"). Without the Workflows plugin
-"Look first" says what the bus says alone.
+"Look first" says what the bus says alone. **A stale nudge is withdrawn** (`stale_nudges.py`): an Outbox draft whose kind
+reminds (`live.nudge`) about a pull request its target names, which the bus says merged or closed, is
+never offered as waiting on the owner (nor among `read_outbox`'s waiting drafts); the owner's line
+says it was withdrawn and why. The Outbox has no drafter's withdraw, so it stays on the Outbox page
+until the owner rejects it, and the line says so.
 
 **Changing the setup** (tool group `setup`; the Supervisor only, checked in the handler, and not a
 group a custom role or team may be granted): `set_agent_roles` (`[agents] serves`),
@@ -1121,6 +1132,15 @@ removed), which starts it again; `orchestra.toml` is not touched and nothing is 
 {name, reason, pid_before, pid} is published. It refuses without a running `orchestra run`, and for
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
 someone else changes the overlay in between, the entry is not put back and the answer says so.
+
+`restart_process` (2026-11-04, T41; `process_restart.py`) restarts one of the launcher's processes by
+its name in the runtime record, a plugin's too (`outbox.sender`), through Orchestra, never a signal
+or a launcher file: with Orchestra's `runtime.request_restart` when the core has it (asked of the
+core's coordinator: a request under the record's lock that the launcher acts on at its next tick),
+else a project's program the way `restart_machine` does, and a plugin's process is refused, saying
+it starts again when `orchestra run` restarts. It is the Supervisor's (the `setup` group), on the bus
+as `process.restarted` {name, owner, reason, by, pid_before, pid} (or `machine.restarted`) and in its
+ledger. Its prompt says a stopped process is restarted after its cause is fixed, never before.
 
 Limits: since 2026-11-02 the Supervisor commits to its own branch, never the base, and never touches
 the checkout, so its changes neither move the base under a landing nor block one; the setup tools

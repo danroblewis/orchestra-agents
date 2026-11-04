@@ -26,6 +26,7 @@ from orchestra.web.app import create_app
 
 from orchestra_agents import access, tooling
 from orchestra_agents.builtins import ROLES
+from orchestra_agents.design import begin_turn
 from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
@@ -64,7 +65,8 @@ def world(tmp_path, monkeypatch):
     sup = AgentStore(p, Events.for_project(p, source="supervisor"))
     set_ = lambda key, value: tooling.handle(p, sup, "set_setting", {"key": key, "value": json.dumps(value), "target": "repo",
                                                                     "reason": "The rig's queue."}, role="supervisor")
-    set_("sources", [{"name": "rig", "url": store.url, "infer": False}])
+    begin_turn(sup, "Read only the rig's queue and jobs series, at most 100 series.")   # the owner's limits (T36)
+    set_("sources", [{"name": "rig", "url": store.url, "infer": False, "match": ['{__name__=~"queue_depth|jobs_.*"}']}])   # a source needs a match (C14)
     set_("series", [{"source": "rig", "name": n, "query": n, "kind": k}
                     for n, k in (("queue_depth", "level"), ("jobs_in_total", "counter"), ("jobs_out_total", "counter"))])
     p.orchestra.reload_config()

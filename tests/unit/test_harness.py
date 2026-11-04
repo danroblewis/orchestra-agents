@@ -137,7 +137,8 @@ def test_pi_transcript(tmp_path):
 
 
 def test_pi_in_bash_mode_shows_a_shell_call_as_the_tool_it_ran_and_counts_its_cost(tmp_path):
-    from orchestra_agents.harness.pi import _Normalizer, message_cost
+    from orchestra_agents.harness.pi import _Normalizer
+    from orchestra_agents.harness.pi_cost import usage_cost
     cmd = "orchestra agents tool read_model '{\"version\": 3}'"
     f = tmp_path / "s.jsonl"
     f.write_text(json.dumps({"type": "message", "timestamp": 1.0, "message": {"role": "assistant", "content": [
@@ -146,8 +147,8 @@ def test_pi_in_bash_mode_shows_a_shell_call_as_the_tool_it_ran_and_counts_its_co
     got = []
     _Normalizer(got.append)({"type": "tool_execution_start", "toolName": "bash", "args": {"command": cmd}})
     assert got == [{"type": "tool_start", "name": "read_model", "args": {"version": 3}}]
-    assert message_cost({"usage": {"cost": {"total": 0.0123}}}) == 0.0123
-    assert message_cost({"usage": {"totalTokens": 9}}) is None and message_cost({}) is None
+    assert usage_cost({"input": 1000, "output": 100}, "claude-sonnet-5") == 0.003
+    assert usage_cost({"totalTokens": 9}, None) is None
 
 
 def test_pi_bash_mode_loads_no_extension_and_appends_the_shell_section(tmp_path):

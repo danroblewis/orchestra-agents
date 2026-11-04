@@ -18,7 +18,9 @@ Otherwise, on `prompt` it plays the role given by ORCHESTRA_ROLE:
 Without ``--extension`` (``[agents] tools_via = "bash"``) each tool is called as Pi's bash tool
 would run it: the command the appended system prompt gives, through a shell with this process's
 environment, recorded as a ``bash`` toolCall with its ``command``. Each assistant message carries
-``usage.cost.total`` (FAKE_PI_COST dollars, default 0.01), as Pi reports it.
+``usage`` as Pi records it: 12,000 tokens in, 800 out, 40,000 read from the cache and 5,000 written
+to it, with ``usage.cost.total`` FAKE_PI_COST dollars (default 0: a login that reports no price), and
+the ``--model`` it was given, in the stream and in the session file.
 
 It writes a Pi-format session file so transcripts work."""
 
@@ -87,15 +89,19 @@ def main() -> None:
             emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "."}})
             time.sleep(0.2)
 
+    model = argv[argv.index("--model") + 1] if "--model" in argv else None
+    usage = {"input": 12000, "output": 800, "cacheRead": 40000, "cacheWrite": 5000, "totalTokens": 57800,
+             "cost": {"total": float(os.environ.get("FAKE_PI_COST", "0"))}}
+
     def record(role_: str, text: str, tool: str | None = None) -> None:
         content = [{"type": "text", "text": text}]
         if tool and SHELL:                    # Pi's bash tool ran it
             content.append({"type": "toolCall", "name": "bash", "arguments": {"command": SHELL["calls"][-1] if SHELL["calls"] else tool}})
         elif tool:
             content.append({"type": "toolCall", "name": tool, "arguments": {}})
+        message = {"role": role_, "content": content, **({"usage": usage, "model": model} if role_ == "assistant" else {})}
         with session_file.open("a") as f:
-            f.write(json.dumps({"type": "message", "timestamp": time.time(),
-                                "message": {"role": role_, "content": content}}) + "\n")
+            f.write(json.dumps({"type": "message", "id": os.urandom(4).hex(), "timestamp": time.time(), "message": message}) + "\n")
 
     for line in sys.stdin:
         line = line.strip()
@@ -155,8 +161,8 @@ def main() -> None:
             else:
                 text = f"{role} acknowledges: {cmd.get('message', '')[:60]}"
             record("assistant", text, tool)
-            usage = {"totalTokens": 1000, "cost": {"total": float(os.environ.get("FAKE_PI_COST", "0.01"))}}
-            emit({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": text}], "usage": usage}})
+            emit({"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": text}], "usage": usage,
+                                                     "model": model}})
             emit({"type": "agent_settled"})
         else:
             emit({"type": "response", "command": t, "success": True})

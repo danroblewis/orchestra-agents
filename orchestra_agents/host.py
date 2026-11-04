@@ -519,7 +519,7 @@ class AgentHost:
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
                 if name == "supervisor" and not event_matches(list(BUILTIN_ROLES["supervisor"].wake_on), ev) \
-                        and (why := budget.over(self.store, self.cfg)):
+                        and (why := budget.over(self.store, self.cfg, priced=(self.harness, self.model_of("supervisor")))):
                     if why != self._over_said:                          # a duty's own wake-up, past the day's cap
                         log(f"supervisor: not woken for {ev['type']}: {why}")
                         self._over_said = why
@@ -679,7 +679,8 @@ class AgentHost:
         if st.get("paused") or st.get("deleted"):
             why = st.get("paused_why") or st.get("crash_loop") or "by request"
             raise StoreError(f"the Supervisor is {'deleted' if st.get('deleted') else 'paused'} ({why}); its messages wait until it is resumed")
-        if over := budget.chat_over(self.store, self.cfg):
+        if over := budget.unpriced(self.harness, self.model_of("supervisor"), self.cfg, chat=True) or \
+                budget.chat_over(self.store, self.cfg):
             log(f"supervisor: a chat message refused: {over}")
             raise StoreError(over)
         with self._turn_lock("supervisor"):

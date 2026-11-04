@@ -12,9 +12,12 @@ mode (``bash_tools.prompt``), and its transcript shows each such call as the too
 
 The model: ``--provider`` and ``--model`` as configured (``[agents] provider`` and ``model``; Pi
 takes ``provider/id`` in ``model`` too, and for Anthropic the API's ids, ``claude-sonnet-4-5``,
-``claude-sonnet-5``: ``pi --list-models`` lists those its credentials reach). Each assistant
-message's ``usage.cost.total`` is the turn's cost, added up (``TurnResult.cost_usd``), so the day's
-caps (``budget.py``) count Pi's turns in dollars as they do Claude Code's."""
+``claude-sonnet-5``: ``pi --list-models`` lists those its credentials reach). A turn's cost
+(``TurnResult.cost_usd``) is what Pi's usage records new since the last turn cost at the model's
+prices (``pi_cost.py``: the session file, a compaction's call included; the stream's messages when
+the file cannot be read), so the day's caps (``budget.py``) count Pi's turns in dollars as they do
+Claude Code's; a model not priced there leaves it unknown, and the dollar caps then refuse to start
+(``PiHarness.priced``, ``budget.unpriced``)."""
 
 from __future__ import annotations
 
@@ -27,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import bash_tools
+from . import bash_tools, pi_cost
 from .base import (
     TOOL_CALL_S,
     AgentSession,
@@ -87,6 +90,8 @@ class PiSession(AgentSession):
         threading.Thread(target=self._read, daemon=True).start()
         self._lock = threading.Lock()
         self.session_file = None
+        self.meter = pi_cost.Meter(spec.model)      # what each turn's usage records cost
+        self._metered = False
 
     @property
     def harness_name(self) -> str:
@@ -141,6 +146,9 @@ class PiSession(AgentSession):
         r = self.command({"type": "get_state"})
         data = r.get("data", {}) if r.get("success") else {}
         self.session_file = data.get("sessionFile") or self.session_file
+        if not self._metered:                       # a resumed session's earlier turns were counted by their own
+            self.meter.entries(self.session_file)
+            self._metered = True
 
     @property
     def pid(self) -> int | None:
@@ -157,7 +165,7 @@ class PiSession(AgentSession):
             self._send({"type": "prompt", "message": text})
             clock = _Deadlines(timeout, idle_timeout)
             last_text = ""
-            cost: float | None = None
+            streamed: list[float | None] = []        # each assistant message's cost, from the stream
             while True:
                 why = clock.expired()
                 if why:
@@ -184,13 +192,21 @@ class PiSession(AgentSession):
                         txt = assistant_text(msg.get("content"))
                         if txt.strip():
                             last_text = txt
-                        if (c := message_cost(msg)) is not None:
-                            cost = round((cost or 0.0) + c, 6)
-                            result.cost_usd = cost
+                        if isinstance(msg.get("usage"), dict):
+                            streamed.append(pi_cost.usage_cost(msg["usage"], msg.get("model") or self.spec.model))
                 elif t == "agent_settled":
                     result.text = last_text
+                    result.cost_usd = self._cost(streamed)
                     emit.settled(last_text)
                     return result
+
+    def _cost(self, streamed: list[float | None]) -> float | None:
+        """The turn's dollars: the session file's new usage records (``pi_cost.Meter``), or the
+        stream's messages when the file has none; None when a model is not priced."""
+        usd, n = self.meter.turn(self.session_file)
+        if n:
+            return usd
+        return None if not streamed or None in streamed else round(sum(streamed), 6)   # type: ignore[arg-type]
 
     def compact(self) -> dict | None:
         """Pi's own compaction: older messages become a summary entry in the session file and
@@ -257,12 +273,6 @@ class PiSession(AgentSession):
         return archive(self.session_file)
 
 
-def message_cost(msg: dict) -> float | None:
-    """What one assistant message cost, as Pi reports it (``usage.cost.total``, dollars), or None."""
-    total = ((msg.get("usage") or {}).get("cost") or {}).get("total") if isinstance(msg.get("usage"), dict) else None
-    return float(total) if isinstance(total, int | float) and not isinstance(total, bool) else None
-
-
 def shown_call(name: str, args) -> tuple[str, dict]:
     """A tool call as a transcript shows it: Pi's bash tool running ``orchestra agents tool <name>``
     (``tools_via = "bash"``) is the Orchestra tool it ran, with its arguments."""
@@ -317,6 +327,10 @@ class PiHarness(Harness):
 
     def start(self, spec: SessionSpec) -> PiSession:
         return PiSession(spec, self.binary)
+
+    def priced(self, model: str | None) -> bool | None:
+        """Whether a turn on ``model`` can be priced (``pi_cost.PRICES``): the dollar caps need it."""
+        return pi_cost.price(model) is not None
 
     @staticmethod
     def context(session_file: str | Path) -> ContextSize:

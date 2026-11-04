@@ -108,7 +108,7 @@ class ReviewRound:
             record["design"] = len(design["findings"])
         reason = None
         if new or proposal or design:
-            why_not = budget.over(h.store, h.cfg, now) if (new or design) and not proposal else None
+            why_not = budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))) if (new or design) and not proposal else None
             if why_not:
                 record["woke"], record["skipped"] = False, why_not
                 h.log(f"review round: {len(new)} new finding(s); the Supervisor is not woken: {why_not}")

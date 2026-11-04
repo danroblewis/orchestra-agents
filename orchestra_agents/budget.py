@@ -53,8 +53,11 @@ def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float
     store.set_agent_state(MACHINE, spend=spend, spend_total=round(float(st.get("spend_total") or 0.0) + usd, 6))
 
 
-def over(store: AgentStore, cfg, t: float | None = None) -> str | None:
-    """Why the Supervisor's initiative must wait until tomorrow, or None."""
+def over(store: AgentStore, cfg, t: float | None = None, priced: tuple | None = None) -> str | None:
+    """Why the Supervisor's initiative must wait until tomorrow, or None. ``priced``: (harness,
+    model) of the Supervisor's turns, refused when the harness cannot price them (``unpriced``)."""
+    if priced and (why := unpriced(*priced, cfg)):
+        return why
     s = spent(store, t)
     if s.get("initiative_usd", 0.0) >= cfg.review_usd_per_day > 0 or cfg.review_usd_per_day == 0:
         return (f"its review rounds and duty wake-ups spent ${s.get('initiative_usd', 0.0):.2f} today, the cap is "
@@ -63,6 +66,24 @@ def over(store: AgentStore, cfg, t: float | None = None) -> str | None:
         return (f"its review rounds and duty wake-ups took {s.get('initiative_turns', 0)} turns today, the cap is "
                 f"{cfg.review_turns_per_day} ([agents] review_turns_per_day)")
     return None
+
+
+PRICED_HINT = "claude-sonnet-5, claude-sonnet-5-5, claude-sonnet-4-6 or claude-sonnet-4-5"
+
+
+def unpriced(harness, model: str | None, cfg, chat: bool = False) -> str | None:
+    """Why a turn on ``model`` may not start under a dollar cap: the harness cannot price it
+    (``Harness.priced`` is False: Pi on a model ``pi_cost.PRICES`` lacks), so the cap could not hold.
+    None when it can be priced, or the cap is off (``chat_usd_per_day`` 0); a review cap of 0 already
+    allows nothing."""
+    if harness is None or harness.priced(model) is not False:
+        return None
+    key, cap = ("chat_usd_per_day", cfg.chat_usd_per_day) if chat else ("review_usd_per_day", cfg.review_usd_per_day)
+    if cap <= 0:
+        return None
+    return (f"The {getattr(harness, 'name', 'agents')} harness cannot price a turn on model {model or '(its default)'}, so "
+            f"[agents] {key} (${cap:.2f} a day) could not hold: the turn was not started. Run the Supervisor on a "
+            f"model Orchestra prices ({PRICED_HINT}){', or set chat_usd_per_day = 0 in your private overlay to talk without a cap' if chat else ''}.")
 
 
 def chat_over(store: AgentStore, cfg, t: float | None = None) -> str | None:

@@ -127,7 +127,11 @@ enabled = true            # false: no host, no agents
   `thinking`). Anthropic's Sonnet on Pi: `provider = "anthropic"`, `model = "claude-sonnet-5"` (Pi
   takes the API's ids, `claude-sonnet-4-5` and `claude-sonnet-4-6` too, or `anthropic/<id>` in `model`;
   `pi --list-models sonnet` lists those its credentials reach: `ANTHROPIC_API_KEY` in `orchestra
-  run`'s environment, or Pi's own login). It reports each turn's cost, so the day's caps count it.
+  run`'s environment, or Pi's own login). Each turn's cost is its usage records (Pi's session file, a
+  compaction's call included) at the model's list prices, which Orchestra knows for
+  `claude-sonnet-5`, `claude-sonnet-5-5`, `claude-sonnet-4-6` and `claude-sonnet-4-5`; on any other
+  model the dollar caps (`review_usd_per_day`, `chat_usd_per_day`) cannot hold, so the turns they
+  cover are refused with that reason: choose a priced model, or set the cap to 0.
 - **`codex`**: OpenAI's Codex CLI (`codex exec`); its MCP tools need OpenAI's own API.
 - **`dummy`**: scripted agents with no model, no network and no cost: a worker commits a token file
   and reports ready, a reviewer approves, the Supervisor hands a chat message to the Coordinator,

@@ -1771,7 +1771,10 @@ on events only its spec's duties listen for) stops at `[agents] review_usd_per_d
 What the fixed core wakes it for never waits on it. The owner's chat turns have their own cap,
 `chat_usd_per_day` (default 10.0; 0: none): past it a message is refused before any turn
 (`budget.chat_over`, raised in `prompt_supervisor`), saying what was spent, the cap and how to go
-on. Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`;
+on. A harness that cannot price its turns (`Harness.priced` False: Pi on a model `harness/pi_cost.py`
+does not price; its turns are priced from Pi's session file, a compaction's call included, at list
+prices, never Pi's own figure alone, which a login reports as 0) is refused under a dollar cap
+before the turn starts (`budget.unpriced`). Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`;
 `spend_total`).
 
 **Self-healing** (group `patch`, the Supervisor's alone, decided by the owner for now; a separate

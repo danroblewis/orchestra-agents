@@ -107,7 +107,7 @@ class ExploreRound:
         record = {"at": now, "sources": [e["name"] for e in sources], "pending": pending["id"] if pending else None}
         if pending and not since:
             record.update(woke=False, skipped=f"experiment {pending['id']} waits for a discovery run to judge it")
-        elif why := budget.over(h.store, h.cfg, now):
+        elif why := budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))):
             record.update(woke=False, skipped=why)
         else:
             h.store.add_wakeup(MACHINE, reason(sources, pending, since, judged))

@@ -1749,6 +1749,22 @@ whose key no earlier round woke it for, or a split proposal, queues a wake-up (`
 ...`): a full turn. Otherwise the round costs nothing. The record is its agent state (`review`,
 `next_review_at`, `load`).
 
+**The explore round** (`explore_round.py`, `explore_tools.py`, `prompts/operator.md` "Exploring the
+stores"; Orchestra's `docs/proposals/metric-explorer.md` and its guide's "Exploring beyond the
+match"). Every `[agents] explore_every` (default 1h, never under 5m; 0 off), once a `[[sources]]` is
+declared, the host checks without a model call and wakes the Supervisor (`[Explore round]`, its
+initiative, under the day's cap) unless the last experiment still waits for a discovery run. The
+round names each source's `match` and `explore` and the experiment to judge first. Its tools are the
+core's commands as a library: `explore_source` (`sources explore`, bounded, within `explore`,
+logged `by: explore`), `read_discovery_runs` (the run record; with `key`, a series' explain record),
+`read_experiments`, `log_experiment` and `judge_experiment` (`explorer log list|add|judge`,
+`by: supervisor`). One experiment a round, logged before it is made; the owner's standing rule is
+held in code (`source_limits.check_scopes`, in `set_setting` key `sources`): on a turn with no
+owner's message a source's `match` may narrow and its `split`, `kinds`, `names` change, but its
+`match` never widens and its `explore` is never written. The record is the Supervisor's agent
+state `explore` (and `explore_rounds`, a week), `next_explore_at`; the digest carries a line
+(`explore_round.digest_line`).
+
 **The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, and wake-ups
 on events only its spec's duties listen for) stops at `[agents] review_usd_per_day` dollars
 (Claude Code reports each turn's cost: `TurnResult.cost_usd`) or `review_turns_per_day` turns.

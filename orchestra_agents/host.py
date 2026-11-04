@@ -56,6 +56,7 @@ from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer, token_file
 from .events import GAVE_UP, INTENT_REQUESTED, Events
+from .explore_round import ExploreRound
 from .facts import SupervisorFacts
 from .fillers import Fillers
 from .first_run import FirstRun
@@ -144,6 +145,7 @@ class AgentHost:
         self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
         self.first_run = FirstRun(self)                # a project not set up wakes the Supervisor to set it up
         self.review = ReviewRound(self)                # the Supervisor's scheduled review round (review.py)
+        self.explore = ExploreRound(self)              # ... and its explore round over the stores (explore_round.py)
         self.adopter = adopt.Adopter(store, lambda: workflow_tools.plugin(), log)   # tickets under way when tracking began
         self._session_models: dict[str, str | None] = {}   # resident agent -> the model its session was opened on
         self._over_said: str | None = None             # the budget's last refusal, logged once
@@ -261,6 +263,10 @@ class AgentHost:
             self.review.tick()
         except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
             log(f"review round: {e!r}")
+        try:
+            self.explore.tick()
+        except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
+            log(f"explore round: {e!r}")
         for target in list(self.agents):
             if target == "supervisor" and self.residents.procs.get("supervisor") is None:
                 continue

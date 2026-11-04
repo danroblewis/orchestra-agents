@@ -143,8 +143,10 @@ class ReviewRound:
 def initiative(reasons: list[str], duty_types: set[str]) -> bool:
     """Whether a Supervisor wake-up is its own initiative (what the day's cap limits): every
     reason a review round's, or an event only a duty of its spec listens for."""
+    from .explore_round import MARK as EXPLORE
+
     def own(r: str) -> bool:
-        if r.startswith(MARK):
+        if r.startswith((MARK, EXPLORE)):
             return True
         if r.startswith("event "):
             return r.split()[1] in duty_types

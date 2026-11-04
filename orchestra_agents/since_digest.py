@@ -15,7 +15,8 @@ paragraph per class, in this order: tickets, pull requests (with each rejection 
 verdict), checks, labels, incidents, the Outbox, items (the open ones now, named), machines marked
 quiet, the other events counted, what waits on the owner, the predictions, the machines by age
 (``machine_ages``), the subsystems line at most once a day (``subsystem_offer``), the Supervisor's
-own pull request (``supervisor_pr.digest_line``), and the model line last (``closing_line``).
+own pull request (``supervisor_pr.digest_line``), its explore rounds and experiments
+(``explore_round.digest_line``), and the model line last (``closing_line``).
 
 **Replays** (an event a poller read again at a resume, ``replayed: true``) are counted apart in the
 first line and never flagged nor listed as new; what they close stays closed. **Every list names the
@@ -559,7 +560,7 @@ EXTRA = ("others", "quiet", "ages", "labels", "checks")     # left to "more" fir
 def digest(events: list[dict], start: float, now: float, tz: str | None, *, outbox_state: str | None = None,
            waiting: dict | None = None, preds=None, model: str | None = None, ages: str | None = None,
            subsystems: str | None = None, own_pr: str | None = None, open_items: int | None = None,
-           state: dict | None = None, record: dict | None = None, full: bool = False) -> str:
+           state: dict | None = None, record: dict | None = None, full: bool = False, explore: str | None = None) -> str:
     """The reply: bounded to about ``LIMIT`` characters (an owner reads it in a minute), the rest on
     "more" (``full``: every entry of every list, unbounded). The bounded reply leaves out, in turn,
     the paragraphs of ``EXTRA``, then names fewer entries per list, then shortens the reasons of what
@@ -569,21 +570,21 @@ def digest(events: list[dict], start: float, now: float, tz: str | None, *, outb
     rows = (state or {}).get("rows")
     if full:
         return _text(Day(events, clock, FULL), start, outbox_state, waiting, preds, model, ages, subsystems, own_pr,
-                     open_items, state, rows, (), False, FULL, record, more=False)
+                     open_items, state, rows, (), False, FULL, record, more=False, explore=explore)
     ladder = [(CAPS[2], EXTRA[:k], False, False, LOOK) for k in range(len(EXTRA) + 1)]
     ladder += [(CAPS[2], EXTRA, True, False, LOOK)] + [(c, EXTRA, True, True, LOOK) for c in CAPS[2:]]
     ladder += [(1, EXTRA, True, True, 2), (1, EXTRA, True, True, 1)]
     text = ""
     for cap, drop, brief, short, look in ladder:
         text = _text(Day(events, clock, cap, brief), start, outbox_state, waiting, preds, model, ages, subsystems, own_pr,
-                     open_items, state, rows, drop, short, look, record, more=True)
+                     open_items, state, rows, drop, short, look, record, more=True, explore=explore)
         if len(text) <= LIMIT:
             break
     return text
 
 
 def _text(d: Day, start, outbox_state, waiting, preds, model, ages, subsystems, own_pr, open_items, state, rows,
-          drop, short: bool, look: int, record: dict | None, *, more: bool) -> str:
+          drop, short: bool, look: int, record: dict | None, *, more: bool, explore: str | None = None) -> str:
     clock = d.clock
     replays = (f", {d.replayed} of them replayed at a resume (read again by a poller: counted apart, never flagged)"
                if d.replayed and not d.brief else f", {d.replayed} replayed at a resume (counted apart)" if d.replayed else "")
@@ -594,7 +595,7 @@ def _text(d: Day, start, outbox_state, waiting, preds, model, ages, subsystems, 
              ("checks", checks(d)), ("labels", labels(d)), ("incidents", incidents(d)), ("outbox", outbox(d, outbox_state)),
              ("items", items(d, open_items, rows)), ("quiet", quiet(d)), ("others", others(d)),
              ("owner", owner(waiting, clock, short)), ("predictions", predictions(preds)), ("ages", ages),
-             ("subsystems", subsystems), ("own_pr", own_pr)]
+             ("subsystems", subsystems), ("own_pr", own_pr), ("explore", explore)]
     kept = [p for name, p in paras if p and name not in drop]
     cut = any(p and name in drop for name, p in paras) or any("… and" in p for p in kept)
     if more and cut:

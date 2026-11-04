@@ -110,6 +110,7 @@ control_port = 0          # the Supervisor chat's local port; 0 (default): any f
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
 review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
 review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
+explore_every = "1h"      # the Supervisor's explore round over the declared stores (default 1h; 0: off)
 chat_usd_per_day = 10.0   # what the owner's chat turns with the Supervisor may spend a day (default 10.0; 0: no cap)
 design_passes = 3         # the most refinement passes over the event map in one round (default 3)
 draft_expiry = "24h"      # how long a draft instrument records before it is removed unkept (default 24h)

@@ -12,7 +12,12 @@ store's ``match`` (``set_setting`` key ``sources``) are refused until one of the
 
 ``check_sources`` is not refused: it asks whether the store answers, and reads no series. The
 words are matched loosely, across the session's messages, and not tied to one store: a message
-that gave one store's limits counts for another. A refusal says why and the one question to ask."""
+that gave one store's limits counts for another. A refusal says why and the one question to ask.
+
+On a turn with no owner's message (a wake-up, such as an explore round), ``check_scopes`` holds the
+explore loop's standing rule: a declared source's ``match`` may narrow and its ``split``, ``kinds``
+and ``names`` change, but its ``match`` never widens and its ``explore`` (the owner's alone) is
+never written; those wait for the owner's yes in a turn of theirs."""
 
 from __future__ import annotations
 
@@ -79,10 +84,15 @@ def check(project, store: AgentStore | None, command: str, a: dict) -> None:
 def check_declared(project, store: AgentStore | None, value) -> None:
     """Refuse declaring a ``[[sources]]`` match the owner's words did not give (a scope picked by the
     Supervisor, which would then pass ``check``); an entry whose match is already declared is kept."""
+    from orchestra.sources.within import outside
     raw = project.orchestra.config.raw.get("sources") or []
     had = {str(e.get("name")): e.get("match") for e in raw if isinstance(e, dict)}
+
+    def narrowed(e: dict) -> bool:                # within the match the owner gave: the explore loop's standing rule
+        old = had.get(str(e.get("name")))
+        return bool(old) and not outside(_scopes(e)[0], _scopes({"match": old})[0])
     new = [e for e in (value if isinstance(value, list) else [])
-           if isinstance(e, dict) and e.get("match") and e.get("match") != had.get(str(e.get("name")))]
+           if isinstance(e, dict) and e.get("match") and e.get("match") != had.get(str(e.get("name"))) and not narrowed(e)]
     if new and not gave_limits(_messages(store)):
         raise StoreError(refusal(", ".join(str(e.get("name") or e.get("url")) for e in new), declaring=True))
 
@@ -93,3 +103,44 @@ def refusal(what: str, declaring: bool = False) -> str:
             f"use the defaults, so {act} is refused: a scope chosen from the code is not theirs, and a general go-ahead "
             f"is not their limits. Ask them in one sentence (\"{ASK}\"); check_sources may still say whether it answers. "
             "Nothing was read")
+
+
+def _scopes(entry: dict) -> tuple[list[str], list[str] | None]:
+    m = entry.get("match")
+    e = entry.get("explore")
+    return ([m] if isinstance(m, str) else list(m or [])), (None if e is None else [e] if isinstance(e, str) else list(e))
+
+
+def check_scopes(project, store: AgentStore | None, value) -> None:
+    """The explore loop's standing rule, held in code (Orchestra's guide, "Exploring beyond the match":
+    nothing in the core stops a plugin's setting tool from writing ``explore``). On a turn with no
+    owner's message (a wake-up: an explore round, a duty), a ``[[sources]]`` change may narrow a
+    source's ``match`` and change its ``split``, ``kinds`` and ``names``, but never widen its ``match``
+    (a selector outside every one it had) nor write its ``explore``, which is the owner's alone: those
+    are asked in one sentence, and made in the turn of their yes."""
+    if store is None or not isinstance(value, list):
+        return
+    from .design import turn_of
+    if (turn_of(store).get("message") or "").strip():
+        return                                                   # the owner's turn: their words carry it (check_declared)
+    from orchestra.sources.within import outside
+    had = {str(e.get("name")): e for e in project.orchestra.config.raw.get("sources") or [] if isinstance(e, dict)}
+    wider, explored = [], []
+    for e in value:
+        if not isinstance(e, dict):
+            continue
+        old = had.get(str(e.get("name")))
+        if old is None:
+            continue                                             # a new store: check_declared holds it to the owner's limits
+        (new_match, new_explore), (old_match, old_explore) = _scopes(e), _scopes(old)
+        if new_explore != old_explore:
+            explored.append(str(e.get("name")))
+        if new_match and old_match and outside(new_match, old_match):
+            wider.append(str(e.get("name")))
+    if explored or wider:
+        why = "; ".join(x for x in (
+            f"its explore ({', '.join(explored)}) is the owner's alone: never written or widened by you" if explored else "",
+            f"its match widens ({', '.join(wider)}): a selector outside every one it had" if wider else "") if x)
+        raise StoreError(f"refused on a turn with no owner's message, so nothing was written: {why}. Narrowing match and "
+                         "changing split, kinds or names apply on the standing rule; ask the owner in one sentence for this "
+                         "one (the change and its expected effect), and make it in the turn of their yes")

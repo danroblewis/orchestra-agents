@@ -133,9 +133,11 @@ get no Orchestra tools at all and write their results to a file Orchestra reads 
 
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
 duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
-review_usd_per_day` and `review_turns_per_day`). Your chat turns are capped apart, at $10 a day
-(`chat_usd_per_day`; 0 removes the cap): past it your message is refused before any turn, saying what
-was spent and how to go on. Not capped are the wake-ups its fixed core always takes (the first-start setup, an escalation, a plan reported, a
+review_usd_per_day` and `review_turns_per_day`). Its explore rounds over the declared stores (every `explore_every`, default an hour, 0 off: one
+experiment a round in Orchestra's experiment log, applied when it narrows `match` or changes `split`,
+`kinds` or `names`, asked of you when it widens `match`) count as its initiative. Your chat turns
+are capped apart, at $10 a day (`chat_usd_per_day`; 0 removes the cap): past it your message is
+refused before any turn, saying what was spent and how to go on. Not capped are the wake-ups its fixed core always takes (the first-start setup, an escalation, a plan reported, a
 program given up on). The other agents run on `[agents] model` (Haiku by default), one session per
 ticket or workflow step.
 

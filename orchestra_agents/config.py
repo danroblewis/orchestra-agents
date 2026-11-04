@@ -73,6 +73,7 @@ class Config:
     spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
     review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
+    explore_every: float = 3600.0       # the Supervisor's explore round (explore_round.py); 0: off
     chat_usd_per_day: float = 10.0      # what the owner's chat turns with the Supervisor may spend a day; 0: no cap (budget.py)
     design_passes: int = 3              # the most refinement passes in one round (design_passes.py)
     draft_expiry_s: float = 86_400.0    # how long a draft instrument records before it expires unkept (design_instruments.py)
@@ -119,6 +120,7 @@ class Config:
             review_turns_per_day=_count(a, "review_turns_per_day", 48), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
             design_passes=_count(a, "design_passes", 3),
             draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),
+            explore_every=_every(a, "explore_every", 3600.0),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 
 
@@ -127,6 +129,20 @@ def _count(a: dict, key: str, default: int) -> int:
     if isinstance(v, bool) or not isinstance(v, int) or v < 0:
         raise ConfigError(f"[agents] {key} must be a whole number, 0 or more (got {v!r})")
     return v
+
+
+def _every(a: dict, key: str, default: float) -> float:
+    """An interval in seconds ("1h", "30m", a number of seconds); 0 or "0" turns it off."""
+    v = a.get(key, default)
+    if v in (0, "0", False):
+        return 0.0
+    try:
+        out = parse_duration(v, default)
+    except Exception as e:
+        raise ConfigError(f"[agents] {key} is an interval like \"1h\" or \"30m\", or 0 for off (got {v!r})") from e
+    if out < 0:
+        raise ConfigError(f"[agents] {key} is an interval like \"1h\" or \"30m\", or 0 for off (got {v!r})")
+    return float(out)
 
 
 def _amount(a: dict, key: str, default: float) -> float:

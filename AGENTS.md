@@ -50,7 +50,7 @@ broken without updating the spec and saying so in the commit.
    way (orchestra-workflows' `docs/machine-contract.md`); nothing is imported from that plugin for
    that contract. The exceptions, each a lazy import of an optional dependency that says the plugin
    is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
-   W7; that plugin's SPEC §10) import its validated writer, loader and record API, and `program_tools.py`
+   W7; that plugin's SPEC §10) import its validated writer, loader and record API, and its start match and settings (`adopt.py`, 2026-11-03), and `program_tools.py`
    its programs reader (`programs.machines`, 2026-11-03, for `declare_program`); and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
    templates and settings, and its `machine.toml` reader); and `supervisor_pr.py` (2026-11-02)

@@ -200,3 +200,147 @@ def test_the_shipped_relator_is_declared_and_the_program_host_would_run_it(chat,
     ran = subprocess.run(list(prog.command), env=env, capture_output=True, text=True, timeout=30, check=False)
     assert prog.outcome(ran.returncode) == "related" and '"ticket": "HK-7"' in ran.stdout
     assert not git(repo, "status", "--porcelain").strip()                  # nothing in the checkout
+
+
+TICKET = {"name": "ticket", "items": "ticket", "planner": "supervisor",
+          "starts": [{"event": "jira.issue.assigned", "data": {"assignee": {"setting": "owner"},
+                                                               "category": {"not": ["done"]}, "replayed": {"not": [True]}}}],
+          "settings": {"owner": {"type": "string", "default": "dan"}},
+          "steps": [{"name": "assigned", "who": {"outside": "github"}, "done_when": {"event": "github.pr.opened", "of": "children"},
+                     "outcomes": {"done": "review"},
+                     "on": [{"event": "jira.issue.transitioned", "data": {"to": "Done"}, "to": None, "outcome": "done_without_pr"}]},
+                    {"name": "review", "who": {"outside": "github"},
+                     "done_when": {"event": "github.pr.labeled", "of": "children", "data": {"label": "SAIL"}},
+                     "outcomes": {"done": "sail"}},
+                    {"name": "sail", "who": {"outside": "github"},
+                     "done_when": {"event": "github.pr.labeled", "of": "children", "data": {"label": "SAILED"}},
+                     "outcomes": {"done": "done"}},
+                    {"name": "done", "who": {"outside": "jira"}, "done_when": {"event": "jira.issue.transitioned", "data": {"to": "Done"}},
+                     "outcomes": {"done": None}}]}
+ADOPT = {"event": ["jira.issue.transitioned", "jira.issue.created", "jira.comment.added"],
+         "data": {"category": {"not": ["new", "done"]}}, "at": {"status": {"In Review": "review"}}}
+PRS = {"name": "pull_request", "starts": [{"event": "github.pr.opened"}],
+       "steps": [{"name": "open", "who": {"outside": "github"}, "done_when": {"event": "github.pr.merged"}, "outcomes": {"done": None}}]}
+
+
+def test_tickets_under_way_when_tracking_begins_are_adopted_at_their_step(tmp_path, monkeypatch):
+    """Bootstrap run 8, finding 4: HK-101 was assigned before the poller began, so it was never
+    relayed as assigned and the ticket workflow never had it; its pull request related to nothing.
+    With the real plugin's recorder: at the declaration every ticket the poller reports under way
+    is adopted at the step its status implies (the Supervisor's request and its own move, never a
+    Jira event made up), one a start refused is not, a done one is not; the host adopts one first
+    reported later; a pull request then relates to the adopted ticket and moves it."""
+    from orchestra.events import Events as CoreEvents
+    from orchestra_workflows.run import recorder_of
+
+    from orchestra_agents import adopt, tooling, workflow_tools
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    project = agents_project(repo)
+    define.write(project.orchestra, PRS, root="state")
+    bus = CoreEvents.for_project(project.orchestra)
+
+    def jira(type_, key, actor, **data):
+        bus.publish(type_, {"issuetype": "Task", "labels": [], **data}, source=f"person.jira.{actor}", subject=key)
+
+    def moved(key, to, category="indeterminate"):
+        jira("jira.issue.transitioned", key, "iruiz", **{"from": "To Do", "to": to, "status": to, "category": category})
+    moved("HK-101", "In Review")                       # assigned before the poller began: only its moves are relayed
+    moved("HK-102", "In Progress")
+    moved("HK-108", "Done", "done")                    # done: nothing to track
+    jira("jira.issue.assigned", "HK-109", "kofi", assignee="kofi", status="In Progress", category="indeterminate")
+    moved("HK-109", "In Progress")                     # someone else's: the start refused it, so no adoption
+    recorder_of(project.orchestra).tick()              # the recorder read all of it before the workflow existed
+    store = AgentStore(project, Events.for_project(project, source="supervisor"))
+    got = tooling.handle(project, store, "declare_workflow", {
+        "definition": TICKET, "adopt": ADOPT, "reason": "each ticket from assignment to Done"}, role="supervisor")
+    assert got["ok"], got
+    assert {a["item"]: a["step"] for a in got["adopt"]["adopted"]} == {"HK-101": "review", "HK-102": "assigned"}
+    assert got["adopt"]["count"] == 2 and "adopted" in got["adopt"]["say"]
+    written = json.loads((project.orchestra.state_dir / "workflows" / "ticket" / "workflow.json").read_text())
+    assert {"request": True} in written["starts"] and "adopt" not in written
+    assert {"event": adopt.MOVE, "data": {"workflow": "ticket", "step": "review"}, "to": "review"} in written["steps"][0]["on"]
+    events = bus.page(0, 10_000)[0]
+    mine = [e for e in events if e["source"] == "supervisor"]
+    assert not any(e["type"].startswith("jira.") for e in mine)               # never a poller's event made up
+    assert sorted(e["subject"] for e in mine if e["type"] == "item.requested") == ["HK-101", "HK-102"]
+    assert all(e["data"]["adopted"] is True and e["data"]["from"] for e in mine if e["type"] == "item.requested")
+
+    moved("HK-111", "In Review")                       # first reported after the declaration
+    jira("jira.issue.assigned", "HK-112", "dan", assignee="dan", status="To Do", category="new")   # the start's own
+    later = adopt.Adopter(store, workflow_tools.plugin).tick(project)
+    assert [(d["item"], d["step"]) for d in later] == [("HK-111", "review")]
+    assert adopt.Adopter(store, workflow_tools.plugin).tick(project) == []            # once
+    bus.publish("github.pr.opened", {"number": 1, "tickets": ["HK-101"]}, source="person.github.ines-r", subject="riff/app#1")
+    bus.publish("item.related", {"kind": "parent", "other": "HK-101"}, source="relate_prs/1", subject="riff/app#1")
+    recorder_of(project.orchestra).tick()
+    at = {k: tooling.handle(project, store, "explain_item", {"item": k}, role="supervisor") for k in ("HK-101", "HK-102", "HK-111", "HK-112")}
+    assert {k: v["positions"]["ticket"]["step"] for k, v in at.items()} == {
+        "HK-101": "review", "HK-102": "assigned", "HK-111": "review", "HK-112": "assigned"}
+    assert at["HK-101"]["fields"]["adopted"]["value"] == adopt.SAID and at["HK-101"]["fields"]["status"]["value"] == "In Review"
+    assert "riff/app#1" in (at["HK-101"]["summary"].get("children") or [])
+    for key in ("HK-108", "HK-109"):
+        with pytest.raises(Exception, match="holds no item"):
+            tooling.handle(project, store, "explain_item", {"item": key}, role="supervisor")
+    bus.publish("github.pr.labeled", {"number": 1, "label": "SAIL"}, source="person.github.ines-r", subject="riff/app#1")
+    recorder_of(project.orchestra).tick()
+    pos = tooling.handle(project, store, "explain_item", {"item": "HK-101"}, role="supervisor")["positions"]["ticket"]
+    assert pos["step"] == "sail"
+
+
+SLACK_STEPS = [{"name": "answer", "who": {"outside": "slack"}, "done_when": {"event": "slack.thread.replied", "data": {"first": True}},
+                "outcomes": {"done": None}, "guards": {"within": {"setting": {"data": "channel"}}, "then": "attention"}}]
+POLICIES = {"C0HKHELP": {"type": "duration", "default": "2h"}, "C0HKDEV": {"type": "duration", "default": "4h"},
+            "C0HKINC": {"type": "duration", "default": "15m"}}
+OWNER_SLACK = ("Slack: C0HKHELP (#hackriff-help, 2h), C0HKDEV (#hackriff-dev, 4h), C0HKINC (#hackriff-incidents, 15m), "
+               "each read every 10 minutes.")
+
+
+def test_the_alert_bots_threads_in_the_incidents_channel_are_alerts(tmp_path, monkeypatch):
+    """Bootstrap run 8, finding 5: the queue left out every bot's thread, so the alert bot's in
+    #hackriff-incidents were never items. Run 8's definition is refused (the owner never spoke of
+    bots); the incidents channel's bot threads start alerts under its 15-minute policy, the other
+    channels' threads, a bot's too, start requests, through the real plugin's recorder."""
+    from orchestra.events import Events as CoreEvents
+    from orchestra_workflows.run import recorder_of
+
+    from orchestra_agents import tooling
+    monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    project = agents_project(repo)
+    store = AgentStore(project, Events.for_project(project, source="supervisor"))
+    store.set_agent_state("supervisor", turn={"n": 1, "id": "sessions/supervisor/1", "message": OWNER_SLACK, "at": 1.0})
+
+    def declare(definition):
+        return tooling.handle(project, store, "declare_workflow", {"definition": definition, "quote": OWNER_SLACK,
+                                                                   "reason": "the owner's channels and their policies"}, role="supervisor")
+    people = {"event": "slack.thread.started", "data": {"bot": {"not": [True]}, "replayed": {"not": [True]}}}
+    run8 = {"name": "slack_queue", "items": {"one": "request", "many": "requests"}, "starts": [people],
+            "steps": SLACK_STEPS, "settings": POLICIES}
+    with pytest.raises(Exception, match="leaves out the threads a bot starts"):
+        declare(run8)
+    queue = {**run8, "starts": [people, {"event": "slack.thread.started",
+                                         "data": {"bot": True, "channel": {"not": ["C0HKINC"]}, "replayed": {"not": [True]}}}]}
+    alerts = {"name": "slack_alerts", "items": "alert", "starts": [{"event": "slack.thread.started",
+                                                                   "data": {"bot": True, "channel": "C0HKINC", "replayed": {"not": [True]}}}],
+              "steps": SLACK_STEPS, "settings": POLICIES}
+    q, a = declare(queue), declare(alerts)
+    assert q["ok"] and a["ok"], (q, a)
+    assert a["bot_threads"]["starts"] == ["bot threads in C0HKINC start alerts (only a bot's)"]
+    assert "every channel but C0HKINC start requests" in q["bot_threads"]["starts"][1]
+    bus = CoreEvents.for_project(project.orchestra)
+    for subject, channel, source, bot in (("C0HKINC/1.1", "C0HKINC", "bot.slack.b0alerts", True),
+                                          ("C0HKINC/1.2", "C0HKINC", "person.slack.u1", False),
+                                          ("C0HKDEV/1.3", "C0HKDEV", "bot.slack.b0ci", True),
+                                          ("C0HKHELP/1.4", "C0HKHELP", "person.slack.u2", False)):
+        bus.publish("slack.thread.started", {"channel": channel, "channel_name": channel.lower(), "user": "x", "bot": bot},
+                    source=source, subject=subject)
+    recorder_of(project.orchestra).tick()
+    where = {s: sorted(tooling.handle(project, store, "explain_item", {"item": s}, role="supervisor")["positions"])
+             for s in ("C0HKINC/1.1", "C0HKINC/1.2", "C0HKDEV/1.3", "C0HKHELP/1.4")}
+    assert where == {"C0HKINC/1.1": ["slack_alerts"], "C0HKINC/1.2": ["slack_queue"], "C0HKDEV/1.3": ["slack_queue"],
+                     "C0HKHELP/1.4": ["slack_queue"]}

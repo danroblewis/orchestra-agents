@@ -605,6 +605,32 @@ not installed: tell the owner, and write nothing.
   state directory's `machines/relate_prs/machine.json`, which the plugin's program host runs. Never
   ask for one to be written. `declare_workflow` refuses a re-declaration that drops a relation the definition in
   place holds, unless the owner's quoted words are about the link ("follow Jira's status only").
+- **Tickets already under way** (bootstrap run 8: HK-101 was assigned before the Jira poller began,
+  so it was never relayed as `jira.issue.assigned`, the `ticket` workflow never had it, and its
+  pull request related to nothing): declare a workflow that follows a poller's tickets with
+  `adopt`, beside the definition: `{"event": ["jira.issue.transitioned", "jira.issue.created",
+  "jira.comment.added"], "data": {"category": {"not": ["new", "done"]}}, "at": {"status": {"In
+  Review": "review"}}}`: the poller's types that carry the ticket as it is now (each `jira.issue.*`
+  carries its `status` and `category`), the fields that say it is under way, and the step each
+  value of one field implies (any other value: the first step). Every ticket the bus reports under
+  way that has no item yet, and that no start refused (assigned to someone else), is **adopted**:
+  your `item.requested` (`adopted: true`, `from`: the poller's report), its fields `adopted: "at
+  tracking start"` and its status, and for a later step your `supervisor.adopted`, which the
+  definition's first step moves on (the tool writes those words into the definition: a `request`
+  start and one `on` per step; the Workflows plugin has no start at a later step). Those already
+  reported are adopted at the declaration, and one the poller first reports later is adopted then,
+  once. Never publish a ticket's events yourself. A re-declaration without `adopt` keeps the rule;
+  `"adopt": false` drops it. Say the answer's `adopt`: how many, each at its step.
+- **Bot threads in a chat queue** (bootstrap run 8: the queue left out every bot's thread, and in
+  #hackriff-incidents the incidents are the alert bot's): leave a bot's threads out (`"bot":
+  {"not": [true]}`) only on the owner's words about bots, quoted; `declare_workflow` refuses it
+  otherwise. In a channel the owner named for incidents or alerts (its name or their words:
+  incidents, alerts, on-call, pages) the bot's threads start **alerts**: a workflow of their own,
+  `"items": "alert"`, started on `{"event": "slack.thread.started", "data": {"bot": true,
+  "channel": "C0HKINC"}}`, with the policy the owner gave that channel; the queue then starts the
+  people's threads everywhere and the bots' elsewhere, `{"bot": true, "channel": {"not":
+  ["C0HKINC"]}}`. The answer's `bot_threads` says, start by start, which channels count bot
+  threads: tell the owner in one line, and why (their words naming the channel).
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
   so (quote them). The repository's is not committed by you: [[tasking]]hand it to the Coordinator to land

@@ -28,6 +28,7 @@ from orchestra.tokens import owner_only
 
 from . import (
     access,
+    adopt,
     budget,
     closing_line,
     design,
@@ -47,6 +48,7 @@ from . import (
     push_guard,
     supervisor_spec,
     tooling,
+    workflow_tools,
 )
 from .builtins import ROLES as BUILTIN_ROLES
 from .clock import daily, next_at, parse_interval
@@ -126,7 +128,7 @@ class AgentHost:
         self._started_at = time.time()
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
-        self._announced: set[tuple[str, tuple[str, ...]]] = set()   # (source, floor roles) announced in this host's lifetime
+        self._announced: set[tuple] = set()            # (source, floor roles, adopted types) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
@@ -142,6 +144,7 @@ class AgentHost:
         self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
         self.first_run = FirstRun(self)                # a project not set up wakes the Supervisor to set it up
         self.review = ReviewRound(self)                # the Supervisor's scheduled review round (review.py)
+        self.adopter = adopt.Adopter(store, lambda: workflow_tools.plugin(), log)   # tickets under way when tracking began
         self._session_models: dict[str, str | None] = {}   # resident agent -> the model its session was opened on
         self._over_said: str | None = None             # the budget's last refusal, logged once
 
@@ -273,6 +276,10 @@ class AgentHost:
                     self._note_waits(drained)
                 if reasons:
                     self._spawn(self.agent_threads, target, self._wake, target, reasons)
+        try:
+            self.adopter.tick(self.project)
+        except Exception as e:  # noqa: BLE001 - a ticket not adopted this tick is read again at the next
+            log(f"adopt: {e!r}")
         self.runner.tick()
         self.floor.tick()
 
@@ -468,7 +475,7 @@ class AgentHost:
         host's lifetime (``reviewer/1`` is one machine instance however many tickets it reviews),
         again when those floor roles change."""
         floor = sorted(r for r, a in served(self.project).items() if a == role)   # the floor roles it answers (floor_roles.py)
-        key = (source, tuple(floor))
+        key = (source, tuple(floor), tuple(adopt.listened(self.store)) if role == "supervisor" else ())
         if key in self._announced:
             return
         self._announced.add(key)
@@ -481,7 +488,7 @@ class AgentHost:
         floor = agent is not None and agent.name in served(self.project).values()
         return listens_for(agent, self.cfg.work, None if agent is None else effective_tools(agent, self.role_defs or all_roles(self.project),
                                                                                              self.teams or all_teams(self.project)),
-                           floor=floor)
+                           floor=floor, adopting=adopt.listened(self.store) if agent is not None and agent.name == "supervisor" else ())
 
     @staticmethod
     def _pid(proc: AgentSession) -> int | None:

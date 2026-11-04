@@ -675,7 +675,9 @@ when the harness takes the name, section 12), `serves` (the task system's roles 
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
-rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
+rounds, explore rounds and its duties' wake-ups may spend a day, section 12), `chat_usd_per_day`
+(default 10.0, 0 no cap: what the owner's chat turns may spend a day), `model` once given is the
+Supervisor's too, over its spec's shipped `sonnet` (`machine_spec.model_of`; D5, 2026-11-04), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
 compacted; Claude Code compacts at its own window, from the model's context, section 6; set to 0 it
@@ -1744,8 +1746,11 @@ whose key no earlier round woke it for, or a split proposal, queues a wake-up (`
 **The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, and wake-ups
 on events only its spec's duties listen for) stops at `[agents] review_usd_per_day` dollars
 (Claude Code reports each turn's cost: `TurnResult.cost_usd`) or `review_turns_per_day` turns.
-The owner's chat and what the fixed core wakes it for never wait on it. Spending is kept per day in
-its agent state (`spend`, `spend_total`).
+What the fixed core wakes it for never waits on it. The owner's chat turns have their own cap,
+`chat_usd_per_day` (default 10.0; 0: none): past it a message is refused before any turn
+(`budget.chat_over`, raised in `prompt_supervisor`), saying what was spent, the cap and how to go
+on. Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`;
+`spend_total`).
 
 **Self-healing** (group `patch`, the Supervisor's alone, decided by the owner for now; a separate
 Steward may split off later). `propose_patch`: a bug in the project's own code, when `work =

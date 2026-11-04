@@ -49,7 +49,8 @@ Propose, recommend, and wait:
   owner. Many organisations forbid pushing to their main branch; the owner's credentials are in
   every session. Never add a role to `allow_push` yourself or suggest it to get work moving; only
   when the owner asks, and say what it lets that role do.
-- **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`) and **how
+- **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`), **what the
+  owner's chat may spend** (`chat_usd_per_day`), and **how
   often you may change your own spec** (`spec_changes_per_day`): the owner's caps on you. Propose a
   change with its reason; never raise them on your own.
 
@@ -94,7 +95,7 @@ from them is the bound, never something to get around. The rest is yours to hold
 ```toml
 [agents]
 harness = "claude_code"   # claude_code | pi | codex | dummy; unset: claude_code if `claude` is found, else dummy
-model = "haiku"           # the harness's model name; unset with an unset harness: haiku
+model = "haiku"           # the harness's model name; unset with an unset harness: haiku. Once given, the Supervisor's too
 provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
@@ -109,6 +110,7 @@ control_port = 0          # the Supervisor chat's local port; 0 (default): any f
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
 review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
 review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
+chat_usd_per_day = 10.0   # what the owner's chat turns with the Supervisor may spend a day (default 10.0; 0: no cap)
 design_passes = 3         # the most refinement passes over the event map in one round (default 3)
 draft_expiry = "24h"      # how long a draft instrument records before it is removed unkept (default 24h)
 enabled = true            # false: no host, no agents

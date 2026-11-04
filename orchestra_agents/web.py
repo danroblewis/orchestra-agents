@@ -58,8 +58,8 @@ def plugin(orchestra_project) -> Plugin:
 
 
 def supervisor_model(project: Project) -> str | None:
-    """The model the Supervisor runs on, as the host chooses it (``host.model_of``): its spec's when
-    the harness takes that name, else ``[agents] model``."""
+    """The model the Supervisor runs on, as the host chooses it (``host.model_of``): ``[agents] model``
+    when the owner gave one, else its spec's when the harness takes that name, else ``[agents] model``."""
     from .harness import get_harness
     from .machine_spec import model_of
     return model_of(project, get_harness(project.config.harness), "supervisor")

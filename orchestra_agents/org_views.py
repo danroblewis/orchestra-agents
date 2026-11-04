@@ -74,7 +74,7 @@ def machine_view(project: Project, store: AgentStore, name: str) -> dict | None:
     if spec is None:
         return None
     st = store.agent_state(name)
-    return {"dir": spec.dir, "model": spec.model, "review_every": spec.review_every, "next_review_at": st.get("next_review_at"),
+    return {"dir": spec.dir, "model": spec.model, **runs_on(project, name), "review_every": spec.review_every, "next_review_at": st.get("next_review_at"),
             "duties": [{"name": d.name, "about": d.about, "builtin": d.builtin, "listens": d.listens, "tools": d.tools,
                         "reason": d.reason} for d in spec.duties],
             "history": spec_git.history(project, 10), "review": {k: v for k, v in (st.get("review") or {}).items() if k != "seen"},
@@ -139,8 +139,38 @@ def agents_status(project: Project, store: AgentStore) -> dict:
                          "ticket": ({"id": x["ticket_id"], "title": x.get("ticket_title") or "", "state": x.get("ticket_state") or "IN_PROGRESS",
                                      "worker_turns": x.get("worker_turns") or 0} if x.get("ticket_id") else None)})
     cfg = project.config
+    for a in agents:
+        if a["name"] == "supervisor":                     # its card says what it runs on (the D5 finding: it was not seen)
+            a.update(runs_on(project))
     return {"ok": True, "host": {**ctl, "alive": host_alive}, "agents": agents, "sessions": sessions, "recent": recent_sessions(rt),
             "now": time.time(), "harness": cfg.harness, "model": cfg.model, "harness_note": cfg.harness_note, "serves": cfg.serves}
+
+
+def runs_on(project: Project, name: str = "supervisor") -> dict:
+    """What an agent's sessions start on: the harness, the provider (Pi and Codex take one) and the
+    model as the host chooses it (``machine_spec.model_of``), with where the model came from."""
+    from .harness import get_harness
+    from .machine_spec import load, model_of
+    cfg = project.config
+    try:
+        harness = get_harness(cfg.harness)
+    except ValueError:                                    # an unknown harness: the host refuses it too
+        harness = None
+    model = model_of(project, harness, name) if harness is not None else cfg.model
+    try:
+        spec = load(project, name)
+    except Exception:  # noqa: BLE001 - a spec that cannot be read: the model is the configured one
+        spec = None
+    if not model:
+        origin = "the harness's default"
+    elif cfg.model_set and model == cfg.model:
+        origin = "[agents] model"
+    elif spec is not None and spec.model and harness is not None and harness.model_for(spec.model) == model:
+        origin = "its spec"
+    else:
+        origin = "[agents] model"
+    return {"runs_on": {"harness": cfg.harness, "provider": cfg.provider, "model": model, "model_from": origin,
+                        "tools_via": cfg.tools_via}}
 
 
 def recent_sessions(rt: dict, per_role: int = 8) -> list[dict]:

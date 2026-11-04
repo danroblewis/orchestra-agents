@@ -59,6 +59,7 @@ class Config:
     dummy_script: str | None = None     # the dummy harness's script, relative to the repository (harness/dummy_script.py)
     provider: str | None = None
     model: str | None = None
+    model_set: bool = False             # [agents] model was given: the Supervisor runs on it too (machine_spec.model_of)
     thinking: str | None = None
     tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto | file (harness/bash_tools.py, file_output.py)
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
@@ -72,6 +73,7 @@ class Config:
     spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
     review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
+    chat_usd_per_day: float = 10.0      # what the owner's chat turns with the Supervisor may spend a day; 0: no cap (budget.py)
     design_passes: int = 3              # the most refinement passes in one round (design_passes.py)
     draft_expiry_s: float = 86_400.0    # how long a draft instrument records before it expires unkept (design_instruments.py)
     base_branch: str = "main"           # from the task system's [project], for the prompts
@@ -107,14 +109,15 @@ class Config:
         return cls(
             harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
             dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
-            model=model, thinking=a.get("thinking"), tools_via=via,
+            model=model, model_set=bool(a.get("model")), thinking=a.get("thinking"), tools_via=via,
             serves=serves, allow_push=allow, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
             spec_changes_per_day=_count(a, "spec_changes_per_day", 5), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
-            review_turns_per_day=_count(a, "review_turns_per_day", 48), design_passes=_count(a, "design_passes", 3),
+            review_turns_per_day=_count(a, "review_turns_per_day", 48), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
+            design_passes=_count(a, "design_passes", 3),
             draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 

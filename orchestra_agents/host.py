@@ -673,6 +673,9 @@ class AgentHost:
         if st.get("paused") or st.get("deleted"):
             why = st.get("paused_why") or st.get("crash_loop") or "by request"
             raise StoreError(f"the Supervisor is {'deleted' if st.get('deleted') else 'paused'} ({why}); its messages wait until it is resumed")
+        if over := budget.chat_over(self.store, self.cfg):
+            log(f"supervisor: a chat message refused: {over}")
+            raise StoreError(over)
         with self._turn_lock("supervisor"):
             self.agent_threads["supervisor"] = threading.current_thread()
             try:
@@ -705,7 +708,7 @@ class AgentHost:
         res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
         res = self._checked(res, began, message, emit)
         res = self._closed(res, began, emit)
-        budget.record(self.store, res.cost_usd, initiative=False)
+        budget.record(self.store, res.cost_usd, initiative=False, chat=True)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])

@@ -465,7 +465,7 @@ class AgentHost:
             system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            tools_via=self.cfg.tools_via, sandbox_escape=self.cfg.sandbox_escape, read_only=read_only, bounds=self._bounds(role, cwd),
+            tools_via=self.cfg.tools_via, sandbox_escape=self.cfg.sandbox_escape, pass_env=self.cfg.pass_env, read_only=read_only, bounds=self._bounds(role, cwd),
             skills=skills.for_session(self.project) if role == protocol.SUPERVISOR else ())
         proc = file_output.start(self.harness, spec) if spec.tools_via == file_output.MODE else self.harness.start(spec)
         if not ticket_id:
@@ -698,10 +698,16 @@ class AgentHost:
             if self.stop.wait(WAIT_RETRY_S):
                 return False
 
+    def run_delegate(self, token: str, body: dict, emit) -> dict:
+        """A session's ``delegate``, asked of the control endpoint: run here, from the host's environment,
+        so the sub-session signs in as the Supervisor's own session does (delegate_host.py)."""
+        from . import delegate_host
+        return delegate_host.serve(self.project, self.store, token, body, emit)
+
     def _start_control(self) -> None:
         """Serve the Supervisor chat; raises OSError when the port cannot be bound."""
         port = self.cfg.control_port                     # 0: any free port; it is recorded for the web
-        self.control = ControlServer(port, self.prompt_supervisor, owner_only(token_file(self.project)))
+        self.control = ControlServer(port, self.prompt_supervisor, owner_only(token_file(self.project)), delegate=self.run_delegate)
         self.control.start()
         self.store.set_control(self.control.port, os.getpid())
         owner_messages.interrupted(self.store)           # what an earlier host accepted and never answered

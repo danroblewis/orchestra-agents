@@ -99,8 +99,53 @@ def transcript_path(cwd: Path, session_uuid: str) -> Path:
 
 
 # Claude Code's own ways to sign in without its login (which is in the macOS keychain or under its
-# config directory): without them a session signed in that way cannot start.
-CLAUDE_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
+# config directory): without them a session signed in that way cannot start. The names are Claude
+# Code's (https://code.claude.com/docs/en/env-vars, and its pages on Amazon Bedrock, Google Cloud's
+# Agent Platform and LLM gateways, read 2026-11-04). An ``apiKeyHelper`` or ``awsAuthRefresh`` lives in
+# its settings, under CLAUDE_CONFIG_DIR, which every session keeps.
+CLAUDE_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+               "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_API_KEY_HELPER_TTL_MS")
+# How it reaches a company's gateway and which model it asks for there (most pass session_env anyway;
+# named so they always do, and so a failed sign-in's report can say which the host has).
+CLAUDE_ROUTE = ("ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_BETAS", "ANTHROPIC_MODEL",
+                "ANTHROPIC_DEFAULT_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_FABLE_MODEL",
+                "CLAUDE_CODE_CLIENT_CERT", "CLAUDE_CODE_CLIENT_KEY", "CLAUDE_CODE_CLIENT_KEY_PASSPHRASE",
+                "CLAUDE_CODE_CERT_STORE", "NODE_EXTRA_CA_CERTS")
+_AWS = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_REGION",
+        "AWS_DEFAULT_REGION", "AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE")
+# A cloud provider's switch -> the credentials Claude Code reads for it, kept only while the switch is on in
+# the host's environment: otherwise a cloud key in the host's environment is not the session's.
+CLAUDE_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "CLAUDE_CODE_USE_BEDROCK": _AWS + ("AWS_BEARER_TOKEN_BEDROCK", "ANTHROPIC_BEDROCK_BASE_URL",
+                                       "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION",
+                                       "CLAUDE_CODE_SKIP_BEDROCK_AUTH"),
+    "CLAUDE_CODE_USE_MANTLE": _AWS + ("ANTHROPIC_BEDROCK_MANTLE_BASE_URL", "ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION",
+                                      "CLAUDE_CODE_SKIP_MANTLE_AUTH"),
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS": _AWS + ("ANTHROPIC_AWS_API_KEY", "ANTHROPIC_AWS_BASE_URL",
+                                             "CLAUDE_CODE_SKIP_ANTHROPIC_AWS_AUTH"),
+    "CLAUDE_CODE_USE_VERTEX": ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT",
+                               "CLOUD_ML_REGION", "ANTHROPIC_VERTEX_PROJECT_ID", "ANTHROPIC_VERTEX_BASE_URL",
+                               "CLAUDE_CODE_SKIP_VERTEX_AUTH"),
+    "CLAUDE_CODE_USE_FOUNDRY": ("ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL",
+                                "ANTHROPIC_FOUNDRY_RESOURCE", "CLAUDE_CODE_SKIP_FOUNDRY_AUTH"),
+}
+
+
+def _on(value: str | None) -> bool:
+    return (value or "").strip().lower() not in ("", "0", "false", "no", "off")
+
+
+def sign_in(environ: dict[str, str] | None = None) -> tuple[str, ...]:
+    """The variables a Claude Code session signs in and routes with, given the host's environment: its
+    own sign-in, the gateway's route, each provider switch, and that provider's credentials while
+    its switch is on there."""
+    env = os.environ if environ is None else environ
+    names = [*CLAUDE_AUTH, *CLAUDE_ROUTE, *CLAUDE_PROVIDERS]
+    for switch, more in CLAUDE_PROVIDERS.items():
+        if _on(env.get(switch)):
+            names += more
+    return tuple(dict.fromkeys(names))
 
 
 class ClaudeCodeSession(AgentSession):
@@ -205,7 +250,7 @@ class ClaudeCodeSession(AgentSession):
         runs: the session's ORCHESTRA_* variables (its token among them) and its tool groups, which
         ``orchestra agents tool`` reads. The session runs with --dangerously-skip-permissions, so it
         gets none of the host's credentials (``session_env``)."""
-        env = {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
+        env = {**session_env(sign_in() + self.spec.pass_env), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
         if self.via() == "bash":              # a tool run from the Bash tool may take as long as any tool call
             ms = str(int(TOOL_CALL_S * 1000))
             env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms,
@@ -561,6 +606,9 @@ class ClaudeCodeHarness(Harness):
 
     def __init__(self, binary: str | None = None):
         self.binary = binary
+
+    def sign_in(self, environ: dict[str, str] | None = None) -> tuple[str, ...]:
+        return sign_in(environ)
 
     def start(self, spec: SessionSpec) -> ClaudeCodeSession:
         return ClaudeCodeSession(spec, self.binary)

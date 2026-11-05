@@ -409,7 +409,8 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
 - serves the Supervisor chat on a local control endpoint (`control.py`, 127.0.0.1, the port
   recorded in the runtime record, and the control token in `agents/control.token`, owner-only,
   asked for on every message: a page of another site could otherwise post to the port, around
-  Orchestra's web login): one turn on the resident session per message, prefixed with
+  Orchestra's web login), and every session's `delegate` (`POST /delegate`, the session's own token as
+  its bearer, `delegate_host.py`): one turn on the resident session per message, prefixed with
   the project context and who fills the roles when either changed, and a digest of the events
   since the last turn: a count per type and at most eight events that concern the Supervisor
   (attention addressed to it, a worker's turn ended blocked (`task.reported`, its
@@ -592,8 +593,11 @@ pushes them onto a later page.
 **No host credentials in a session** (`harness/base.session_env`): every harness starts its process
 with the host's environment minus each name that may hold a credential (`integrate_kits.CREDENTIAL_VARS`,
 or ending in `_TOKEN`/`_SECRET`/`_PASSWORD`/`_KEY`; the host's `ORCHESTRA_*` tokens among them), keeping
-only that harness's own sign-in (Claude Code's `CLAUDE_AUTH`, Pi's provider keys `PI_AUTH`, Codex's
-`CODEX_AUTH`) and the session's own `SessionSpec.env`.
+only that harness's own sign-in (`Harness.sign_in`: Claude Code's `CLAUDE_AUTH`, a gateway's route
+`CLAUDE_ROUTE` and the credentials of each cloud provider whose switch is on in the host's environment,
+`CLAUDE_PROVIDERS`, from Claude Code's own list of variables, 2026-11-04; Pi's provider keys `PI_AUTH`;
+Codex's `CODEX_AUTH`), the names in `[agents] pass_env` (the owner's alone, in the private overlay:
+`set_setting` refuses it, and no `ORCHESTRA_` name is taken) and the session's own `SessionSpec.env`.
 **No push, no pull-request writes** (`push_guard.py`; the owner, 2026-10-31: using Orchestra at work
 "won't try to push things to master"). Every session runs with the owner's git and gh
 credentials and its harness's permission checks off, so the host gives each session whose role is
@@ -1996,7 +2000,20 @@ and its token revoked, and its report (at most 4,000 characters) is the answer. 
 says to delegate them. Its spend is the Supervisor's: refused when the cap of the turn it runs in is
 spent (the owner's chat, else its initiative; `design.begin_turn` says which), added to that cap when
 it ends, and counted apart (`delegate_usd`, `delegate_turns`). With `tools_via = "file"` nothing is
-delegated (a sub-session would have no tools).
+delegated (a sub-session would have no tools). **The host runs it** (`delegate_host.py`, 2026-11-04, the
+owner: a delegated job got a 401 from the owner's LLM service while the Supervisor was signed in): the
+tool command runs in the Supervisor's shell, often in Claude Code's sandbox, where a nested session may
+not reach the owner's sign-in (the keychain, a gateway's variable). So every `delegate` call
+(`harness/caller.py`) asks the host's control endpoint (`POST /delegate`, through the sandbox's proxy
+when it must, `local_http`; the harness lists the control port in the sandbox's allowed addresses);
+the host checks the token's grant (a delegated sub-session's grant names its job, and it never
+delegates again), runs the job in its own process and environment, and streams `started`, each `tool`,
+a `wait` line every 15 s and `done`. The caller waits the turn's bound and 30 s (inside the tool call's
+own); past it, it returns what is known (the sub-session, its transcript, the tools it called). With the
+host down the call is refused, saying so. A sub-session whose provider refused its sign-in (401 or 403,
+an invalid key, OAuth, "please run /login", in its error, its text or its stderr log) is reported
+plainly (`sign_in.py`): who started it, which of the harness's sign-in variables and `pass_env` names
+the host's environment has, by name only (a value in the provider's message is blanked), and what to set.
 
 **Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
 takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;

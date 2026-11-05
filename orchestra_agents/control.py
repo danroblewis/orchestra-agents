@@ -11,6 +11,10 @@ POST /supervisor  body {"message": "..."}  -> NDJSON stream of the session's nor
                                               only tool_start and assistant_end are forwarded, host.py
                                               prompt_supervisor), then {"type": "done"}
                   401 without the token
+POST /delegate    body {"job", "brief"}    -> NDJSON: started, tool, wait lines, then {"type": "done", "result"|"error"}:
+                  a session's ``delegate`` run in the host, from its environment (delegate_host.py). Its
+                  bearer is the calling session's own token, never the control token: the host checks
+                  the token's grant, so a delegated job runs only for a live Supervisor session
 GET  /health                                -> {"ok": true}
 """
 
@@ -26,6 +30,7 @@ from pathlib import Path
 from orchestra.tokens import owner_only
 
 PromptFn = Callable[[str, Callable[[dict], None]], dict]
+DelegateFn = Callable[[str, dict, Callable[[dict], None]], dict]     # (the session's token, the body, emit) -> the answer
 
 
 def token_file(project) -> Path:
@@ -38,7 +43,7 @@ def bearer(project) -> dict[str, str]:
 
 
 class ControlServer:
-    def __init__(self, port: int, prompt_supervisor: PromptFn, token: str):
+    def __init__(self, port: int, prompt_supervisor: PromptFn, token: str, delegate: DelegateFn | None = None):
         self.port = port
         outer = self
 
@@ -62,16 +67,35 @@ class ControlServer:
                 self._json(404, {"ok": False})
 
             def do_POST(self):
+                if self.path == "/delegate" and delegate is not None:
+                    return self._delegate()
                 if self.path != "/supervisor":
                     return self._json(404, {"ok": False})
                 given = (self.headers.get("Authorization") or "").encode()
                 if not hmac.compare_digest(given, f"Bearer {token}".encode()):
                     return self._json(401, {"ok": False, "error": "send the control token (agents/control.token)"})
+                body = self._body()
+                if body is None:
+                    return self._json(400, {"ok": False, "error": "bad json"})
+                self._stream(lambda emit: outer.prompt_supervisor(body.get("message", ""), emit))
+
+            def _body(self) -> dict | None:
                 n = int(self.headers.get("Content-Length") or 0)
                 try:
                     body = json.loads(self.rfile.read(n) or b"{}")
                 except json.JSONDecodeError:
+                    return None
+                return body if isinstance(body, dict) else None
+
+            def _delegate(self):
+                given = self.headers.get("Authorization") or ""
+                session = given.removeprefix("Bearer ").strip() if given.startswith("Bearer ") else ""
+                body = self._body()
+                if body is None:
                     return self._json(400, {"ok": False, "error": "bad json"})
+                self._stream(lambda emit: {"result": delegate(session, body, emit)})
+
+            def _stream(self, run):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-ndjson")
                 self.end_headers()
@@ -80,13 +104,13 @@ class ControlServer:
                 def emit(ev: dict) -> None:
                     with lock:
                         try:
-                            self.wfile.write((json.dumps(ev) + "\n").encode())
+                            self.wfile.write((json.dumps(ev, default=str) + "\n").encode())
                             self.wfile.flush()
                         except (BrokenPipeError, ConnectionResetError):
                             pass
 
                 try:
-                    result = outer.prompt_supervisor(body.get("message", ""), emit)
+                    result = run(emit)
                     emit({"type": "done", **result})
                 except Exception as e:  # noqa: BLE001 - reported to the caller instead of dropping the connection
                     emit({"type": "done", "error": str(e)})

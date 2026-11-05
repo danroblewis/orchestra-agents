@@ -55,11 +55,12 @@ def _core(repo: str | None):
 
 def ports(repo: str | None) -> list[int]:
     """The ports of Orchestra's servers for the project on 127.0.0.1, as its runtime record has them
-    now: the host's events endpoint and the web server. [] when there is no project or record."""
+    now: the host's events endpoint, the web server, and the agents host's control endpoint (where
+    ``delegate`` asks the host to run a job, delegate_host.py). [] when there is no project or record."""
     try:
         from orchestra import endpoint, runtime
         core = _core(repo)
-        out: list[int] = []
+        out: list[int] = _control(repo)
         rec = endpoint.recorded(core)
         if rec and (u := urllib.parse.urlsplit(str(rec.get("url") or ""))).hostname == "127.0.0.1" and u.port:
             out.append(u.port)
@@ -68,6 +69,18 @@ def ports(repo: str | None) -> list[int]:
             out.append(int(web["port"]))
         return sorted(set(out))
     except Exception:  # noqa: BLE001 - no project to read: nothing to allow
+        return []
+
+
+def _control(repo: str | None) -> list[int]:
+    try:
+        from orchestra.runtime import alive
+
+        from ..config import load_project
+        from ..store import AgentStore
+        rec = AgentStore(load_project(repo or None)).runtime().get("control") or {}
+        return [int(rec["port"])] if rec.get("port") and rec.get("pid") and alive(int(rec["pid"])) else []
+    except Exception:  # noqa: BLE001 - no agents record: no control port to allow
         return []
 
 

@@ -44,10 +44,12 @@ def _digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def issue(store: AgentStore, session_id: str, role: str, ticket: str = "") -> str:
-    """A new token for a session the host is starting; any earlier token of that session id stops working."""
+def issue(store: AgentStore, session_id: str, role: str, ticket: str = "", delegated: str = "") -> str:
+    """A new token for a session the host is starting; any earlier token of that session id stops working.
+    ``delegated``: the job of a delegated sub-session (delegate.py), which never delegates again."""
     token = secrets.token_urlsafe(32)
-    store.set_grant(session_id, {"digest": _digest(token), "role": role, "ticket": ticket, "issued_at": time.time()})
+    grant = {"digest": _digest(token), "role": role, "ticket": ticket, "issued_at": time.time()}
+    store.set_grant(session_id, grant | ({"delegated": delegated} if delegated else {}))
     return token
 
 
@@ -55,16 +57,23 @@ def revoke(store: AgentStore, session_id: str) -> None:
     store.drop_grant(session_id)
 
 
-def identify(store: AgentStore, env: Mapping[str, str]) -> tuple[str, str]:
-    """The (role, ticket) the host issued the calling session's token for. Raises StoreError,
-    saying why, when there is no token, the host did not issue it (or no longer honours it), or
-    ``ORCHESTRA_ROLE`` claims another role than the token's."""
+def grant_of(store: AgentStore, env: Mapping[str, str]) -> dict | None:
+    """The grant the host recorded for the calling session's token (its role, ticket and, for a
+    delegated sub-session, its job); None when the host did not issue it or its session has ended.
+    Raises StoreError when there is no token at all."""
     token = env.get(TOKEN_ENV) or ""
     if not token:
         raise StoreError(f"refused: no {TOKEN_ENV}. The agents' tools are called only from a session the host started, "
                          "which carries ORCHESTRA_ROLE and the session's token")
     digest = _digest(token)
-    grant = next((g for g in store.grants().values() if hmac.compare_digest(str(g.get("digest", "")), digest)), None)
+    return next((g for g in store.grants().values() if hmac.compare_digest(str(g.get("digest", "")), digest)), None)
+
+
+def identify(store: AgentStore, env: Mapping[str, str]) -> tuple[str, str]:
+    """The (role, ticket) the host issued the calling session's token for. Raises StoreError,
+    saying why, when there is no token, the host did not issue it (or no longer honours it), or
+    ``ORCHESTRA_ROLE`` claims another role than the token's."""
+    grant = grant_of(store, env)
     if grant is None:
         raise StoreError(f"refused: {TOKEN_ENV} was not issued by the host, or its session has ended")
     claimed = env.get("ORCHESTRA_ROLE") or ""

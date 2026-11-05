@@ -677,7 +677,7 @@ no host),
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
-hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
+hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 12: what its review
 rounds, explore rounds and its notices may spend a day, section 12), `chat_usd_per_day`
 (default 10.0, 0 no cap: what the owner's chat turns may spend a day), `attention_every` (default
 `10m`, 0 no wait: the Supervisor's notices gathered into one turn at most this often, section 12), `ask`
@@ -1982,7 +1982,7 @@ harness's notice). Every other event in its `wake_on`, the fixed core's (`task.a
 `attention.needed`, `orchestra.process.gave_up`, `work.planned`) and every duty's alike, is a
 **notice** (`notices.py`): held in its agent state (`notices`), the same item and guard (the event's
 type and the fields that name what it is about) once with a count; let out as wake-ups for one turn
-when `[agents] attention_every` (default 10m) has passed since the last, no Supervisor turn runs, no
+when `[agents] attention_every` (default 1h) has passed since the last, no Supervisor turn runs, no
 owner's message waits, and the day's cap is not spent; counted against that cap. Past the cap
 they are not dropped: the Agents page says "N notices waiting; the day's cap is spent", and the
 next chat turn is handed them as a short digest (`notices.take_digest`), which clears them. The

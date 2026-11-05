@@ -50,7 +50,7 @@ def wakeups(h):
 
 
 def test_explore_every_is_an_interval_off_at_zero():
-    assert Config.from_raw({"agents": {"harness": "dummy"}}).explore_every == 3600.0
+    assert Config.from_raw({"agents": {"harness": "dummy"}}).explore_every == 21600.0   # 6h since 2026-11-04 (fewer wake-ups)
     assert Config.from_raw({"agents": {"harness": "dummy", "explore_every": "30m"}}).explore_every == 1800.0
     assert Config.from_raw({"agents": {"harness": "dummy", "explore_every": 0}}).explore_every == 0.0
     with pytest.raises(ConfigError, match="explore_every"):
@@ -60,8 +60,8 @@ def test_explore_every_is_an_interval_off_at_zero():
 def test_a_round_is_due_on_schedule_and_off_without_a_store_or_at_zero(host, project):
     now = time.time()
     assert host.explore.tick(now) is None                                       # not due yet
-    assert host.store.agent_state("supervisor")["next_explore_at"] == pytest.approx(host.explore.started + 3600)
-    rec = host.explore.tick(host.explore.started + 3601)
+    assert host.store.agent_state("supervisor")["next_explore_at"] == pytest.approx(host.explore.started + 21600)
+    rec = host.explore.tick(host.explore.started + 21601)
     assert rec["woke"] and rec["sources"] == ["metrics"]
     [why] = wakeups(host)
     assert why.startswith(explore_round.MARK) and '{__name__=~"queue_.*", env="prod"}' in why and "explore_source" in why

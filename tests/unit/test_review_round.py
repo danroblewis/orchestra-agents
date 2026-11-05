@@ -33,6 +33,9 @@ def project(tmp_path, monkeypatch):
     for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
         git(repo, *args)
     p = agents_project(repo)
+    toml = p.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text().rstrip() + "\nreview_every = 0\nreview_turns_per_day = 48\n")   # the spec's own 30m rhythm
+    p.reload_config()
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     supervisor_spec.ensure(p)

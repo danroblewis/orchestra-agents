@@ -77,9 +77,11 @@ class Config:
     control_port: int = 0               # 0: any free port, recorded for the web and `chat`
     spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
-    review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
-    explore_every: float = 3600.0       # the Supervisor's explore round (explore_round.py); 0: off
-    attention_every: float = 600.0      # the Supervisor's notices gathered into one turn at most this often (notices.py); 0: no wait
+    review_turns_per_day: int = 12      # ... and how many turns a day, whatever the harness reports
+    # Fewer wake-ups by default (the owner, 2026-11-04: "Can you significantly reduce the amount of wakeups"):
+    explore_every: float = 21600.0      # the Supervisor's explore round (explore_round.py), every 6h; 0: off
+    attention_every: float = 3600.0     # its notices gathered into one turn at most this often (notices.py), 1h; 0: no wait
+    review_every: float = 7200.0        # its review round at most this often, whatever its spec says (review.py), 2h; 0: its spec alone
     chat_usd_per_day: float = 10.0      # what the owner's chat turns with the Supervisor may spend a day; 0: no cap (budget.py)
     design_passes: int = 3              # the most refinement passes in one round (design_passes.py)
     draft_expiry_s: float = 86_400.0    # how long a draft instrument records before it expires unkept (design_instruments.py)
@@ -132,10 +134,11 @@ class Config:
             compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
             spec_changes_per_day=_count(a, "spec_changes_per_day", 5), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
-            review_turns_per_day=_count(a, "review_turns_per_day", 48), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
+            review_turns_per_day=_count(a, "review_turns_per_day", 12), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
             design_passes=_count(a, "design_passes", 3),
             draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),
-            explore_every=_every(a, "explore_every", 3600.0), attention_every=_every(a, "attention_every", 600.0),
+            explore_every=_every(a, "explore_every", 21600.0), attention_every=_every(a, "attention_every", 3600.0),
+            review_every=_every(a, "review_every", 7200.0),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 
 

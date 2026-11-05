@@ -44,6 +44,16 @@ def agents_project(repo: Path | str, *, harness: str = "dummy", model: str = "",
     return project
 
 
+def ask_always(project) -> None:
+    """``[agents] ask = "always"``: the Supervisor asks the owner first, as before 2026-11-04 (ask.py),
+    for a test of the old refusals."""
+    toml = project.repo_root / "orchestra.toml"
+    text = toml.read_text()
+    if 'ask = "always"' not in text:
+        toml.write_text(text.replace("[agents]\n", '[agents]\nask = "always"\n', 1))
+    project.reload_config()
+
+
 REAL_HARNESSES = {"pi", "claude_code", "codex"}
 
 

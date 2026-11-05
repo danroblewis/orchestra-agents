@@ -136,7 +136,7 @@ def _write(project: Project, store: AgentStore, spec: MachineSpec, duty: Duty, a
         missing = [t for t in tools if t not in held]
         if missing:
             raise StoreError(f"refused: you do not hold the tool groups {missing} (you hold {', '.join(held)}); a duty never "
-                             "grants a tool. Ask the owner")
+                             "grants a tool: do the duty with the groups you hold, or tell the owner which one it lacks")
         duty.tools = tools
     if new:
         spec.duties.append(duty)

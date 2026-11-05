@@ -62,7 +62,7 @@ def test_the_always_needed_rules_stay_in_the_prompt(tmp_path, monkeypatch):
     for rule in ("Your fixed core", "Anything sent as the owner goes through the outbox",       # the core's guardrails
                  "You never read outside the project's tree", "never name a path as an example",   # bounds, tokens
                  "Read nothing from another store", "Never write or widen `explore`",            # the owner's scopes
-                 "Quote them exactly", "never fill it with a default of yours",                   # the owner's words
+                 "Quote them exactly", "never invent a quote", "Decide and act, then say",                   # the owner's words
                  "You never edit the project's code", "change them yourself with `edit_machine_file`", "Never guess at a cause",
                  "You are the Orchestra Supervisor", "## Your tools in this session"):
         assert rule in text, rule

@@ -13,7 +13,11 @@ tool texts. Three conditions, each a pair of markers, kept when it holds and dro
   on here, and the Supervisor says what is missing (the Workflows plugin) and that installing it is
   the one step, never that it is not capable.
 
-With both installed the task system's words hold and the Workflows-only ones are dropped."""
+With both installed the task system's words hold and the Workflows-only ones are dropped.
+
+One more pair, not about a plugin: ``[[act]]…[[/act]]`` holds under ``[agents] ask = "outside"`` (the
+default: the Supervisor acts and says what it did) and ``[[ask]]…[[/ask]]`` under ``ask = "always"``
+(it asks first), ``ask.py``. Text gated without a project (a tool's description) takes the default."""
 
 from __future__ import annotations
 
@@ -23,11 +27,20 @@ WITH = re.compile(r"\[\[tasking\]\](.*?)\[\[/tasking\]\]", re.DOTALL)
 WITHOUT = re.compile(r"\[\[no-tasking\]\](.*?)\[\[/no-tasking\]\]", re.DOTALL)
 FLOOR = re.compile(r"\[\[workflows\]\](.*?)\[\[/workflows\]\]", re.DOTALL)
 NEITHER = re.compile(r"\[\[no-workflows\]\](.*?)\[\[/no-workflows\]\]", re.DOTALL)
+ACT = re.compile(r"\[\[act\]\](.*?)\[\[/act\]\]", re.DOTALL)
+ASK = re.compile(r"\[\[ask\]\](.*?)\[\[/ask\]\]", re.DOTALL)
 
 
-def gate(text: str, on: bool | None = None, workflows: bool | None = None) -> str:
+def gate(text: str, on: bool | None = None, workflows: bool | None = None, ask: str | None = None) -> str:
     """The text as it holds now: ``on`` is whether the task system is installed, ``workflows``
-    whether the Workflows plugin is (each read when None)."""
+    whether the Workflows plugin is (each read when None), ``ask`` the project's ``[agents] ask``
+    (the default when None)."""
+    if "[[" not in text:
+        return text
+    from .ask import DEFAULT
+    acting = (ask or DEFAULT) == "outside"
+    text = ACT.sub(lambda m: m.group(1) if acting else "", text)
+    text = ASK.sub(lambda m: "" if acting else m.group(1), text)
     if "[[" not in text:
         return text
     from . import installed

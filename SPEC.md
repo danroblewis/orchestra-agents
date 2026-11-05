@@ -680,7 +680,8 @@ section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its o
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
 rounds, explore rounds and its notices may spend a day, section 12), `chat_usd_per_day`
 (default 10.0, 0 no cap: what the owner's chat turns may spend a day), `attention_every` (default
-`10m`, 0 no wait: the Supervisor's notices gathered into one turn at most this often, section 12), `model` once given is the
+`10m`, 0 no wait: the Supervisor's notices gathered into one turn at most this often, section 12), `ask`
+(`outside` or `always`, default `outside`: when the Supervisor asks the owner first, section 10.0), `model` once given is the
 Supervisor's too, over its spec's shipped `sonnet` (`machine_spec.model_of`; D5, 2026-11-04), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
@@ -819,6 +820,52 @@ product's real protocol), and the dummy harness (section 6), which has no produc
 nothing at all: `demo/run.py --dummy` is the whole demo for free.
 
 ## 10. The Supervisor as the project's operator (`observe.py`, `observe_model.py`, `setup_tools.py`, `config_change.py`, `restart.py`)
+
+### 10.0 When the Supervisor asks first (`[agents] ask`, `ask.py`)
+
+The owner, 2026-11-04: "I don't really care about the 'ask before widening'. I want the Supervisor to
+do most things without asking me." Their only hard lines: no write outside this machine, and no
+store query that could take a store down. `[agents] ask` says which:
+
+- **`outside`** (the default): the Supervisor decides and acts, then tells the owner in one line what
+  it did and why. A tool that took the owner's quoted words takes the Supervisor's `reason` instead,
+  and records the act as the Supervisor's decision (`by: supervisor`, with the reason; `author:
+  supervisor` in the declared layer), never as the owner's: no quote is made up. So, on its reason:
+  a source's `match` widens as far as its `explore` (`source_limits.within_explore`; `set_setting`
+  refuses only past it), in an explore round too; `approve_integration` clears a read-only
+  integration (`design_integrate.writes` false: the bridges' kits only read, and a `[[sources]]`
+  entry only reads), recorded `approved.by: supervisor`; `declare_workflow` writes to the
+  repository's `.orchestra/` and `create_role`/`create_agent` of a confirmed designed machine too
+  (`root = "repository"`); `request_work` publishes the Supervisor's own request, source
+  `supervisor` with its `reason` in the event (with the owner's words quoted it is still theirs,
+  source `owner`, `via: supervisor`); `declare_program` declares a shipped program;
+  `keep_instrument` keeps a draft (`kept_by` the Supervisor's decision); and its prompt and skills
+  (`[[act]]` text, `tasking_text.gate`) say to fill a role (`set_agent_roles`), set `work = "code"`,
+  declare an observing workflow after a connection, and choose what a request leaves open, each said
+  in a line, instead of asking.
+- **`always`**: the behaviour before 2026-11-04 (`[[ask]]` text): every change the owner's words did
+  not ask for is put to them in one sentence and made on their quoted yes; each tool above refuses
+  without the quote.
+
+**Held in every mode.** A write outside this machine: an Outbox draft (Jira, Slack, an email), the
+Supervisor's branch pushed and its pull request (`supervisor_pr`: orchestra-scm's configuration, or
+the Outbox's approval), any session's `git push` (`push_guard`, `allow_push`), a graduation (it ends
+in a pull request: the owner's quoted yes), and an integration that writes to the system it connects
+(`approve_integration` refuses it without the owner's quoted yes). A store: `explore` is the owner's
+and never written here; a match-everything selector, the rate and the daily cap are Orchestra's
+refusals (`orchestra.sources`); a store is read only once the owner gave its limits
+(`source_limits.check`), and a system the owner never named is never connected. **A confirm or a
+discard** of anything in the declared layer, a machine included, stays the owner's (their quoted
+words or their page click, `orchestra.intent.requested` from `owner`) because Orchestra holds it:
+its declared layer settles a proposal only by the owner (`orchestra/sd/intended/consent.py`,
+`may_settle`) and its rule 9 makes a page's confirm a request the Supervisor answers. Making the
+Supervisor's own confirm a decision would need a new kind of provenance in Orchestra's core and an
+amendment of its rule 9, so under `outside` the Supervisor declares and drafts the machine and says
+in a line that it runs once the owner confirms it, without a question. Also kept: a part's or a
+subsystem's name is the owner's words (`name_part`, `declare_subsystem` take them only quoted), an
+unlink of the owner's link, and the guards from bootstrap runs on what the owner's words must say
+(confirming a machine by name, `confirm_words`; dropping a relation, `relation_guard`; leaving bot
+threads out, `bot_threads`).
 
 The human talks only to the Supervisor (Orchestra's rule 9), so when the system cannot do what
 the human asks, the Supervisor is the one who sees why and fixes the setup. Its prompt
@@ -1620,7 +1667,8 @@ read API (`record.api.Record`): the one exception to rule 3's "nothing is import
 plugin". Without the plugin each tool says it is not installed. **A step's program** (`program_tools.py`,
 since 2026-11-03, bootstrap run 7's finding 1: every pull request waited at `relate` because nothing
 could write the relator's `machine.json`, while `confirm` said "nothing is to be written"):
-`declare_program`, the Supervisor's on the owner's quoted yes, writes
+`declare_program`, the Supervisor's on the owner's quoted yes (on its own reason under `[agents] ask =
+"outside"`, §10.0), writes
 `<state>/machines/<id>/machine.json`, the file the plugin's program host reads (its guide,
 "Programs"), for a program **the plugin ships** (`spec.program`, its `SHIPPED`: `relate_prs`, with
 its defaults `timeout 1m` and `exit {0: related, 3: unrelated}`), never for code of the project's
@@ -1638,7 +1686,7 @@ definition in §7.1's shape (its schema spells out each key), a `reason` and an 
 (verified as the design tools verify one); the plugin's checks run first and any refusing problem
 refuses the call, every problem said, nothing written; otherwise it is written to the state
 directory (`~/.orchestrator/<key>/workflows/<name>/workflow.json`, the default) or, only with the
-owner's quoted words, to the repository's `.orchestra/workflows/<name>/workflow.json`, **left
+owner's quoted words (or the Supervisor's reason under `ask = "outside"`, §10.0), to the repository's `.orchestra/workflows/<name>/workflow.json`, **left
 uncommitted**: the answer says so and the Supervisor hands it to the Coordinator to land through a
 ticket and a pull request (rule 2). **A relation is never dropped on the Supervisor's judgement**
 (`relation_guard.py`, since 2026-11-03, bootstrap run 5's step 8: tickets waited at `open_pr`

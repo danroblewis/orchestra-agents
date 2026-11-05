@@ -30,8 +30,10 @@ Orchestra's guide, "Exploring beyond the match", once per session. One round:
    first, `log_experiment` with the change and its expected effect in words, then:
    - **apply it now** with `set_setting` key `sources` when it narrows `match` or changes `split`,
      `kinds` or `names`: the owner's standing rule, which needs no question;
-   - **ask the owner in one sentence** when it widens `match` (the change and what you expect of
-     it), and make it in the turn of their yes. `set_setting` refuses a wider `match` on a round.
+   [[act]]- **apply it now too** when it widens `match` within `explore` (`[agents] ask = "outside"`), and
+     say in your report what you widened and what you expect. `set_setting` refuses a `match` past
+     `explore`.[[/act]][[ask]]- **ask the owner in one sentence** when it widens `match` (the change and what you expect of
+     it), and make it in the turn of their yes. `set_setting` refuses a wider `match` on a round.[[/ask]]
    **Never write or widen `explore`**: it is the owner's alone (refused on a round too).
 6. **Report in two lines** at most: what you tried and why, or that nothing was worth trying.
    The digest ("what changed since") carries the rounds and the experiments.

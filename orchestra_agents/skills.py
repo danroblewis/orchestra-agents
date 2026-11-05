@@ -51,9 +51,10 @@ def indexed() -> list[str]:
 
 def text(project, name: str) -> str:
     """A skill's text as the Supervisor reads it: its placeholders filled and gated as the prompt is."""
+    from .ask import mode as ask_mode
     from .prompting import _fill
     from .tasking_text import gate
-    return gate(_fill(project, raw(name)))
+    return gate(_fill(project, raw(name)), ask=ask_mode(project))
 
 
 INDEX_HEAD = """## Skills: read the one a request needs

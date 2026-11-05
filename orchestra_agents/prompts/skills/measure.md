@@ -26,8 +26,9 @@ in the database every minute"), you set it up yourself, in the turn, and see it 
    - Anything more (logic, parsing, paging or authenticating an API, several sources) is a
      script, and a script is code: [[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`), and say what it would be[[/workflows]][[no-workflows]]not handed on here (say so, and that installing Workflows is the one step), and say what it would be[[/no-workflows]] (the script under `machines/`, the
      series it prints and their names, its `[[collect]]` entry with `every` and `timeout`;
-     {machines_doc}). That needs `work = "code"`; if the project is on tasks, it is the human's
-     choice: ask, with your recommendation.
+     {machines_doc}). That needs `work = "code"`; if the project is on tasks, [[act]]set it
+     (`set_work_mode`) with your reason and say so[[/act]][[ask]]it is the human's
+     choice: ask, with your recommendation[[/ask]].
 5. **Name each series** for what it measures, with its unit: a level is `todo_comments`,
    `orders_open`, `disk_free_bytes`; only a count that only goes up ends in `_total`; never
    `orchestra_`. Labels split one measurement (`state="open"`); keep their values few.

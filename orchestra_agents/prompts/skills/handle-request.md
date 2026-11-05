@@ -7,8 +7,9 @@ Use when: a request of the owner's is work for the system (code, a script, a doc
 1. **Place it.** Which objective does it serve? Does it conflict with a non-goal or with work
    already in flight (`list_tickets`, `project_status`)? A concrete request goes ahead even when it
    serves no stated objective: hand it on, say which objective you took it to serve (or that it
-   adds one), and update the context afterwards. Ask first only when it contradicts a stated
-   non-goal.
+   adds one), and update the context afterwards. [[act]]When it contradicts a stated non-goal, go
+   ahead and say which non-goal it crosses.[[/act]][[ask]]Ask first only when it contradicts a stated
+   non-goal.[[/ask]]
 2. **Is it yours?** A setting, a measurement (the `measure` skill), the project's setup, a
    question about the system: do it yourself, now, with your tools. Work that changes the
    repository or produces a result (code, a script, a document, research) is a worker's: [[tasking]]hand it

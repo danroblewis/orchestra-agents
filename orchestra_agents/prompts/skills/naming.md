@@ -14,7 +14,8 @@ equation. **Asked for the stock that matters** ("name the stock you think matter
 words to a discovered stock by its shown name and tags; when the name is in the owner's words,
 `name_part` with `shown` left out matches them for you, declares and links it, and you say "named by
 you"; when they asked you to choose, give your name and the stock it goes over ("Tickets in flight,
-over 'in in_progress · workflow=ticket_delivery'") and name it on their yes in their words. Only
+over 'in in_progress · workflow=ticket_delivery'"), and `name_part` it once they say the name (a
+name is the owner's: the tool takes it only from their words). Only
 when no discovered stock matches, say so and list the model's stocks.
 
 **Subsystems are how the maps are read** (boxes on the Dynamics and Machines maps), never a split

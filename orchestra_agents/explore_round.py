@@ -15,8 +15,9 @@ project declares at least one ``[[sources]]`` (it is then set up), the host chec
    "Exploring the stores"): read the state, look both ways, probe within ``explore``
    (``explore_source``), propose one experiment with its expected effect (``log_experiment``),
    apply it on the standing rule (narrowing ``match``, ``split``, ``kinds``, ``names``; code holds
-   it, ``source_limits.check_scopes``) or ask the owner in one sentence for anything that widens
-   ``match``, and judge the previous one (``judge_experiment``).
+   it, ``source_limits.check_scopes``), widening ``match`` too, as far as ``explore``, under ``[agents]
+   ask = "outside"`` (the default), or asking the owner in one sentence for a wider ``match`` under
+   ``always``, and judge the previous one (``judge_experiment``).
 
 The record is the Supervisor's agent state ``explore``: when it ran, whether it woke the Supervisor
 or why not, and the next round's time (``next_explore_at``). ``digest_line`` puts the rounds and the
@@ -27,6 +28,7 @@ from __future__ import annotations
 import time
 
 from . import budget
+from .ask import acts
 
 MACHINE = "supervisor"
 MARK = "[Explore round]"
@@ -50,7 +52,7 @@ def _list(v) -> list[str]:
     return [v] if isinstance(v, str) else list(v or [])
 
 
-def reason(sources: list[dict], pending: dict | None, since: int, last: dict | None) -> str:
+def reason(sources: list[dict], pending: dict | None, since: int, last: dict | None, acting: bool = True) -> str:
     lines = [f"{MARK} One round of your explore duty (\"Exploring the stores\" in your prompt), within the caps."]
     for e in sources:
         lines.append(f"- source {e['name']}: match {', '.join(_list(e.get('match'))) or '(none)'}; explore "
@@ -63,8 +65,10 @@ def reason(sources: list[dict], pending: dict | None, since: int, last: dict | N
         lines.append(f"The last experiment, {last['id']}, was judged {last.get('verdict')}: {last.get('why') or ''}")
     lines.append("Then: read_experiments, read_discovery_runs and get_model's left_out; look both ways (too strict, too "
                  "loose); explore_source within explore, bounded; log_experiment one change with its expected effect; "
-                 "apply it with set_setting key sources when it narrows match or changes split, kinds or names; ask the "
-                 "owner in one sentence when it widens match (never write explore). Nothing worth trying: say so in a line.")
+                 "apply it with set_setting key sources when it narrows match or changes split, kinds or names"
+                 + ("; or widens match within explore, and say what you changed in one line" if acting else
+                    "; ask the owner in one sentence when it widens match")
+                 + " (never write explore). Nothing worth trying: say so in a line.")
     return "\n".join(lines)
 
 
@@ -110,7 +114,7 @@ class ExploreRound:
         elif why := budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))):
             record.update(woke=False, skipped=why)
         else:
-            h.store.add_wakeup(MACHINE, reason(sources, pending, since, judged))
+            h.store.add_wakeup(MACHINE, reason(sources, pending, since, judged, acts(h.project)))
             record["woke"] = True
         rounds = [x for x in (h.store.agent_state(MACHINE).get("explore_rounds") or []) if now - x.get("at", 0) < 7 * 86_400][-50:]
         h.store.set_agent_state(MACHINE, explore=record, explore_rounds=[*rounds, record], next_explore_at=now + every)

@@ -8,7 +8,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
-from conftest import agents_project, supervisor_knows
+from conftest import agents_project, ask_always, supervisor_knows
 from orchestra import runtime
 from test_workflow_tools import DEF, MESSAGE, FakePlugin, call, git
 
@@ -106,6 +106,7 @@ def test_the_supervisors_request_is_the_owners_with_their_words(project, store, 
 
 
 def test_the_supervisor_never_starts_work_on_its_own(project, store, fake, floor):
+    ask_always(project)
     end = store.events.end()
     with pytest.raises(StoreError, match="owner's to ask"):
         call(project, store, "request_work", workflow="write_review", brief=BRIEF, reason=WHY)

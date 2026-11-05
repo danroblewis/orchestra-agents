@@ -6,6 +6,7 @@ program is never "running", in the tools' words or in a reply the host checks.""
 import json
 
 import pytest
+from conftest import ask_always
 from design_fixtures import WHY, call, say
 
 from orchestra_agents import program_tools, truth
@@ -52,9 +53,10 @@ def test_the_shipped_relator_is_declared_on_the_owners_yes_and_its_workflow_then
 
 
 def test_it_takes_the_owners_quoted_yes_and_writes_nothing_without_it(project, store):
+    ask_always(project)
     workflow(project)
     say(store, YES)
-    with pytest.raises(StoreError, match="missing quote"):
+    with pytest.raises(StoreError, match="quote their yes"):
         call(project, store, "declare_program", program="relate_prs", args=ARGS, reason=WHY)
     assert not machine_json(project).exists()
     with pytest.raises(StoreError, match="refused declare_program"):

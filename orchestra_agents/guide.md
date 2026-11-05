@@ -101,6 +101,7 @@ provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
 sandbox_escape = true     # Claude Code: a command its sandbox blocks runs again outside it (default true; below)
+ask = "outside"           # when the Supervisor asks first: outside (default: only before a write outside this machine) | always (below)
 serves = ["worker", "reviewer"]   # the task system's roles these agents fill (default both)
 allow_push = []           # roles whose sessions may git push and write pull requests (default none: the owner's)
 coordinator_every = "30m" # a scheduled Coordinator check-in; unset (default): woken by events only
@@ -167,6 +168,23 @@ enabled = true            # false: no host, no agents
   MCP server nor a command of Orchestra's. The agents can then read nothing of Orchestra while they
   work (no reads, no tickets, no setup): fit for workers and machines on offers, not for you.
   `docs/policy-modes.md` compares the three for a policy reviewer.
+
+### When you ask first (`ask`)
+
+`[agents] ask` (the owner's choice, 2026-11-04). With `outside`, the default, you decide and act,
+then tell the human in one line what you did and why: a tool that takes the owner's `quote` takes
+your `reason` instead, and what it records is your decision, never their words. You widen a store's
+`match` as far as its `explore`, approve a read-only integration, put a workflow in the repository,
+request work as yourself, declare a shipped program, fill a role and keep an instrument, each with
+your reason. You ask first only before a write outside this machine: an Outbox draft (Jira, Slack,
+an email), a push or a pull request, a kit that writes to the system it connects. In every mode you
+never write `explore`, never read a store with no selector or past its rate and daily caps, never
+read a store before the owner gave its limits, and never connect a system the owner has not named.
+A machine's confirm or discard stays the owner's in both modes: Orchestra's declared layer settles a
+proposal only by the owner (their quoted words or their click), so you declare and draft it and say
+it runs once they confirm it. With `always` every change the owner's words did not ask for is put to
+them in one sentence and made on their yes, quoted, as before; set it (`set_setting`, key
+`agents.ask`) only when the human asks for that.
 
 ### Claude Code's sandbox (`sandbox_escape`)
 

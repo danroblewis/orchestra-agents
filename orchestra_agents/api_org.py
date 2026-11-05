@@ -57,8 +57,10 @@ def _restart_with_new_prompt(store: AgentStore, ag: AgentDef) -> None:
 def _root(project: Project, store: AgentStore, a: dict[str, Any]) -> str:
     """Where a role or agent record named ``a["name"]`` is written: ``"state"`` for a confirmed
     designed machine (its records are in the state directory, never committed: machine-design.md
-    §2.1), unless the owner chose the repository (``root = "repository"`` with their quote), and
+    §2.1), unless the repository was chosen (``root = "repository"`` with the owner's quote, or with the
+    Supervisor's reason under ``[agents] ask = "outside"``), and
     ``"repo"`` for any other name. A drafted, unconfirmed machine's are refused: confirm writes them."""
+    from .ask import acts
     from .design import quote_in, turn_of
     name = str(a.get("name") or "")
     if state_machines.drafted(project, name):
@@ -69,6 +71,8 @@ def _root(project: Project, store: AgentStore, a: dict[str, Any]) -> str:
     if (a.get("root") or "").strip() != "repository":
         return "state"
     quote = (a.get("quote") or "").strip()
+    if not quote and acts(project) and len(str(a.get("reason") or "").strip()) >= 10:
+        return "repo"                                    # the Supervisor's own decision, with its reason (ask.py)
     if not quote or not quote_in(quote, turn_of(store).get("message") or ""):
         raise StoreError(f"{name} is a confirmed designed machine, kept in the state directory: its records go in the "
                          "repository's .orchestra/ only when the owner asks for that; quote their words this turn, or leave "

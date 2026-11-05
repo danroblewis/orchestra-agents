@@ -106,4 +106,4 @@ era it is judged in. One managed elsewhere starts nothing and publishes nothing 
 effect is kept as an expectation. Retiring a confirmed machine is the owner's word in the chat
 (`discard`, quoted): its records are removed and its session stopped. Switching a confirmed one to
 Programmatic (at once on their click, or once they confirm the change) stops its agent[[tasking]] and hands
-the program to the Coordinator[[/tasking]][[no-tasking]]; code work is not handed on here: say so[[/no-tasking]].
+the program to the Coordinator[[/tasking]][[workflows]] and the program is a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]; code work is not handed on here: say so, and that installing Workflows is the one step[[/no-workflows]].

@@ -113,7 +113,8 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration and
     never edits a file in the checkout; new code is a worker's, through a ticket, a review and the
-    gate. One amendment (2026-11-01, the owner's proposal 4, `machine-design.md` §2.1): a
+    gate, or, without the task system, through a Workflows item for the worker role on its own branch
+    in a worktree, for the owner's review (2026-11-04, T54; `request_work` with `role`). One amendment (2026-11-01, the owner's proposal 4, `machine-design.md` §2.1): a
     measurement script of at most 100 lines is configuration the Supervisor writes, to the state
     directory (`instruments/<name>.sh`, `add_instrument`), with its entry in the owner's overlay, as
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.

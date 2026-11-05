@@ -41,8 +41,13 @@ def test_without_the_task_system_a_chat_is_not_handed_to_a_ticket_only_coordinat
     msg = "[Orchestra: ...]\n\n[The human's message]\nAdd a page"
     alone = s.pick(Turn(role="supervisor", prompt=msg, tasking=False))
     assert alone.steps == ()                                                          # nothing handed on, nothing changed
-    assert "changed nothing" in alone.reply and "tasking plugin" in alone.reply and "request_work" in alone.reply
+    assert "changed nothing" in alone.reply and "Workflows plugin" in alone.reply and "request_work" in alone.reply
+    assert "The one step: install the Workflows plugin" in alone.reply and "cannot" not in alone.reply
     assert "I will tell you the plan" not in alone.reply
+    floor = s.pick(Turn(role="supervisor", prompt=msg, tasking=False, workflows=True))  # T54: the worker's route
+    (step,) = floor.steps
+    assert step["tool"] == "request_work" and step["args"]["role"] == "worker" and step["args"]["needs"] == ["worktree"]
+    assert step["args"]["quote"] == "{message}" and floor.reply is None
     assert s.pick(Turn(role="supervisor", prompt=msg, tasking=True)).steps[0]["tool"] == "hand_to_coordinator"
     duty = s.pick(Turn(role="supervisor", prompt="[The human's message]\nfrom now on, be brief", tasking=False))
     assert duty.steps[0]["tool"] == "add_duty"                                        # a duty needs no tickets
@@ -60,6 +65,8 @@ def test_installed_tasking_reads_the_plugins_entry_points(monkeypatch):
     assert installed.tasking() is True
     with pytest.raises(ScriptError, match="tasking is true or false"):
         parse('[[rule]]\nrole = "*"\ntasking = "no"\n')
+    with pytest.raises(ScriptError, match="workflows is true or false"):
+        parse('[[rule]]\nrole = "*"\nworkflows = 1\n')
 
 
 def test_a_rule_s_prompt_groups_fill_its_steps():

@@ -73,9 +73,10 @@ def test_read_skill_is_the_supervisors_and_bounded(project, monkeypatch):
 def test_a_skill_is_filled_and_gated_as_the_prompt_is(project, monkeypatch):
     from orchestra_agents import installed
     monkeypatch.setattr(installed, "tasking", lambda: False)
+    monkeypatch.setattr(installed, "workflows", lambda: False)
     text = skills.text(project, "measure")
     assert "{machines_doc}" not in text and "[[tasking]]" not in text and "[[no-tasking]]" not in text
-    assert "code work is not handed on here" in text
+    assert "not handed on here" in text and "[[no-workflows]]" not in text
     assert "tickets" not in skills.indexed()                                 # it holds only with the task system
     monkeypatch.setattr(installed, "tasking", lambda: True)
     assert "tickets" in skills.indexed() and "Coordinator" in skills.text(project, "measure")

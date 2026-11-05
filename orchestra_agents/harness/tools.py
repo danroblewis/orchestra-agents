@@ -657,6 +657,6 @@ def tools_for(groups: list[str] | tuple[str, ...] | set[str]) -> list[ToolDef]:
     from .. import installed
     from ..tasking_text import gate, gate_schema
     g = set(groups)
-    tasking = installed.tasking()
-    return [replace(t, description=gate(t.description, tasking), properties=gate_schema(t.properties, tasking))
+    tasking, flows = installed.tasking(), installed.workflows()
+    return [replace(t, description=gate(t.description, tasking, flows), properties=gate_schema(t.properties, tasking, flows))
             for t in TOOLS if t.group in g and (tasking or not task_system(t))]

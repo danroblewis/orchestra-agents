@@ -93,7 +93,7 @@ def check_script(text: str) -> list[str]:
     lines = text.splitlines()
     if len(lines) > MAX_LINES:
         raise StoreError(f"the script is {len(lines)} lines; one the Supervisor writes is at most {MAX_LINES} (anything longer is "
-                         "code: " + gate("[[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]not handed on here; say so[[/no-tasking]])"))
+                         "code: " + gate("[[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item (skill code-work)[[/workflows]][[no-workflows]]not handed on here; say so, and that installing Workflows is the one step[[/no-workflows]])"))
     for n, line in enumerate(lines, 1):
         if why := secret_in(line):
             raise StoreError(f"line {n} looks like it holds a secret ({why}); a credential is named only by its environment "

@@ -24,7 +24,7 @@ in the database every minute"), you set it up yourself, in the turn, and see it 
      `wc -l`), it is configuration: declare it yourself with `set_collector`, `shell: true`, e.g.
      `echo "todo_comments $(git grep -I -c TODO -- . | awk -F: '{s+=$2} END {print s+0}')"`.
    - Anything more (logic, parsing, paging or authenticating an API, several sources) is a
-     script, and a script is code: [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here, so say so and say what it would be[[/no-tasking]] (the script under `machines/`, the
+     script, and a script is code: [[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`), and say what it would be[[/workflows]][[no-workflows]]not handed on here (say so, and that installing Workflows is the one step), and say what it would be[[/no-workflows]] (the script under `machines/`, the
      series it prints and their names, its `[[collect]]` entry with `every` and `timeout`;
      {machines_doc}). That needs `work = "code"`; if the project is on tasks, it is the human's
      choice: ask, with your recommendation.
@@ -47,4 +47,4 @@ Never run a collector or start a program yourself outside `try_collector`: Orche
 and a program started from a session dies with it. A failing collector wakes no one: when the
 human says a measurement is missing, look (`read_instrument`, `list_metrics`, `check_setup`); a
 cause in its entry is yours to fix with `set_collector`, a cause in a script is a bug for a
-worker, [[tasking]]handed to the Coordinator with the error quoted[[/tasking]][[no-tasking]]not handed on here: say so, with the error quoted[[/no-tasking]].
+worker, [[tasking]]handed to the Coordinator with the error quoted[[/tasking]][[workflows]]a Workflows item for the worker (skill `code-work`), with the error quoted[[/workflows]][[no-workflows]]not handed on here: say so, with the error quoted, and that installing Workflows is the one step[[/no-workflows]].

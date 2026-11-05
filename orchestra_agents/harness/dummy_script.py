@@ -12,6 +12,7 @@ file's, so a file says only what differs.
     turn = 1                          # this session's nth turn (or a list of them)
     checkout = true                   # whether the working directory is a git checkout
     tasking = false                   # whether the task system (orchestra-tasking) is installed
+    workflows = true                  # whether the Workflows plugin (orchestra-workflows) is installed
     steps = [
       { say = "Reading the diff." },
       { tool = "report_review", args = { verdict = "REJECTED", summary = "Not yet.", feedback = "1. Say more." } },
@@ -45,7 +46,7 @@ ACTIONS = ("say", "write", "run", "commit", "tool", "sleep", "fail")
 MODIFIERS = {"write": {"text", "append"}, "tool": {"args", "keep"}}
 MATCH = re.compile(r"\{match\.([A-Za-z_]\w*)\}")
 KEPT = re.compile(r"\{kept\.([A-Za-z_]\w*)((?:\.[\w-]+)*)\}")
-CONDITIONS = ("role", "ticket", "prompt", "turn", "checkout", "tasking")
+CONDITIONS = ("role", "ticket", "prompt", "turn", "checkout", "tasking", "workflows")
 HUMAN = "[The human's message]\n"          # prompting.CHAT_SEAM ends with it
 
 
@@ -102,6 +103,7 @@ class Turn:
     checkout: bool = False
     instance: str = ""
     tasking: bool = True                  # the task system installed (``installed.tasking``)
+    workflows: bool = False               # the Workflows plugin installed (``installed.workflows``)
     output: str = ""                      # ORCHESTRA_OUTPUT: the file a file-mode session writes (file_output.py)
 
     @property
@@ -133,6 +135,7 @@ class Rule:
     turn: tuple[int, ...] = ()
     checkout: bool | None = None
     tasking: bool | None = None
+    workflows: bool | None = None
     where: str = ""                       # the file and rule number, for errors
 
     def groups(self, t: Turn) -> dict:
@@ -146,7 +149,8 @@ class Rule:
                 and (self.prompt is None or re.search(self.prompt, t.prompt) is not None)
                 and (not self.turn or t.turn in self.turn)
                 and (self.checkout is None or self.checkout == t.checkout)
-                and (self.tasking is None or self.tasking == t.tasking))
+                and (self.tasking is None or self.tasking == t.tasking)
+                and (self.workflows is None or self.workflows == t.workflows))
 
 
 @dataclass
@@ -198,14 +202,16 @@ def _rule(raw, where: str) -> Rule:
     turn = (turn,) if isinstance(turn, int) else tuple(turn)
     if not all(isinstance(n, int) and n >= 1 for n in turn):
         raise ScriptError(f"{where}: turn is a number from 1, or a list of them")
-    if raw.get("tasking") is not None and not isinstance(raw["tasking"], bool):
-        raise ScriptError(f"{where}: tasking is true or false")
+    for flag in ("tasking", "workflows"):
+        if raw.get(flag) is not None and not isinstance(raw[flag], bool):
+            raise ScriptError(f"{where}: {flag} is true or false")
     steps = raw.get("steps", [])
     if not isinstance(steps, list):
         raise ScriptError(f"{where}: steps is a list")
     return Rule(role=raw["role"], steps=tuple(_step(s, f"{where} step {i}") for i, s in enumerate(steps, 1)),
                 reply=raw.get("reply"), ticket=raw.get("ticket"), prompt=raw.get("prompt"), turn=turn,
-                checkout=raw.get("checkout"), tasking=raw.get("tasking"), where=where)
+                checkout=raw.get("checkout"), tasking=raw.get("tasking"),
+                workflows=raw.get("workflows"), where=where)
 
 
 def parse(text: str, name: str = "script") -> list[Rule]:

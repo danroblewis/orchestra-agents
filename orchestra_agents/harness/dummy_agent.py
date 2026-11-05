@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     prompt = sys.stdin.read()
     t = Turn(role=os.environ.get("ORCHESTRA_ROLE", ""), ticket=os.environ.get("ORCHESTRA_TICKET", ""), prompt=prompt,
              turn=turns_so_far(transcript) + 1, checkout=(cwd / ".git").exists(), instance=os.environ.get("ORCHESTRA_SOURCE", ""),
-             tasking=installed.tasking(), output=os.environ.get("ORCHESTRA_OUTPUT", ""))
+             tasking=installed.tasking(), workflows=installed.workflows(), output=os.environ.get("ORCHESTRA_OUTPUT", ""))
     agent = Agent(transcript, cwd)
     emit({"type": "turn_start", "pid": os.getpid()})
     agent.record("user", prompt)

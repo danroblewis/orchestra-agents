@@ -619,7 +619,7 @@ script when it exists. A rule's conditions:
 `prompt` (a regular expression searched in the turn's prompt; its named groups are
 `{match.<group>}` in the rule's steps and reply), `turn` (the session's nth turn,
 counted from its transcript, or a list of them), `checkout` (whether the working directory is a
-git checkout) and `tasking` (whether the tasking plugin is installed, `installed.tasking`). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
+git checkout), `tasking` (whether the tasking plugin is installed, `installed.tasking`) and `workflows` (whether the Workflows plugin is, `installed.workflows`). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
 `append`), `run` (a shell command in the working directory; its output and status are the
 result, and the script goes on), `commit` (everything, with this message; a commit even when
 nothing changed), `tool` (an agents' tool, with `args`; a refusal is the result, and the script
@@ -1621,6 +1621,21 @@ Refused with nothing published: the plugin not installed, a workflow the loader 
 request does not start, an id the record already holds, and no floor to offer it (no live
 `orchestra run`, or its `workflows.floor` process not running). The answer carries the id, the
 Items page link (`/items/<id>`) and `explain_item` to follow it.
+
+**Code work without the task system** (2026-11-04, T54; the owner's report: a Supervisor with
+Workflows installed said it could not do coding work). `request_work` with `role` in place of
+`workflow` publishes the contract's role-only `item.requested` (`role`, `brief`, `needs`, `planner:
+supervisor`), offered once to the role: code work is `role: worker` with `needs: ["worktree"]`, made
+on the item's branch (`workflows/<item>-…`) in its worktree, pushed only if `allow_push` names the
+role; the answer says the branch and, when no agent fills the role (`floor_roles.served`), that
+`set_agent_roles` is to be proposed. The texts' third condition (`tasking_text.gate`):
+`[[workflows]]…[[/workflows]]` holds with Workflows and no task system, and routes code work to the
+worker (skill `code-work`: the role filled on the owner's yes, a code-change workflow or a one-off
+item, then the item, the branch and what is pushed); `[[no-workflows]]…[[/no-workflows]]` holds with
+neither, where code work is not handed on and the Supervisor names the missing plugin and the one
+step that installs it. A new agent is never designed for code work: the built-in worker does it.
+After `approve_integration`, with Workflows installed, the answer and the `connect-system` skill
+propose a workflow that makes the system's items items, observe only.
 
 ## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

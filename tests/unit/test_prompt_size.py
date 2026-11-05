@@ -43,11 +43,13 @@ def sent(project, via: str) -> str:
     return bash_tools.system(system, groups, path="") if via == "bash" else system
 
 
+@pytest.mark.parametrize("workflows", [True, False])
 @pytest.mark.parametrize("tasking", [True, False])
 @pytest.mark.parametrize("work", ["tasks", "code"])
 @pytest.mark.parametrize("via", ["mcp", "bash"])
-def test_the_supervisors_prompt_as_sent_is_under_35000_tokens(tmp_path, monkeypatch, tasking, work, via):
+def test_the_supervisors_prompt_as_sent_is_under_35000_tokens(tmp_path, monkeypatch, tasking, workflows, work, via):
     monkeypatch.setattr(installed, "tasking", lambda: tasking)
+    monkeypatch.setattr(installed, "workflows", lambda: workflows)
     project = _project(tmp_path, monkeypatch, work)
     text = sent(project, via)
     assert "## Your machine spec" in text and "### Duty `keep_flow`" in text       # the spec is counted

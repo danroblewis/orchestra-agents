@@ -44,7 +44,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import design_dynamics, design_machines, integrate_heard
+from . import design_dynamics, design_machines, installed, integrate_heard
 from . import integrate_address as address
 from . import integrate_branch as branch
 from . import integrate_handoff as handoff
@@ -154,8 +154,9 @@ def _no_kits(system: str) -> dict:
         f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
         "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so " + gate(
             "[[tasking]]hand it to the Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the "
-            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[no-tasking]]it is not handed "
-            "on here (no task system): say so[[/no-tasking]]"),
+            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[workflows]]it is a worker's, as a "
+            "Workflows item on a branch (skill code-work)[[/workflows]][[no-workflows]]it is not handed on here (no task system "
+            "or Workflows plugin): say so, and that installing Workflows is the one step[[/no-workflows]]"),
         "a store with a Prometheus API needs no kit: strategy source"],
         "next": f"tell the owner the kits are missing and which route you propose for {kits.title(system)}"}
 
@@ -519,8 +520,9 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         if {"user_env", "user_file"} & set(creds) and "basic" not in (target / f"{name}.py").read_text(encoding="utf-8").casefold():
             lines.append(f"{name}.py does not log in with an account and a token yet (HTTP Basic, auth_format \"Basic "
                          "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so "
-                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[no-tasking]]say it "
-                                "is not handed on here (code work)[[/no-tasking]] before saying it reads"))
+                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[workflows]]it is a "
+                                "worker's, as a Workflows item (skill code-work)[[/workflows]][[no-workflows]]say it is not "
+                                "handed on here (code work) and that installing Workflows is the one step[[/no-workflows]] before saying it reads"))
     steps = schedule.with_token(rec["steps"], creds)
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]
@@ -545,9 +547,18 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
                 missing.append(f"{v}: the file, chmod 600" if state == "not there yet" else f"chmod 600 {v}")
     said, more = _confirm_heard(store, rec, project)
     lines += said
+    if installed.workflows():
+        lines.append(items_follow_up(kits.title(rec["system"])))
     return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds, **more,
                   token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
                   owner_must_set=missing)
+
+
+def items_follow_up(title: str) -> str:
+    """The line after a connection, with the Workflows plugin installed: its items as a workflow, observe only."""
+    return (f"next: if {title} has items (tickets, incidents, threads), propose in one sentence a workflow that makes them "
+            "items, naming the items and the stocks the owner gets (each step's count and the moves between steps, which "
+            f"discovery finds), observe only, writing nothing to {title} (skill connect-system); declare it only on their yes")
 
 
 def heard(store: AgentStore, system: str) -> list[str]:

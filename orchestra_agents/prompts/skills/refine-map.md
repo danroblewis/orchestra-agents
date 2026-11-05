@@ -3,8 +3,11 @@
 Use when: your review round's refinement pass wakes you with findings on the event map (your built-in `refine_map` duty).
 
 **The refinement pass** (your built-in `refine_map` duty) proposes, never declares:
-when its findings wake you, put them to the owner in one message and change nothing until they
-answer.
+[[act]]when its findings wake you, apply the ones you agree with to your own machines (your
+reason; under the owner's standing consent, confirm your own pending changes) and say in one
+message what you changed and why; a change to a machine the owner declared or confirmed waits as a
+pending change, and you say it waits for them.[[/act]][[ask]]when its findings wake you, put them to
+the owner in one message and change nothing until they answer.[[/ask]]
 
 ## Your built-in duty `refine_map`
 
@@ -31,10 +34,12 @@ When it wakes you:
    your judgement is what counts. Which declared machine's steps use an unheard event, which name
    to keep (the one already heard on the bus), how to split an overloaded type into a family, what
    a machine with no prediction should change, how a neighbour's steps should change to fit.
-2. Put the round's findings you agree with to the owner in **one** message, each with its reason
-   and what you would change. **Propose, never declare**: change nothing until they answer; then
-   apply what they confirmed with `refine_machine`, `declare_event` or `declare_expected_effect`,
-   quoting them.
+2. [[act]]Apply the round's findings you agree with yourself, with `refine_machine`,
+   `declare_event` or `declare_expected_effect` and your reason, and say them in **one** message,
+   each with its reason; no question.[[/act]][[ask]]Put the round's findings you agree with to the
+   owner in **one** message, each with its reason and what you would change. **Propose, never
+   declare**: change nothing until they answer; then apply what they confirmed with
+   `refine_machine`, `declare_event` or `declare_expected_effect`, quoting them.[[/ask]]
 3. Never invent an event type nothing would publish; never remove a measurement to quiet a finding.
 
 Success: no finding stays unanswered for a day, and the next pass over an unchanged map finds

@@ -97,9 +97,12 @@ before `confirm`: `confirm` refuses a machine whose expectation is unrecorded, s
 is published as it is confirmed.
 
 **Confirm and discard are the owner's**, for every part and every pending change (Orchestra's
-declared layer settles a proposal only by the owner[[act]], under `ask = "outside"` too: declare and
-draft the machine, then say in one line that it runs once they confirm it, here or on the Machines
-page, without a question[[/act]]). "Confirm it" in
+declared layer settles a proposal only by the owner[[act]], unless the owner gave the standing
+consent, `[intended] settle_own = ["supervisor"]`: then `declare_machine` and `refine_machine` say
+so, and you confirm your own machine yourself once its draft is complete (`confirm` with your
+reason, no quote), in the same turn, and say in one line what you confirmed, why, and that the owner
+can discard it. Without it: declare and draft the machine, then say in one line that it runs once
+they confirm it, here or on the Machines page, without a question[[/act]]). "Confirm it" in
 the chat (quoted), or their click on a page: you are woken with `orchestra.intent.requested` and
 its request id, and you call exactly what it asks (`confirm`, `discard`, or `switch_kind` for the
 Universal | Programmatic switch) with that `request`; a request backs that one call only.

@@ -5,7 +5,11 @@ The owner confirms; the Supervisor applies. A click on the Machines page publish
 (``wake_reason``; the host wakes it only for one whose source is ``owner``), which calls
 ``confirm``, ``discard`` or ``switch_kind`` with the request's id, as it does for "confirm it" in
 the chat. Every confirm and discard, of any part and of a pending change, is backed by the owner:
-their quote, or their noted request for exactly that (``design.check_request``).
+their quote, or their noted request for exactly that (``design.check_request``), or,
+for the Supervisor's own proposals and pending changes, the owner's standing consent (``[intended]
+settle_own`` under ``ask = "outside"``, ``ask.settles_own``), which Orchestra records as the
+Supervisor's (``confirmed.by: supervisor``) and the owner may undo: their discard of a machine
+confirmed so removes it, and retires it here as any discard does.
 
 What confirming a machine does here depends first on who runs it. **Managed elsewhere**
 (``managed: external``), of either kind: nothing runs here, nothing is written to the state
@@ -50,6 +54,7 @@ from . import (
     program_tools,
     state_machines,
 )
+from .ask import settled_line, settles_own
 from .clock import next_at, zone
 from .config import Project
 from .design import MACHINE, OWNER, REQUESTED, answer, apply, check_request, plural
@@ -141,14 +146,22 @@ def _first_run(m: dict) -> str:
     return f"first run at {at} {tz or '(the host clock)'}, {day}"
 
 
+def _own(project: Project, prov: dict) -> str | None:
+    """Where the owner gave the standing consent a call without their words or request settles under."""
+    return settles_own(project) if prov.get("author") != OWNER and not prov.get("request") else None
+
+
 def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     part, eid = _element(project, a)
     pending = (a.get("change") or "").strip() or None
     check_request(project, store, prov, "confirm", part, eid, pending)
+    own = _own(project, prov)
     if part != "machine" or pending:
         before = current(project, eid) if part == "machine" else None
         done = apply(project, [{"op": "confirm", "part": part, "id": eid, **({"change": pending} if pending else {})}], prov)
         lines = [f"{part} {eid}: {'change ' + pending if pending else 'it'} confirmed"]
+        if own:
+            lines.append(settled_line(own, f"{part} {eid}{' (change ' + pending + ')' if pending else ''} confirmed"))
         extra: dict = {}
         if before is not None:
             lines += _made_so(project, store, before, current(project, eid), prov, extra)
@@ -173,6 +186,8 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     seen = max((heard[n] for n in (eid, *(m.get("aliases") or [])) if n in heard), default=None)   # heard as an alias too
     lines = [f"machine {eid} confirmed", "the Machines page draws it solid" + ("" if seen is not None or eid in programs
                                                                              else ", \"declared · never heard\"")]
+    if own:
+        lines.append(settled_line(own, f"machine {eid} confirmed") + ": its records and its run are undone with it")
     if seen is not None or eid in programs:
         lines.append(f"{eid}: {machines_running.running(eid, m, seen, programs)}")
     if proto := design_named.protocol_line(m.get("receives")):
@@ -380,12 +395,19 @@ def discard(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
     check_request(project, store, prov, "discard", part, eid, pending)
     el = (intended_api.current(project).get(f"{part}s") or {}).get(eid) or {}
     retract = not pending and el.get("state") not in (None, "proposed")
-    op = {"op": "retract", "part": part, "id": eid} if retract else \
+    c = el.get("confirmed") or {}
+    owner_undoes = retract and c.get("standing_consent") and c.get("by") != OWNER and (prov.get("author") == OWNER
+                                                                                        or prov.get("request"))
+    op = {"op": "retract", "part": part, "id": eid} if retract and not owner_undoes else \
         {"op": "discard", "part": part, "id": eid, **({"change": pending} if pending else {})}
     done = apply(project, [op], prov)
     said = [f"change {pending} on {part} {eid} discarded" if pending else
+            f"{part} {eid} discarded: you confirmed it under the owner's standing consent, and the owner undid it; kept only "
+            "in the history" if owner_undoes else
             f"{part} {eid} retracted: it was declared, and is kept only in the history" if retract else
             f"{part} {eid} discarded: kept only in the history"]
+    if (own := _own(project, prov)) and not retract:
+        said.append(settled_line(own, f"{part} {eid}{' (change ' + pending + ')' if pending else ''} discarded"))
     if part == "machine" and not pending:
         shutil.rmtree(drafts_dir(project) / eid, ignore_errors=True)
         if state_machines.remove(project, eid):

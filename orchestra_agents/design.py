@@ -39,6 +39,7 @@ import time
 from typing import Any
 
 from . import intended_api
+from .ask import settles_own
 from .config import Project
 from .secret_shapes import redact
 from .store import AgentStore, StoreError
@@ -137,10 +138,14 @@ def check_request(project: Project, store: AgentStore, prov: dict, control: str,
     """The owner's backing of one call: their quote, or the request ``prov`` names, which must be
     one the declared layer noted from the owner's page and holds open (its row carries the control,
     the element and the change asked), for this ``control`` on ``part:eid`` (and this pending
-    ``change``). Refused otherwise; the layer counts a request answered once an op verified it."""
+    ``change``), or the owner's standing consent (``ask.settles_own``), under which Orchestra's
+    declared layer itself refuses what is not the Supervisor's own. Refused otherwise; the layer
+    counts a request answered once an op verified it."""
     rid = prov.get("request")
     if not rid:
         if prov.get("author") == OWNER:
+            return
+        if settles_own(project):          # the owner's standing consent: Orchestra checks it is yours and not theirs
             return
         raise StoreError(f"{control} is the owner's to ask: quote their words (quote) or pass the request id of their click "
                          "(request)")

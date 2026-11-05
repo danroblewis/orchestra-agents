@@ -777,8 +777,10 @@ scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffol
 `machine.toml`'s clearance and settings, and reads each change back with the bridges' own reader,
 `orchestra_bridges.kits.machinefile.read`); those files are the bridges', read by them. And
 `propose_people` (below, "Accounts and people") writes the bridges' identity map in the state
-directory, `<state>/bridges/people.toml`, only through the bridges' `identity.join` and only on the
-owner's quoted yes; that file is the bridges', read by their pollers. The declarations are Orchestra's declared layer
+directory, `<state>/bridges/people.toml`, only through the bridges' `identity.join` (and
+`unjoin_people` rewrites it whole through the same), on the owner's quoted yes or, for an exact
+candidate under `ask = "outside"`, the Supervisor's own reason; that file is the bridges', read by
+their pollers. The declarations are Orchestra's declared layer
 (`orchestra.sd.intended`), reached only through `intended_api.py` and written only through its
 host's endpoint (`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with
 the host down a design call is refused. The Supervisor's agent state also keeps the turn its tools
@@ -907,10 +909,21 @@ refusals (`orchestra.sources`); a store is read only once the owner gave its lim
 discard** of anything in the declared layer, a machine included, stays the owner's (their quoted
 words or their page click, `orchestra.intent.requested` from `owner`) because Orchestra holds it:
 its declared layer settles a proposal only by the owner (`orchestra/sd/intended/consent.py`,
-`may_settle`) and its rule 9 makes a page's confirm a request the Supervisor answers. Making the
-Supervisor's own confirm a decision would need a new kind of provenance in Orchestra's core and an
-amendment of its rule 9, so under `outside` the Supervisor declares and drafts the machine and says
-in a line that it runs once the owner confirms it, without a question. Also kept: a part's or a
+`may_settle`) and its rule 9 makes a page's confirm a request the Supervisor answers. **The one
+exception is the owner's standing consent** (since 2026-11-04, T69; Orchestra's rule 9 as amended,
+C32; the owner: "why am I using AI if I need to do this"): `[intended] settle_own = ["supervisor"]`,
+which the owner writes by hand in the private overlay (Orchestra reads it there only, and its
+`config_edit` refuses to change it, so the Supervisor cannot give it to itself). Under `outside`
+with it (`ask.settles_own`), `declare_machine` and `refine_machine` tell the Supervisor to confirm
+its own machine (or its own pending change) once the draft is complete, and `confirm` takes its
+reason with no quote or request (`design.check_request`); Orchestra checks that the proposal is the
+Supervisor's own and not the owner's, and records it as `confirmed: {by: supervisor,
+standing_consent, reason}`, never the owner's; the answer tells the Supervisor to say in one line
+what it confirmed, why, and that the owner can discard it. The owner's discard of a machine
+confirmed so (their click, which Orchestra no longer answers with a 409 for it, or their words) is
+a `discard` that removes it and retires it here, as a discard of a proposal does. Without the
+consent, or under `always`, the Supervisor declares and drafts the machine and says in a line that
+it runs once the owner confirms it, without a question. Also kept: a part's or a
 subsystem's name is the owner's words (`name_part`, `declare_subsystem` take them only quoted), an
 unlink of the owner's link, and the guards from bootstrap runs on what the owner's words must say
 (confirming a machine by name, `confirm_words`; dropping a relation, `relation_guard`; leaving bot
@@ -1202,12 +1215,22 @@ a person (`person.<key>`, `mapped`). `propose_people` (group `setup`, the Superv
 candidate joins the bridges' table finds among the accounts the bus announced and the map does not
 list: exact (the same display name on two systems) or weak (namesakes, a handle, word order, a close
 spelling), each with its id, accounts, proposed key and name, evidence and confidence; without
-`join` it writes nothing. **Writing a join is the owner's quoted yes in both `ask` modes, exact
-candidates included**: joining accounts is a claim about people, a matching name is evidence about
-strings, and a wrong join merges two people's acts under a name that looks confirmed. Exact ones may
-be confirmed together ("all", "these", or by name); a weak one only when the owner's words name it.
-The entries go to `<state>/bridges/people.toml` (never the repository); the owner's own `[bridges]
-people` file is read with it and never written here. A poller reads the map when it starts.
+`join` it writes nothing. **Who writes a join** (since 2026-11-04, T69, the owner: "why am I using
+AI if I need to do this"): under `ask = "outside"` an **exact** candidate (the same display name on
+two systems and no namesake on either, the table's 0.9 tier) is the Supervisor's to join on its own
+reason, said to the owner in one line with `unjoin_people` to undo it; a **weak** one stays the
+owner's quoted yes naming it, in both modes, because a matching handle is evidence about strings
+and a wrong join merges two people's acts under a name that looks confirmed; under `always` every
+join is the owner's quoted yes, exact ones included ("all", "these", or by name). Who joined each
+entry is kept beside the map in the Supervisor's agent state (`people_joins`, by key: `joined_by`
+`supervisor` or `owner`, the candidate's id, strength, confidence and evidence, the reason and any
+quote): the bridges' map reads every field of an entry but its name, team and `bot` as an account,
+so the entry itself carries none of ours. `unjoin_people {key, reason, quote?}` takes an entry out
+of the state directory's map (rewritten whole through the bridges' own `identity.join`): one the
+Supervisor joined on its reason, one the owner joined (or with no record) only on their quoted
+words; the candidate is then kept in `people_unjoined` and never joined again on the Supervisor's
+own reason. The entries go to `<state>/bridges/people.toml` (never the repository); the owner's own
+`[bridges] people` file is read with it and never written here. A poller reads the map when it starts.
 
 **"What changed since"** (`read_events` with `since`: its `digest`, `since_digest.py`, which the
 Supervisor replies with as it is; since 2026-11-03, T2j s16, the morning after on the standing demo).
@@ -1421,7 +1444,8 @@ answered once an op verified it, refuses a call citing one that is not open, and
 while it can still be acted on. A confirm in answer to the owner's request makes the element the
 owner's (`confirmed: {by: owner, via: request}`). At start the host queues one Supervisor wake-up
 for each request the layer still holds open, so a click made while it was down is acted on. Every
-`confirm`, `discard` and `switch_kind` needs the owner's quote or such a request; changing what the
+`confirm`, `discard` and `switch_kind` needs the owner's quote or such a request (or, for the
+Supervisor's own proposals under `outside`, the owner's standing consent, above); changing what the
 owner declared (a target on it, unmarking their expect mark, retracting it) needs their quote or
 their request, as Orchestra's `guard_owners` says.
 **A machine is confirmed only on words that name it** (`confirm_words.py`, since 2026-11-03,

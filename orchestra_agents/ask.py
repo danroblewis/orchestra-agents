@@ -20,12 +20,17 @@ store down (the owner's two hard lines):
   selector, and the store's rate and daily caps (Orchestra's ``sources``), and the owner's limits on
   a store before its first read (``source_limits.check``).
 
-Also held in both modes, by Orchestra's contract rather than this setting: confirming or discarding
-an element of the declared layer, a machine included, is the owner's (their quoted words or their
-click on a page, ``orchestra.intent.requested`` from ``owner``). Orchestra's declared layer refuses
-a proposal settled by its own author (``orchestra/sd/intended/consent.py``), and its rule 9 makes a
-page's confirm a request the Supervisor answers; under ``outside`` the Supervisor proposes and says
-the confirm is the owner's, on the Machines page or in the chat, without asking a question."""
+Confirming or discarding an element of the declared layer, a machine included, is the owner's by
+Orchestra's contract (their quoted words or their click on a page, ``orchestra.intent.requested``
+from ``owner``), with one exception the owner gives Orchestra itself: the standing consent
+``[intended] settle_own = ["supervisor"]`` in their private overlay (Orchestra's rule 9 as amended
+2026-11-04; only the owner writes it, Orchestra's ``config_edit`` refuses to). Under ``outside``
+with it (``settles_own``), the Supervisor confirms and discards its own proposals and pending
+changes with its reason, recorded by Orchestra as ``confirmed.by: supervisor`` with the consent,
+never as the owner's, and says in one line what it confirmed, why, and that the owner can discard
+it; what the owner declared or confirmed stays theirs (Orchestra refuses the rest). Without it, or
+under ``always``, the Supervisor proposes and says the confirm is the owner's, on the Machines page
+or in the chat, without asking a question."""
 
 from __future__ import annotations
 
@@ -57,3 +62,35 @@ def decided(project, prov: dict) -> bool:
 def decision(prov: dict) -> dict:
     """What is recorded of the Supervisor's own decision: by whom, why, in which turn, when."""
     return {"by": "supervisor", "reason": str(prov.get("reason") or "").strip(), "turn": prov.get("turn"), "at": time.time()}
+
+
+def settles_own(project) -> str | None:
+    """Where the owner gave Orchestra the standing consent that the Supervisor settles its own
+    proposals (``[intended] settle_own``, read by Orchestra from the private overlay only), when the
+    Supervisor acts on its own (``outside``); None otherwise, and with an Orchestra too old to know it."""
+    if not acts(project):
+        return None
+    cfg = getattr(getattr(project, "orchestra", None), "config", None)
+    if "supervisor" not in tuple(getattr(cfg, "settle_own", ()) or ()):
+        return None
+    return getattr(cfg, "settle_own_from", None) or "[intended] settle_own"
+
+
+def settled_line(where: str, what: str) -> str:
+    """What the Supervisor says after settling its own proposal under the owner's standing consent."""
+    return (f"{what} by you, under the owner's standing consent ({where}): Orchestra records it as yours "
+            "(confirmed.by: supervisor), never theirs. Tell the owner in one line what you did and why, and that they "
+            "can discard it on the Machines page or in the chat")
+
+
+def own_next(project, el: dict | None, change: str | None = None) -> str | None:
+    """The line that tells the Supervisor to settle its own proposal (or pending ``change``) itself:
+    only under the standing consent, and only for what is its own, not the owner's."""
+    where = settles_own(project)
+    el = el or {}
+    if where is None or (el.get("provenance") or {}).get("author") == OWNER or (el.get("confirmed") or {}).get("by") == OWNER:
+        return None
+    what = f"confirm with change {change}" if change else "confirm"
+    return (f"the owner's standing consent is on ({where}): when the draft is complete (its expected effect recorded, "
+            f"or why none can be said), {what} it yourself in this turn with your reason, and tell the owner in one line "
+            "what you confirmed and why, and that they can discard it; no question")

@@ -41,6 +41,11 @@
 
 ## Your reply
 
+[[act]]- **End a turn with a question only** when it is about a write outside this machine (the outbox,
+  a push, a pull request, a kit that writes) or something only the owner can know: where a token
+  is, a scope they never named, which of two of their systems. Anything else, make the reasonable
+  choice, do it and say so in a line. Never end with "Shall I …?", "Would you like …?", "Should I
+  …?" or "Let me know if …".[[/act]]
 - Every action your reply names is one a tool call made in this turn, with the ids it gave. The
   state of an item or a ticket comes from a tool's answer in this turn, never from memory of an
   earlier turn: an item the tools list as closed is closed, never "waiting". Orchestra tells you before each turn what your tools changed

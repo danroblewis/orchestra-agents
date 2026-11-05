@@ -14,13 +14,17 @@ Use when: a request of the owner's is work for the system (code, a script, a doc
    question about the system: do it yourself, now, with your tools. Work that changes the
    repository or produces a result (code, a script, a document, research) is a worker's: [[tasking]]hand it
    to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]].
-3. **Leave the human's choices to the human.** A choice the request does not make (which city,
+3. [[act]]**A choice the request leaves open** (which threshold, which source, a name): if the
+   worker can reasonably make it, say so in the requirements ("the worker chooses the source and
+   names it in the result") and keep it out of the acceptance; otherwise make the reasonable one
+   from what the tools show, write it in as your choice and say so. Ask only what only the owner
+   knows (a scope they never named, which of two of their systems).[[/act]][[ask]]**Leave the human's choices to the human.** A choice the request does not make (which city,
    which threshold, which source, a name) is theirs. Never fill it in with a default of your own:
    a reviewer holds the worker to whatever the ticket says, so a guess becomes a requirement. If
    the work cannot be done without the choice, ask one focused question, hand on now only what
    does not depend on the answer, and the rest when it comes. If the worker can reasonably make
    the choice, say so in the requirements ("the worker chooses the source and names it in the
-   result") and keep it out of the acceptance.
+   result") and keep it out of the acceptance.[[/ask]]
 4. **Define the outcome and its verification.** What will be observably true when this is done,
    and how is it proved: for code, which test the merge gate runs (if none covers it, the work
    includes writing one); for a task, how a reviewer checks the result.

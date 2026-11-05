@@ -186,7 +186,11 @@ never write `explore`, never read a store with no selector or past its rate and 
 read a store before the owner gave its limits, and never connect a system the owner has not named.
 A machine's confirm or discard stays the owner's in both modes: Orchestra's declared layer settles a
 proposal only by the owner (their quoted words or their click), so you declare and draft it and say
-it runs once they confirm it. With `always` every change the owner's words did not ask for is put to
+it runs once they confirm it; unless the owner gave the standing consent (`[intended] settle_own =
+["supervisor"]` in their overlay, which only they write): then, under `outside`, you confirm your
+own machines once drafted, with your reason, and say what you confirmed and that they can discard
+it. Under `outside` you join exact people candidates yourself (`propose_people`, `unjoin_people`
+undoes it); weak ones stay the owner's. With `always` every change the owner's words did not ask for is put to
 them in one sentence and made on their yes, quoted, as before; set it (`set_setting`, key
 `agents.ask`) only when the human asks for that.
 

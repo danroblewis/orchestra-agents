@@ -467,13 +467,21 @@ TOOLS: list[ToolDef] = [
             "list. Exact: the same display name on two systems; weak: namesakes, the same handle, the same words in "
             "another order, a close spelling. Each has an id, its accounts, a proposed key and name, its evidence and "
             "confidence. Without join: a dry listing, nothing written. An account is not a person until the map joins "
-            "it, and every join is the owner's yes in both ask modes, exact ones included: ask the exact ones together "
-            "in one sentence and each weak one on its own, then pass join with their quote; the entries go to the "
-            "identity map in the state directory, never the repository.",
-            {"join": A("Candidate ids to write into the identity map, on the owner's yes; leave out for the dry listing"),
+            "it. Under ask = \"outside\" join the exact ones yourself with a reason and tell the owner in one line "
+            "(unjoin_people undoes it); a weak one only on the owner's quoted words naming it, in both modes (under "
+            "\"always\" exact ones too). The entries go to the identity map in the state directory, never the "
+            "repository.",
+            {"join": A("Candidate ids to write into the identity map; leave out for the dry listing"),
              "quote": S("With join: the owner's words this session that said yes to these joins (a weak one by its name, "
                         "id or account)"),
              "reason": S("With join: why, in a sentence (recorded with the change)")}),
+    ToolDef("unjoin_people", "setup",
+            "Take one person out of the identity map in the state directory: their accounts are accounts again (each "
+            "poller from its next restart). One you joined on your own reason; one the owner joined only on their "
+            "quoted words; never the owner's own [bridges] people file. An unjoined candidate is not joined again on "
+            "your own reason.",
+            {"key": S("The person's key in the identity map (alice_example)"), "reason": S("Why, in a sentence"),
+             "quote": S("The owner's words, when they joined it or asked for this")}, ("key", "reason")),
     ToolDef("restart_machine", "setup",
             "Restart one of the project's programs ([[machines]]), including one Orchestra gave up on: its entry is taken "
             "out until Orchestra has stopped it, then put back as it was, which starts it again. Nothing is committed.",

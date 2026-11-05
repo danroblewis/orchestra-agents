@@ -63,6 +63,7 @@ def test_the_always_needed_rules_stay_in_the_prompt(tmp_path, monkeypatch):
                  "You never read outside the project's tree", "never name a path as an example",   # bounds, tokens
                  "Read nothing from another store", "Never write or widen `explore`",            # the owner's scopes
                  "Quote them exactly", "never invent a quote", "Decide and act, then say",                   # the owner's words
+                 "End a turn with a question only", "Never end with \"Shall I …?\"",                       # no needless asks
                  "You never edit the project's code", "change them yourself with `edit_machine_file`", "Never guess at a cause",
                  "You are the Orchestra Supervisor", "## Your tools in this session"):
         assert rule in text, rule
@@ -72,3 +73,11 @@ def test_on_the_shell_route_the_tools_are_listed_once(tmp_path, monkeypatch):
     text = sent(_project(tmp_path, monkeypatch, "code"), "bash")
     assert "## Your tools in this session" not in text                # the names alone: replaced by the list below
     assert text.count("- `check_setup` {") == 1 and "`reason`, required wherever a tool takes it" in text
+
+
+def test_under_ask_always_the_question_rule_is_not_sent(tmp_path, monkeypatch):
+    from conftest import ask_always
+    project = _project(tmp_path, monkeypatch, "code")
+    ask_always(project)
+    text = " ".join(sent(project, "mcp").split())
+    assert "End a turn with a question only" not in text and "Ask first" in text

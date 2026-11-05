@@ -29,6 +29,7 @@ from pathlib import Path
 from orchestra.config import ConfigError, parse_duration
 
 from . import design_asked, design_named, intended_api, machine_sends, state_machines
+from .ask import own_next
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, check_request, plural
 from .expect_grammar import expect_edit
@@ -377,6 +378,8 @@ def declare_machine(project: Project, store: AgentStore, a: dict, prov: dict) ->
         lines.append(NO_RECEIVES)
     if d:
         lines.append(f"draft implementation: {d} (not official until confirmed)")
+    if prov["author"] != OWNER and (own := own_next(project, {"provenance": prov})):
+        lines.append(own)
     return answer(project, done, lines, machine=mid, draft=str(d) if d else None, sends=machine_sends.sends(project, mid))
 
 
@@ -488,7 +491,9 @@ def refine_machine(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         spec_change = next(c["change"] for c, (label, _) in zip(done["changes"], ops, strict=True) if label.startswith("spec: "))
         lines.append(f"the spec edits are one change, {spec_change}: confirmed or discarded together")
     if pending:
-        lines.append("recorded as a proposed change: the owner confirms or discards it in the chat")
+        changes = ", ".join(c["change"] for c in done["changes"] if c["change"] in {p["change"] for p in now.get("pending") or []})
+        own = own_next(project, m, changes) if prov.get("author") != OWNER else None
+        lines.append(own or "recorded as a proposed change: the owner confirms or discards it in the chat")
     else:
         lines += ["applied", "the Machines page marks it \"just now\", with what it replaced",
                   state_machines.unmapped_line(now)]

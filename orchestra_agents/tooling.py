@@ -184,6 +184,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
     if command == "propose_people":
         from .people_tools import propose_people
         return propose_people(project, store, a, role)
+    if command == "unjoin_people":
+        from .people_tools import unjoin_people
+        return unjoin_people(project, store, a, role)
     if command == "edit_machine_file":
         from .machine_files import edit_machine_file
         return edit_machine_file(project, store, a, role)

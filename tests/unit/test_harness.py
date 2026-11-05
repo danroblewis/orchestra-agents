@@ -136,6 +136,53 @@ def test_pi_transcript(tmp_path):
     assert read_transcript({"session_file": str(f)}) == msgs     # pi is the default
 
 
+def test_pi_in_bash_mode_shows_a_shell_call_as_the_tool_it_ran_and_counts_its_cost(tmp_path):
+    from orchestra_agents.harness.pi import _Normalizer
+    from orchestra_agents.harness.pi_cost import usage_cost
+    cmd = "orchestra agents tool read_model '{\"version\": 3}'"
+    f = tmp_path / "s.jsonl"
+    f.write_text(json.dumps({"type": "message", "timestamp": 1.0, "message": {"role": "assistant", "content": [
+        {"type": "toolCall", "name": "bash", "arguments": {"command": cmd}}]}}) + "\n")
+    assert PiHarness.read_transcript(f)[0]["tool_calls"] == [{"name": "read_model", "args": {"version": 3}}]
+    got = []
+    _Normalizer(got.append)({"type": "tool_execution_start", "toolName": "bash", "args": {"command": cmd}})
+    assert got == [{"type": "tool_start", "name": "read_model", "args": {"version": 3}}]
+    assert usage_cost({"input": 1000, "output": 100}, "claude-sonnet-5") == 0.003
+    assert usage_cost({"totalTokens": 9}, None) is None
+
+
+def test_pi_bash_mode_loads_no_extension_and_appends_the_shell_section(tmp_path):
+    """The command line Pi starts with: in bash mode no Orchestra extension, the shell section of
+    bash_tools appended to the system prompt, and the configured provider and model (Anthropic's
+    Sonnet as Pi names it); otherwise the extension."""
+    import sys
+
+    from orchestra_agents.harness.base import SessionSpec
+    from orchestra_agents.harness.pi import EXTENSION_PATH, PiSession
+    fake = tmp_path / "pi"
+    fake.write_text(f"#!{sys.executable}\nimport json, sys\njson.dump(sys.argv[1:], open({str(tmp_path / 'argv.json')!r}, 'w'))\n")
+    fake.chmod(0o755)
+
+    def argv(via):
+        spec = SessionSpec(session_id="supervisor", session_dir=tmp_path / "s", cwd=tmp_path, system_prompt="You are it.",
+                           role="supervisor", tool_groups=("observe", "setup"), env={}, log_path=tmp_path / "log",
+                           model="claude-sonnet-5", provider="anthropic", tools_via=via, read_only=True)
+        s = PiSession(spec, str(fake))
+        s.proc.wait(10)
+        s.close()
+        return json.loads((tmp_path / "argv.json").read_text())
+    bash = argv("bash")
+    assert str(EXTENSION_PATH) not in bash and "--extension" not in bash
+    assert bash[bash.index("--provider") + 1] == "anthropic" and bash[bash.index("--model") + 1] == "claude-sonnet-5"
+    assert bash[bash.index("--exclude-tools") + 1] == "edit,write"           # the Supervisor reads and runs commands only
+    system = bash[bash.index("--append-system-prompt") + 1]
+    assert system.startswith("You are it.") and "## Orchestra's tools: run them with your shell" in system
+    assert "`check_sources`" in system and "`set_setting`" in system          # the same tools as Claude Code's bash mode
+    mcp = argv("auto")
+    assert mcp[mcp.index("--extension") + 1] == str(EXTENSION_PATH)
+    assert "run them with your shell" not in mcp[mcp.index("--append-system-prompt") + 1]
+
+
 def test_claude_transcript(tmp_path):
     f = tmp_path / "u.jsonl"
     f.write_text("\n".join(json.dumps(e) for e in [

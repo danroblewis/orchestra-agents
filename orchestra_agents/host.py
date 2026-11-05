@@ -56,6 +56,7 @@ from .closing import CLOSE_S, close_together
 from .config import Project
 from .control import ControlServer, token_file
 from .events import GAVE_UP, INTENT_REQUESTED, Events
+from .explore_round import ExploreRound
 from .facts import SupervisorFacts
 from .fillers import Fillers
 from .first_run import FirstRun
@@ -144,6 +145,7 @@ class AgentHost:
         self.verdicts = Verdicts(self)                 # a prediction's verdict wakes the agent that made it
         self.first_run = FirstRun(self)                # a project not set up wakes the Supervisor to set it up
         self.review = ReviewRound(self)                # the Supervisor's scheduled review round (review.py)
+        self.explore = ExploreRound(self)              # ... and its explore round over the stores (explore_round.py)
         self.adopter = adopt.Adopter(store, lambda: workflow_tools.plugin(), log)   # tickets under way when tracking began
         self._session_models: dict[str, str | None] = {}   # resident agent -> the model its session was opened on
         self._over_said: str | None = None             # the budget's last refusal, logged once
@@ -261,6 +263,10 @@ class AgentHost:
             self.review.tick()
         except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
             log(f"review round: {e!r}")
+        try:
+            self.explore.tick()
+        except Exception as e:  # noqa: BLE001 - a round that fails is tried at the next interval
+            log(f"explore round: {e!r}")
         for target in list(self.agents):
             if target == "supervisor" and self.residents.procs.get("supervisor") is None:
                 continue
@@ -513,7 +519,7 @@ class AgentHost:
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
                 if name == "supervisor" and not event_matches(list(BUILTIN_ROLES["supervisor"].wake_on), ev) \
-                        and (why := budget.over(self.store, self.cfg)):
+                        and (why := budget.over(self.store, self.cfg, priced=(self.harness, self.model_of("supervisor")))):
                     if why != self._over_said:                          # a duty's own wake-up, past the day's cap
                         log(f"supervisor: not woken for {ev['type']}: {why}")
                         self._over_said = why
@@ -673,6 +679,10 @@ class AgentHost:
         if st.get("paused") or st.get("deleted"):
             why = st.get("paused_why") or st.get("crash_loop") or "by request"
             raise StoreError(f"the Supervisor is {'deleted' if st.get('deleted') else 'paused'} ({why}); its messages wait until it is resumed")
+        if over := budget.unpriced(self.harness, self.model_of("supervisor"), self.cfg, chat=True) or \
+                budget.chat_over(self.store, self.cfg):
+            log(f"supervisor: a chat message refused: {over}")
+            raise StoreError(over)
         with self._turn_lock("supervisor"):
             self.agent_threads["supervisor"] = threading.current_thread()
             try:
@@ -705,7 +715,7 @@ class AgentHost:
         res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
         res = self._checked(res, began, message, emit)
         res = self._closed(res, began, emit)
-        budget.record(self.store, res.cost_usd, initiative=False)
+        budget.record(self.store, res.cost_usd, initiative=False, chat=True)
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])

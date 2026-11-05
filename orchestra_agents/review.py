@@ -108,7 +108,7 @@ class ReviewRound:
             record["design"] = len(design["findings"])
         reason = None
         if new or proposal or design:
-            why_not = budget.over(h.store, h.cfg, now) if (new or design) and not proposal else None
+            why_not = budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))) if (new or design) and not proposal else None
             if why_not:
                 record["woke"], record["skipped"] = False, why_not
                 h.log(f"review round: {len(new)} new finding(s); the Supervisor is not woken: {why_not}")
@@ -143,8 +143,10 @@ class ReviewRound:
 def initiative(reasons: list[str], duty_types: set[str]) -> bool:
     """Whether a Supervisor wake-up is its own initiative (what the day's cap limits): every
     reason a review round's, or an event only a duty of its spec listens for."""
+    from .explore_round import MARK as EXPLORE
+
     def own(r: str) -> bool:
-        if r.startswith(MARK):
+        if r.startswith((MARK, EXPLORE)):
             return True
         if r.startswith("event "):
             return r.split()[1] in duty_types

@@ -206,13 +206,20 @@ def load(project: Project, name: str) -> MachineSpec | None:
 
 def model_of(project: Project, harness, name: str) -> str | None:
     """The model an agent runs on: its machine spec's (``.orchestra/machines/<name>/``) when the
-    harness takes that name (``Harness.model_for``), else ``[agents] model``. The host and the
-    Agents page both ask this."""
+    harness takes that name (``Harness.model_for``), else ``[agents] model``. One exception (the D5
+    finding, 2026-11-04: the owner set ``[agents] model`` and the Supervisor still started on Sonnet):
+    the Supervisor runs on ``[agents] model`` whenever the owner gave one and its spec still holds the
+    shipped default (``supervisor_spec.DEFAULT_MODEL``), on every harness; a model written into its
+    spec since is a choice and stands. The host, the Agents page and the Supervisor's card ask this."""
+    from .supervisor_spec import DEFAULT_MODEL as SHIPPED
     try:
         spec = load(project, name)
     except Exception:  # noqa: BLE001 - a spec that cannot be read leaves the configured model
         spec = None
-    return (harness.model_for(spec.model) if spec is not None and spec.model else None) or project.config.model
+    cfg = project.config
+    if name == "supervisor" and cfg.model_set and cfg.model and (spec is None or not spec.model or spec.model == SHIPPED):
+        return cfg.model
+    return (harness.model_for(spec.model) if spec is not None and spec.model else None) or cfg.model
 
 
 def apply(agent, spec: MachineSpec) -> None:

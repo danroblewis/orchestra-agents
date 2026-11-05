@@ -1,8 +1,8 @@
 """The seam between ``integrate_system`` (``design_integrate.py``) and what Orchestra's
-``docs/INTEGRATING.md`` builds an integration from: the bridges plugin's kits
+guide (``orchestra/guide.md``, "Connecting another system: the strategies" on) builds an integration from: the bridges plugin's kits
 (``orchestra_bridges.kits``: its scaffold, templates and fakes) and a scaffolded poller's own files.
 
-- **Which strategy** (INTEGRATING.md §2, in its order of preference): a Prometheus-API store is a
+- **Which strategy** (the guide's "Connecting another system: the strategies", in its order of preference): a Prometheus-API store is a
   ``[[sources]]`` entry (``source``); a system with item events is a poller built from a kit
   (``poller``, which also measures); one measurement alone is the kit's ``measure`` as a
   ``[[collect]]`` (``collect``). The Supervisor chooses; ``choose`` is the default when it does
@@ -57,7 +57,8 @@ TITLES = {"jira": "Jira", "slack": "Slack", "discord": "Discord", "pagerduty": "
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "acme.chronosphere.io")
 CREDENTIAL_VARS = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|_KEY|BEARER|CREDENTIAL)", re.IGNORECASE)
 TEST_TIMEOUT_S = 300
-INTEGRATING = "Orchestra's docs/INTEGRATING.md (https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md)"
+INTEGRATING = ("Orchestra's guide (read_guide orchestra, its sections from \"Connecting another system: the strategies\" to "
+               "\"Confirming an integration, and what goes wrong\"; https://github.com/danroblewis/orchestra/blob/main/orchestra/guide.md)")
 
 
 def installed() -> bool:
@@ -73,7 +74,7 @@ def title(system: str) -> str:
 
 
 def choose(system: str) -> str:
-    """INTEGRATING.md §2's first fit by the system's name: a metrics store reads in place
+    """The guide's first strategy that fits ("Connecting another system: the strategies") by the system's name: a metrics store reads in place
     (``source``); anything else with items is a poller (which measures too)."""
     return "source" if system in STORES else "poller"
 

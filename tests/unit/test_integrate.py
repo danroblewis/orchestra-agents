@@ -141,7 +141,7 @@ def test_without_the_kits_it_says_so_and_proposes_the_no_kit_route(project, stor
     got = connect(project, store)
     assert got["ok"] and got["integrated"] is False
     said = " ".join(got["said"])
-    assert "not installed" in said and "minikit.py" in said and "hand_to_coordinator" in said and "INTEGRATING.md" in said
+    assert "not installed" in said and "minikit.py" in said and "hand_to_coordinator" in said and "orchestra/guide.md" in said and "Without the kits" in said
     assert not (project.orchestra.state_dir / "machines").exists() and not scaffolded(project).exists()
     assert "jira" not in layer(project)["machines"]
 

@@ -339,7 +339,7 @@ DESIGN_TOOLS: list[ToolDef] = [
     ToolDef("integrate_system", "design",
             "Only for a system the owner named in words this session (refused otherwise: propose one in a line and wait). "
             "The first call when the owner asks to connect an outside system (\"connect our Jira so I can see issue "
-            "transitions and open counts\"), before reading any guide. It follows Orchestra's INTEGRATING.md: the bridges "
+            "transitions and open counts\"), before reading any guide. It follows Orchestra's guide (\"Connecting another system: the strategies\" on): the bridges "
             "are a library, so a collector is a script built from a kit, a poller (events and series) or a measurement alone "
             "(collect); a Prometheus-API store is a [[sources]] entry (source, no code). The script is scaffolded into the "
             "owner's repository (.orchestra/machines/<name>/, live from there and its files committed on your branch "
@@ -354,7 +354,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             {"system": S("The system's name: jira, github, slack, discord, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),
              "strategy": E(["poller", "collect", "source"],
-                           "Leave out for INTEGRATING.md's default: source for a Prometheus-API store, poller otherwise"),
+                           "Leave out for the guide's default: source for a Prometheus-API store, poller otherwise"),
              "name": S("The poller's name (default <system>_poller); never the system's own name"),
              "root": E(["repository", "state"], "Leave out: the owner's repository. state (Orchestra's state directory) only "
                        "when the owner said their repository must stay clean"),

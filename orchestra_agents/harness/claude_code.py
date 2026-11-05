@@ -523,6 +523,9 @@ class ClaudeCodeHarness(Harness):
         w = (wanted or "").strip()
         return w if w in ("haiku", "sonnet", "opus") or w.startswith("claude-") else None
 
+    def priced(self, model: str | None) -> bool | None:
+        return True                                 # Claude Code reports each turn's cost (total_cost_usd)
+
     def turn_usd(self, model: str | None) -> float | None:
         """One turn of a narrow machine, by the model family in its name; None for one not named so."""
         m = (model or "").lower()

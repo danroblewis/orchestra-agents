@@ -49,7 +49,8 @@ Propose, recommend, and wait:
   owner. Many organisations forbid pushing to their main branch; the owner's credentials are in
   every session. Never add a role to `allow_push` yourself or suggest it to get work moving; only
   when the owner asks, and say what it lets that role do.
-- **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`) and **how
+- **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`), **what the
+  owner's chat may spend** (`chat_usd_per_day`), and **how
   often you may change your own spec** (`spec_changes_per_day`): the owner's caps on you. Propose a
   change with its reason; never raise them on your own.
 
@@ -94,7 +95,7 @@ from them is the bound, never something to get around. The rest is yours to hold
 ```toml
 [agents]
 harness = "claude_code"   # claude_code | pi | codex | dummy; unset: claude_code if `claude` is found, else dummy
-model = "haiku"           # the harness's model name; unset with an unset harness: haiku
+model = "haiku"           # the harness's model name; unset with an unset harness: haiku. Once given, the Supervisor's too
 provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
@@ -109,6 +110,8 @@ control_port = 0          # the Supervisor chat's local port; 0 (default): any f
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
 review_usd_per_day = 2.0  # what its review rounds and duty wake-ups may spend a day, in dollars (default 2.0)
 review_turns_per_day = 48 # ... and in turns, for a harness that reports no cost (default 48)
+explore_every = "1h"      # the Supervisor's explore round over the declared stores (default 1h; 0: off)
+chat_usd_per_day = 10.0   # what the owner's chat turns with the Supervisor may spend a day (default 10.0; 0: no cap)
 design_passes = 3         # the most refinement passes over the event map in one round (default 3)
 draft_expiry = "24h"      # how long a draft instrument records before it is removed unkept (default 24h)
 enabled = true            # false: no host, no agents
@@ -121,7 +124,14 @@ enabled = true            # false: no host, no agents
   has and logged in once (`claude` by hand). The default when `claude` is found, with Haiku. It
   compacts its own context. The Supervisor and the Coordinator run without its editing tools.
 - **`pi`**: the Pi coding agent (`pi`), any provider and model it supports (`provider`, `model`,
-  `thinking`).
+  `thinking`). Anthropic's Sonnet on Pi: `provider = "anthropic"`, `model = "claude-sonnet-5"` (Pi
+  takes the API's ids, `claude-sonnet-4-5` and `claude-sonnet-4-6` too, or `anthropic/<id>` in `model`;
+  `pi --list-models sonnet` lists those its credentials reach: `ANTHROPIC_API_KEY` in `orchestra
+  run`'s environment, or Pi's own login). Each turn's cost is its usage records (Pi's session file, a
+  compaction's call included) at the model's list prices, which Orchestra knows for
+  `claude-sonnet-5`, `claude-sonnet-5-5`, `claude-sonnet-4-6` and `claude-sonnet-4-5`; on any other
+  model the dollar caps (`review_usd_per_day`, `chat_usd_per_day`) cannot hold, so the turns they
+  cover are refused with that reason: choose a priced model, or set the cap to 0.
 - **`codex`**: OpenAI's Codex CLI (`codex exec`); its MCP tools need OpenAI's own API.
 - **`dummy`**: scripted agents with no model, no network and no cost: a worker commits a token file
   and reports ready, a reviewer approves, the Supervisor hands a chat message to the Coordinator,
@@ -155,9 +165,20 @@ enabled = true            # false: no host, no agents
   work (no reads, no tickets, no setup): fit for workers and machines on offers, not for you.
   `docs/policy-modes.md` compares the three for a policy reviewer.
 
-The sessions start again on the new setting after their turn. Pi always calls the tools through
-its extension and the dummy harness in-process: the setting changes nothing there; Codex takes
-`bash`, and `auto` is the MCP server on Codex.
+The sessions start again on the new setting after their turn. Pi calls the tools through its
+extension with `mcp` or `auto` (it has no MCP server to block), and with `bash` from its own bash
+tool, exactly as Claude Code does (no extension loaded, the same system prompt section, the same
+tools); the dummy harness calls them in-process; Codex takes `bash`, and `auto` is the MCP server
+on Codex. Pi in bash mode, on Anthropic's Sonnet, is what an organisation that allows shell
+commands and no unapproved MCP server or extension can run:
+
+```toml
+[agents]
+harness = "pi"
+provider = "anthropic"
+model = "claude-sonnet-5"
+tools_via = "bash"
+```
 
 The harness the host runs on is on the Agents page and in `orchestra agents status`; when it was
 chosen by default, both say so and how to change it.
@@ -336,9 +357,9 @@ a file. Follow it top to bottom:
    question. Unquoted, it is your proposal of a label's value under its own name: no box until the
    owner confirms, said in the digest's one Subsystems line at most once a day.
    **Bringing in an outside system** (Jira, Slack, PagerDuty, a metrics store) as series, events or
-   a declared external machine follows Orchestra's integration guide, `docs/INTEGRATING.md`
-   (<https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md>): choose its strategy
-   there; the declaration is yours (its §5.6).
+   a declared external machine follows Orchestra's guide (`read_guide` orchestra, sections "Connecting another system: the strategies" to
+   "Confirming an integration, and what goes wrong"; <https://github.com/danroblewis/orchestra/blob/main/orchestra/guide.md>):
+   choose its strategy there; the declaration is yours.
 3. **Machines.** Read the map (`read_design`, `read_events`, `read_model`), then `declare_machine`:
    a dashed, "unconfirmed" node; nothing runs (a machine a plugin proposed may already run: heard on
    the bus, or a workflow's program; `list_machines`' `running` says which). Refine it as the owner talks (`refine_machine`,
@@ -437,9 +458,10 @@ the owner asks how the system is made, and in the digest of what changed, say it
 ## Connecting a system
 
 When the owner wants to see what happens in another system ("connect our Jira so I can see issue
-transitions and open counts"), the method is Orchestra's `docs/INTEGRATING.md`
-(https://github.com/danroblewis/orchestra/blob/main/docs/INTEGRATING.md: the strategies, the kits,
-the rules, the checklist). **The bridges are a library** (the owner, 2026-11-01: "a library or
+transitions and open counts"), the method is Orchestra's guide (`read_guide` orchestra; for a human
+https://github.com/danroblewis/orchestra/blob/main/orchestra/guide.md): its sections "Connecting another system: the strategies",
+"Rules for every collector", "The systems", "Without the kits: `minikit.py` and a one-file poller" and
+"Confirming an integration, and what goes wrong". **The bridges are a library** (the owner, 2026-11-01: "a library or
 framework so that AI agents within my repo could write scripts in the target repo to do the
 metrics and event collection"): kits (a cached, rate-limited, read-only client; a poller with its
 cursor; a compliance check), fakes for tests, templates and a scaffold. They read nothing
@@ -456,7 +478,7 @@ system (a label, a transition, a Slack post) is an Outbox draft the owner's appr
 govern, never the collector's. You do it with two `design` tools, and the owner writes nothing:
 
 1. **`integrate_system`** with the system, what the owner wants (their words), and their quote. The
-   strategy follows INTEGRATING.md §2 when you leave it out: a store with a Prometheus API
+   strategy follows the guide's "Connecting another system: the strategies" when you leave it out: a store with a Prometheus API
    (Chronosphere) is a `[[sources]]` entry (`source`: read in place, no code; give `base_url` and a
    narrow `match`); anything with items is a `poller` built from a kit (events as who acted, and
    its series); `collect` is a measurement alone. Give the owner's scope in `settings` (`jql`,
@@ -549,7 +571,7 @@ answer says when one is missing:
 
 - **the bridges' kits not installed**: nothing was written. Propose the route the answer names:
   the owner's coding tool reinstalls Orchestra with the `bridges` extra (the answer gives the
-  command), or the one-file poller of INTEGRATING.md §5.2, which is code and goes to the
+  command), or the one-file poller of the guide's "Without the kits: `minikit.py` and a one-file poller", which is code and goes to the
   Coordinator (`hand_to_coordinator`).
 - **pytest not installed** (state `test not run`): the scaffolded test could not run, which is no
   failure: nothing is handed to the Coordinator. The owner's coding tool reinstalls Orchestra with

@@ -107,7 +107,7 @@ def who_lands(rec: dict) -> str:
                 f"{relative(rec['name'])}/ on a ticket, and the ticket's review and gate land it on the base branch")
     return (f"in the owner's repository ({relative(rec['name'])}/, live from there, and its files on the Supervisor's branch for "
             "its pull request): a coding tool may edit it there; never ask the owner to commit, discard or land it "
-            "(INTEGRATING.md)")
+            "(Orchestra's guide, \"Confirming an integration, and what goes wrong\")")
 
 
 def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, list]:

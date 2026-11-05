@@ -67,7 +67,7 @@ Install Orchestra with the agents beside it, once, as one tool (no clone):
 
 `workflows` brings the Workflows plugin, which moves the work you ask for (below); `bridges` brings the integration kits the Supervisor builds a connection to another system from
 (`integrate_system`), and `dev` brings pytest, which runs each scaffolded poller's own test in
-Orchestra's Python (as Orchestra's `docs/INTEGRATING.md` §4 installs them); add `tasking` for the
+Orchestra's Python (as Orchestra's guide, `orchestra/guide.md`, section "Without the kits: `minikit.py` and a one-file poller", installs them); add `tasking` for the
 tasking plugin's milestones and tickets instead. That puts one executable on your PATH,
 `orchestra`. The agents' command line comes with it as `orchestra agents …` and the task system's
 as `orchestra tasks …`; neither has an executable of its own. Installing the tool again replaces it, so name every plugin, as an extra, on each install.
@@ -84,8 +84,11 @@ With no `[agents]` section the agents run on Claude Code with Haiku when the `cl
 the PATH `orchestra run` has (installed, and logged in once with `claude` by hand), and otherwise on
 the dummy harness (scripted, no model, no cost); the Agents page says which, and how to change it.
 The Supervisor runs on its machine spec's model, **Sonnet by default** (decision D20), where the
-harness takes the name; every other agent on `[agents] model` (Haiku by default). To change the
-Supervisor's, tell it, or edit `model` in `.orchestra/machines/supervisor/machine.toml`.
+harness takes the name; every other agent on `[agents] model` (Haiku by default). **`[agents] model`,
+once given, is the Supervisor's too**, on every harness (with `provider` on Pi), over the spec's
+shipped Sonnet: its card on the Machines page says the harness, provider and model it starts on,
+and where the model came from. A model written into its spec since (`machine.toml`'s `model`, other
+than the shipped `sonnet`) is a choice and still wins.
 
 On the first `orchestra run` the agents' host writes the Supervisor's spec (its duties, its role and
 a ledger of why each duty exists) and commits it to `.orchestra/machines/supervisor/`: on the base
@@ -130,8 +133,11 @@ get no Orchestra tools at all and write their results to a file Orchestra reads 
 
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
 duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
-review_usd_per_day` and `review_turns_per_day`). Your chat turns are not capped, nor are the
-wake-ups its fixed core always takes (the first-start setup, an escalation, a plan reported, a
+review_usd_per_day` and `review_turns_per_day`). Its explore rounds over the declared stores (every `explore_every`, default an hour, 0 off: one
+experiment a round in Orchestra's experiment log, applied when it narrows `match` or changes `split`,
+`kinds` or `names`, asked of you when it widens `match`) count as its initiative. Your chat turns
+are capped apart, at $10 a day (`chat_usd_per_day`; 0 removes the cap): past it your message is
+refused before any turn, saying what was spent and how to go on. Not capped are the wake-ups its fixed core always takes (the first-start setup, an escalation, a plan reported, a
 program given up on). The other agents run on `[agents] model` (Haiku by default), one session per
 ticket or workflow step.
 

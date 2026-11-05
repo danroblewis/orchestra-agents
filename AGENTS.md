@@ -90,7 +90,7 @@ broken without updating the spec and saying so in the commit.
    as `tests/e2e/test_design_rehearsal_e2e.py`. The dummy harness is the exception: it is a
    product feature with no product behind it, so it has no fake; the e2e tests run on it as it
    ships, with a script for each fake's knob. The Supervisor runs on its machine spec's model,
-Sonnet by default (D20), where the harness takes the name; the other agents on `[agents] model`. A test of anything around the agents (another goal's
+Sonnet by default (D20), where the harness takes the name, and on `[agents] model` once the owner gives one (over the spec's shipped default, D5, 2026-11-04); the other agents on `[agents] model`. A test of anything around the agents (another goal's
    acceptance, the task system's flow, the web) uses the dummy harness, never a model.
 9. **State lives in `~/.orchestrator/<key>/agents/`**: `runtime.json` is written only by
    `store.py` under its lock; the rest of the state directory is listed in SPEC §7, file by file

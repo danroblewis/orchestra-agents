@@ -318,6 +318,36 @@ TOOLS: list[ToolDef] = [
             {"source": S("A [[sources]] name"), "url": S("Or a store's URL"), "auth": O("With url: as [[sources]] writes it"),
              "match": A("PromQL selectors to narrow it"),
              "refresh": B("Infer again now (it reads the store's schema); by default a recent inference is reused")}),
+    # the explore loop (explore_tools.py): the core's survey, run record and experiment log
+    ToolDef("explore_source", "observe",
+            "A bounded survey of a declared source's explore scope beyond its match (orchestra sources explore): the "
+            "families under explore, those outside the match first, each with whether the model reads it, its kind, how "
+            "it reads (flow, level, neither), its type and labels with their value counts. Every request stays within "
+            "explore, counts against the store's caps and is logged by explore; refused before anything is sent when it "
+            "could pass the daily cap (ask for fewer families).",
+            {"source": S("A [[sources]] name"), "family": S("Only metric names this glob matches (e.g. 'queue_*')"),
+             "limit": I("Families surveyed, default 10, at most 50"), "minutes": I("The window, default 60")}, ("source",)),
+    ToolDef("read_discovery_runs", "observe",
+            "The last discovery runs from Orchestra's run record: each run's stocks, flows, left out, mean trust, fitted "
+            "flows and their mean R², the store requests, its trigger, outcome and what was partial. With key, the "
+            "explain record of one series: what discovery read and tried for it, and why it is a stock or left out.",
+            {"n": I("Runs, default 5, at most 30"), "key": S("A series key (as get_model's left_out names it)")}),
+    ToolDef("read_experiments", "observe",
+            "The explorer's experiment log (orchestra explorer log list): each change tried, its expected effect, the "
+            "runs before and after, the measured effect and its verdict; and the ids still to be judged. Read it first "
+            "each explore round: never retry what failed until the data changes.",
+            {"n": I("Experiments, newest last, default 20")}),
+    ToolDef("log_experiment", "setup",
+            "Record one experiment before making it (orchestra explorer log add): the change (a source's match, split, "
+            "kinds or names, or an expected flow) and its expected effect in words. The last discovery run is its before.",
+            {"change": O('What changes, e.g. {"source": "metrics", "split": ["queue"]}'),
+             "expect": S("The effect expected, in words, before it is known")}, ("change", "expect")),
+    ToolDef("judge_experiment", "setup",
+            "Judge an experiment by the discovery runs since it was recorded (orchestra explorer log judge): kept, "
+            "reverted (undo the change first) or inconclusive, with what the runs showed.",
+            {"id": S("The experiment's id (x...)"), "verdict": {"type": "string", "enum": ["kept", "reverted", "inconclusive"],
+                                                             "description": "The verdict"},
+             "why": S("What in discovery's runs decided it")}, ("id", "verdict", "why")),
     # flows: one level's flows, searched for in the stores (read only)
     ToolDef("find_balance", "flows",
             "The counters that fill and drain a level (or each of a list), searched for in the stores with Orchestra's own discovery: candidates "
@@ -584,7 +614,7 @@ PAGED = frozenset({
     "list_gate_runs", "get_staging_status", "get_capacity", "read_events", "list_teams", "get_team", "list_agents",
     "get_agent", "list_roles", "get_role", "org_guide", "list_duties", "check_setup", "read_config", "list_processes",
     "read_machine_log", "list_metrics", "get_model", "read_instrument", "check_sources", "source_schema",
-    "preview_query", "infer_source", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
+    "preview_query", "infer_source", "explore_source", "read_discovery_runs", "read_experiments", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
     "read_design", "find_balance", "modeling_guide", "read_model", "read_series", "read_eras", "read_observability",
     "check_equation", "read_predictions", "list_guides", "read_guide", "list_workflows", "list_items", "explain_item"})
 PAGE_ARG = I("The answer's page, when it came back cut (its last line says so): 2 for the second; default 1")

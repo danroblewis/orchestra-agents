@@ -189,11 +189,16 @@ def read_events(store: AgentStore, a: dict, project=None) -> dict:
             record = since_dead.record(project)
         except Exception:  # noqa: BLE001 - the runtime record unreadable: "Look first" without what died
             record = None
+        from . import explore_round
+        try:
+            explored = explore_round.digest_line(project, store, start)
+        except Exception:  # noqa: BLE001 - the experiment log unreadable: the digest stands without the line
+            explored = None
         counted["digest"] = since_digest.digest(picked, start, time.time(), clock.host_zone(), outbox_state=counted["outbox"],
                                                 waiting=counted["waiting_on_owner"], preds=counted["predictions"],
                                                 model=counted["model"], ages=ages, subsystems=boxes, own_pr=own_pr,
                                                 open_items=open_now, state=now_state, record=record,
-                                                full=bool(a.get("full")))
+                                                full=bool(a.get("full")), explore=explored)
     return {"ok": True, "count": len(picked), **window, **counted, "types": len(summary),
             "by_type": first(({**r, "sources": first(r["sources"], 10)} for r in summary), hint="give types to narrow"),
             "announced_not_heard": first({"type": t, "listened_for_by": first(s, 10)} for t, s in quiet.items()),

@@ -4,7 +4,20 @@ Pi stays resident between turns (the process is the session), takes one JSON com
 per line on stdin and streams events on stdout; ``agent_settled`` ends a turn. Tools
 come from the Orchestra extension (``pi_extension.ts``), which registers the tool
 definitions in ``tools.py`` and runs each call through ``<this interpreter> -m orchestra agents tool`` (ORCHESTRA_PYTHON); with ``[agents]
-tools_via = "file"`` the extension is not loaded (``file_output.py``)."""
+tools_via = "file"`` the extension is not loaded (``file_output.py``). With ``tools_via = "bash"`` it is
+not loaded either: the session calls the same tools as ``orchestra agents tool <name> '<json>'`` from
+Pi's own bash tool, told how by the same system prompt section as Claude Code's and Codex's bash
+mode (``bash_tools.prompt``), and its transcript shows each such call as the tool it ran
+(``bash_tools.parse``). ``auto`` loads the extension: Pi has no MCP server for a policy to block.
+
+The model: ``--provider`` and ``--model`` as configured (``[agents] provider`` and ``model``; Pi
+takes ``provider/id`` in ``model`` too, and for Anthropic the API's ids, ``claude-sonnet-4-5``,
+``claude-sonnet-5``: ``pi --list-models`` lists those its credentials reach). A turn's cost
+(``TurnResult.cost_usd``) is what Pi's usage records new since the last turn cost at the model's
+prices (``pi_cost.py``: the session file, a compaction's call included; the stream's messages when
+the file cannot be read), so the day's caps (``budget.py``) count Pi's turns in dollars as they do
+Claude Code's; a model not priced there leaves it unknown, and the dollar caps then refuse to start
+(``PiHarness.priced``, ``budget.unpriced``)."""
 
 from __future__ import annotations
 
@@ -17,6 +30,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import bash_tools, pi_cost
 from .base import (
     TOOL_CALL_S,
     AgentSession,
@@ -51,7 +65,7 @@ class PiSession(AgentSession):
         self.spec = spec
         args = [resolve_binary(pi_binary or os.environ.get("PI_BINARY", "pi")), "--mode", "rpc",
                 "--session-dir", str(spec.session_dir), "--session-id", spec.session_id]
-        if spec.tools_via != "file":              # file: no Orchestra tools at all (file_output.py)
+        if spec.tools_via not in ("file", "bash"):  # file: no Orchestra tools at all (file_output.py); bash: from the shell
             args += ["--extension", str(EXTENSION_PATH)]
         if spec.provider:
             args += ["--provider", spec.provider]
@@ -61,10 +75,13 @@ class PiSession(AgentSession):
             args += ["--exclude-tools", "edit,write"]
         if spec.thinking:
             args += ["--thinking", spec.thinking]
-        if spec.system_prompt:
-            args += ["--append-system-prompt", spec.system_prompt]
         full_env = {**session_env(PI_AUTH), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
                     "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
+        system = spec.system_prompt or ""
+        if spec.tools_via == "bash":              # the tools as a command Pi's bash tool runs, in this environment
+            system = f"{system.rstrip()}\n\n{bash_tools.prompt(spec.tool_groups, full_env.get('PATH'))}"
+        if system:
+            args += ["--append-system-prompt", system]
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr = spec.log_path.open("a", encoding="utf-8")
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._stderr, text=True,
@@ -73,6 +90,8 @@ class PiSession(AgentSession):
         threading.Thread(target=self._read, daemon=True).start()
         self._lock = threading.Lock()
         self.session_file = None
+        self.meter = pi_cost.Meter(spec.model)      # what each turn's usage records cost
+        self._metered = False
 
     @property
     def harness_name(self) -> str:
@@ -127,6 +146,9 @@ class PiSession(AgentSession):
         r = self.command({"type": "get_state"})
         data = r.get("data", {}) if r.get("success") else {}
         self.session_file = data.get("sessionFile") or self.session_file
+        if not self._metered:                       # a resumed session's earlier turns were counted by their own
+            self.meter.entries(self.session_file)
+            self._metered = True
 
     @property
     def pid(self) -> int | None:
@@ -143,6 +165,7 @@ class PiSession(AgentSession):
             self._send({"type": "prompt", "message": text})
             clock = _Deadlines(timeout, idle_timeout)
             last_text = ""
+            streamed: list[float | None] = []        # each assistant message's cost, from the stream
             while True:
                 why = clock.expired()
                 if why:
@@ -169,10 +192,21 @@ class PiSession(AgentSession):
                         txt = assistant_text(msg.get("content"))
                         if txt.strip():
                             last_text = txt
+                        if isinstance(msg.get("usage"), dict):
+                            streamed.append(pi_cost.usage_cost(msg["usage"], msg.get("model") or self.spec.model))
                 elif t == "agent_settled":
                     result.text = last_text
+                    result.cost_usd = self._cost(streamed)
                     emit.settled(last_text)
                     return result
+
+    def _cost(self, streamed: list[float | None]) -> float | None:
+        """The turn's dollars: the session file's new usage records (``pi_cost.Meter``), or the
+        stream's messages when the file has none; None when a model is not priced."""
+        usd, n = self.meter.turn(self.session_file)
+        if n:
+            return usd
+        return None if not streamed or None in streamed else round(sum(streamed), 6)   # type: ignore[arg-type]
 
     def compact(self) -> dict | None:
         """Pi's own compaction: older messages become a summary entry in the session file and
@@ -239,6 +273,14 @@ class PiSession(AgentSession):
         return archive(self.session_file)
 
 
+def shown_call(name: str, args) -> tuple[str, dict]:
+    """A tool call as a transcript shows it: Pi's bash tool running ``orchestra agents tool <name>``
+    (``tools_via = "bash"``) is the Orchestra tool it ran, with its arguments."""
+    if name == "bash" and isinstance(args, dict) and (called := bash_tools.parse(str(args.get("command") or ""))):
+        return called
+    return name, args
+
+
 def archive(session_file: str | None) -> str | None:
     """Move a Pi session file beside its siblings under ``archive/``; the new path, or None."""
     if not session_file or not Path(session_file).exists():
@@ -265,13 +307,14 @@ class _Normalizer(_NormalizerBase):
             kind = {"text_delta": "text", "thinking_delta": "thinking"}.get(u.get("type"))
             self._emit({"type": "token", "kind": kind, "delta": u.get("delta") if kind else None})
         elif t == "tool_execution_start":
-            self._emit({"type": "tool_start", "name": ev.get("toolName") or ev.get("name", "?"),
-                        "args": ev.get("args") or ev.get("arguments") or {}})
+            name, args = shown_call(ev.get("toolName") or ev.get("name", "?"), ev.get("args") or ev.get("arguments") or {})
+            self._emit({"type": "tool_start", "name": name, "args": args})
         elif t == "tool_execution_end":
             self._emit({"type": "tool_end", "name": ev.get("toolName") or ev.get("name", "?")})
         elif t == "message_end" and msg.get("role") == "assistant":
             content = msg.get("content")
-            calls = [p.get("name", "?") for p in content if isinstance(p, dict) and p.get("type") == "toolCall"] \
+            calls = [shown_call(p.get("name", "?"), p.get("arguments"))[0] for p in content
+                     if isinstance(p, dict) and p.get("type") == "toolCall"] \
                 if isinstance(content, list) else []
             self._emit({"type": "assistant_end", "text": assistant_text(content), "tool_calls": calls})
 
@@ -284,6 +327,10 @@ class PiHarness(Harness):
 
     def start(self, spec: SessionSpec) -> PiSession:
         return PiSession(spec, self.binary)
+
+    def priced(self, model: str | None) -> bool | None:
+        """Whether a turn on ``model`` can be priced (``pi_cost.PRICES``): the dollar caps need it."""
+        return pi_cost.price(model) is not None
 
     @staticmethod
     def context(session_file: str | Path) -> ContextSize:
@@ -333,7 +380,8 @@ class PiHarness(Harness):
                                 args = json.loads(args)
                             except json.JSONDecodeError:
                                 pass
-                        tools.append({"name": part.get("name"), "args": args})
+                        name, args = shown_call(part.get("name"), args)
+                        tools.append({"name": name, "args": args})
             entry = {"role": role, "text": text, "tool_calls": tools, "ts": e.get("timestamp")}
             if role == "toolResult":
                 entry["text"] = text[:6000]

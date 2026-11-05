@@ -263,6 +263,12 @@ class Harness(ABC):
         Default: none taken (a harness whose model names differ says which it accepts)."""
         return None
 
+    def priced(self, model: str | None) -> bool | None:
+        """Whether this harness knows what a turn on ``model`` costs: True when it reports or prices
+        it, False when it cannot (then the dollar caps refuse to start: ``budget.unpriced``), None when
+        not known either way (its turns are counted, ``review_turns_per_day``). Default: None."""
+        return None
+
     def turn_usd(self, model: str | None) -> float | None:
         """An estimate of what one turn of a narrow machine costs on ``model`` (for a drafted
         machine's cost line), or None when it is not known. Default: not known."""

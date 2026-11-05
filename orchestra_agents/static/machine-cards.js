@@ -58,8 +58,10 @@
     const a = agentOf(m), next = a.next_scheduled_at && !(s && s.status === "running") ? `next wake-up in ${ago(a.next_scheduled_at - D.now)}` : "";
     // with nothing said yet the status line already names the next wake-up
     const text = m.unseen ? "declared, not run yet" : say ? [say, next].filter(Boolean).join(" · ") : typeof agentStatus === "function" ? agentStatus(s, D.now, a).title : "";
+    // what its sessions start on (the Supervisor's: harness, provider and model, and where the model came from)
+    const ro = a.runs_on, on = ro ? ` <span class="muted" title="its sessions start on this (model from ${e_(ro.model_from || "")}; tools via ${e_(ro.tools_via || "")})">· ${e_([ro.harness, ro.provider, ro.model || "default model"].filter(Boolean).join(" / "))}</span>` : "";
     return `<div class="agent ${m.unseen ? "unseen-agent" : ""}" style="--rc:${ROLE_C[role] || "#c4b5fd"}" title="${e_(agentOf(m).description || role)}">
-        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${titled(m)}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
+        <div class="av">${e_(m.id[0].toUpperCase())}</div><div class="name">${titled(m)}${on}</div><div class="say">${e_(text)}</div>${s ? chip(s, m) : ""}</div>${more(m, compact)}`;
   }
 
   // an agent that runs per wake-up or on a schedule, outside the task system: its last run and its next

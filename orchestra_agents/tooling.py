@@ -24,6 +24,7 @@ from . import (
     design,
     design_dynamics,
     duties,
+    explore_tools,
     guides,
     handoff,
     installed,
@@ -202,6 +203,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         if role != "supervisor":
             raise StoreError("only the supervisor tries collectors (it sets them up)")
         return instruments.try_collector(project, a)
+    if command in explore_tools.COMMANDS:
+        return explore_tools.handle(project, command, a, role)
     if command in source_tools.COMMANDS or command in balance_tools.COMMANDS:
         source_limits.check(project, store, command, a)          # nothing read before the owner's limits (run 6)
         return {**source_tools.COMMANDS, **balance_tools.COMMANDS}[command](project, a)

@@ -675,7 +675,9 @@ when the harness takes the name, section 12), `serves` (the task system's roles 
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
-rounds and its duties' wake-ups may spend a day, section 12), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
+rounds, explore rounds and its duties' wake-ups may spend a day, section 12), `chat_usd_per_day`
+(default 10.0, 0 no cap: what the owner's chat turns may spend a day), `model` once given is the
+Supervisor's too, over its spec's shipped `sonnet` (`machine_spec.model_of`; D5, 2026-11-04), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
 compacted; Claude Code compacts at its own window, from the model's context, section 6; set to 0 it
@@ -956,6 +958,12 @@ instrument, a `[[scrape]]` of an existing `/metrics`, the gate's stages), ask th
 choices in one message with a recommendation for each (`work = "code"`, `push`, anything acting as
 the human, the model and its cost), check what it declared works, and report what it set and why.
 It creates no tickets.
+With no `[[sources]]` (the owner, 2026-11-04: a short discussion, then an automated exploration and
+setup) the wake-up adds `first_run.CHECKLIST`, and the Supervisor's first message is it, in one
+message, before any store is read: which systems, where each token file is (a path or a variable's
+name, never the token's value), the `match` and the wider `explore` of each, the caps, and that it
+stays read-only. From the owner's answer it declares the stores and explores within them on its
+own (`explore_round.py`); the record notes `setup.asked = "checklist"`.
 
 **Measurements** (`instruments.py`, `source_tools.py`, `prompts/operator.md` "Measurements"). Adding a
 collector is the Supervisor's, from one chat message: it reads Orchestra's guide, finds where the
@@ -1318,8 +1326,8 @@ observed rate of what wakes it, and at least what discovery needs to see an era)
 each event type's declared and heard publishers and listeners).
 
 **Connecting a system** (`design_integrate.py`, `integrate_kits.py`, `integrate_schedule.py`; task
-I3, Orchestra's `docs/INTEGRATING.md` as a flow). `integrate_system` takes the system's name, what
-the owner wants from it, and the strategy (INTEGRATING.md §2; by default `source` for a
+I3, Orchestra's guide (`orchestra/guide.md`, its sections from "Connecting another system: the strategies" to "Confirming an integration, and what goes wrong") as a flow). `integrate_system` takes the system's name, what
+the owner wants from it, and the strategy (the guide's "Connecting another system: the strategies"; by default `source` for a
 Prometheus-API store and `poller` otherwise; also `collect`, a measurement alone; the bridges are a
 library with no readers of their own, the owner, 2026-11-01). For `poller` and `collect` it
 scaffolds the bridges plugin's kit (`orchestra_bridges.kits.scaffold`, a dev dependency here,
@@ -1392,8 +1400,8 @@ and its PromQL `query` (and `help`), names unique; each of `selectors` and `matc
 promql kit's own `bounded` (never the whole store); `cadence` a channel's id to a duration;
 `max_backoff` a duration. What is written is read back by TOML and then by the bridges' reader, and
 put back as it was when either refuses it.
-Without the kits nothing is written, and the answer says so and names INTEGRATING.md's routes (the
-bridges plugin installed, or the one-file poller of its §5.2, which is code and goes to the
+Without the kits nothing is written, and the answer says so and names the guide's routes (the
+bridges plugin installed, or the one-file poller of its "Without the kits: `minikit.py` and a one-file poller", which is code and goes to the
 Coordinator). `source` writes nothing either: the `[[sources]]` entry is planned. The answer
 carries `ask_owner`: the owner's approval and where the token is (a variable's NAME or a file's
 path), put to them in the chat. `approve_integration` takes a verified quote of the owner (refused
@@ -1427,7 +1435,7 @@ template's `token_env` when the owner named only a file; the scaffolded test rea
 there, so it is not run again), says whether each variable is set and each file is there and
 `chmod 600` (never reading it), then the plan to the owner's overlay through `config_change`: a
 `[[machines]]` entry with `restart = "always"` (a process Orchestra's launcher keeps, never an
-announced machine: the poller only relays, Orchestra's rule 2; INTEGRATING.md §5.5's Workflows
+announced machine: the poller only relays, Orchestra's rule 2; the guide's Workflows
 route is not taken for that reason) and a `[[collect]]` entry for the series, or the `[[sources]]`
 entry with `auth.bearer_env` or `auth.bearer_file`, each announced (`instruments.changed` or
 `config.changed`). **The entries are written at the approval** (a deviation from the task's
@@ -1741,11 +1749,33 @@ whose key no earlier round woke it for, or a split proposal, queues a wake-up (`
 ...`): a full turn. Otherwise the round costs nothing. The record is its agent state (`review`,
 `next_review_at`, `load`).
 
+**The explore round** (`explore_round.py`, `explore_tools.py`, `prompts/operator.md` "Exploring the
+stores"; Orchestra's `docs/proposals/metric-explorer.md` and its guide's "Exploring beyond the
+match"). Every `[agents] explore_every` (default 1h, never under 5m; 0 off), once a `[[sources]]` is
+declared, the host checks without a model call and wakes the Supervisor (`[Explore round]`, its
+initiative, under the day's cap) unless the last experiment still waits for a discovery run. The
+round names each source's `match` and `explore` and the experiment to judge first. Its tools are the
+core's commands as a library: `explore_source` (`sources explore`, bounded, within `explore`,
+logged `by: explore`), `read_discovery_runs` (the run record; with `key`, a series' explain record),
+`read_experiments`, `log_experiment` and `judge_experiment` (`explorer log list|add|judge`,
+`by: supervisor`). One experiment a round, logged before it is made; the owner's standing rule is
+held in code (`source_limits.check_scopes`, in `set_setting` key `sources`): on a turn with no
+owner's message a source's `match` may narrow and its `split`, `kinds`, `names` change, but its
+`match` never widens and its `explore` is never written. The record is the Supervisor's agent
+state `explore` (and `explore_rounds`, a week), `next_explore_at`; the digest carries a line
+(`explore_round.digest_line`).
+
 **The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, and wake-ups
 on events only its spec's duties listen for) stops at `[agents] review_usd_per_day` dollars
 (Claude Code reports each turn's cost: `TurnResult.cost_usd`) or `review_turns_per_day` turns.
-The owner's chat and what the fixed core wakes it for never wait on it. Spending is kept per day in
-its agent state (`spend`, `spend_total`).
+What the fixed core wakes it for never waits on it. The owner's chat turns have their own cap,
+`chat_usd_per_day` (default 10.0; 0: none): past it a message is refused before any turn
+(`budget.chat_over`, raised in `prompt_supervisor`), saying what was spent, the cap and how to go
+on. A harness that cannot price its turns (`Harness.priced` False: Pi on a model `harness/pi_cost.py`
+does not price; its turns are priced from Pi's session file, a compaction's call included, at list
+prices, never Pi's own figure alone, which a login reports as 0) is refused under a dollar cap
+before the turn starts (`budget.unpriced`). Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`;
+`spend_total`).
 
 **Self-healing** (group `patch`, the Supervisor's alone, decided by the owner for now; a separate
 Steward may split off later). `propose_patch`: a bug in the project's own code, when `work =

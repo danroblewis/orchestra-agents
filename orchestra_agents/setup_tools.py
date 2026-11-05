@@ -332,6 +332,7 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
     if key in ("sources", "series") and isinstance(value, list):
         _check_sources(project, key, value)
     if key == "sources":
+        source_limits.check_scopes(project, store, value)     # on a wake-up: narrow, split, kinds, names only (explore_round.py)
         source_limits.check_declared(project, store, value)   # a match the owner gave, never one picked here (run 6)
     caution = scm_settings.check(project, key, value)      # [scm]: orchestra-scm's schema, the token by file only
     eras = era_guard.check(project, store, key, value)     # [discovery]: never eras faster than discovery can fit a stock in

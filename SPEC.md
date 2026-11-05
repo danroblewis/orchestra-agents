@@ -1653,6 +1653,18 @@ step that installs it. A new agent is never designed for code work: the built-in
 After `approve_integration`, with Workflows installed, the answer and the `connect-system` skill
 propose a workflow that makes the system's items items, observe only.
 
+**No Coordinator without the task system** (T54 addendum, the owner: "it says it sent a change to the
+Coordinator ... but it says it's down"). The Coordinator is never started without the task system
+(`org.needs_task_system`), so nothing hands work to it: `hand_to_coordinator` (every caller: the
+tool, an integration's failed test or missing template, a measurement script for the repository, a
+machine switched to Programmatic) refuses before publishing `work.requested` (`handoff.NO_COORDINATOR`,
+naming `edit_machine_file` for Orchestra's own files and a worker through Workflows for the project's
+code); `propose_patch` refuses before its scratch worktree; an integration's failed test stays in
+place for `edit_machine_file`. The built-in duty `hand_to_planner` is not in force
+(`supervisor_spec.inactive`: left out of the prompt, `inactive` in `list_duties`), and `keep_flow`'s
+hand-off line is gated. The agent views carry `not_used: "needs the task system"` for it, and the
+Agents page shows "not used: needs the task system", never "down".
+
 ## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 
 Orchestra discovers a system dynamics model of the system from its metrics, lets any machine read

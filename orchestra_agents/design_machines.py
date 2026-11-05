@@ -518,7 +518,7 @@ def apply_kind(project: Project, store: AgentStore, before: dict, after: dict, p
     (Programmatic, or managed elsewhere), its agent stopped, its records removed, its wake-ups
     drained and, for a program to be written here, the program handed to the Coordinator; run here
     again (Universal, managed here), its records written. What to say, and the hand-off's id."""
-    from .handoff import hand_to_coordinator
+    from .handoff import coordinator_runs, hand_to_coordinator
     mid = after["id"]
     lines: list[str] = []
     extra: dict = {}
@@ -529,7 +529,11 @@ def apply_kind(project: Project, store: AgentStore, before: dict, after: dict, p
         lines.append(("its agent is stopped and its records in the state directory removed" + (
             f" ({plural(len(drained), 'queued wake-up')} dropped)" if drained else "") + ": nothing runs it here")
                      if stopped else "no agent ran it")
-        if after.get("kind") == "programmatic" and after.get("managed") != "external":
+        if after.get("kind") == "programmatic" and after.get("managed") != "external" and not coordinator_runs():
+            lines.append("no Coordinator runs here (no task system), so the program is handed to no one: a program under "
+                         ".orchestra/machines/ is yours to write with edit_machine_file; one in the project's own code is a "
+                         "worker's through Workflows (request_work with role worker)")
+        elif after.get("kind") == "programmatic" and after.get("managed") != "external":
             req = hand_to_coordinator(store, {"requirements": (
                 f"Write the program for the confirmed machine {mid} ({after.get('title')}), now Programmatic: "
                 f"{after.get('description')}. It receives {', '.join(after.get('receives') or []) or 'nothing'}, emits "

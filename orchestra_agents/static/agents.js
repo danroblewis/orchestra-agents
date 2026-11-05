@@ -333,6 +333,7 @@ window.addEventListener("hashchange", agentsFromHash);
 // is a resident whose host is gone; a resident between turns says what it waits for.
 function agentStatus(s, now, a) {
   a = a || {};
+  if (a.not_used) return { cls: "", text: "not used: " + a.not_used, title: "never started here: it plans into the task system's tickets, which is not installed" };
   if (s && s.status === "archived") return { cls: "archived", text: "finished", title: "ticket closed" };
   if (s && s.status === "running") return runningPhase(s, now);
   const perTicket = s ? (!!s.ticket_id || /^(worker|reviewer)-/.test(s.id || s.session || "")) : false;

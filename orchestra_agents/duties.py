@@ -217,8 +217,10 @@ def _revert(project: Project, store: AgentStore, a: dict, reason: str) -> dict:
 
 
 def _list(project: Project, store: AgentStore, spec: MachineSpec) -> dict:
+    from .supervisor_spec import inactive
     duties = [{"name": d.name, "about": d.about, "builtin": d.builtin, "listens": d.listens, "tools": d.tools,
-               "added_by": d.added_by, "reason": d.reason, **({"text": spec.duty_text(d)} if not d.builtin else {})}
+               "added_by": d.added_by, "reason": d.reason, **({"text": spec.duty_text(d)} if not d.builtin else {}),
+               **({"inactive": why} if d.builtin and (why := inactive(d.name)) else {})}
               for d in spec.duties]
     try:
         notes = lint(spec, _groups(project), _known_types())

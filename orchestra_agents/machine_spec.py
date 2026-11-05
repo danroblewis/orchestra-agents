@@ -279,7 +279,8 @@ def prompt_part(spec: MachineSpec) -> str:
               "`revert_change`; `list_duties` shows them with their history.")]
     if spec.role_text.strip():
         parts.append(f"### How you work a wake-up\n\n{spec.role_text.strip()}")
-    builtin = [d for d in spec.duties if d.builtin]
+    from .supervisor_spec import inactive
+    builtin = [d for d in spec.duties if d.builtin and not inactive(d.name)]     # one the task system needs, only with it
     if builtin:
         parts.append("### Built-in duties (their text is your built-in prompt above; fixed)\n\n"
                      + "\n".join(f"- `{d.name}`: {d.about}" for d in builtin))

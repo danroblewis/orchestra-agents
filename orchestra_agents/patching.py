@@ -67,6 +67,9 @@ def handle(project: Project, store: AgentStore, command: str, a: dict) -> dict:
 
 
 def propose_patch(project: Project, store: AgentStore, a: dict, name: str, reason: str) -> dict:
+    if not handoff.coordinator_runs():               # its commit lands only through a ticket: refused before anything
+        raise StoreError(handoff.NO_COORDINATOR.replace("refused, nothing published", "refused, nothing written or published")
+                         + "; a bug in an installed plugin is write_override")
     if project.config.work != "code":
         raise StoreError("refused: the project's work is tasks, so nothing lands in the repository through the gate. A bug in an "
                          "installed plugin is write_override; for the project's own code, ask the owner to choose work = \"code\"")

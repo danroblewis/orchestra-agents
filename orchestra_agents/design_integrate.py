@@ -309,6 +309,9 @@ def _retest(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     _save(store, name, rec)
     tail = "; ".join((test.get("tail") or [])[-3:])
     lines = [f"its test in {target} still does not pass ({test['summary']}" + (f": {tail}" if tail else "") + ")"]
+    if not handoff.coordinator_runs():
+        lines.append(handoff.yours(rec))
+        return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": rec["dir"], "test": test}
     if not rec.get("request"):
         rec["request"], said = handoff.hand_on(store, rec, f"its test against the kit's fake fails ({test['summary']})", prov)
         _save(store, name, rec)
@@ -350,6 +353,12 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     if not test["passed"]:
         rec["state"] = "test failed"
         tail = "; ".join((test.get("tail") or [])[-3:])
+        if not handoff.coordinator_runs():               # no Coordinator: the script is fixed here, never handed on
+            _save(store, name, rec)
+            lines.append(handoff.yours(rec))
+            return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": rec["dir"], "test": test,
+                    "next": "Tell the owner the script is scaffolded at the path above and its test failed; fix it with "
+                            "edit_machine_file, then call integrate_system again."}
         handoff.move_out(project, rec)
         _save(store, name, rec)
         rec["request"], said = handoff.hand_on(store, rec, f"its test against the kit's fake failed ({test['summary']}"
@@ -366,6 +375,10 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     rec["steps"] = schedule.poller(name, home, every, events=events)
     rec.update(state=NEEDS, machine=mid, stock=sid)
     hand = not kits.templated(kit) and not rec.get("request") and not rec.get("adopted")
+    if hand and not handoff.coordinator_runs():          # no Coordinator: the guess is the Supervisor's to adapt
+        hand = False
+        lines.append(f"the kits have no template for {kits.title(system)}, so the script is the generic http kit's guess at "
+                     "a JSON API: " + handoff.yours(rec))
     if hand:
         handoff.move_out(project, rec)
     _save(store, name, rec)

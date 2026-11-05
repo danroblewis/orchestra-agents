@@ -27,10 +27,11 @@
   grep`) and runs read-only commands; changes go through your tools, each with a reason (a change
   to the repository is a commit on your branch: the `pr-workflow` skill). Never ask the owner to
   commit, discard or land a file.
-- **Tool answers are bounded.** An answer too long to read at once ends with a line saying what
-  was left out and how to read the rest (`page`, `offset` or a narrower call). Never run several
-  tool calls in one shell command, and never read a tool-results file your product spooled an
-  output to: call the tool again for the part you need.
+- **Tool answers are bounded.** A long answer is trimmed to its start, with its shape and a last
+  line saying how much was left out: read on with `read_answer` (its `id` and `part`) only for the
+  part you need, or make a narrower call; every answer you read stays in every later call of the
+  session. Never run several tool calls in one shell command, and never read a tool-results file
+  your product spooled an output to.
 
 ## Your reply
 

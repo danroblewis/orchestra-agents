@@ -524,6 +524,11 @@ TOOLS: list[ToolDef] = [
             {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
              "section": S("A section's heading (or part of it), from the guide's contents"),
              "offset": I("Where to read on in a long section, as its last answer says (default 0)")}, ("name",)),
+    ToolDef("read_answer", "guides",
+            "A part of a tool answer that came back trimmed (its last line names its id, a-…, and the next part): the whole "
+            "answer is kept, so the same call need not run again. Read on only for the part you need.",
+            {"id": S("The answer's id, from its trimmed last line (a-…)"), "part": I("The part to read: 2 for the second")},
+            ("id",)),
     ToolDef("read_skill", "guides",
             "One of your skills (your prompt's index names each, with when to use it): the steps, the order of your tools "
             "and the pitfalls for one kind of work. Read it before your first change for that work in a session. A long "

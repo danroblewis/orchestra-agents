@@ -1716,6 +1716,13 @@ skills (`SessionSpec.skills`) and the harness writes them as Claude Code's own,
 `<sessions>/claude-code/<session>.skills/.claude/skills/<name>/SKILL.md` (the "use when" as the
 description), outside the repository, added with `--add-dir`, so its own skill loading finds them.
 
+**Large answers are trimmed** (`answer_store.py`): every model call carries every earlier answer of
+the session, so a session that holds `read_answer` (the Supervisor's, group `guides`) reads at most
+6,000 characters of an answer: its start, its shape (each top-level field and its size) and a last
+line with the id of the whole answer, kept in `<state>/agents/answers/` (the newest 200), which
+`read_answer` reads part by part (a read tool's own `page` gives the same parts). A skill and a part
+of a kept answer are never trimmed. A session without `read_answer` keeps the bound of `answers.cut`.
+
 **Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
 takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;
 the dummy harness records it; Pi and Codex take none, and `[agents] model` stands). A changed

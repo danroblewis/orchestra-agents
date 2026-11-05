@@ -604,6 +604,7 @@ class ClaudeCodeHarness(Harness):
         if not p.exists():
             return out
         names: dict[str, str] = {}
+        by_id: dict[str, dict] = {}
         for line in p.read_text(encoding="utf-8").splitlines():
             try:
                 e = json.loads(line)
@@ -616,18 +617,29 @@ class ClaudeCodeHarness(Harness):
             content = msg.get("content")
             ts = e.get("timestamp")
             if t == "assistant":
-                text, tools = "", []
+                # Claude Code may write one reply several times as it grows (its text, then its text and a
+                # tool call, under one message id): one message per id, each block once (the owner,
+                # 2026-11-04: "the command shows up with the message as well as the command").
+                mid = msg.get("id")
+                prev = by_id.get(mid) if mid else None
+                if prev is None:
+                    prev = {"role": "assistant", "text": "", "tool_calls": [], "ts": ts, "_texts": [], "_tools": set()}
                 for part in content if isinstance(content, list) else []:
                     if not isinstance(part, dict):
                         continue
-                    if part.get("type") == "text":
-                        text += part.get("text", "")
-                    elif part.get("type") == "tool_use":
+                    if part.get("type") == "text" and part.get("text") and part["text"] not in prev["_texts"]:
+                        prev["_texts"].append(part["text"])
+                        prev["text"] += part["text"]
+                    elif part.get("type") == "tool_use" and part.get("id", "") not in prev["_tools"]:
                         name, args = _call(part)
                         names[part.get("id", "")] = name
-                        tools.append({"name": name, "args": args})
-                if text or tools:
-                    out.append({"role": "assistant", "text": text, "tool_calls": tools, "ts": ts})
+                        prev["_tools"].add(part.get("id", ""))
+                        prev["tool_calls"].append({"name": name, "args": args})
+                if (prev["text"] or prev["tool_calls"]) and not prev.get("_out"):
+                    prev["_out"] = True
+                    out.append(prev)
+                if mid:
+                    by_id[mid] = prev
                 continue
             if isinstance(content, str):
                 if content.strip():
@@ -645,4 +657,7 @@ class ClaudeCodeHarness(Harness):
                                 "is_error": bool(part.get("is_error"))})
                 elif part.get("type") == "text" and part.get("text", "").strip():
                     out.append({"role": "user", "text": part["text"], "tool_calls": [], "ts": ts})
+        for m in out:
+            for k in ("_texts", "_tools", "_out"):
+                m.pop(k, None)
         return out

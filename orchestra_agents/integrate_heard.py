@@ -42,6 +42,17 @@ def heard_as(store: AgentStore, system: str) -> list[str]:
     return list(dict.fromkeys([*heard(store, system), *_typed(store, system)]))
 
 
+SHOWN = 20             # actors named in a join's reason; the rest are counted (the declared layer's text is at most 4000)
+
+
+def reason_for(system: str, new: list[str]) -> str:
+    """A join's reason: the first actors by name, the rest counted, always within the layer's limit
+    (the owner, 2026-11-04: hundreds of Jira people made the reason too long, and every sweep failed)."""
+    shown = ", ".join(new[:SHOWN]) + (f", and {len(new) - SHOWN} more" if len(new) > SHOWN else "")
+    text = f"{system}'s poller relays these {len(new)} actors, heard on the bus: {shown}"
+    return text if len(text) <= 3900 else text[:3880] + "…"
+
+
 def join(project: Project, store: AgentStore, system: str) -> list[str]:
     """Alias each actor heard for ``system`` to its declared machine; the sources added."""
     from . import design_machines
@@ -52,8 +63,7 @@ def join(project: Project, store: AgentStore, system: str) -> list[str]:
     new = [s for s in heard_as(store, system) if s not in have and s != system]
     if new:
         apply(project, [{"op": "alias", "machine": system, "observed": s} for s in new],
-              {"author": MACHINE, "source": MACHINE, "reason": f"{system}'s poller relays these actors, heard on the bus: "
-                                                               + ", ".join(new)})
+              {"author": MACHINE, "source": MACHINE, "reason": reason_for(system, new)})
     return new
 
 

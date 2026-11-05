@@ -78,6 +78,8 @@ async function openTranscript(id) {
       ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
     </form>`;
   openDrawer(html);
+  $("drawer").scrollTop = 0;
+  fitConvo();
   const box = $("convo-scroll");
   if (box) box.addEventListener("scroll", () => { if (transcriptPaging && box.scrollTop < 300) loadOlderTranscript(); });
   scrollTranscriptToEnd();
@@ -115,6 +117,17 @@ function progressHtml(s) {
 // while the reader is at the bottom, and leaves them alone while they read further up.
 // The conversation scrolls in its own box (#convo-scroll), so the head and the controls above it stay put.
 const convoBox = () => $("convo-scroll") || $("drawer");
+// The box takes exactly the drawer's room below what is above it, less the message box under it, so
+// the drawer itself never has to scroll to reach the bottom.
+function fitConvo() {
+  const box = $("convo-scroll"), drawer = $("drawer");
+  if (!box || !drawer) return;
+  const pad = parseFloat(getComputedStyle(drawer).paddingBottom) || 0;
+  const form = $("chat"), below = form ? form.getBoundingClientRect().height + (parseFloat(getComputedStyle(form).marginTop) || 0) : 0;
+  const top = box.getBoundingClientRect().top - drawer.getBoundingClientRect().top + drawer.scrollTop;
+  box.style.height = Math.max(240, drawer.clientHeight - top - below - pad - 2) + "px";
+}
+window.addEventListener("resize", () => { const end = atTranscriptEnd(); fitConvo(); if (end) scrollTranscriptToEnd(); });
 const atTranscriptEnd = () => { const el = convoBox(); return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80; };
 function scrollTranscriptToEnd() { const el = convoBox(); if (el) el.scrollTop = el.scrollHeight; }
 
@@ -135,6 +148,7 @@ async function refreshTranscript() {
     if (d.total < p.total) { transcriptPaging = null; return openTranscript(p.id); }  // file replaced: start over
     const follow = atTranscriptEnd();
     const head = $("transcript-head"); if (head) head.innerHTML = transcriptHead(p.id, d.session, d);
+    fitConvo();                                          // the head may have grown or shrunk
     const prog = $("progress"); if (prog) prog.innerHTML = progressHtml(d.session);
     showPending(d.pending, d.session);
     if (follow) scrollTranscriptToEnd();
@@ -171,6 +185,7 @@ async function loadOlderTranscript() {
 // on demand, after the page has loaded) DOMContentLoaded has passed, so it starts at once there.
 function agentsFollowTranscripts() {
   $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && !$("convo-scroll") && el.scrollTop < 300) loadOlderTranscript(); });
+  $("drawer").addEventListener("toggle", () => fitConvo(), true);    // a details opened or closed above the box
   setInterval(refreshTranscript, TRANSCRIPT_POLL_MS);
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", agentsFollowTranscripts);

@@ -85,6 +85,5 @@ details.msg.marker.wake > summary { cursor:pointer } details.msg.marker.wake .pr
 .tkc-past .row:hover { background:var(--panel3) } .tkc-past .row .id { font-family:var(--mono); font-weight:700 } .tkc-past .row > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 
 /* the conversation scrolls in its own box; the transcript's head and controls above it stay in view (2026-11-04) */
-.convo-scroll { max-height:calc(100vh - 300px); min-height:240px; overflow-y:auto; overscroll-behavior:contain; border:1px solid var(--border); border-radius:8px; padding:4px 10px; background:var(--bg) }
+.convo-scroll { min-height:240px; overflow-y:auto; overscroll-behavior:contain; border:1px solid var(--border); border-radius:8px; padding:4px 10px; background:var(--bg) }
 .convo-scroll + .chat { position:static; margin-top:10px }
-@media (max-width: 900px) { .convo-scroll { max-height:calc(100vh - 240px) } }

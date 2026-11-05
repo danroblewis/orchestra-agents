@@ -729,7 +729,10 @@ Beside it, in Orchestra's state directory and not the agents' own, `integrate_sy
 scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffold: its
 `machine.toml`, with a top-level `kit`, and its program and test; `integrate_kits.py` edits the
 `machine.toml`'s clearance and settings, and reads each change back with the bridges' own reader,
-`orchestra_bridges.kits.machinefile.read`); those files are the bridges', read by them. The declarations are Orchestra's declared layer
+`orchestra_bridges.kits.machinefile.read`); those files are the bridges', read by them. And
+`propose_people` (below, "Accounts and people") writes the bridges' identity map in the state
+directory, `<state>/bridges/people.toml`, only through the bridges' `identity.join` and only on the
+owner's quoted yes; that file is the bridges', read by their pollers. The declarations are Orchestra's declared layer
 (`orchestra.sd.intended`), reached only through `intended_api.py` and written only through its
 host's endpoint (`POST /intended`, with the project's token; Orchestra's rule 5 as amended), so with
 the host down a design call is refused. The Supervisor's agent state also keeps the turn its tools
@@ -1143,6 +1146,22 @@ and the sweep's lines, and a note every person carries (a poller's `fake`) said 
 The Supervisor's notices count the people a batch announced per system, never by name. A person a
 declaration is heard through stays listed. The plugin's pages name no person: its machine cards draw
 agents only, and Orchestra draws the rest.
+
+**Accounts and people** (since 2026-11-04, the owner: "It looks like the machine is a reference to a
+real person, not just their user account ... people use different github user names than their jira
+or slack names, so we would need a table of some sort to combine them"; the bridges' SPEC §8;
+`people_tools.py`). A relayed `person.<system>.<account>` is an account, announced as
+`<system>.user.<account>` with the system's `display_name` as a detail; only the identity map makes
+a person (`person.<key>`, `mapped`). `propose_people` (group `setup`, the Supervisor's) lists the
+candidate joins the bridges' table finds among the accounts the bus announced and the map does not
+list: exact (the same display name on two systems) or weak (namesakes, a handle, word order, a close
+spelling), each with its id, accounts, proposed key and name, evidence and confidence; without
+`join` it writes nothing. **Writing a join is the owner's quoted yes in both `ask` modes, exact
+candidates included**: joining accounts is a claim about people, a matching name is evidence about
+strings, and a wrong join merges two people's acts under a name that looks confirmed. Exact ones may
+be confirmed together ("all", "these", or by name); a weak one only when the owner's words name it.
+The entries go to `<state>/bridges/people.toml` (never the repository); the owner's own `[bridges]
+people` file is read with it and never written here. A poller reads the map when it starts.
 
 **"What changed since"** (`read_events` with `since`: its `digest`, `since_digest.py`, which the
 Supervisor replies with as it is; since 2026-11-03, T2j s16, the morning after on the standing demo).

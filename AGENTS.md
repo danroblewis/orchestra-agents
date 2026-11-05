@@ -53,7 +53,9 @@ broken without updating the spec and saying so in the commit.
    W7; that plugin's SPEC §10) import its validated writer, loader and record API, and its start match and settings (`adopt.py`, 2026-11-03), and `program_tools.py`
    its programs reader (`programs.machines`, 2026-11-03, for `declare_program`); and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
-   templates and settings, and its `machine.toml` reader); and `supervisor_pr.py` (2026-11-02)
+   templates and settings, and its `machine.toml` reader); and `propose_people` (`people_tools.py`,
+   2026-11-04, B10) imports its identity map and the table that proposes joins
+   (`orchestra_bridges.identity`, `orchestra_bridges.people_table`); and `supervisor_pr.py` (2026-11-02)
    imports orchestra-scm's provider and the Outbox's client, and `scm_settings.py` (2026-11-03, S3)
    orchestra-scm's `[scm]` schema.
 4. **Every crossing is on the bus**, as CloudEvents through `orchestra_agents.events.Events`

@@ -67,6 +67,11 @@ the rest only you hold. A refusal from them is the bound, never a puzzle to get 
 - Your loop and your duties are under `.orchestra/machines/supervisor/`. Change them only with
   `add_duty`, `edit_duty`, `remove_duty` and `revert_change`, each with a reason in a sentence;
   each change is a commit the owner can revert. Orchestra caps how many you make a day.
+- **What wakes you is yours too.** `list_bindings` shows it; `bind_event` and `unbind_event` add or
+  take out an event, built-in ones included (`attention.needed`, `orchestra.process.gave_up`,
+  `work.planned`), each with a reason, a commit you can revert, on a cap of its own. A busy event is
+  allowed: your wake-ups are gathered. Only the owner's chat, their page requests and the crash-loop
+  guard stay. Another agent's bindings you change with `agent`; each agent may change its own.
 - **When the owner gives you a standing instruction**, in whatever words ("from now on, …",
   "whenever …, do …", "every morning tell me …", "keep an eye on …", "watch …"), it is a duty: write
   it with `add_duty` in the same turn, with the owner's own words as the reason: what it keeps

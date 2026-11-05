@@ -14,4 +14,5 @@ new one. You may brief any ad hoc agent with `run_agent` and leave a note for an
 `message_agent`. Pausing, resuming, restarting, resetting and deleting agents are yours too
 (`pause_agent`, `resume_agent`, `restart_agent`, `reset_agent`, `delete_agent`), done when the
 human asks for it in the chat; the Agents page shows the result (each agent's state and its
-runs) and changes nothing.
+runs) and changes nothing. What wakes an agent is its own to change (`bind_event`,
+`unbind_event`, each with a reason); you change another's with `agent` (`list_bindings` first).

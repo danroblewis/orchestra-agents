@@ -1145,6 +1145,22 @@ removed), which starts it again; `orchestra.toml` is not touched and nothing is 
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
 someone else changes the overlay in between, the entry is not put back and the answer says so.
 
+`edit_machine_file` (2026-11-04, T54; `machine_files.py`; the owner: "it's just trying to set up the
+Jira machine and it is refusing to make code changes") changes one of Orchestra's own files, setup
+rather than the project's code, with or without the task system: `.orchestra/machines/**`,
+`.orchestra/workflows/**` and `.orchestra/resources/**` in the repository, and `machines/**`,
+`workflows/<name>/workflow.json` and `resources/**` in Orchestra's state directory; every path is
+resolved (symlinks followed, `..` refused) and refused outside those, and also under `.orchestra/plugins`,
+`.orchestra/overrides` (`write_override`'s) and the Supervisor's own spec (the duty tools'). The
+whole text, or an exact replacement of text the file holds once; refused when the new lines hold a
+secret's shape (`config_change.no_secret`). A repository file is one commit on `orchestra/supervisor`
+(`side_branch`, `supervisor_pr`), the checkout untouched but a scaffolded poller's live copy that only
+`.git/info/exclude` ignores (`integrate_branch`), written too; a state-directory file is written in
+place. The previous text is kept (`<state>/agents/machine_edits/<id>.json`), and `revert_change` with
+that id puts it back while the file still holds what was written. A file inside an
+`integrate_system` record's directory has the kit's test run on a copy with the new text, then
+`restart_machine` when the test passed and the live copy changed; the answer carries both.
+
 `restart_process` (2026-11-04, T41; through the core's call since T42; `process_restart.py`)
 restarts one of the launcher's processes by its name in the runtime record, a project's
 `[[machines]]` program or a plugin's (`outbox.sender`), through Orchestra, never a signal or a

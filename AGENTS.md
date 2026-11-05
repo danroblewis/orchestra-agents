@@ -129,7 +129,10 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     to the Coordinator, moved out of the checkout first; the ticket's review and gate land it), never by the Supervisor, which changes only its `machine.toml` (the owner's
     settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
     reference: a variable's name or a file's path; the scaffolded test reads them from `machine.toml`)
-    and the overlay entries that run it. A graduation (`graduate_machine`, invariant 2) moves a
+    and the overlay entries that run it, and (since 2026-11-04, T54, the owner) the files of Orchestra's own
+    places with `edit_machine_file` (`machine_files.py`: `.orchestra/machines|workflows|resources/` on its
+    branch, the state directory's `machines/`, `workflows/<name>/workflow.json` and `resources/` in place),
+    which are setup, not the project's code. A graduation (`graduate_machine`, invariant 2) moves a
     program's files unchanged and writes only the wiring its language needs (a `__main__.py` that
     runs the entry, a script in `package.json`, a `[[bin]]` or a workspace member in `Cargo.toml`):
     no new code, on the owner's quoted yes. So the Supervisor

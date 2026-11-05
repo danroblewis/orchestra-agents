@@ -11,7 +11,7 @@ and is no longer restarted. The wake-up names the process, its last exit code an
 package, an import error, a request that fails, a typo. A cause in its `[[machines]]` entry (a
 wrong command or path) is yours: fix it with `set_machine`, which makes Orchestra try it again. A
 cause in the program is a **bug** for a worker: [[tasking]]hand it to the Coordinator (`hand_to_coordinator`)
-with the outcome[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`): its brief gives[[/workflows]][[no-workflows]]not handed on here (no task system or Workflows plugin: say so, and that installing Workflows is the one step), so say what the owner's fix must do: give[[/no-workflows]] the outcome (the program running and writing again), the error quoted from the log and the
+with the outcome[[/tasking]][[no-tasking]]in one of Orchestra's own machines (`.orchestra/machines/`, the state directory's `machines/`) yours, with `edit_machine_file`; in the project's code [[/no-tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`): its brief gives[[/workflows]][[no-workflows]]not handed on here (no task system or Workflows plugin: say so, and that installing Workflows is the one step), so say what the owner's fix must do: give[[/no-workflows]] the outcome (the program running and writing again), the error quoted from the log and the
 log's name, and the acceptance (the error is gone; the program runs once with `--once` without it,
 when it has that flag). A merged change to the program or its entry makes Orchestra try it again.
 A DONE ticket is never reopened: the fix is always new work, naming the ticket that added the

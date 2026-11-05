@@ -349,7 +349,7 @@ DESIGN_TOOLS: list[ToolDef] = [
             "datacenter: REST API v2, a personal access token sent as Bearer) as well as Cloud, and GitHub Enterprise "
             "(base_url https://<host>/api/v3) as well as github.com. "
             "A failed test, or a system with no template of its own, is [[tasking]]handed to the Coordinator as work (its ticket lands "
-            "the script); call again with the same name once the worker's test passes[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill code-work: request_work with role worker)[[/workflows]][[no-workflows]]not handed on here: say the Workflows plugin is missing and installing it is the one step[[/no-workflows]]. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
+            "the script); call again with the same name once the worker's test passes[[/tasking]][[no-tasking]]yours: fix the script with edit_machine_file (its kit's test runs again, then it restarts)[[/no-tasking]]. Nothing reads the real system until the owner approves: put the answer's ask_owner to them, then "
             "approve_integration.",
             {"system": S("The system's name: jira, github, slack, discord, pagerduty, chronosphere, jenkins"),
              "wants": S("What the owner wants from it, in a sentence (issue transitions and open counts)"),

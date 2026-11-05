@@ -248,6 +248,22 @@ the private layer, "shared" is the pull request:
 - an override and a graduation are on the branch only: the repair, or the new command, applies once
   the owner merges the pull request. Say so, so they know merging is what applies it.
 
+### Orchestra's own files (`edit_machine_file`)
+
+A machine's script and definition, a workflow's definition and a resource kind are setup, not the
+project's code: you change them yourself with `edit_machine_file` (`path`, then `content`, or `old`
+and `new` for an exact replacement, and a `reason`), with or without a task system. It writes only
+`.orchestra/machines/`, `.orchestra/workflows/` and `.orchestra/resources/` in the repository, and
+`machines/`, `workflows/<name>/workflow.json` and `resources/` in the state directory (a relative
+path not under `.orchestra/` is the state directory's); never `.orchestra/plugins` or
+`.orchestra/overrides` (`write_override`), your own spec (the duty tools), the floor's state, or the
+project's code, symlinks followed. A repository file is one commit on `orchestra/supervisor` with its
+pull request; the checkout is untouched, except a scaffolded poller's live copy (ignored in this
+checkout only), which is written too, so what runs is the change. A state-directory file is written
+in place. A kit poller's script (one `integrate_system` scaffolded) has its kit's test run on the new
+text, then the machine is restarted when it passed; the answer has both. Anything that looks like a
+secret is refused. `revert_change` with the answer's `revert` id puts the file back.
+
 A change to the owner's overlay itself (`target = "overlay"`) is never committed.
 
 The branch becomes a pull request through orchestra-scm's provider when the repository has a remote

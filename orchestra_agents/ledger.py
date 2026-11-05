@@ -25,7 +25,7 @@ KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
-           | frozenset({"restart_machine", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
+           | frozenset({"restart_machine", "edit_machine_file", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
                          "draft_upstream_issue", "declare_workflow", "declare_program", "retry_step"}))
 
@@ -80,6 +80,10 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return f"asked the floor to offer {a.get('item')}'s {a.get('step')} again now: {a.get('reason')}"
     if command == "restart_process":
         return f"asked orchestra run to restart the process {result.get('requested') or a.get('name')}: {a.get('reason')}"
+    if command == "edit_machine_file":
+        return (f"changed {result.get('path')}" + (f", commit {result['commit'][:9]} on {result.get('branch')}"
+                                                     if result.get("commit") else " in the state directory")
+                + f" (revert: {result.get('revert')}): {a.get('reason')}") if result.get("changed") else None
     if command == "restart_machine":
         return f"restarted the program {result.get('restarted') or a.get('name')} (pid {result.get('pid_before')} -> {result.get('pid')})"
     if command == "update_project_context":

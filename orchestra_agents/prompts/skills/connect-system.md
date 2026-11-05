@@ -11,7 +11,7 @@ with the system, what the owner wants, their scope and their quote; put its `ask
    library: it scaffolds a script from a kit into the owner's repository (`.orchestra/machines/`;
    the state directory only when they said the repository must stay clean), or configures the one
    already there from that kit (several: name each), tests it and declares
-   the system; a failed test or a system with no template [[tasking]]goes to the Coordinator as work[[/tasking]][[workflows]]is a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]is not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]].
+   the system; a failed test or a system with no template [[tasking]]goes to the Coordinator as work[[/tasking]][[no-tasking]]is yours: fix the script with `edit_machine_file` (its kit's test runs again)[[/no-tasking]].
    Nothing reads it yet. Put its `ask_owner` to the owner: their yes, where the token is (a
    variable's *name* or a file's path, never the token), and what it says is missing. On their
    yes, quoted, `approve_integration` with what they gave. Your guide's "Connecting a system" has

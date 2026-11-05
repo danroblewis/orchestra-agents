@@ -461,6 +461,20 @@ TOOLS: list[ToolDef] = [
             "Restart one of the project's programs ([[machines]]), including one Orchestra gave up on: its entry is taken "
             "out until Orchestra has stopped it, then put back as it was, which starts it again. Nothing is committed.",
             {"name": S("The [[machines]] entry's name"), "reason": S("Why, in a sentence")}, ("name", "reason")),
+    ToolDef("edit_machine_file", "setup",
+            "Change one of Orchestra's own files yourself: setup, not the project's code. Only .orchestra/machines/, "
+            ".orchestra/workflows/ and .orchestra/resources/ in the repository, and machines/, workflows/<name>/"
+            "workflow.json and resources/ in the state directory (a relative path not under .orchestra/ is the state "
+            "directory's); never .orchestra/plugins or .orchestra/overrides (write_override), your own spec (the duty "
+            "tools) or anything else, symlinks followed. A repository file is one commit on your branch (orchestra/"
+            "supervisor) with its pull request, the checkout untouched but a scaffold's ignored live copy; a state file "
+            "is written in place. Refused if it holds what looks like a secret. A kit poller's script has its kit's "
+            "test run, then the machine restarted: both results are in the answer, and revert undoes it (revert_change).",
+            {"path": S("The file: .orchestra/machines/jira_poller/jira_poller.py, or machines/<name>/<file> in the state "
+                       "directory"),
+             "content": S("The whole new file (or old and new)"),
+             "old": S("Text the file holds exactly once, to replace"), "new": S("What replaces old"),
+             "reason": S("Why, in a sentence: the commit's body")}, ("path", "reason")),
     ToolDef("restart_process", "setup",
             "Restart one of the launcher's processes by its name in list_processes (a [[machines]] program or a plugin's, "
             "such as outbox.sender), through Orchestra's launcher, never a signal: the restart is requested and the launcher "
@@ -585,8 +599,9 @@ TOOLS: list[ToolDef] = [
             {"name": S("The duty"), "reason": S("Why, in a sentence")}, ("name", "reason")),
     ToolDef("revert_change", "roles",
             "Undo one commit of your spec (list_duties' history), as a new commit with the reason; never refused for the "
-            "day's cap. Use it when the owner asks, or when a change of yours made things worse.",
-            {"commit": S("The commit's id"), "reason": S("Why, in a sentence")}, ("commit", "reason")),
+            "day's cap; or, with an edit-… id edit_machine_file answered (its revert), put that file back as it was. Use it "
+            "when the owner asks, or when a change of yours made things worse.",
+            {"commit": S("The commit's id, or edit_machine_file's revert id (edit-…)"), "reason": S("Why, in a sentence")}, ("commit", "reason")),
     # patch: self-healing, the Supervisor's alone (patching.py, upstream.py)
     ToolDef("propose_patch", "patch",
             "Repair a bug in the project's own code (work = code): your unified diff is applied and committed in a scratch "

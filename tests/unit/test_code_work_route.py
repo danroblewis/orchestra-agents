@@ -64,8 +64,9 @@ def test_with_workflows_and_no_task_system_code_work_goes_to_a_worker(project, m
     assert '`role: "worker"`' in route and "One-off work" in route                  # else a one-off item
     assert "allow_push" in route and "branch" in route and "nothing is pushed" in route
     assert "the worker role already does this and offer to fill it instead" in route
-    for name in ("setup", "handle-request", "cannot-do", "connect-system", "gave-up"):
+    for name in ("setup", "handle-request", "cannot-do", "gave-up"):
         assert "Workflows item" in skills.text(project, name), name
+    assert "`edit_machine_file`" in skills.text(project, "connect-system")       # a poller's script is setup
 
 
 def test_with_neither_installed_the_supervisor_names_what_is_missing(project, monkeypatch):
@@ -77,7 +78,7 @@ def test_with_neither_installed_the_supervisor_names_what_is_missing(project, mo
     route = flat(skills.text(project, "code-work"))
     assert "what is missing (the Workflows plugin" in route and "the one step that gets it" in route
     assert "Never say you are not capable" in route
-    for name in ("setup", "handle-request", "cannot-do", "connect-system", "gave-up"):
+    for name in ("setup", "handle-request", "cannot-do", "gave-up"):
         assert "installing Workflows is the one step" in flat(skills.text(project, name)) or \
             "the one step that gets it" in flat(skills.text(project, name)), name
 

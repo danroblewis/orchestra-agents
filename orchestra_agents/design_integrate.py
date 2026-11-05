@@ -154,9 +154,8 @@ def _no_kits(system: str) -> dict:
         f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
         "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so " + gate(
             "[[tasking]]hand it to the Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the "
-            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[workflows]]it is a worker's, as a "
-            "Workflows item on a branch (skill code-work)[[/workflows]][[no-workflows]]it is not handed on here (no task system "
-            "or Workflows plugin): say so, and that installing Workflows is the one step[[/no-workflows]]"),
+            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[no-tasking]]it is yours: write it with "
+            "edit_machine_file under .orchestra/machines/<name>/ (Orchestra's own files are setup)[[/no-tasking]]"),
         "a store with a Prometheus API needs no kit: strategy source"],
         "next": f"tell the owner the kits are missing and which route you propose for {kits.title(system)}"}
 
@@ -520,9 +519,8 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         if {"user_env", "user_file"} & set(creds) and "basic" not in (target / f"{name}.py").read_text(encoding="utf-8").casefold():
             lines.append(f"{name}.py does not log in with an account and a token yet (HTTP Basic, auth_format \"Basic "
                          "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so "
-                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[workflows]]it is a "
-                                "worker's, as a Workflows item (skill code-work)[[/workflows]][[no-workflows]]say it is not "
-                                "handed on here (code work) and that installing Workflows is the one step[[/no-workflows]] before saying it reads"))
+                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[no-tasking]]change it "
+                                "yourself with edit_machine_file (its test runs, then it restarts)[[/no-tasking]] before saying it reads"))
     steps = schedule.with_token(rec["steps"], creds)
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]

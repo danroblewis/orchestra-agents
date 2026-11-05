@@ -29,7 +29,7 @@ not done yet, first check whether the system can do it at all:
 4. **Is what is needed running?** `list_processes`. A program Orchestra gave up on, or a collector
    whose rounds fail: read its log. A cause in its entry (a wrong command or path, a timeout too
    short) is yours: `set_machine` or `set_collector`. A cause in its code is a bug for a worker:
-   [[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]]. Once the cause is gone, `restart_machine` starts a program again, and `restart_process` any process
+   [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]in one of Orchestra's own machines (`.orchestra/machines/`, the state directory's `machines/`) yours, with `edit_machine_file`; in the project's code [[/no-tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]]. Once the cause is gone, `restart_machine` starts a program again, and `restart_process` any process
    the launcher stopped retrying (a plugin's too): never before the cause is fixed. A workflow item
    whose step failed (blocked or error: in retry, or `stalled`) is offered again now with
    `retry_step` once you fixed its cause; the reason, and your reply, say what you fixed.

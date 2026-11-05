@@ -131,6 +131,18 @@ Supervisor "use bash for tools", or set `tools_via = "bash"`. With `tools_via = 
 get no Orchestra tools at all and write their results to a file Orchestra reads after each turn
 (`docs/policy-modes.md` compares the three for a policy reviewer).
 
+**Claude Code's sandbox.** With the sandbox on (`sandbox.enabled`, yours or your organisation's), the
+tool command reaches Orchestra's own servers on 127.0.0.1 (the host's events endpoint and the web
+server) only through the sandbox's proxy, and only at the addresses its settings list. The harness
+lists exactly those in the session's settings, `"sandbox": {"network": {"allowedDomains":
+["127.0.0.1:<port>"]}}`, one entry per port, and turns the unsandboxed retry off
+(`allowUnsandboxedCommands: false`); nothing broader (no `allowLocalBinding`, no `excludedCommands`).
+Managed settings win over the session's: if your organisation's set `allowManagedDomainsOnly`, the
+turn stops at the first blocked tool call and the Supervisor's reply names the entry to ask IT to add
+to the managed `allowedDomains`. Give the ports fixed values first (`[events] listen =
+"127.0.0.1:<port>"`, `orchestra web --port <port>`), since the events endpoint's port is otherwise
+picked at each start. The Supervisor never reruns a blocked command outside the sandbox.
+
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
 duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
 review_usd_per_day` and `review_turns_per_day`). Its explore rounds over the declared stores (every `explore_every`, default an hour, 0 off: one

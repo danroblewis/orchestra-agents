@@ -40,6 +40,7 @@ from orchestra.sd.intended.names import ABSENT, WAITS, WAITS_LINK  # noqa: F401 
 from orchestra.sd.intended.names import resolve as _core_resolve
 from orchestra.sd.intended.ops import OPTION
 
+from . import local_http
 from .config import Project
 from .store import StoreError
 
@@ -122,7 +123,7 @@ class Core:
         req = urllib.request.Request(url + path, method=method, data=json.dumps(body).encode() if body is not None else None,
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+            with local_http.urlopen(req, TIMEOUT_S) as r:
                 return json.loads(r.read() or b"{}")
         except urllib.error.HTTPError as e:
             try:

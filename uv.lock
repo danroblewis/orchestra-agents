@@ -420,7 +420,7 @@ wheels = [
 [[package]]
 name = "orchestra"
 version = "1.0.0a1"
-source = { git = "https://github.com/danroblewis/orchestra?rev=main#23f44c6f5576ba00ef6ba2e735e54408d694b360" }
+source = { git = "https://github.com/danroblewis/orchestra?rev=main#8567994e3ef6e3d318694886756a9e6659f5c4a5" }
 dependencies = [
     { name = "fastapi" },
     { name = "psutil" },
@@ -486,7 +486,7 @@ dependencies = [
 [[package]]
 name = "orchestra-scm"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/danroblewis/orchestra-scm?rev=main#ee6fced7c2f2a394a77d3c211301ef3c6d3ad780" }
+source = { git = "ssh://git@github.com/danroblewis/orchestra-scm?rev=main#5088816087532c24195aace30e60bcdfca66b691" }
 dependencies = [
     { name = "orchestra", extra = ["sd"] },
     { name = "orchestra-bridges" },

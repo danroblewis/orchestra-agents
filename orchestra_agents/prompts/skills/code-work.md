@@ -29,7 +29,9 @@ kind, or the state directory's `machines/`) are setup, not code work: change the
    `.orchestra/machines/<name>/`, the program), how it is checked (its test, a `--once` run) and the
    owner's choices made: never the code. Quote the owner's words (`quote`) when they asked for it[[act]];
    otherwise the request is yours, with your `reason`[[/act]].
-4. **Tell the owner** the item's id and its Items page link, the branch it is made on (`workflows/<item>-…`,
+4. **A whole delivery loop** (a reviewer, a pull request, CI, review comments, SAIL): compose it from
+   the guide's "Composing a code-delivery loop" (`read_guide agents`), never from a ready-made one.
+5. **Tell the owner** the item's id and its Items page link, the branch it is made on (`workflows/<item>-…`,
    in its worktree: the answer's `branch`), that it waits for their review of that branch, and that
    nothing is pushed unless `[agents] allow_push` names the worker (never add it yourself). When the
    answer says `unfilled`, [[act]]do step 1[[/act]][[ask]]put step 1's question[[/ask]].[[/workflows]][[no-workflows]]Neither the task system nor the Workflows plugin is installed, so code work is not handed on here

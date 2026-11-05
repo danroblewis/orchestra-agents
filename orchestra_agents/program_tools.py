@@ -34,8 +34,12 @@ from .store import AgentStore, StoreError
 
 ID_CHARS = "lowercase letters, digits and _"
 # what each program the plugin ships is declared with when the call leaves it out (the plugin's guide)
-DEFAULTS = {"relate_prs": {"role": "relate_prs", "timeout": "1m", "exit": {"0": "related", "3": "unrelated"}}}
-NEXT = ("declare_program declares a program the Workflows plugin ships (relate_prs), with your reason (on the owner's yes "
+DEFAULTS = {"relate_prs": {"role": "relate_prs", "timeout": "1m", "exit": {"0": "related", "3": "unrelated"}},
+            # orchestra-scm's, through the plugin's entry point group (its README, "The program step open_pr")
+            "open_pr": {"role": "open_pr", "timeout": "10m",
+                        "exit": {"0": "opened", "3": "no_changes", "4": "failed", "5": "drafted"}}}
+NEXT = ("declare_program declares a program the Workflows plugin ships (relate_prs) or an installed package gives it "
+        "(open_pr, orchestra-scm's), with your reason (on the owner's yes "
         "under [agents] ask = \"always\"); a program of the project's own is code, a worker's to write")
 
 
@@ -45,6 +49,15 @@ def programs_module():
         return import_module("orchestra_workflows.programs.machines")
     except ImportError:
         return None
+
+
+def shipped_programs(m) -> set[str]:
+    """The programs the host can run by name: the plugin's own and those installed packages give
+    (its ``shipped``, W20); only the plugin's own with a plugin older than that."""
+    try:
+        return set(m.shipped())
+    except (AttributeError, TypeError):
+        return set(getattr(m, "SHIPPED", {}) or {})
 
 
 def declared(project: Project) -> set[str] | None:
@@ -146,9 +159,9 @@ def declare_program(project: Project, store: AgentStore, a: dict, role: str) -> 
         raise StoreError("declare_program runs a program on the owner's systems ([agents] ask = \"always\"): quote their yes "
                          "to it (quote), as they said it this session; ask in one sentence first. Nothing was written")
     program = str(a.get("program") or "").strip()
-    shipped = sorted(getattr(m, "SHIPPED", {}) or {})
+    shipped = sorted(shipped_programs(m))
     if program not in shipped:
-        raise StoreError(f"program names one the Workflows plugin ships ({', '.join(shipped) or 'none in this version'}), "
+        raise StoreError(f"program names one the Workflows plugin ships or an installed package gives it ({', '.join(shipped) or 'none in this version'}), "
                          f"not {program!r}: a program of the project's own is code, a worker's to write; nothing was written")
     mid = str(a.get("id") or program).strip()
     if not m.ID.match(mid):

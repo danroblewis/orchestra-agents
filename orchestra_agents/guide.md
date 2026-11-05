@@ -765,6 +765,51 @@ A worked example. The owner: "declare a two-step workflow: write then review". Y
 the quote "declare a two-step workflow" and a reason; then tell the owner where it was written,
 what the notes say, and that its items will show on the Items page.
 
+### Composing a code-delivery loop
+
+When the owner describes how a change goes from a request to a merged pull request ("intake, the
+worker and a reviewer until it is right, then a pull request; back to the worker on CI failures,
+review comments or a rejected SAIL"), compose it yourself from these blocks with `declare_workflow`,
+from their one sentence, without asking review questions. The pattern is orchestra-workflows'
+`examples/delivery_live` (write, open_pr, ci, review, sail, sail_check, triage, with its `on` ends);
+there is no ready-made definition: the steps and their names are the owner's.
+
+- **The worker's step**: `who: {"role": "worker"}`, `needs: ["worktree"]`, outcomes other than
+  `ready` (`implemented`), so the worker reports with `report_outcome` and its `fields`: it writes
+  `pr_title` and `pr_body` into the item, reads the notes on rework (`review_notes`, `ci_notes`,
+  `pr_comments`, `triage_notes`) and never asks the owner (its `code-change` skill).
+- **The AI review**: `who: {"role": "reviewer"}`, `needs: ["worktree"]` (a worktree on the item's branch,
+  so it reads the worker's commits), outcomes `approved` and `changes` (back to the worker; it
+  writes `review_notes`), with `guards: {"rounds": 3, "then": "attention"}`. Both roles need the agents
+  to fill them: `[agents] serves = ["worker", "reviewer"]` (`set_agent_roles`).
+- **The pull request**: the program `open_pr` (orchestra-scm's; read its guide, `read_guide scm`):
+  `declare_program` with `program: open_pr`, then a step `{"who": {"program": "open_pr"}, "outcomes":
+  {"opened": <next>, "no_changes": <the worker's step>, "failed": "attention"}}`. It opens a **draft**,
+  pushes rework to the same pull request, writes `pr_number`, `pr_url`, `number` and `commit`, and makes
+  the pull request (`<repo>#<n>`) the item's child, so the steps after it read GitHub's events with
+  `"of": "children"`. It needs `[scm]` (yours to set) and, without the Outbox, the owner's own `[scm]
+  open_drafts = true` in their overlay: never set it (`set_setting` refuses it); until then it ends
+  `failed` with that line, which you say to the owner once.
+- **CI**: `who: {"outside": "github"}`, `done_when: {"event": "github.checks.completed", "of":
+  "children", "data": {"head_sha": {"item": "commit"}}}`, outcomes `success` and `failure` (back to the
+  worker).
+- **Review on GitHub**: `done_when: {"event": "github.pr.approved", "of": "children"}`; `on`
+  `github.pr.changes_requested` and `github.pr.commented` (each `"of": "children"`) back to the worker.
+- **SAIL**: adding the label is a write. With the Outbox, an `outbox` step drafting it; without it, a
+  `person: owner` step whose done-when is `{"event": "github.pr.labeled", "of": "children", "data":
+  {"label": "SAIL"}}`: the owner's one click, said plainly to them. Then `sail_check` waits for
+  `github.pr.labeled` `SAILED` (the end, outcome `landed`), and `REJECTED` goes to a triage step (a
+  program, or the planner's attention) that sends it back to the worker or retries SAIL for a known flake.
+- **Ends from any step**: `on` `github.pr.merged` and `github.pr.closed` (`"data": {"merged": false}`),
+  each `"of": "children"`, `"to": null` with an outcome; and the ticket moving to Done
+  (`jira.issue.transitioned` `{"category": "done"}`) when the item is the ticket.
+- **What it needs from GitHub**: the bridges' GitHub reader (`integrate_system`, kit `github`, with
+  `branches = ["workflows/*"]`) relays `github.pr.opened`, `.synchronize`, `.labeled`, `.approved`,
+  `.changes_requested`, `.commented` (a review), `.merged`, `.closed` and `github.checks.completed`
+  (`outcome`, `head_sha`), about the pull request. It never carries a comment's or a check's text, and
+  not a conversation comment that is no review: the worker reads those itself (`gh pr view --comments`,
+  `gh pr checks`), which its skill says.
+
 ### Starting a piece of work
 
 When the owner asks for work ("do X", "start Y") and a workflow fits, start it with

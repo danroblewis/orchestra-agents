@@ -132,4 +132,9 @@ def task_text(offer: dict, role: str, path: str | None) -> tuple[str, str]:
              + (f" of workflow {offer['workflow']}" if offer.get("workflow") else ""),
              "", f"Offer: {offer.get('offer')}", where, "", "## Brief", "", str(offer.get("brief") or "(no brief)"), "",
              f"When you are finished, {how} Call it exactly once; after it you are done."]
+    from .floor_skills import (
+        for_offer,  # what the agent knows for this kind of offer, and the item's fields
+    )
+    if more := for_offer(offer, path):
+        lines += ["", more]
     return "\n".join(lines) + "\n", f"You stopped without reporting the outcome. Now {how}"

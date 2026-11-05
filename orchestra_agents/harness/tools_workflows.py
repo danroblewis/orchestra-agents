@@ -170,18 +170,19 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "adopt": ADOPT, "quote": QUOTE, "reason": REASON}, ("definition", "reason")),
     ToolDef("declare_program", "workflows",
             "Declare a program the Workflows plugin ships (relate_prs: relates each pull request to its ticket by the key in "
-            "its branch or title) for a workflow's program step, with your reason (the owner's quoted yes under [agents] ask = "
+            "its branch or title) or an installed package gives it (open_pr, orchestra-scm's: pushes an item's branch and "
+            "opens or updates its draft pull request from the worker's pr_title and pr_body) for a workflow's program step, with your reason (the owner's quoted yes under [agents] ask = "
             "\"always\"): writes machines/<id>/machine.json "
             "in the state directory, which the plugin's program host runs each time the step is offered. The plugin's reader "
             "checks it; with a problem nothing stays written. A token only by its file's path (--token-file) or variable's "
             "name (--token-env), never its value. A workflow step whose program has no machine.json waits there: its goal is "
             "not running until this is done.",
-            {"program": S("The shipped program: relate_prs"),
+            {"program": S("The shipped program: relate_prs, or open_pr"),
              "id": S("The program's id as the step names it (who: {program: <id>}); default: the program's name"),
              "args": A("The program's arguments, as words. relate_prs: --projects HK,PLAT (the Jira projects whose keys "
                        "count), --github <GitHub's API URL> and --token-file <the path the owner gave> to read titles"),
              "exit": {"type": "object", "description": "Exit code -> outcome; relate_prs's default: {\"0\": \"related\", "
-                      "\"3\": \"unrelated\"}"},
+                      "\"3\": \"unrelated\"}; open_pr's: {\"0\": \"opened\", \"3\": \"no_changes\", \"4\": \"failed\", \"5\": \"drafted\"}"},
              "timeout": S("A duration bounding one run (relate_prs: 1m)"),
              "role": S("The role it runs as (default: its id)"),
              "quote": QUOTE, "reason": REASON}, ("program", "reason")),

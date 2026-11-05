@@ -96,7 +96,10 @@ TOOLS: list[ToolDef] = [
             "The outcome is one the offer lists (any, when it lists none); `blocked` means you cannot do it, "
             "with the reason in summary.",
             {"outcome": S("The outcome, as the offer names it, or blocked"),
-             "summary": S("What you did, in a few sentences; when blocked, what you need")}, ("outcome", "summary")),
+             "summary": S("What you did, in a few sentences; when blocked, what you need"),
+             "fields": {"type": "object", "description": "The item's fields to set with the finish, {name: value}: "
+                        "pr_title and pr_body after code work, review_notes after a review asking for changes"}},
+            ("outcome", "summary")),
     # tickets
     ToolDef("project_status", "tickets", "Counts of tickets by state, milestones, capacity, pipeline state."),
     ToolDef("list_milestones", "tickets", "List all milestones with id, name, status, and ticket counts."),

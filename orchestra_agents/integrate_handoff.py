@@ -110,6 +110,19 @@ def who_lands(rec: dict) -> str:
             "(Orchestra's guide, \"Confirming an integration, and what goes wrong\")")
 
 
+def yours(rec: dict) -> str:
+    """Without a Coordinator: the scaffold is one of Orchestra's own files, the Supervisor's to fix."""
+    name = rec["name"]
+    return (f"no Coordinator runs here (no task system), so nothing is handed on: {name}.py in {rec['dir']} is one of "
+            "Orchestra's own files, yours to fix with edit_machine_file (its kit's test runs on the new text); then call "
+            "integrate_system again with the same name")
+
+
+def coordinator_runs() -> bool:
+    from .handoff import coordinator_runs as runs
+    return runs()
+
+
 def hand_on(store: AgentStore, rec: dict, why: str, prov: dict) -> tuple[str, list]:
     """The scaffolded script handed to the Coordinator as work (the way the Supervisor gives work):
     a worker adapts it to the real system until its test passes; never a stop."""

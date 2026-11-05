@@ -249,6 +249,22 @@ the private layer, "shared" is the pull request:
 - an override and a graduation are on the branch only: the repair, or the new command, applies once
   the owner merges the pull request. Say so, so they know merging is what applies it.
 
+### Orchestra's own files (`edit_machine_file`)
+
+A machine's script and definition, a workflow's definition and a resource kind are setup, not the
+project's code: you change them yourself with `edit_machine_file` (`path`, then `content`, or `old`
+and `new` for an exact replacement, and a `reason`), with or without a task system. It writes only
+`.orchestra/machines/`, `.orchestra/workflows/` and `.orchestra/resources/` in the repository, and
+`machines/`, `workflows/<name>/workflow.json` and `resources/` in the state directory (a relative
+path not under `.orchestra/` is the state directory's); never `.orchestra/plugins` or
+`.orchestra/overrides` (`write_override`), your own spec (the duty tools), the floor's state, or the
+project's code, symlinks followed. A repository file is one commit on `orchestra/supervisor` with its
+pull request; the checkout is untouched, except a scaffolded poller's live copy (ignored in this
+checkout only), which is written too, so what runs is the change. A state-directory file is written
+in place. A kit poller's script (one `integrate_system` scaffolded) has its kit's test run on the new
+text, then the machine is restarted when it passed; the answer has both. Anything that looks like a
+secret is refused. `revert_change` with the answer's `revert` id puts the file back.
+
 A change to the owner's overlay itself (`target = "overlay"`) is never committed.
 
 The branch becomes a pull request through orchestra-scm's provider when the repository has a remote
@@ -658,7 +674,7 @@ not installed: tell the owner, and write nothing.
 - **Where they live**: the state directory, `~/.orchestrator/<key>/workflows/<name>/workflow.json`,
   by default; the repository's `.orchestra/workflows/<name>/workflow.json` only when the owner says
   so (quote them). The repository's is not committed by you: [[tasking]]hand it to the Coordinator to land
-  through a ticket[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]].
+  through a ticket[[/tasking]][[no-tasking]]it stays uncommitted in the checkout, live there: say so (a worker's item, skill `code-work`, can carry it onto a branch for the owner's review)[[/no-tasking]].
 - **How**: only with `declare_workflow`, never by writing a file. It checks the definition first;
   a refusal names every problem and writes nothing, so fix them and call it again. Its `notes` say
   what the project still lacks (a program or a resource kind no one declares): say them to the
@@ -687,7 +703,7 @@ When the owner asks for work ("do X", "start Y") and a workflow fits, start it w
 1. `list_workflows`: the workflows a request starts (`starts` holds `{"request": true}`, or is
    empty). One fits: use it. More than one fits: ask the owner which, and request nothing yet.
    None fits: it is [[tasking]]a ticket for the Coordinator (`hand_to_coordinator`), or [[/tasking]]a workflow to
-   declare[[no-tasking]] (code work is not handed on here; say so)[[/no-tasking]].
+   declare[[no-tasking]], or for code work a one-off item for the worker role (`request_work` with `role: worker`, skill `code-work`)[[/no-tasking]].
 2. `request_work` with `workflow`, `brief` (the work in the owner's terms: the first step's
    machine is given it), `quote` (the owner's words asking for it: the request goes out as theirs,
    source `owner`, and without them it is refused), `reason`, and when they say so `parent` (the

@@ -27,9 +27,23 @@ from .store import AgentStore, StoreError
 
 REQUESTED, PLANNED = WORK_REQUESTED, WORK_PLANNED
 REQUESTS_KEPT = 30             # the newest requests remembered in the Supervisor's state
+NO_COORDINATOR = ("refused, nothing published: no Coordinator runs here (it plans into the task system's tickets, and "
+                  "the task system is not installed). The routes that exist: Orchestra's own files (a machine's script "
+                  "or definition, a workflow, a resource kind) you change yourself with edit_machine_file; the "
+                  "project's own code goes to a worker through Workflows (the code-work skill: request_work with role "
+                  "worker)")
+
+
+def coordinator_runs() -> bool:
+    """Whether a Coordinator would answer a hand-off: only with the task system installed (T54: an
+    integration's failed test was handed to a Coordinator the Agents page showed as down)."""
+    from . import installed
+    return installed.tasking()
 
 
 def hand_to_coordinator(store: AgentStore, a: dict, role: str) -> dict:
+    if not coordinator_runs():
+        raise StoreError(NO_COORDINATOR)
     requirements, context = (a.get("requirements") or "").strip(), (a.get("context") or "").strip()
     if len(requirements) < 20:
         raise StoreError("write the requirements out: the outcome wanted, how it is verified, constraints, priority; "

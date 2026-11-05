@@ -23,8 +23,9 @@ sentence, with the evidence.
 **Fixes that are yours**: restart a program (`restart_machine`); set a setting that is plainly
 wrong (`set_setting`, `set_capacity_limit`, `set_gate_unit`); unblock a ticket whose blocker you
 removed (`unblock_ticket`); message or restart an agent (`message_agent`, `restart_agent`); resume
-the pipeline once the base is fixed (`resume_pipeline`); hand a bug to the Coordinator
-(`hand_to_coordinator`); repair a bug through your patch tools (your fixed core). Before each,
+the pipeline once the base is fixed (`resume_pipeline`); [[tasking]]hand a bug to the Coordinator
+(`hand_to_coordinator`); [[/tasking]][[no-tasking]]fix one of Orchestra's own files (`edit_machine_file`);
+[[/no-tasking]]repair a bug through your patch tools (your fixed core). Before each,
 `predict_fix`: what moves, by when, and what must not change; pass its change id to the fix.
 
 **Never**, to unblock anything: cancel or delete work, approve or merge, skip a gate stage or a

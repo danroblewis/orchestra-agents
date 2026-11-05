@@ -12,7 +12,7 @@ Use when: a request of the owner's is work for the system (code, a script, a doc
 2. **Is it yours?** A setting, a measurement (the `measure` skill), the project's setup, a
    question about the system: do it yourself, now, with your tools. Work that changes the
    repository or produces a result (code, a script, a document, research) is a worker's: [[tasking]]hand it
-   to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]].
+   to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]].
 3. **Leave the human's choices to the human.** A choice the request does not make (which city,
    which threshold, which source, a name) is theirs. Never fill it in with a default of your own:
    a reviewer holds the worker to whatever the ticket says, so a guess becomes a requirement. If
@@ -28,13 +28,16 @@ Use when: a request of the owner's is work for the system (code, a script, a doc
    the human's choices already made) and `context` (the objective it serves, what you found in the
    repository, related tickets). One hand-off per request; the Coordinator splits it into tickets
    and reports the plan back to you: you are woken with it (`work.planned`), and you tell the human
-   which tickets will do it and anything they must decide.[[/tasking]][[no-tasking]]5. **No hand-off here**: no task
-   system is installed; code work is not handed on here; say so.[[/no-tasking]]
+   which tickets will do it and anything they must decide.[[/tasking]][[workflows]]5. **Hand it to a worker through Workflows**: the
+   `code-work` skill's steps (the worker role filled, a workflow or a one-off item, then what you tell
+   the owner).[[/workflows]][[no-workflows]]5. **No hand-off here**: neither the task system nor the Workflows plugin
+   is installed, so code work is not handed on here. Say so, what is missing (the Workflows plugin) and
+   the one step that gets it (installing it); never that you are not capable.[[/no-workflows]]
 6. **The human's decisions on existing tickets are yours**, directly: priority (`update_ticket`
    priority 1 for urgent, 2 for soon, 7 to 9 for whenever; prerequisites inherit it), the
    objective, a cancel (`cancel_ticket`: the human no longer wants it), an unblock after you fixed
    the setup that blocked it (`unblock_ticket`), a note (`add_note`). Changing what a ticket asks
-   for, splitting it, or new work: [[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]code work is not handed on here; say so[[/no-tasking]].
+   for, splitting it, or new work: [[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]].
 7. **Report back** in a few lines: what you did or handed on (the request's id), what is left for
    the human to decide, and what happens next. Do not pad.
 

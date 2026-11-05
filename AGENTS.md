@@ -119,7 +119,8 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
     operator controls on tickets are the task system's. The Supervisor changes configuration and
     never edits a file in the checkout; new code is a worker's, through a ticket, a review and the
-    gate. One amendment (2026-11-01, the owner's proposal 4, `machine-design.md` §2.1): a
+    gate, or, without the task system, through a Workflows item for the worker role on its own branch
+    in a worktree, for the owner's review (2026-11-04, T54; `request_work` with `role`). One amendment (2026-11-01, the owner's proposal 4, `machine-design.md` §2.1): a
     measurement script of at most 100 lines is configuration the Supervisor writes, to the state
     directory (`instruments/<name>.sh`, `add_instrument`), with its entry in the owner's overlay, as
     one act, after a trial round; refused over 100 lines or with a line that looks like a secret.
@@ -134,7 +135,10 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     to the Coordinator, moved out of the checkout first; the ticket's review and gate land it), never by the Supervisor, which changes only its `machine.toml` (the owner's
     settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
     reference: a variable's name or a file's path; the scaffolded test reads them from `machine.toml`)
-    and the overlay entries that run it. A graduation (`graduate_machine`, invariant 2) moves a
+    and the overlay entries that run it, and (since 2026-11-04, T54, the owner) the files of Orchestra's own
+    places with `edit_machine_file` (`machine_files.py`: `.orchestra/machines|workflows|resources/` on its
+    branch, the state directory's `machines/`, `workflows/<name>/workflow.json` and `resources/` in place),
+    which are setup, not the project's code. A graduation (`graduate_machine`, invariant 2) moves a
     program's files unchanged and writes only the wiring its language needs (a `__main__.py` that
     runs the entry, a script in `package.json`, a `[[bin]]` or a workspace member in `Cargo.toml`):
     no new code, on the owner's quoted yes. So the Supervisor

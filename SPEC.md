@@ -622,7 +622,7 @@ script when it exists. A rule's conditions:
 `prompt` (a regular expression searched in the turn's prompt; its named groups are
 `{match.<group>}` in the rule's steps and reply), `turn` (the session's nth turn,
 counted from its transcript, or a list of them), `checkout` (whether the working directory is a
-git checkout) and `tasking` (whether the tasking plugin is installed, `installed.tasking`). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
+git checkout), `tasking` (whether the tasking plugin is installed, `installed.tasking`) and `workflows` (whether the Workflows plugin is, `installed.workflows`). Its `steps`, in order: `say` (a message), `write` (a file, with `text` and
 `append`), `run` (a shell command in the working directory; its output and status are the
 result, and the script goes on), `commit` (everything, with this message; a commit even when
 nothing changed), `tool` (an agents' tool, with `args`; a refusal is the result, and the script
@@ -1165,6 +1165,22 @@ removed), which starts it again; `orchestra.toml` is not touched and nothing is 
 a plugin's process (it restarts with `orchestra run`) or a collector (it runs on its interval). If
 someone else changes the overlay in between, the entry is not put back and the answer says so.
 
+`edit_machine_file` (2026-11-04, T54; `machine_files.py`; the owner: "it's just trying to set up the
+Jira machine and it is refusing to make code changes") changes one of Orchestra's own files, setup
+rather than the project's code, with or without the task system: `.orchestra/machines/**`,
+`.orchestra/workflows/**` and `.orchestra/resources/**` in the repository, and `machines/**`,
+`workflows/<name>/workflow.json` and `resources/**` in Orchestra's state directory; every path is
+resolved (symlinks followed, `..` refused) and refused outside those, and also under `.orchestra/plugins`,
+`.orchestra/overrides` (`write_override`'s) and the Supervisor's own spec (the duty tools'). The
+whole text, or an exact replacement of text the file holds once; refused when the new lines hold a
+secret's shape (`config_change.no_secret`). A repository file is one commit on `orchestra/supervisor`
+(`side_branch`, `supervisor_pr`), the checkout untouched but a scaffolded poller's live copy that only
+`.git/info/exclude` ignores (`integrate_branch`), written too; a state-directory file is written in
+place. The previous text is kept (`<state>/agents/machine_edits/<id>.json`), and `revert_change` with
+that id puts it back while the file still holds what was written. A file inside an
+`integrate_system` record's directory has the kit's test run on a copy with the new text, then
+`restart_machine` when the test passed and the live copy changed; the answer carries both.
+
 `restart_process` (2026-11-04, T41; through the core's call since T42; `process_restart.py`)
 restarts one of the launcher's processes by its name in the runtime record, a project's
 `[[machines]]` program or a plugin's (`outbox.sender`), through Orchestra, never a signal or a
@@ -1641,6 +1657,33 @@ Refused with nothing published: the plugin not installed, a workflow the loader 
 request does not start, an id the record already holds, and no floor to offer it (no live
 `orchestra run`, or its `workflows.floor` process not running). The answer carries the id, the
 Items page link (`/items/<id>`) and `explain_item` to follow it.
+
+**Code work without the task system** (2026-11-04, T54; the owner's report: a Supervisor with
+Workflows installed said it could not do coding work). `request_work` with `role` in place of
+`workflow` publishes the contract's role-only `item.requested` (`role`, `brief`, `needs`, `planner:
+supervisor`), offered once to the role: code work is `role: worker` with `needs: ["worktree"]`, made
+on the item's branch (`workflows/<item>-…`) in its worktree, pushed only if `allow_push` names the
+role; the answer says the branch and, when no agent fills the role (`floor_roles.served`), that
+`set_agent_roles` is to be proposed. The texts' third condition (`tasking_text.gate`):
+`[[workflows]]…[[/workflows]]` holds with Workflows and no task system, and routes code work to the
+worker (skill `code-work`: the role filled on the owner's yes, a code-change workflow or a one-off
+item, then the item, the branch and what is pushed); `[[no-workflows]]…[[/no-workflows]]` holds with
+neither, where code work is not handed on and the Supervisor names the missing plugin and the one
+step that installs it. A new agent is never designed for code work: the built-in worker does it.
+After `approve_integration`, with Workflows installed, the answer and the `connect-system` skill
+propose a workflow that makes the system's items items, observe only.
+
+**No Coordinator without the task system** (T54 addendum, the owner: "it says it sent a change to the
+Coordinator ... but it says it's down"). The Coordinator is never started without the task system
+(`org.needs_task_system`), so nothing hands work to it: `hand_to_coordinator` (every caller: the
+tool, an integration's failed test or missing template, a measurement script for the repository, a
+machine switched to Programmatic) refuses before publishing `work.requested` (`handoff.NO_COORDINATOR`,
+naming `edit_machine_file` for Orchestra's own files and a worker through Workflows for the project's
+code); `propose_patch` refuses before its scratch worktree; an integration's failed test stays in
+place for `edit_machine_file`. The built-in duty `hand_to_planner` is not in force
+(`supervisor_spec.inactive`: left out of the prompt, `inactive` in `list_duties`), and `keep_flow`'s
+hand-off line is gated. The agent views carry `not_used: "needs the task system"` for it, and the
+Agents page shows "not used: needs the task system", never "down".
 
 ## 11. The model and predictions (`modeling.py`, `model_text.py`, `run_text.py`, `verdicts.py`, `prompts/modeling.md`)
 

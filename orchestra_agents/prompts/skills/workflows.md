@@ -21,3 +21,6 @@ Use when: the owner describes how a piece of work moves (its steps and who does 
   running"; repeat every `notes` line `declare_workflow` answers. Before you say what items carry ("each carrying the
   ticket key"), a bound or an interval, read it (`explain_item`, the tool's own answer): never claim
   one a tool has not shown you.
+
+- A system just connected that has items (tickets, incidents, threads): the `connect-system`
+  skill's last paragraph proposes the workflow that makes them items, observe only.

@@ -195,8 +195,9 @@ def confirm(project: Project, store: AgentStore, a: dict, prov: dict) -> dict:
         lines.append("its program is the workflow's: the Workflows plugin's program host runs it when the step is offered "
                      "(not a launcher process, so list_processes does not list it); its machine.json is declared")
     elif here:
-        lines.append(gate("next: the program is a worker's to write ([[tasking]]hand_to_coordinator[[/tasking]][[no-tasking]]"
-                          "code work is not handed on here; say so[[/no-tasking]]) unless it exists; when it does, "
+        lines.append(gate("next: the program is a worker's to write ([[tasking]]hand_to_coordinator[[/tasking]][[workflows]]"
+                          "a Workflows item, skill code-work[[/workflows]][[no-workflows]]not handed on here: "
+                          "say so, and that installing Workflows is the one step[[/no-workflows]]) unless it exists; when it does, "
                           "set_machine adds its [[machines]] entry, in the overlay"))
     else:
         lines.append("nothing runs here: the declaration waits to be heard on the bus or measured")

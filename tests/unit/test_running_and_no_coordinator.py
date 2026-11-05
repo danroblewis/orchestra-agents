@@ -31,6 +31,7 @@ PROPOSED = {"author": "workflows", "source": "workflow review_nudger", "reason":
 @pytest.fixture
 def no_tasking(monkeypatch):
     monkeypatch.setattr(installed, "tasking", lambda: False)
+    monkeypatch.setattr(installed, "workflows", lambda: False)      # neither: code work not handed on (test_code_work_route)
 
 
 def fake_plugin(monkeypatch, steps: dict[str, list[tuple[str, str]]]):
@@ -143,7 +144,7 @@ def test_without_the_task_system_no_text_names_a_coordinator(project, store, no_
     for text in (prompt, tools, flows):
         assert "coordinator" not in text.lower()
         assert "[[tasking]]" not in text and "[[no-tasking]]" not in text and "[[/" not in text
-    assert "code work is not handed on here; say so" in " ".join(prompt.split())
+    assert "not handed on here: no task system or Workflows plugin is installed; say so" in " ".join(prompt.split())
 
 
 def test_with_the_task_system_the_coordinator_is_named(project, monkeypatch):

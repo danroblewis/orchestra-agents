@@ -11,10 +11,12 @@ from . import prompting
 from .clock import parse_interval
 from .config import Project
 from .harness.tools import tools_for
-from .org import AgentDef, TeamDef, effective_tools, members_of, team_chain
+from .org import AgentDef, TeamDef, effective_tools, members_of, needs_task_system, team_chain
 from .org_store import RepoOrgStore, all_agents, all_teams
 from .roles import RoleDef, all_roles
 from .store import AgentStore
+
+NOT_USED = "needs the task system"     # the Coordinator without it: never started, never "down" (T54)
 
 
 def role_definition(project: Project, role: RoleDef) -> dict:
@@ -50,7 +52,8 @@ def agent_view(project: Project, store: AgentStore, ag: AgentDef, teams: dict | 
             "paused_why": st.get("paused_why") if st.get("paused") else None,
             "last_woken": st.get("last_woken"), "last_turn": st.get("last_turn"), "next_scheduled_at": st.get("next_scheduled_at"),
             "next_review_at": st.get("next_review_at"),
-            "every_seconds": parse_interval(ag.every) if ag.every else None}
+            "every_seconds": parse_interval(ag.every) if ag.every else None,
+            **({"not_used": NOT_USED} if needs_task_system(ag) else {})}
 
 
 def agent_definition(project: Project, store: AgentStore, ag: AgentDef) -> dict:
@@ -121,7 +124,8 @@ def agents_status(project: Project, store: AgentStore) -> dict:
     for a in all_agents(project).values():
         st = rt["agent_state"].get(a.name) or {}
         last = None if a.resident or a.builtin else next(iter(agent_runs(store, a)), None)
-        agents.append({"id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team,
+        agents.append({**({"not_used": NOT_USED} if needs_task_system(a) else {}),
+                       "id": a.name, "name": a.name, "kind": "agent", "description": a.description, "team": a.team,
                        "session_id": a.session_id, "resident": a.resident, "paused": bool(st.get("paused")),
                        "paused_why": st.get("paused_why") if st.get("paused") else None,
                        "last_woken": st.get("last_woken"), "last_turn": st.get("last_turn"),

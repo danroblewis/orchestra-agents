@@ -93,7 +93,7 @@ def check_script(text: str) -> list[str]:
     lines = text.splitlines()
     if len(lines) > MAX_LINES:
         raise StoreError(f"the script is {len(lines)} lines; one the Supervisor writes is at most {MAX_LINES} (anything longer is "
-                         "code: " + gate("[[tasking]]hand it to the Coordinator[[/tasking]][[no-tasking]]not handed on here; say so[[/no-tasking]])"))
+                         "code: " + gate("[[tasking]]hand it to the Coordinator[[/tasking]][[workflows]]a worker's, as a Workflows item (skill code-work)[[/workflows]][[no-workflows]]not handed on here; say so, and that installing Workflows is the one step[[/no-workflows]])"))
     for n, line in enumerate(lines, 1):
         if why := secret_in(line):
             raise StoreError(f"line {n} looks like it holds a secret ({why}); a credential is named only by its environment "
@@ -215,6 +215,10 @@ def add_instrument(project: Project, store: AgentStore, a: dict, prov: dict) -> 
         trial.write_text(script if script.startswith("#!") else "#!/bin/sh\n" + script, encoding="utf-8")
         trial.chmod(0o755)
         command = str(trial)
+    if a.get("where") == "repo" and not handoff.coordinator_runs():
+        if script:
+            Path(command).unlink(missing_ok=True)
+        raise StoreError(handoff.NO_COORDINATOR + "; a measurement script goes to the state directory: where state")
     tried = instruments.try_collector(project, {"command": command} if kind == "collect" else {"url": url})
     if script and (not tried.get("works") or a.get("where") == "repo"):
         Path(command).unlink(missing_ok=True)

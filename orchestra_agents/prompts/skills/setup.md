@@ -68,4 +68,4 @@ reviewed and, in code work, tested and landed.
   Actions, each file, its triggers and jobs), never "CI is defined" alone. Offer only what lies in
   the project's tree or in a system the owner names: never offer to read a folder outside it (a
   script's output under `~` is theirs to point a tool at, not yours to propose reading). Setting up creates no tickets: work that needs code (a collector script, a missing test)
-  is [[tasking]]handed to the Coordinator once the human allows code work[[/tasking]][[no-tasking]]not handed on here (code work is not handed on here; say so)[[/no-tasking]].
+  is [[no-tasking]]yours when it is one of Orchestra's own files (`.orchestra/machines/`, workflows, resource kinds: `edit_machine_file`), and in the project's code [[/no-tasking]][[tasking]]handed to the Coordinator once the human allows code work[[/tasking]][[workflows]]a worker's, as a Workflows item on a branch (skill `code-work`)[[/workflows]][[no-workflows]]not handed on here: no task system or Workflows plugin is installed; say so, and that installing Workflows is the one step[[/no-workflows]].

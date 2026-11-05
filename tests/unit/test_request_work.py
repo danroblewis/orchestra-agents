@@ -88,7 +88,7 @@ def published(store, since):
 def test_the_tool_is_the_supervisors_and_the_coordinators():
     assert BY_NAME["request_work"].group == "work"
     assert {n for n, r in ROLES.items() if "work" in r.tools} == {"supervisor", "coordinator"}
-    assert BY_NAME["request_work"].input_schema["required"] == ["workflow", "brief", "reason"]
+    assert BY_NAME["request_work"].input_schema["required"] == ["brief", "reason"]
 
 
 def test_the_supervisors_request_is_the_owners_with_their_words(project, store, fake, floor):

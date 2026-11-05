@@ -215,11 +215,15 @@ WORKFLOW_TOOLS: list[ToolDef] = [
                          "agent's key is loaded again)")}, ("item", "step", "reason")),
     ToolDef("request_work", "work",
             "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
-            "with the fields, if any). The Supervisor asks only for the owner: quote their words, and the request goes "
+            "with the fields, if any). With role in place of workflow, a one-off item that role does once: code work is "
+            "role worker with needs [\"worktree\"], made on the item's branch in a worktree, pushed only if allow_push "
+            "names the role. The Supervisor asks only for the owner: quote their words, and the request goes "
             "out as theirs (source owner)[[tasking]]; the Coordinator's is its own, as the planner[[/tasking]]. Refused, nothing published: "
             "an unknown workflow or one a request does not start (list_workflows), an id already used, or the floor "
             "not running. Answers the item's id, the Items page link and how to follow it (explain_item).",
-            {"workflow": S("The workflow's name, as list_workflows shows it (task_loop)"),
+            {"workflow": S("The workflow's name, as list_workflows shows it (task_loop); or leave it out and give role"),
+             "role": S("A one-off item's role, in place of workflow: worker for code work"),
+             "needs": A("A one-off item's resource kinds: [\"worktree\"] for code work"),
              "brief": S("The work asked for, in the owner's terms: what the first step's machine is given"),
              "parent": S("The parent item's id, when this is part of a larger item"),
              "fields": {"type": "object", "description": "The item's fields to set at once, {name: value}: "
@@ -228,5 +232,5 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "quote": S("The Supervisor's: the owner's own words asking for this work, from their message this turn, "
                         "exactly, at least three words (or their whole message). Required of the Supervisor; never "
                         "invent one.[[tasking]] The Coordinator leaves it out[[/tasking]]"),
-             "reason": REASON}, ("workflow", "brief", "reason")),
+             "reason": REASON}, ("brief", "reason")),
 ]

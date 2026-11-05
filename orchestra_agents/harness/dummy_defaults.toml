@@ -72,13 +72,22 @@ role = "supervisor"
 prompt = "(?s)\\[The human's message\\].*(?i:\\b(?:harness|claude|haiku|sonnet|opus)\\b|\\b(?:use|switch to|change|another) (?:the |a )?model\\b)"
 reply = "I am a scripted Supervisor (the dummy harness): I cannot change the harness. Install Claude Code and log in once (run claude), then restart orchestra run."
 
-# A chat message without the task system: the Coordinator plans into tickets, which only the
-# tasking plugin keeps, so nothing is handed on; the reply says so and what would do the work.
+# A chat message with the Workflows plugin and no task system: the owner's words go to the built-in
+# worker as a one-off Workflows item on a branch in a worktree (skill code-work), never a refusal.
 [[rule]]
 role = "supervisor"
 prompt = "\\[The human's message\\]"
 tasking = false
-reply = "I am a scripted Supervisor (the dummy harness), and I changed nothing: I cannot do the work myself, and the Coordinator I would hand it to plans requests into tickets, which need the tasking plugin (orchestra-tasking), not installed here. For the work to be done, install Claude Code and log in once (run claude), then restart orchestra run: a real Supervisor starts it as an item on a workflow (request_work), and the Items page follows it."
+workflows = true
+steps = [{ tool = "request_work", args = { role = "worker", needs = ["worktree"], brief = "The owner asked for this, in their words: {message}", quote = "{message}", reason = "Handed on by the scripted Supervisor (the dummy harness), word for word." } }]
+
+# A chat message with neither the task system nor Workflows: nothing hands work on; the reply says
+# what is missing and the one step that gets it.
+[[rule]]
+role = "supervisor"
+prompt = "\\[The human's message\\]"
+tasking = false
+reply = "I am a scripted Supervisor (the dummy harness), and I changed nothing: neither the task system (orchestra-tasking) nor the Workflows plugin (orchestra-workflows) is installed here, so nothing hands the work on. The one step: install the Workflows plugin and restart orchestra run; then the work goes to a worker on a branch (request_work), and the Items page follows it."
 
 # A chat message with the task system: handed to the Coordinator as the human's requirements, as a real Supervisor does.
 [[rule]]

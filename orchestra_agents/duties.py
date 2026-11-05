@@ -62,6 +62,12 @@ def _known_types() -> set[str]:
 def handle(project: Project, store: AgentStore, command: str, a: dict[str, Any], role: str) -> dict:
     if role != MACHINE:
         raise StoreError(f"refused {command}: a machine's spec is changed only by the Supervisor (the caller is {role or 'none'!r})")
+    if command == "revert_change" and str(a.get("commit") or "").startswith("edit-"):     # a file edit_machine_file wrote
+        from . import machine_files
+        reason = (a.get("reason") or "").strip()
+        if len(reason) < 10:
+            raise StoreError("give the reason in a sentence: it goes in the commit and the ledger")
+        return machine_files.revert(project, store, a["commit"].strip(), reason)
     machine = (a.get("machine") or MACHINE).strip()
     if machine != MACHINE:
         raise StoreError("only the Supervisor's own spec is changed with these tools for now (splitting into new machines comes later)")
@@ -222,8 +228,10 @@ def _revert(project: Project, store: AgentStore, a: dict, reason: str) -> dict:
 
 
 def _list(project: Project, store: AgentStore, spec: MachineSpec) -> dict:
+    from .supervisor_spec import inactive
     duties = [{"name": d.name, "about": d.about, "builtin": d.builtin, "listens": d.listens, "tools": d.tools,
-               "added_by": d.added_by, "reason": d.reason, **({"text": spec.duty_text(d)} if not d.builtin else {})}
+               "added_by": d.added_by, "reason": d.reason, **({"text": spec.duty_text(d)} if not d.builtin else {}),
+               **({"inactive": why} if d.builtin and (why := inactive(d.name)) else {})}
               for d in spec.duties]
     try:
         notes = lint(spec, _groups(project), _known_types())

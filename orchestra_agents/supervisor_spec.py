@@ -25,6 +25,18 @@ BUILTIN_DUTIES = (
     ("hand_to_planner", "hand the owner's requirements to the Coordinator (work.requested) and tell them its plan (work.planned)"),
 )
 
+TASK_SYSTEM_DUTIES = frozenset({"hand_to_planner"})     # a built-in duty that needs the Coordinator, so the task system
+
+
+def inactive(name: str) -> str | None:
+    """Why a built-in duty is not in force now, or None (T54: without the task system the Supervisor
+    still handed work to a Coordinator that never runs)."""
+    from . import installed
+    if name in TASK_SYSTEM_DUTIES and not installed.tasking():
+        return ("not in force: it hands work to the Coordinator, which runs only with the task system (not installed "
+                "here); Orchestra's own files are edit_machine_file's, the project's code a worker's through Workflows")
+    return None
+
 
 def starting(at: str | None = None) -> MachineSpec:
     at = at or time.strftime("%Y-%m-%d")

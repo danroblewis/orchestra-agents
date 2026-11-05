@@ -44,7 +44,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import design_dynamics, design_machines, integrate_heard
+from . import design_dynamics, design_machines, installed, integrate_heard
 from . import integrate_address as address
 from . import integrate_branch as branch
 from . import integrate_handoff as handoff
@@ -154,8 +154,8 @@ def _no_kits(system: str) -> dict:
         f"Orchestra's environment ({kits.REINSTALL}) and you call integrate_system again; without them, the program "
         "is the one-file poller of §5.2 beside minikit.py (§4, \"Without the kits\"), with its own fake and test: that is code, so " + gate(
             "[[tasking]]hand it to the Coordinator (hand_to_coordinator) with the system, what the owner wants, and §3's rules (the "
-            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[no-tasking]]it is not handed "
-            "on here (no task system): say so[[/no-tasking]]"),
+            "token by its variable's name, clearance before any read, metadata only)[[/tasking]][[no-tasking]]it is yours: write it with "
+            "edit_machine_file under .orchestra/machines/<name>/ (Orchestra's own files are setup)[[/no-tasking]]"),
         "a store with a Prometheus API needs no kit: strategy source"],
         "next": f"tell the owner the kits are missing and which route you propose for {kits.title(system)}"}
 
@@ -309,6 +309,9 @@ def _retest(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     _save(store, name, rec)
     tail = "; ".join((test.get("tail") or [])[-3:])
     lines = [f"its test in {target} still does not pass ({test['summary']}" + (f": {tail}" if tail else "") + ")"]
+    if not handoff.coordinator_runs():
+        lines.append(handoff.yours(rec))
+        return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": rec["dir"], "test": test}
     if not rec.get("request"):
         rec["request"], said = handoff.hand_on(store, rec, f"its test against the kit's fake fails ({test['summary']})", prov)
         _save(store, name, rec)
@@ -350,6 +353,12 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     if not test["passed"]:
         rec["state"] = "test failed"
         tail = "; ".join((test.get("tail") or [])[-3:])
+        if not handoff.coordinator_runs():               # no Coordinator: the script is fixed here, never handed on
+            _save(store, name, rec)
+            lines.append(handoff.yours(rec))
+            return {"ok": True, "integrated": False, "said": lines, "integration": name, "dir": rec["dir"], "test": test,
+                    "next": "Tell the owner the script is scaffolded at the path above and its test failed; fix it with "
+                            "edit_machine_file, then call integrate_system again."}
         handoff.move_out(project, rec)
         _save(store, name, rec)
         rec["request"], said = handoff.hand_on(store, rec, f"its test against the kit's fake failed ({test['summary']}"
@@ -366,6 +375,10 @@ def _tested(project: Project, store: AgentStore, a: dict, prov: dict, rec: dict,
     rec["steps"] = schedule.poller(name, home, every, events=events)
     rec.update(state=NEEDS, machine=mid, stock=sid)
     hand = not kits.templated(kit) and not rec.get("request") and not rec.get("adopted")
+    if hand and not handoff.coordinator_runs():          # no Coordinator: the guess is the Supervisor's to adapt
+        hand = False
+        lines.append(f"the kits have no template for {kits.title(system)}, so the script is the generic http kit's guess at "
+                     "a JSON API: " + handoff.yours(rec))
     if hand:
         handoff.move_out(project, rec)
     _save(store, name, rec)
@@ -519,8 +532,8 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
         if {"user_env", "user_file"} & set(creds) and "basic" not in (target / f"{name}.py").read_text(encoding="utf-8").casefold():
             lines.append(f"{name}.py does not log in with an account and a token yet (HTTP Basic, auth_format \"Basic "
                          "{basic}\"; Jira Cloud's search is /rest/api/3/search/jql): that is a change to the script, so "
-                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[no-tasking]]say it "
-                                "is not handed on here (code work)[[/no-tasking]] before saying it reads"))
+                         + gate("[[tasking]]hand it to the Coordinator (hand_to_coordinator)[[/tasking]][[no-tasking]]change it "
+                                "yourself with edit_machine_file (its test runs, then it restarts)[[/no-tasking]] before saying it reads"))
     steps = schedule.with_token(rec["steps"], creds)
     if rec["strategy"] == "source":
         steps = [{**s, "entry": {**s["entry"], "url": base_url}} for s in steps]
@@ -545,9 +558,18 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
                 missing.append(f"{v}: the file, chmod 600" if state == "not there yet" else f"chmod 600 {v}")
     said, more = _confirm_heard(store, rec, project)
     lines += said
+    if installed.workflows():
+        lines.append(items_follow_up(kits.title(rec["system"])))
     return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds, **more,
                   token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
                   owner_must_set=missing)
+
+
+def items_follow_up(title: str) -> str:
+    """The line after a connection, with the Workflows plugin installed: its items as a workflow, observe only."""
+    return (f"next: if {title} has items (tickets, incidents, threads), propose in one sentence a workflow that makes them "
+            "items, naming the items and the stocks the owner gets (each step's count and the moves between steps, which "
+            f"discovery finds), observe only, writing nothing to {title} (skill connect-system); declare it only on their yes")
 
 
 def heard(store: AgentStore, system: str) -> list[str]:

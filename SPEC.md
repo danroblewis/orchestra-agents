@@ -1707,7 +1707,7 @@ prediction for every fix, the rules of self-healing), its built-in prompt
 **The prompt stays small; skills are read on demand** (the owner, 2026-11-04: "we should stay under
 35k for a regular system prompt and split the rest into separate prompt files"). The system prompt
 as the harness sends it (the core, the role, the always-needed rules, the skill index, the spec, the
-tools it holds) is under 35,000 characters (`tests/unit/test_prompt_size.py` fails above it). The
+tools it holds) is under 35,000 tokens, estimated at 3.5 characters a token (`tests/unit/test_prompt_size.py` fails above it). The
 know-how for each kind of work is a skill, `prompts/skills/<name>.md`: a title, a `Use when:` line
 (the index lists each by name with it) and the text, filled and gated like the prompt (`skills.py`).
 The Supervisor reads one with `read_skill` (group `guides`; at most 12,000 characters a piece, a

@@ -1,6 +1,7 @@
-"""The Supervisor's system prompt, as the harness sends it, stays under 35,000 characters (the owner,
+"""The Supervisor's system prompt, as the harness sends it, stays under 35,000 tokens (the owner,
 2026-11-04: "we should stay under 35k for a regular system prompt and split the rest into separate
-prompt files"): its fixed core, its role, its always-needed rules, the index of its skills, its
+prompt files", and then: "that was a 35k limit for tokens, not for characters"), estimated from its
+characters at 3.5 a token, on the safe side of English prose's usual 4: its fixed core, its role, its always-needed rules, the index of its skills, its
 machine spec and the tools it holds (by name through the MCP server; with their arguments when they
 are called from the shell, the larger)."""
 
@@ -14,7 +15,12 @@ from orchestra_agents.builtins import ROLES
 from orchestra_agents.harness import bash_tools
 from orchestra_agents.org import built_in_agents
 
-LIMIT = 35_000
+LIMIT_TOKENS = 35_000
+CHARS_PER_TOKEN = 3.5             # an estimate, low on purpose: the guard fails early, never late
+
+
+def tokens(text: str) -> int:
+    return round(len(text) / CHARS_PER_TOKEN)
 
 
 def _project(tmp_path, monkeypatch, work: str):
@@ -40,13 +46,13 @@ def sent(project, via: str) -> str:
 @pytest.mark.parametrize("tasking", [True, False])
 @pytest.mark.parametrize("work", ["tasks", "code"])
 @pytest.mark.parametrize("via", ["mcp", "bash"])
-def test_the_supervisors_prompt_as_sent_is_under_35000_characters(tmp_path, monkeypatch, tasking, work, via):
+def test_the_supervisors_prompt_as_sent_is_under_35000_tokens(tmp_path, monkeypatch, tasking, work, via):
     monkeypatch.setattr(installed, "tasking", lambda: tasking)
     project = _project(tmp_path, monkeypatch, work)
     text = sent(project, via)
     assert "## Your machine spec" in text and "### Duty `keep_flow`" in text       # the spec is counted
     assert "## Skills: read the one a request needs" in text and "`setup`: " in text
-    assert len(text) < LIMIT, f"{len(text):,} characters ({via}, work={work}, tasking={tasking})"
+    assert tokens(text) < LIMIT_TOKENS, f"about {tokens(text):,} tokens, {len(text):,} characters ({via}, work={work}, tasking={tasking})"
 
 
 def test_the_always_needed_rules_stay_in_the_prompt(tmp_path, monkeypatch):

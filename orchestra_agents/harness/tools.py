@@ -524,6 +524,27 @@ TOOLS: list[ToolDef] = [
             {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
              "section": S("A section's heading (or part of it), from the guide's contents"),
              "offset": I("Where to read on in a long section, as its last answer says (default 0)")}, ("name",)),
+    # delegate: a bounded job in a sub-session of its own (delegate.py), the Supervisor's alone
+    ToolDef("delegate", "delegate",
+            "Run one bounded job in a one-shot sub-session (your harness, the job's skill as its whole prompt, a cheaper "
+            "model when [agents] delegate_model is set) and get its short report: its reads never enter your context. Its "
+            "spend counts toward your caps. survey: one declared store's families, levels and flows; scaffold_poller: "
+            "scaffold and test a named system's poller (integrate_system), its ask_owner returned for you to put to the "
+            "owner; judge_experiment: judge the explore round's last experiment and record the verdict.",
+            {"job": {"type": "string", "enum": ["survey", "scaffold_poller", "judge_experiment"], "description": "The job"},
+             "brief": S("Everything the job needs, since the sub-session knows nothing else: the store and its bound, the "
+                        "system with the owner's scope and quote, or the experiment's id")}, ("job", "brief")),
+    ToolDef("read_answer", "guides",
+            "A part of a tool answer that came back trimmed (its last line names its id, a-…, and the next part): the whole "
+            "answer is kept, so the same call need not run again. Read on only for the part you need.",
+            {"id": S("The answer's id, from its trimmed last line (a-…)"), "part": I("The part to read: 2 for the second")},
+            ("id",)),
+    ToolDef("read_skill", "guides",
+            "One of your skills (your prompt's index names each, with when to use it): the steps, the order of your tools "
+            "and the pitfalls for one kind of work. Read it before your first change for that work in a session. A long "
+            "one ends with where to read on (offset).",
+            {"name": S("The skill's name, from your prompt's index (setup, measure, store-setup, ...)"),
+             "offset": I("Where to read on in a long skill, as its last answer says (default 0)")}, ("name",)),
     # handoff: the Supervisor passes the human's requirements to the Coordinator, who plans them
     ToolDef("hand_to_coordinator", "handoff",
             "Hand the human's requirements to the Coordinator, who plans them into a milestone and tickets and reports "
@@ -616,7 +637,7 @@ PAGED = frozenset({
     "read_machine_log", "list_metrics", "get_model", "read_instrument", "check_sources", "source_schema",
     "preview_query", "infer_source", "explore_source", "read_discovery_runs", "read_experiments", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
     "read_design", "find_balance", "modeling_guide", "read_model", "read_series", "read_eras", "read_observability",
-    "check_equation", "read_predictions", "list_guides", "read_guide", "list_workflows", "list_items", "explain_item"})
+    "check_equation", "read_predictions", "list_guides", "read_guide", "read_skill", "list_workflows", "list_items", "explain_item"})
 PAGE_ARG = I("The answer's page, when it came back cut (its last line says so): 2 for the second; default 1")
 TOOLS[:] = [replace(t, properties={**t.properties, PAGE: PAGE_ARG}) if t.name in PAGED else t for t in TOOLS]
 BY_NAME = {t.name: t for t in TOOLS}

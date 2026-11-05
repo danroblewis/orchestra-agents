@@ -244,11 +244,14 @@ class ClaudeCodeSession(AgentSession):
         args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
         if (settings := self._settings(via)) is not None:
             args += ["--settings", str(settings)]
+        if self.spec.skills:              # its skills, as Claude Code's own (skills.py; read_skill gives the same text)
+            from ..skills import write_claude
+            args += ["--add-dir", str(write_claude(self.spec.skills, self._dir / f"{self.spec.session_id}.skills"))]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""
         if via == "bash":
-            system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self._env().get('PATH'))}"
+            system = bash_tools.system(system, self.spec.tool_groups, self._env().get('PATH'))
         if system:
             sp = self._dir / f"{self.spec.session_id}.system.md"
             sp.write_text(system, encoding="utf-8")

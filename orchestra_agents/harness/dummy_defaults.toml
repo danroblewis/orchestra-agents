@@ -39,6 +39,13 @@ prompt = "\\[First run: set up this project\\]"
 steps = [{ tool = "list_guides" }]
 reply = "I am a scripted Supervisor (the dummy harness): I cannot read your repository, so I set nothing up. Install Claude Code and log in once (run claude), then restart orchestra run, and I will set the project up on Claude Code with Haiku; or tell a real Supervisor to set [agents] harness and model."
 
+# A delegated job's sub-session (delegate.py): it reads what the job reads first, and reports in a line.
+[[rule]]
+role = "supervisor"
+prompt = "\\[Delegated job: (?P<job>[a-z_]+)\\]"
+steps = [{ tool = "list_metrics" }]
+reply = "Report of the {match.job} job (a scripted sub-session: the dummy harness): I read the store's catalogue and found nothing to report."
+
 # A standing instruction in the chat ("from now on, ..."): a duty of its own, as the Supervisor's fixed core says.
 [[rule]]
 role = "supervisor"

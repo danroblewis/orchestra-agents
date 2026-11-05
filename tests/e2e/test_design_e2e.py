@@ -207,7 +207,7 @@ def test_no_prompt_or_guide_asks_the_owner_to_write_configuration():
     guide's `[agents]` block is a reference for the Supervisor, not addressed to the owner, so
     only the phrases are checked there."""
     prompts = PACKAGE / "prompts"
-    mine = [*prompts.glob("supervisor*.md"), prompts / "operator.md", prompts / "design.md", *(prompts / "duties").glob("*.md")]
+    mine = [*prompts.glob("supervisor*.md"), *(prompts / "skills").glob("*.md"), *(prompts / "duties").glob("*.md")]
     for p in mine:
         for phrase in FORBIDDEN:
             assert phrase not in p.read_text(encoding="utf-8").lower(), (p.name, phrase)

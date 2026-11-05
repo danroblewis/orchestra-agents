@@ -9,7 +9,8 @@ that has ended is refused), and it runs as that role (``tooling.handle``, which 
 groups again). The project and the session come from the environment (``ORCHESTRA_REPO``,
 ``ORCHESTRA_SESSION_TOKEN``), never from the working directory, which may be a ticket's worktree
 or another repository. ``ORCHESTRA_TOOLS`` only chooses which tools are offered. Every answer is
-bounded here (``answer``, ``answers.cut``): no harness gets one over ``answers.BOUND`` characters."""
+bounded here (``answer``, ``answers.cut``): no harness gets one over ``answers.BOUND`` characters, and a
+session that holds ``read_answer`` none over ``answer_store.TRIM``: the rest is kept, to page."""
 
 from __future__ import annotations
 
@@ -18,6 +19,9 @@ import os
 from collections.abc import Mapping
 
 from .tools import PAGE, TOOLS, ToolDef, tools_for
+
+READ_ANSWER = "read_answer"
+WHOLE = (READ_ANSWER, "read_skill")      # never trimmed: a page already, and a skill is read whole (skills.PIECE_CHARS)
 
 
 def groups_of(env: Mapping[str, str]) -> list[str] | None:
@@ -57,6 +61,7 @@ class Caller:
         """The tool's answer as the model reads it: its text, at most ``answers.BOUND`` characters
         (cut with a line saying how to read the rest; a read tool's ``page`` is the page asked for,
         never passed to the tool). Raises with the reason when the call is refused or fails."""
+        from ..answer_store import TRIM
         from ..answers import cut
         tool = self.tool(name)
         args = dict(args or {})
@@ -66,7 +71,21 @@ class Caller:
             page = int(page) if page not in (None, "") else 1
         except (TypeError, ValueError):
             raise ValueError(f"page is a number, 1 for the first page; not {page!r}") from None
-        return cut(text(self.call(name, args)), tool.name, page, pageable)
+        full = text(self.call(name, args))
+        if self.trims and tool.name not in WHOLE and (len(full) > TRIM or page > 1):
+            return self.trimmed(full, tool.name, page)
+        return cut(full, tool.name, page, pageable)
+
+    @property
+    def trims(self) -> bool:
+        """Whether this session's large answers are trimmed (``answer_store``): it holds ``read_answer``."""
+        return any(t.name == READ_ANSWER for t in self.tools)
+
+    def trimmed(self, full: str, tool: str, page: int) -> str:
+        """The answer's start (or the page asked for), its shape and a pointer to the whole of it, kept."""
+        from ..answer_store import keep, piece
+        project, _ = self._ctx()
+        return piece(full, keep(project, full), tool, page)
 
     def call(self, name: str, args: dict | None):
         """The tool's answer; raises with the reason when the call is refused or fails."""

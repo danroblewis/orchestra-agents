@@ -36,6 +36,13 @@ def big_guide() -> str:
     return "\n".join(out)
 
 
+@pytest.fixture(autouse=True)
+def _the_bound_itself(monkeypatch):
+    """These are the bound's tests: a session that trims its answers further (it holds read_answer,
+    answer_store.py) is test_answer_trimming's."""
+    monkeypatch.setattr(caller_mod.Caller, "trims", property(lambda self: False))
+
+
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_HOME", str(tmp_path / "home"))

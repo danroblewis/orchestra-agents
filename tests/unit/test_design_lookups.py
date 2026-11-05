@@ -8,6 +8,7 @@ once, and the tools a session holds named in its prompt. Each runs on Orchestra'
 import json
 
 import pytest
+from conftest import skill_files, supervisor_knows
 from design_fixtures import WHY, call, layer, model_with, say
 
 from orchestra_agents import bus_reads, design_confirm, intended_api, prompting
@@ -202,8 +203,7 @@ def test_the_prompt_names_the_tools_the_session_holds_and_no_other():
 
 
 def test_the_design_prompt_says_store_first_receives_flows_and_the_owners_zone():
-    from orchestra_agents.prompting import PROMPTS_DIR
-    text = " ".join((PROMPTS_DIR / "design.md").read_text().split())
+    text = " ".join(skill_files().split())
     assert "An existing series always beats a new script" in text and "`propose_measurements` is refused until" in text
     assert "Events go in `receives`." in text and "Never put them only in `steps` or `uses`" in text
     assert "An announced type counts as heard" in text
@@ -269,9 +269,7 @@ def test_quiet_marks_are_the_cores_events(project, store):
 
 
 def test_the_stuck_line_never_advises_a_restart_the_core_did_not_mark(project):
-    from orchestra_agents import prompting
-    from orchestra_agents.org import built_in_agents
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "is waiting for that event, not stuck on a quiet machine" in text
     assert ("A machine's state is what the tools returned: say what they returned; when a tool did not answer, "
             "say that.") in text

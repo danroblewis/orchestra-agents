@@ -6,7 +6,7 @@ import subprocess
 import tomllib
 
 import pytest
-from conftest import agents_project
+from conftest import agents_project, supervisor_knows
 from fake_tasks import FakeTasks
 
 from orchestra_agents import tooling
@@ -314,9 +314,8 @@ def test_only_the_supervisor_is_given_the_setup_tools():
 
 @pytest.mark.parametrize("work", ["tasks", "code"])
 def test_the_supervisor_is_told_to_look_fix_the_setup_and_name_only_real_paths(project, work):
-    from orchestra_agents.prompting import role_prompt
     project.config.work = work
-    text = role_prompt(project, "supervisor")
+    text = supervisor_knows(project)
     assert "{operator}" not in text and "## When the system cannot do what is asked" in text
     for tool in ("check_setup", "set_agent_roles", "set_work_mode", "set_gate_unit", "restart_machine", "list_metrics"):
         assert f"`{tool}`" in text

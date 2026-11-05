@@ -25,7 +25,7 @@ A spec lives in ``.orchestra/machines/<name>/`` or in the state directory's ``ma
 reads both, and the repository's wins when both have the name.
 
 A **built-in duty** (``builtin = true``) names a part of the plugin's own prompt
-(``prompts/supervisor.md`` and ``operator.md``): its text ships with the plugin and changes with
+(``prompts/supervisor.md`` and its skills, ``prompts/skills/``): its text ships with the plugin and changes with
 it, so it is listed here and never copied, edited or removed. The Supervisor's **fixed core**
 (``prompts/supervisor_core.md``) is not in the spec at all: it is prepended to every Supervisor
 turn, so nothing the Supervisor writes here can remove its guardrails.

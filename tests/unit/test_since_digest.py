@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+from conftest import supervisor_knows
 from design_fixtures import call
 
 from orchestra_agents import (
@@ -119,11 +120,10 @@ def test_a_question_asked_is_told_with_what_the_owner_said_next():
 def test_the_prompt_replies_with_the_digest_as_returned_and_never_guesses_a_cause(project, monkeypatch):
     """T2g s16 (the digest), and s08 and s15: "the stand-in may have stopped", "the incident may be
     holding SAIL", each a hedged wrong guess."""
-    from orchestra_agents import installed, prompting
-    from orchestra_agents.org import built_in_agents
+    from orchestra_agents import installed
     for on in (False, True):
         monkeypatch.setattr(installed, "tasking", lambda on=on: on)
-        text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+        text = " ".join(supervisor_knows(project).split())
         assert ("call `read_events` once, with `since` (the time, or `24h`), and reply with its `digest` exactly as "
                 "returned: no rewording, no additions, no omissions, then nothing") in text
         assert "its last line is the read's `closing_line`, the model line" in text

@@ -79,7 +79,7 @@ class PiSession(AgentSession):
                     "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
         system = spec.system_prompt or ""
         if spec.tools_via == "bash":              # the tools as a command Pi's bash tool runs, in this environment
-            system = f"{system.rstrip()}\n\n{bash_tools.prompt(spec.tool_groups, full_env.get('PATH'))}"
+            system = bash_tools.system(system, spec.tool_groups, full_env.get('PATH'))
         if system:
             args += ["--append-system-prompt", system]
         spec.log_path.parent.mkdir(parents=True, exist_ok=True)

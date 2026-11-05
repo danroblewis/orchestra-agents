@@ -9,12 +9,11 @@ import subprocess
 from datetime import UTC, datetime
 
 import pytest
-from conftest import agents_project
+from conftest import agents_project, skill_files
 
 from orchestra_agents import era_guard, tooling
 from orchestra_agents import integrate_schedule as schedule
 from orchestra_agents.events import Events
-from orchestra_agents.prompting import PROMPTS_DIR
 from orchestra_agents.side_branch import SIDE
 from orchestra_agents.store import AgentStore, StoreError
 
@@ -112,7 +111,7 @@ def test_an_era_filter_faster_than_discovery_can_fit_a_stock_is_refused_with_the
 
 
 def test_the_guide_says_what_an_era_is_for():
-    text = (PROMPTS_DIR / "operator.md").read_text()
+    text = skill_files()
     assert "not for every merge" in text and "MIN_COVER" in text and "set_setting` refuses it" in text
 
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import agents_project
+from conftest import agents_project, skill_files, supervisor_knows
 
 from orchestra_agents import design_machines, tooling, workflow_tools
 from orchestra_agents.builtins import ROLES
@@ -387,9 +387,7 @@ def test_the_items_at_a_step_waiting_outside_are_listed_for_an_incident(project,
 
 
 def test_the_alert_line_names_the_items_an_incident_may_hold(project):
-    from orchestra_agents import prompting
-    from orchestra_agents.org import built_in_agents
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "an incident on a service a step waits on holds the items at that step: name them" in text
     assert "never say the work is unaffected while an item waits at such a step" in text
 
@@ -423,8 +421,7 @@ def test_the_hosts_zone_is_its_iana_name(monkeypatch):
 
 
 def test_the_design_prompt_takes_the_zone_answer():
-    from orchestra_agents.prompting import PROMPTS_DIR
-    text = " ".join((PROMPTS_DIR / "design.md").read_text().split())
+    text = " ".join(skill_files().split())
     assert "when it is \"this machine's clock\", \"local\" or \"here\", pass those words as `tz`" in text
     assert "Declare it in that turn, say what was declared, and never ask for the zone again" in text
 
@@ -511,9 +508,8 @@ def test_the_shipped_definitions_fit_the_schema_and_the_plugin_accepts_them():
 def test_the_owner_is_never_asked_to_commit_discard_or_land_a_file(project, store, fake, monkeypatch, tasking):
     """R3 e (O5), M2: T2i's answer said "Commit it yourself if you want it kept". The answer says
     where the definition lives and that it is live, with or without the task system."""
-    from orchestra_agents import installed, integrate_handoff, patching, prompting
+    from orchestra_agents import installed, integrate_handoff, patching
     from orchestra_agents.harness.tools import BY_NAME
-    from orchestra_agents.org import built_in_agents
     monkeypatch.setattr(installed, "tasking", lambda: tasking)
     out = call(project, store, "declare_workflow", definition=DEF, reason=WHY, root="repository",
                quote="keep it in the repository")
@@ -527,7 +523,7 @@ def test_the_owner_is_never_asked_to_commit_discard_or_land_a_file(project, stor
     assert "the owner commits it" not in BY_NAME["integrate_system"].description
     assert "the owner commits it" not in integrate_handoff.who_lands({"root": "repository", "name": "jira_poller"})
     assert ": ask the owner to commit" not in Path(patching.__file__).read_text()
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "Never ask the owner to commit, discard or land a file." in text
 
 
@@ -562,9 +558,7 @@ def test_an_attention_waits_why_reaches_list_items_and_explain_item(project, sto
     assert ex["summary"]["wait"]["why"] == WHY_WAIT["why"]
     assert ex["positions"]["delivery_live"]["wait"]["why"] == WHY_WAIT["why"]
     assert "why (an attention's own cause" in BY_NAME["list_items"].description
-    from orchestra_agents import prompting
-    from orchestra_agents.org import built_in_agents
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "a wait's `why`" in text and "is the cause to report" in text
     assert "never say the attention events carry no reason" in text
 
@@ -611,8 +605,7 @@ def test_a_missing_link_is_asked_for_never_hidden_by_dropping_the_relation(proje
 
 
 def test_the_prompt_says_to_ask_for_the_link_a_goal_needs():
-    from orchestra_agents.prompting import PROMPTS_DIR
-    text = " ".join((PROMPTS_DIR / "supervisor.md").read_text().split())
+    text = " ".join(skill_files().split())
     assert "never silently remove the goal" in text and "linker" in text and "item.related" in text
     assert "`relate_prs`" in text and "`declare_program`" in text and "Never ask for one to be written" in text
     assert "may I have one written" not in text and 'never "fully running"' in text

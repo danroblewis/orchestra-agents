@@ -6,13 +6,12 @@ not end on it."""
 import subprocess
 
 import pytest
-from conftest import FakeHarness, FakeSession, agents_project
+from conftest import FakeHarness, FakeSession, agents_project, supervisor_knows
 
-from orchestra_agents import bus_reads, closing_line, modeling, prompting, protocol, tooling
+from orchestra_agents import bus_reads, closing_line, modeling, protocol, tooling
 from orchestra_agents.events import Events
 from orchestra_agents.harness.base import TurnResult
 from orchestra_agents.host import AgentHost
-from orchestra_agents.org import built_in_agents
 from orchestra_agents.store import AgentStore
 
 LINE = "model v5, changed by discovery at 2026-11-02 11:14:57Z; it has 3 stocks and 6 flows"
@@ -92,6 +91,6 @@ def test_read_events_since_answers_the_closing_line_and_records_it_for_the_super
 
 
 def test_the_prompt_says_the_final_line_is_the_closing_line_verbatim(project):
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "its last line is the read's `closing_line`, the model line" in text
     assert "no rewording, no additions, no omissions, then nothing" in text

@@ -8,7 +8,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
-from conftest import agents_project
+from conftest import agents_project, supervisor_knows
 from orchestra import runtime
 from test_workflow_tools import DEF, MESSAGE, FakePlugin, call, git
 
@@ -182,8 +182,6 @@ def test_the_answer_says_the_item_starts_now_not_on_the_schedule(project, store,
 
 
 def test_the_prompt_says_a_requested_reminder_starts_at_once(project):
-    from orchestra_agents import prompting
-    from orchestra_agents.org import built_in_agents
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "A requested item starts at once: say what the answer's `runs` says" in text
     assert "never that it waits for the workflow's schedule" in text

@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from conftest import FakeHarness, agents_project
+from conftest import FakeHarness, agents_project, supervisor_knows
 from orchestra.config import load_project as load_orchestra_project
 
 import orchestra_agents
@@ -198,6 +198,5 @@ def test_the_supervisor_writes_to_the_overlay_when_asked_and_to_the_repository_o
 
 
 def test_the_supervisor_is_told_where_each_setting_goes(project):
-    from orchestra_agents.prompting import role_prompt
-    text = role_prompt(project, "supervisor")
+    text = supervisor_knows(project)
     assert "`target`" in text and "overlay" in text and "identities" in text

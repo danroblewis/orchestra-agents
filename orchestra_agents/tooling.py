@@ -212,6 +212,15 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return guides.list_guides(project)
     if command == "read_guide":
         return guides.read_guide(project, a)
+    if command == "delegate":
+        from . import delegate
+        return delegate.delegate(project, store, a, role)
+    if command == "read_answer":
+        from . import answer_store
+        return answer_store.read(project, a)
+    if command == "read_skill":
+        from . import skills
+        return skills.read(project, a)
     if command == "hand_to_coordinator":
         return handoff.hand_to_coordinator(store, a, role)
     if command == "report_plan":

@@ -7,7 +7,7 @@ Not set up means all of: the configuration (orchestra.toml with the owner's over
 ``[[sources]]``); and the Supervisor's record has no setup that ran. A setup that ran on the dummy
 harness, which cannot read the repository, does not count once a real harness runs the agents.
 
-The wake-up gives the goal, not steps; the Supervisor's prompt (``prompts/operator.md``, "Setting
+The wake-up gives the goal, not steps; the Supervisor's `setup` skill (``prompts/skills/setup.md``, "Setting
 up the project") says what setting up means, and the guides (``guides.py``) say how each setting
 is chosen. The record is the Supervisor's agent state, ``setup``: ``{ran_at, harness}`` once the
 setup turn ended; the same goal, asked for in the chat ("set up this project", "re-check the
@@ -34,7 +34,7 @@ INSTRUMENTS = ("collect", "scrape", "sources")
 GOAL = MARK + """ This project has not been set up for Orchestra: its configuration has no [project] and no
 instruments, and no setup has run. The human installed Orchestra and its plugins and has not configured
 anything; they want you to do it. The goal: understand this repository, then configure Orchestra and the
-installed plugins for it, as your prompt's "Setting up the project" says. Read the guides first
+installed plugins for it, as your `setup` skill says (read_skill setup first). Read the guides
 (list_guides; then read_guide for a guide's contents, and its sections one at a time for what you will set), explore the repository read-only, make each setting
 that is plainly right with your setup tools (each with its reason), check that what you declared works,
 and leave the human one short message: what you set and why, and the few choices that are theirs, each
@@ -53,8 +53,8 @@ store is read before they answer.
 4. The caps: at most how many series, how many requests a second and a day to the store, and what
    my own rounds may spend a day (the defaults are 200 series, 5 a second, 20,000 a day, $2; say so).
 5. Confirm it stays read-only: I never write to their stores, and change only Orchestra's settings.
-Once they answer, set it up and explore within what they gave, without asking again (your prompt's
-"Exploring the stores")."""
+Once they answer, set it up and explore within what they gave, without asking again (your
+`exploring` skill)."""
 
 
 def wants_checklist(raw: dict) -> bool:

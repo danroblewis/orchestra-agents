@@ -4,6 +4,7 @@ asks for; an existing series that is a superset or a proxy linked with its cavea
 instrument; a schedule that keeps every receive."""
 
 import pytest
+from conftest import supervisor_knows
 from design_fixtures import WHY, call, journal, layer, model_with, say
 
 from orchestra_agents import design_asked, intended_api
@@ -303,9 +304,7 @@ def test_scheduling_a_machine_a_workflow_runs_says_its_run_time_is_the_workflows
 
 
 def test_the_design_prompt_puts_every_named_family_in_receives_and_the_clock_on_the_workflow(project):
-    from orchestra_agents import prompting
-    from orchestra_agents.org import built_in_agents
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "**Every event family the owner names goes into `receives`.**" in text
     assert "give each phrase in `owner_named`" in text and "a SAILED label does not stand for `sail.check.completed`" in text
     assert "declare the workflow's `every` start with `at` (\"09:00\") and `tz`" in text

@@ -22,6 +22,7 @@ from pathlib import Path
 
 MODES = ("mcp", "bash", "auto", "file")   # file: no tools at all (file_output.py)
 LINE_MAX = 140          # a tool's line in the prompt: its first sentence, cut here (`--help` has the rest)
+LIST_BOUND = 8_500      # the prompt's tool list: with each first sentence while under this, else the arguments alone
 ENUM_SHOWN = 6          # an argument's allowed values are named in its tool's line when there are this few
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n\s*\2\s*(?:\n|$)", re.DOTALL)
 
@@ -42,12 +43,15 @@ def _line(description: str) -> str:
     return first if len(first) <= LINE_MAX else first[:LINE_MAX - 1].rstrip() + "…"
 
 
-def _args(t) -> str:
+COMMON = ("reason", "quote")   # left out of a long list's lines, and said once above it
+
+
+def _args(t, skip: tuple[str, ...] = ()) -> str:
     """A tool's arguments as its line names them: each by name, the required ones marked ``*``, the
     allowed values of one that has a few, and the type of one that is not a string."""
     out = []
     for name, schema in (t.properties or {}).items():
-        if name == "page":                  # every read tool's; the prompt says it once
+        if name == "page" or name in skip:  # every read tool's; the prompt says it once
             continue
         a = name + ("*" if name in (t.required or ()) else "")
         schema = schema if isinstance(schema, dict) else {}
@@ -89,7 +93,7 @@ def prompt(groups: list[str] | tuple[str, ...], path: str | None = None) -> str:
     from .tools import tools_for
     cmd = command(path)
     tools = tools_for(groups)
-    listed = "\n".join(f"- `{t.name}` {_args(t)}: {_line(t.description)}" for t in tools) or "- (none)"
+    listed = _listed(tools)
     first = tools[0] if tools else None
     example = json.dumps({k: "..." for k in (first.required or [])[:2]}) if first else "{}"
     return f"""## Orchestra's tools: run them with your shell
@@ -124,6 +128,30 @@ of the product you run in, in its place.
 Your tools, each with its arguments (* required; `a|b` the values one takes; a type when not a string):
 {listed}
 """
+
+
+def _listed(tools) -> str:
+    """Each tool in a line: its arguments and its first sentence while the list stays under
+    LIST_BOUND, else its arguments alone (the Supervisor's 126 tools: its prompt stays under 35,000
+    characters; ``--help`` and its skills say what each is for)."""
+    lines = [f"- `{t.name}` {_args(t)}: {_line(t.description)}" for t in tools]
+    if sum(len(x) + 1 for x in lines) > LIST_BOUND:
+        lines = [COMMON_NOTE] + [f"- `{t.name}` {_args(t, COMMON)}" for t in tools]
+    return "\n".join(lines) or "- (none)"
+
+
+COMMON_NOTE = ("(Left out of each line below: `reason`, required wherever a tool takes it (a tool that changes "
+               "something), and `quote`, the owner's exact words; `--help` says whether a tool takes them.)")
+
+
+HELD = re.compile(r"## Your tools in this session\n\n.*?(?:\n\n|\Z)", re.DOTALL)
+
+
+def system(system_prompt: str, groups, path: str | None = None) -> str:
+    """The system prompt of a session whose tools come from the shell: the prompt without its list of
+    the tools held (``prompting.tools_held``: this section lists them again, with their arguments),
+    then this section."""
+    return f"{HELD.sub('', system_prompt or '').rstrip()}\n\n{prompt(groups, path)}"
 
 
 def parse(cmd: str) -> tuple[str, dict] | None:

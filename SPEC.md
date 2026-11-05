@@ -483,7 +483,7 @@ transcript, which is the only one kept (`read_transcript` parses it); kill a tur
 server loads either); the session runs `orchestra agents tool <name> '<json>'` from its shell
 (`cli.cmd_tool`), and the system prompt gains a section naming the command, as it can be run
 whatever the session's PATH and working directory, and each tool with one line
-(`harness/bash_tools.py`; `--help` gives a tool's schema). Some organisations' Claude Code policy
+(`harness/bash_tools.py`; `--help` gives a tool's schema): its arguments and first sentence while the list stays under 8,500 characters, else its arguments alone (`reason` and `quote` said once above it), and in place of the prompt's list of the tools held by name. Some organisations' Claude Code policy
 allows only listed MCP servers; every session can run commands. `auto` (the default): MCP, until
 the server is found blocked; then every Claude Code session of this host calls the tools from its
 shell until it restarts (`mcp_status.Fallback`), said once as a `notice`. Blocked is: Claude Code's
@@ -802,7 +802,7 @@ nothing at all: `demo/run.py --dummy` is the whole demo for free.
 
 The human talks only to the Supervisor (Orchestra's rule 9), so when the system cannot do what
 the human asks, the Supervisor is the one who sees why and fixes the setup. Its prompt
-(`prompts/operator.md`, part of both of its prompts) gives it a duty: when a ticket blocks or is
+(its `cannot-do` skill, `prompts/skills/cannot-do.md`, read on demand from both of its prompts) gives it a duty: when a ticket blocks or is
 rejected twice for the same reason, or a request of the human's is not met, look first, then
 check whether the system can do it at all (which machines fill which role, the kind of work, the
 gate's tests, whether what is needed runs), fix the setup with its tools, and tell the human what
@@ -949,7 +949,7 @@ ends with where to read on (`offset`) and, for a `##`, its subsections to ask fo
 100 KB, so they are read on demand, a section at a time; the Supervisor's prompt says to read the
 contents first and the part a setting is in before changing it.
 
-**Setting up** (`first_run.py`, `prompts/operator.md` "Setting up the project"). Orchestra wakes the
+**Setting up** (`first_run.py`, the `setup` skill, `prompts/skills/setup.md`). Orchestra wakes the
 Supervisor once on a project that is not set up (section 4), and the human may ask any time ("set up
 this project", "re-check the setup"). The goal, not steps: read the guides, explore the repository
 read-only (its session has no editing tools; it may run the test command once to time it), set
@@ -965,7 +965,7 @@ name, never the token's value), the `match` and the wider `explore` of each, the
 stays read-only. From the owner's answer it declares the stores and explores within them on its
 own (`explore_round.py`); the record notes `setup.asked = "checklist"`.
 
-**Measurements** (`instruments.py`, `source_tools.py`, `prompts/operator.md` "Measurements"). Adding a
+**Measurements** (`instruments.py`, `source_tools.py`, the `measure` skill). Adding a
 collector is the Supervisor's, from one chat message: it reads Orchestra's guide, finds where the
 number lives, chooses a `[[scrape]]` of an existing `/metrics`, a `[[sources]]` store, or a
 `[[collect]]` command; tries the command once exactly as Orchestra would (`try_collector`: Orchestra's
@@ -1080,7 +1080,7 @@ group a custom role or team may be granted): `set_agent_roles` (`[agents] serves
 takes a `target`: `repo` (the default; `set_setting` must be told) for the project's settings in
 `orchestra.toml`, or `overlay` for the owner's own or their company's settings (identities,
 channels, templates) in the private overlay outside the repository (Orchestra's SPEC §8.1). The
-prompt (`prompts/operator.md`) says which goes where. Each tool:
+`config-changes` skill (`prompts/skills/config-changes.md`) says which goes where. Each tool:
 
 - refuses a reason shorter than a sentence, and for `repo` unless the repository root is a git
   checkout on the base branch and `orchestra.toml` has no uncommitted change;
@@ -1126,7 +1126,7 @@ prompt (`prompts/operator.md`) says which goes where. Each tool:
   discovery's minimum era, `MIN_COVER` of the window (`orchestra.sd.discover`) and at least
   `2 * EVENTS_PER_PARAM` steps: 30 minutes on the default hour, with both numbers in the refusal.
   A filter matched fewer than three times is allowed with a caution. An era is for a change that
-  can alter how the system behaves, not every merge; the guide says so (`operator.md`);
+  can alter how the system behaves, not every merge; the guide says so (the `setup` skill);
 - answers with what applies now and what restarts, from the readers' documented rules: the
   agents' host reads `[agents]` every second; the task system's scheduler reads `[project]`,
   `[tasks]` and `[gate]` on every tick (its own SPEC owns what they mean); Orchestra's launcher and
@@ -1534,7 +1534,7 @@ kept, which stay.
 
 The owner's page request, `orchestra.intent.requested`, wakes the Supervisor only when its source
 is `owner` (a fixed wake-up, never capped). **The `refine_map` duty is built into the plugin**
-(`prompts/duties/refine_map.md` is part of the Supervisor's fixed prompt, like `operator.md`), so
+(its text is the plugin's `refine-map` skill, `prompts/skills/refine-map.md`, named in every Supervisor's skill index), so
 every Supervisor has it whatever its spec lists: the review round runs the refinement passes, a
 quick heuristic check with no model, when the declared layer changed, and they run again after the
 owner's confirm or discard is answered (the findings in that answer); the first pass runs every
@@ -1702,7 +1702,41 @@ files are the project's. Its prompt is, in order: the **fixed core** (`prompts/s
 shipped with the plugin and always first, so nothing in the spec can remove it: the owner's
 channel, Orchestra's invariants, the outbox for acting as the owner, the guardrails below, a
 prediction for every fix, the rules of self-healing), its built-in prompt
-(`supervisor.md`/`supervisor.tasks.md` with `operator.md`), then the spec's loop and duties.
+(`supervisor.md`/`supervisor.tasks.md` with `supervisor_rules.md` and the index of its skills), then the spec's loop and duties.
+
+**The prompt stays small; skills are read on demand** (the owner, 2026-11-04: "we should stay under
+35k for a regular system prompt and split the rest into separate prompt files"). The system prompt
+as the harness sends it (the core, the role, the always-needed rules, the skill index, the spec, the
+tools it holds) is under 35,000 characters (`tests/unit/test_prompt_size.py` fails above it). The
+know-how for each kind of work is a skill, `prompts/skills/<name>.md`: a title, a `Use when:` line
+(the index lists each by name with it) and the text, filled and gated like the prompt (`skills.py`).
+The Supervisor reads one with `read_skill` (group `guides`; at most 12,000 characters a piece, a
+longer one says where to read on). On Claude Code the host also gives the Supervisor's session its
+skills (`SessionSpec.skills`) and the harness writes them as Claude Code's own,
+`<sessions>/claude-code/<session>.skills/.claude/skills/<name>/SKILL.md` (the "use when" as the
+description), outside the repository, added with `--add-dir`, so its own skill loading finds them.
+
+**Large answers are trimmed** (`answer_store.py`): every model call carries every earlier answer of
+the session, so a session that holds `read_answer` (the Supervisor's, group `guides`) reads at most
+6,000 characters of an answer: its start, its shape (each top-level field and its size) and a last
+line with the id of the whole answer, kept in `<state>/agents/answers/` (the newest 200), which
+`read_answer` reads part by part (a read tool's own `page` gives the same parts). A skill and a part
+of a kept answer are never trimmed. A session without `read_answer` keeps the bound of `answers.cut`.
+
+**Bounded jobs run in sub-sessions** (`delegate.py`, group `delegate`, the Supervisor's alone).
+`delegate <job> <brief>` starts a one-shot session of the Supervisor's own harness, as the Supervisor
+(its token, its bounds, read-only) with only the job's tool groups and never `delegate`
+(`ORCHESTRA_DELEGATED`), on `[agents] delegate_model` (default the Supervisor's model). Its whole
+system prompt is a preamble, the job's skill (a skill whose "use when" starts `(a delegated job)`,
+left out of the index) and its tools, about 3,000 characters; it runs one turn on the brief, is closed
+and its token revoked, and its report (at most 4,000 characters) is the answer. The jobs: `survey`
+(a declared store's families, levels and flows; observe, flows, guides), `scaffold_poller`
+(`integrate_system` for a named system, its `ask_owner` returned; design, observe, guides) and
+`judge_experiment` (the explore round's last experiment; observe, setup, model). The prompt's index
+says to delegate them. Its spend is the Supervisor's: refused when the cap of the turn it runs in is
+spent (the owner's chat, else its initiative; `design.begin_turn` says which), added to that cap when
+it ends, and counted apart (`delegate_usd`, `delegate_turns`). With `tools_via = "file"` nothing is
+delegated (a sub-session would have no tools).
 
 **Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
 takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;
@@ -1749,8 +1783,7 @@ whose key no earlier round woke it for, or a split proposal, queues a wake-up (`
 ...`): a full turn. Otherwise the round costs nothing. The record is its agent state (`review`,
 `next_review_at`, `load`).
 
-**The explore round** (`explore_round.py`, `explore_tools.py`, `prompts/operator.md` "Exploring the
-stores"; Orchestra's `docs/proposals/metric-explorer.md` and its guide's "Exploring beyond the
+**The explore round** (`explore_round.py`, `explore_tools.py`, the `exploring` skill; Orchestra's `docs/proposals/metric-explorer.md` and its guide's "Exploring beyond the
 match"). Every `[agents] explore_every` (default 1h, never under 5m; 0 off), once a `[[sources]]` is
 declared, the host checks without a model call and wakes the Supervisor (`[Explore round]`, its
 initiative, under the day's cap) unless the last experiment still waits for a discovery run. The

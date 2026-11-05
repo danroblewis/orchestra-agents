@@ -1,4 +1,6 @@
-## Ticket states
+[[tasking]]# Skill: tickets
+
+Use when: the owner asks for the state of tickets or the work, or a ticket is PREPARING, BLOCKED, rejected or DONE.
 
 OPEN → IN_PROGRESS (worker) → READY_FOR_REVIEW → IN_REVIEW (reviewer) → APPROVED → MERGING →
 DONE (on `{base_branch}`). Before a worker gets it, a ticket may show PREPARING while its
@@ -16,3 +18,4 @@ short message, a line or two, on what now works and where they can see it. So yo
 you will say when their work is done.
 
 Ticket ids look like `{ticket_prefix}-12`. Milestone ids look like `M1`.
+[[/tasking]]

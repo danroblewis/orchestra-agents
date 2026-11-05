@@ -42,8 +42,8 @@ def test_no_prompt_and_not_the_guide_names_a_file_under_the_home_directory():
     texts["guide.md"] = GUIDE.read_text()
     offered = {name: _offered(text) for name, text in texts.items()}
     assert {k: v for k, v in offered.items() if v} == {}
-    sup = texts["supervisor.md"]
-    assert "never\n  name a path as an example" in sup and "never a path that exists on this machine" in sup
+    sup = texts["supervisor_rules.md"]
+    assert "never name a path as an example" in " ".join(sup.split()) and "never a path that exists on this machine" in sup
     assert "<path to the token file>" in sup
 
 

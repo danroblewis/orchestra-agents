@@ -7,14 +7,14 @@ workflows before the task system."""
 import subprocess
 
 import pytest
-from conftest import FakeHarness, agents_project
+from conftest import FakeHarness, agents_project, supervisor_knows
 
 from orchestra_agents import installed, prompting
 from orchestra_agents.builtins import ROLES
 from orchestra_agents.events import Events
 from orchestra_agents.harness.tools import BY_NAME, tools_for
 from orchestra_agents.host import AgentHost
-from orchestra_agents.org import AgentDef, built_in_agents
+from orchestra_agents.org import AgentDef
 from orchestra_agents.store import AgentStore
 
 
@@ -46,7 +46,7 @@ def test_the_task_system_tools_come_back_with_it(monkeypatch):
 
 
 def test_the_prompts_say_nothing_of_tickets(project, no_tasking):
-    sup = prompting.agent_prompt(project, built_in_agents()["supervisor"])
+    sup = supervisor_knows(project)
     for gone in ("## Ticket states", "Coordinator can *plan*", "The task system offers", "`snapshot`", "{task_system",
                  "{ticket_states}"):
         assert gone not in sup
@@ -63,7 +63,7 @@ def test_the_prompts_say_nothing_of_tickets(project, no_tasking):
 
 def test_workflows_come_before_the_task_system(project, monkeypatch):
     monkeypatch.setattr(installed, "tasking", lambda: True)
-    sup = prompting.agent_prompt(project, built_in_agents()["supervisor"])
+    sup = supervisor_knows(project)
     assert sup.index("declare_workflow") < sup.index("The task system offers") < sup.index("## Ticket states")
     assert "{task_system" not in sup and "{ticket_states}" not in sup
 

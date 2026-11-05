@@ -86,6 +86,15 @@ def tools_held(groups) -> str:
               "use it; do the work with these, or say plainly what you cannot do.")
 
 
+def with_tools(system_prompt: str, groups) -> str:
+    """A session's system prompt as the host opens it (tools through the MCP server or the shell): the
+    prompt, the tools it holds by name (``tools_held``), and what to do when they are missing
+    (``NO_SUBSTITUTE``). A harness calling the tools from the shell replaces the list with its own
+    (``bash_tools.system``)."""
+    held = tools_held(groups)
+    return f"{system_prompt.rstrip()}\n\n" + (f"{held}\n\n" if held else "") + f"{NO_SUBSTITUTE}\n"
+
+
 MACHINES_DOC_URL = "https://github.com/danroblewis/orchestra/blob/main/docs/machines.md"
 
 
@@ -98,13 +107,15 @@ def machines_doc() -> str:
 
 
 def _fill(project: Project, text: str) -> str:
-    """Placeholders: ``{operator}`` (the Supervisor's part shared by both kinds of work: seeing the
-    system and fixing its setup, prompts/operator.md, then designing it, prompts/design.md, with its
-    built-in refine_map duty, prompts/duties/refine_map.md), then the project's settings."""
+    """Placeholders: ``{rules}`` (the Supervisor's always-needed rules, prompts/supervisor_rules.md)
+    and ``{skills}`` (the index of its skills, ``skills.index``: the know-how read on demand, kept out
+    of the system prompt), then the task system's parts and the project's settings."""
+    if "{rules}" in text:
+        text = text.replace("{rules}", (PROMPTS_DIR / "supervisor_rules.md").read_text(encoding="utf-8").strip())
+    if "{skills}" in text:
+        from . import skills
+        text = text.replace("{skills}", skills.index())
     text = _task_system(text)
-    if "{operator}" in text:
-        text = _task_system(text.replace("{operator}", "\n\n".join((PROMPTS_DIR / f).read_text(encoding="utf-8").strip()
-                                                                    for f in ("operator.md", "design.md", "duties/refine_map.md"))))
     return (text.replace("{base_branch}", project.config.base_branch).replace("{ticket_prefix}", project.config.ticket_prefix)
             .replace("{machines_doc}", machines_doc()))
 
@@ -116,16 +127,14 @@ TASK_SYSTEM_INTRO = (" Code work becomes requirements the Coordinator can *plan*
 
 def _task_system(text: str) -> str:
     """The Supervisor's task-system parts (``{task_system_intro}``, ``{task_system}``,
-    prompts/task_system.md, and ``{ticket_states}``, prompts/ticket_states.md), after the
-    workflows, only when the task system is installed (``installed.tasking``); else nothing."""
-    if not any(k in text for k in ("{task_system_intro}", "{task_system}", "{ticket_states}", "{snapshot_tool}")):
+    prompts/task_system.md), after the workflows, only when the task system is installed
+    (``installed.tasking``); else nothing. Its ticket states are a skill (prompts/skills/tickets.md)."""
+    if not any(k in text for k in ("{task_system_intro}", "{task_system}", "{snapshot_tool}")):
         return text
     on = installed.tasking()
     text = text.replace("{snapshot_tool}", "; `snapshot`: the task system's tickets, assignments and capacity" if on else "")
     tasks = (PROMPTS_DIR / "task_system.md").read_text(encoding="utf-8").rstrip("\n") if on else ""
-    states = (PROMPTS_DIR / "ticket_states.md").read_text(encoding="utf-8").rstrip("\n") + "\n\n" if on else ""
-    return (text.replace("{task_system_intro}", TASK_SYSTEM_INTRO if on else "").replace("{task_system}\n", tasks + "\n" if on else "")
-            .replace("{ticket_states}", states))
+    return text.replace("{task_system_intro}", TASK_SYSTEM_INTRO if on else "").replace("{task_system}\n", tasks + "\n" if on else "")
 
 
 def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict | None = None) -> str:

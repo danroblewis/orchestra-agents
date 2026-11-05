@@ -247,7 +247,7 @@ class ClaudeCodeSession(AgentSession):
             args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""
         if via == "bash":
-            system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self._env().get('PATH'))}"
+            system = bash_tools.system(system, self.spec.tool_groups, self._env().get('PATH'))
         if system:
             sp = self._dir / f"{self.spec.session_id}.system.md"
             sp.write_text(system, encoding="utf-8")

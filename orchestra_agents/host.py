@@ -421,8 +421,7 @@ class AgentHost:
             section = file_output.prompt(file_output.path_for(self.project.sessions_dir, session_id), tools)
             system_prompt = f"{system_prompt.rstrip()}\n\n{section}"
         else:
-            held = prompting.tools_held(tools)
-            system_prompt = f"{system_prompt.rstrip()}\n\n" + (f"{held}\n\n" if held else "") + f"{prompting.NO_SUBSTITUTE}\n"
+            system_prompt = prompting.with_tools(system_prompt, tools)
         prompt_file = self.project.logs_dir / "agents" / f"{session_id}.prompt.md"
         prompt_file.parent.mkdir(parents=True, exist_ok=True)
         prompt_file.write_text(system_prompt, encoding="utf-8")

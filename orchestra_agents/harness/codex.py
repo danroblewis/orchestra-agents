@@ -154,7 +154,7 @@ class CodexSession(AgentSession):
                 "-C", str(self.spec.cwd), "-c", self._shell_env() if shell else self._mcp_override()]
         system = self.spec.system_prompt or ""
         if bash:
-            system = f"{system.rstrip()}\n\n{bash_tools.prompt(self.spec.tool_groups, self.spec.env.get('PATH') or os.environ.get('PATH'))}"
+            system = bash_tools.system(system, self.spec.tool_groups, self.spec.env.get('PATH') or os.environ.get('PATH'))
         if system:
             args += ["-c", f"developer_instructions={toml_string(system)}"]
         if self.spec.model:

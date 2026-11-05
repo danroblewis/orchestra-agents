@@ -59,6 +59,6 @@ def test_check_setup_carries_it(project, store):
 
 def test_the_first_look_prompt_names_ci_and_keeps_inside_the_project():
     root = Path(project_ci.__file__).parent
-    text = (root / "prompts" / "operator.md").read_text()
+    text = (root / "prompts" / "skills" / "setup.md").read_text()
     assert "Name the project's CI as `check_setup`'s `ci` reads it" in text
     assert "never offer to read a folder outside it" in text

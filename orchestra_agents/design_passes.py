@@ -3,8 +3,8 @@ probably run a few times, try to make sure no events have publishers but no subs
 the purposes of events aren't duplicated, make sure that events aren't excessively deduplicated
 and serving multiple distinct purposes, other refinement things").
 
-The Supervisor's ``refine_map`` duty, built into the plugin (its text, ``prompts/duties/refine_map.md``,
-is part of the Supervisor's fixed prompt, as ``operator.md`` is), so every Supervisor has it with no
+The Supervisor's ``refine_map`` duty, built into the plugin (its text, the ``refine-map`` skill,
+``prompts/skills/refine-map.md``, named in every Supervisor's skill index), so every Supervisor has it with no
 change to its spec and no commit. This quick part is **heuristic** and calls no model: word overlap for one
 purpose under two names, "or" in a purpose for one name serving several, event counts for load.
 The judgement (which listener, which name to keep, how to split) is the Supervisor's, in the one

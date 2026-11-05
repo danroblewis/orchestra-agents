@@ -524,6 +524,12 @@ TOOLS: list[ToolDef] = [
             {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
              "section": S("A section's heading (or part of it), from the guide's contents"),
              "offset": I("Where to read on in a long section, as its last answer says (default 0)")}, ("name",)),
+    ToolDef("read_skill", "guides",
+            "One of your skills (your prompt's index names each, with when to use it): the steps, the order of your tools "
+            "and the pitfalls for one kind of work. Read it before your first change for that work in a session. A long "
+            "one ends with where to read on (offset).",
+            {"name": S("The skill's name, from your prompt's index (setup, measure, store-setup, ...)"),
+             "offset": I("Where to read on in a long skill, as its last answer says (default 0)")}, ("name",)),
     # handoff: the Supervisor passes the human's requirements to the Coordinator, who plans them
     ToolDef("hand_to_coordinator", "handoff",
             "Hand the human's requirements to the Coordinator, who plans them into a milestone and tickets and reports "
@@ -616,7 +622,7 @@ PAGED = frozenset({
     "read_machine_log", "list_metrics", "get_model", "read_instrument", "check_sources", "source_schema",
     "preview_query", "infer_source", "explore_source", "read_discovery_runs", "read_experiments", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
     "read_design", "find_balance", "modeling_guide", "read_model", "read_series", "read_eras", "read_observability",
-    "check_equation", "read_predictions", "list_guides", "read_guide", "list_workflows", "list_items", "explain_item"})
+    "check_equation", "read_predictions", "list_guides", "read_guide", "read_skill", "list_workflows", "list_items", "explain_item"})
 PAGE_ARG = I("The answer's page, when it came back cut (its last line says so): 2 for the second; default 1")
 TOOLS[:] = [replace(t, properties={**t.properties, PAGE: PAGE_ARG}) if t.name in PAGED else t for t in TOOLS]
 BY_NAME = {t.name: t for t in TOOLS}

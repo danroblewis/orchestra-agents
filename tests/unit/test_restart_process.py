@@ -8,14 +8,13 @@ and the dummy harness's Supervisor gets the tool and the digest that names the s
 
 import subprocess
 import time
-from pathlib import Path
 
 import pytest
-from conftest import agents_project
+from conftest import agents_project, skill_files
 from orchestra import runtime
 from test_restart_machine import WHY, launcher, pid_of, project, wait_pid  # noqa: F401 - the fixtures
 
-from orchestra_agents import ledger, prompting, tooling
+from orchestra_agents import ledger, tooling
 from orchestra_agents.events import Events
 from orchestra_agents.harness.tools import BY_NAME, tools_for
 from orchestra_agents.store import AgentStore, StoreError
@@ -81,7 +80,7 @@ def test_a_refusal_is_said_in_the_tools_words(project):  # noqa: F811
 def test_the_tool_is_the_supervisors_setup_and_its_prompt_says_after_the_fix():
     assert BY_NAME["restart_process"].group == "setup"
     assert "restart_process" in [t.name for t in tools_for(("setup",))]
-    text = (Path(prompting.__file__).parent / "prompts" / "supervisor.md").read_text()
+    text = skill_files()
     assert "`restart_process`" in text and "after its cause is fixed, never\nbefore" in text
 
 

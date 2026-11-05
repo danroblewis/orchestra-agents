@@ -1,4 +1,12 @@
-### Your built-in duty `refine_map`
+# Skill: refine-map
+
+Use when: your review round's refinement pass wakes you with findings on the event map (your built-in `refine_map` duty).
+
+**The refinement pass** (your built-in `refine_map` duty) proposes, never declares:
+when its findings wake you, put them to the owner in one message and change nothing until they
+answer.
+
+## Your built-in duty `refine_map`
 
 Keep the event map coherent while the owner designs the system (the owner: "an AI pass should
 probably run a few times, try to make sure no events have publishers but no subscribers, make sure

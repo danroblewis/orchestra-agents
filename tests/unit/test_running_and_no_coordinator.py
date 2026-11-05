@@ -9,6 +9,7 @@ import re
 from types import SimpleNamespace
 
 import pytest
+from conftest import supervisor_knows
 from design_fixtures import WHY, call, say
 
 from orchestra_agents import (
@@ -16,13 +17,11 @@ from orchestra_agents import (
     intended_api,
     machines_read,
     machines_running,
-    prompting,
     tasking_text,
     workflow_tools,
 )
 from orchestra_agents.builtins import ROLES
 from orchestra_agents.harness.tools import tools_for
-from orchestra_agents.org import built_in_agents
 
 pytest_plugins = ["design_fixtures"]
 
@@ -123,7 +122,7 @@ def test_confirming_a_workflows_program_with_no_machine_json_says_the_step_waits
 
 
 def test_the_prompt_says_a_proposal_may_run(project):
-    text = " ".join(prompting.agent_prompt(project, built_in_agents()["supervisor"]).split())
+    text = " ".join(supervisor_knows(project).split())
     assert "nothing runs only for a machine never heard on the bus and with no workflow behind it" in text
     assert "say a machine does not run only when `running` says it is not heard and no workflow runs it" in text
     assert "its program still needs writing" in text
@@ -133,7 +132,7 @@ def test_without_the_task_system_no_text_names_a_coordinator(project, store, no_
     """T2d s13: after request_work failed, "I did not send the request another way, such as through
     the Coordinator": the agents guide's Workflows section (its "start the task loop" example) still
     sent a request no workflow fits to the Coordinator."""
-    prompt = prompting.agent_prompt(project, built_in_agents()["supervisor"])
+    prompt = supervisor_knows(project)
     tools = " ".join(str(t.to_dict()) for t in tools_for(ROLES["supervisor"].tools))
     flows = call(project, store, "read_guide", name="agents", section="Workflows")["text"]
     start = call(project, store, "read_guide", name="agents", section="Starting a piece of work")["text"]
@@ -149,7 +148,7 @@ def test_without_the_task_system_no_text_names_a_coordinator(project, store, no_
 
 def test_with_the_task_system_the_coordinator_is_named(project, monkeypatch):
     monkeypatch.setattr(installed, "tasking", lambda: True)
-    prompt = prompting.agent_prompt(project, built_in_agents()["supervisor"])
+    prompt = supervisor_knows(project)
     tools = {t.name: t for t in tools_for(ROLES["supervisor"].tools)}
     assert "hand it to the Coordinator" in " ".join(prompt.split())
     assert "code work is not handed on here" not in prompt and not re.search(r"\[\[/?(no-)?tasking\]\]", prompt)

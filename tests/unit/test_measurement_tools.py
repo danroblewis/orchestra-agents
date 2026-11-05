@@ -194,8 +194,7 @@ def test_a_token_in_a_file_is_declared_by_its_path_and_never_shown(project, stor
 
 def test_the_supervisor_connects_a_store_it_is_asked_to_without_waiting_for_a_go_ahead(project):
     from orchestra_agents.prompting import PROMPTS_DIR
-    text = (PROMPTS_DIR / "operator.md").read_text()
-    store_part = text[text.index("## Another time-series store"):text.index("## When the system cannot do what is asked")]
+    store_part = (PROMPTS_DIR / "skills" / "store-setup.md").read_text()
     assert "observation, not a change to the system" in store_part and "do not propose" in store_part
     assert "bearer_file" in store_part and "never for its value" in store_part
     assert "or size-limited store is no reason to stop or to ask" in store_part

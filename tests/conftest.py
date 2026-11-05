@@ -71,6 +71,21 @@ def _no_real_harness_in_unit_tests(request, monkeypatch):
     monkeypatch.setattr(host_mod, "get_harness", guarded)
 
 
+def supervisor_knows(project, agent=None) -> str:
+    """What the Supervisor is told, on demand included: its system prompt, then every skill it can
+    read (``read_skill``), as it reads them (placeholders filled, task-system words gated)."""
+    from orchestra_agents import prompting, skills
+    from orchestra_agents.org import built_in_agents
+    agent = agent or built_in_agents()["supervisor"]
+    return prompting.agent_prompt(project, agent) + "\n\n" + "\n\n".join(skills.text(project, n) for n in skills.names())
+
+
+def skill_files() -> str:
+    """Every skill's file as it ships, one after another."""
+    from orchestra_agents.skills import SKILLS_DIR
+    return "\n\n".join(p.read_text(encoding="utf-8") for p in sorted(SKILLS_DIR.glob("*.md")))
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

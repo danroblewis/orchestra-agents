@@ -109,14 +109,14 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     write a person has is the Supervisor chat (a page's confirm, discard or kind switch changes
     nothing: Orchestra publishes it as `orchestra.intent.requested` from `owner`, and the Supervisor
     answers that request, and only one from `owner`, with its design tools). Pausing, resuming, restarting, resetting or
-    deleting an agent, role or team is the Supervisor's, through its tools; the one exception
-    (2026-11-04, T55, the owner's standstill report) is this plugin's own operator control, which
-    Orchestra's rule 9 lets a plugin own: the Agents page's "Pause the Supervisor's own initiative
-    until tomorrow" (and its resume), which holds its review rounds, explore rounds and notices
-    until the day ends (`notices.pause`, read by `budget.over`), recorded with who, when and from
-    where, and changes no configuration, no machine and no agent's paused state; chat and the
-    owner's page requests go on; so is the project's
-    setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted;
+    deleting an agent, role or team is the Supervisor's, through its tools; so is the project's
+    setup in `orchestra.toml` (`setup_tools.py`, `restart.py`), which no other role is granted. The
+    one exception (2026-11-04, T55, the owner's standstill report) is this plugin's own operator
+    control, which Orchestra's rule 9 lets a plugin own: the Agents page's "Pause the Supervisor's
+    own initiative until tomorrow" (and its resume), which holds its review rounds, explore rounds
+    and notices until the day ends (`notices.pause`, read by `budget.over`), recorded with who, when
+    and from where, and changes no configuration, no machine and no agent's paused state; chat and
+    the owner's page requests go on;
     operator controls on tickets are the task system's. The Supervisor changes configuration and
     never edits a file in the checkout; new code is a worker's, through a ticket, a review and the
     gate, or, without the task system, through a Workflows item for the worker role on its own branch

@@ -20,6 +20,7 @@ owner might keep the token): a refusal describes the rule and shows ``PLACEHOLDE
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -108,3 +109,74 @@ def check(value: str, what: str, repo_root: Path | None) -> tuple[str, str | Non
         raise StoreError(f"{what}: {value} is refused: {refused}. A credential's file lives where no commit can carry it: "
                          f"{hint()}. Nothing was changed")
     return value, caution
+
+
+NAMED_KEYS = ("token_file", "bearer_file", "password_file", "value_file", "user_file", "client_key", "client_cert",
+              "ca_file")   # the keys whose value is a credential's file: [[sources]] (and their auth), [scm], the kits
+
+
+def _walk(x, out: list[str]) -> None:
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if k in NAMED_KEYS and isinstance(v, str) and v.strip():
+                out.append(v.strip())
+            else:
+                _walk(v, out)
+    elif isinstance(x, list):
+        for v in x:
+            _walk(v, out)
+
+
+def named(project) -> list[str]:
+    """The exact credential files the project's configuration names (the merged configuration, overlay
+    included: ``[[sources]]``, ``[scm]``, any section's ``token_file``; and each scaffolded kit's own
+    settings), as absolute paths. Each is a path the owner gave; only the tool command opens it (a
+    source's probe, a kit's check), so Claude Code's sandbox lets exactly these be read
+    (``harness/sandbox.py``). Never listed to the owner or offered: only passed to the sandbox."""
+    found: list[str] = []
+    _walk(project.orchestra.config.raw, found)
+    try:
+        from .integrate_kits import read, shipped
+        kits = shipped(project)
+    except Exception:  # noqa: BLE001 - no bridges installed: the configuration's alone
+        kits = []
+    for kit in kits:
+        try:
+            _walk(read(Path(kit["dir"])), found)
+        except (OSError, ValueError):
+            continue
+    out: list[str] = []
+    for v in found:
+        p = Path(v).expanduser()
+        if not p.is_absolute():
+            continue
+        for q in (str(p), str(p.resolve())):         # and where a link points: the sandbox denies that too (macOS)
+            if q not in out:
+                out.append(q)
+    return out
+
+
+UNSEEN = re.compile(r"^token_file (.+?): no such file")   # Orchestra's refusal of a [[sources]] token_file it cannot see
+
+
+def unseen(refused: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """The sources refused only because their ``token_file`` is not seen from this process (Orchestra's
+    "token_file <path>: no such file"): name -> (the path, why it was not seen). A path that is there
+    (a directory) stays refused. Never the file's content."""
+    out: dict[str, tuple[str, str]] = {}
+    for name, why in refused.items():
+        if (m := UNSEEN.match(why or "")) is None:
+            continue
+        try:
+            Path(m[1]).expanduser().stat()
+            continue                         # there, and not a file Orchestra takes: refused as Orchestra says
+        except PermissionError:
+            seen = "read (Claude Code's sandbox, or the file's permissions, refused it)"
+        except OSError:
+            seen = "found (not there, or hidden by Claude Code's sandbox)"
+        out[name] = (m[1], seen)
+    return out
+
+
+AFTER = ("Write the [[sources]] entry all the same (set_setting, key sources): Orchestra's host and the Core page read "
+         "the token from outside any sandbox, and the Core page shows whether the store answers. Tell the owner so")

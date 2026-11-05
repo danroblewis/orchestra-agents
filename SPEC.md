@@ -878,6 +878,35 @@ read by a program the Supervisor writes, and not listing or offering credential 
 rules cover the usual stores; a file elsewhere is the prompt's). Pi, Codex and the dummy harness
 carry the prompt only.
 
+**Claude Code's sandbox and `[agents] sandbox_escape`** (the owner, 2026-11-04, Claude Code on
+Sonnet with the tools from the shell: "You told it to never escape its sandbox, and it's fine to
+escape the sandbox. Now it can't read my chronosphere-token file and it gave up almost immediately
+and wrote nothing. This is overprotective and the opposite of helpful."). With the tools from the
+shell, the harness's session settings (`harness/sandbox.py`) list exactly Orchestra's local ports
+(`sandbox.network.allowedDomains`), the state directory (`sandbox.filesystem.allowWrite`) and the
+exact credential files the merged configuration names (`sandbox.filesystem.allowRead`,
+`credential_paths.named`: `token_file`, `bearer_file`, `password_file`, `value_file`, `user_file`,
+`client_key`, `client_cert`, `ca_file` anywhere in it, `[[sources]]` and `[scm]` among them, and in
+each scaffolded kit's own settings). Claude Code turns the bounds' `Read(~/.config/**)` into a
+sandbox read denial for every sandboxed command; where read rules overlap the narrower path
+applies (Claude Code's docs, "Configure sandboxing"), so each exact file is readable by the tool
+command while the permission rule still refuses it to the Read tool and to `cat`. The Supervisor
+never prints a token; that is the prompt's rule and the guard against listing or offering credential
+files stays. `sandbox_escape` (a boolean, default **true**): when true, the settings leave Claude
+Code's unsandboxed retry alone (no `allowUnsandboxedCommands: false`), the core prompt says to rerun
+a command Orchestra needs that the sandbox blocks outside it (`dangerouslyDisableSandbox: true`) and
+say so in one line, and the tool command's refusal says the same (`local_http.ESCAPE_ENV`), with what
+to ask IT for if running outside is refused too (an organisation's managed settings); the harness
+passes the refusal through and does not stop the turn. When false, the behaviour is the one before:
+the retry is off, the prompt says never to rerun outside the sandbox, and the harness stops the turn
+at a refusal or at a `dangerouslyDisableSandbox` call of the tool command and tells the owner, once,
+the setting to ask IT for (`Blocked`). **Never give up silently**: a `[[sources]]` entry refused only
+because its `token_file` cannot be seen from the tool command is written all the same, with a caution
+saying so (`setup_tools._check_sources`, `credential_paths.unseen`); the host and the Core page probe
+it from outside any sandbox, and the Supervisor tells the owner what it wrote and that the Core page
+shows whether the store answers. `check_sources`, `source_schema` and `preview_query` refused for the
+same reason say to write it.
+
 **The Supervisor's own branch and pull request** (`side_branch.py`, `supervisor_pr.py`,
 `live_layers.py`; the owner, 2026-11-02, self-improvement 5: "they probably need a pull request, but
 we can use it locally while working"; scm 6–8: "plain branch plu PR", "the provider can push to the

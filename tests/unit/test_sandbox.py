@@ -36,12 +36,13 @@ def project(tmp_path, monkeypatch):
     return agents_project(repo)
 
 
-def spec(project, tmp_path, via: str = "bash", bounded: bool = True, session_id: str = "supervisor") -> SessionSpec:
+def spec(project, tmp_path, via: str = "bash", bounded: bool = True, session_id: str = "supervisor",
+         escape: bool = False) -> SessionSpec:
     repo = str(project.repo_root)
     return SessionSpec(session_id=session_id, session_dir=tmp_path / "sessions", cwd=project.repo_root,
                        system_prompt="be good", role="supervisor", tool_groups=("design",),
                        env={"ORCHESTRA_ROLE": "supervisor", "ORCHESTRA_REPO": repo}, log_path=tmp_path / "logs" / "x.log",
-                       tools_via=via, read_only=True, bounds=(repo,) if bounded else ())
+                       tools_via=via, sandbox_escape=escape, read_only=True, bounds=(repo,) if bounded else ())
 
 
 def settings_of(args: list[str]) -> dict:
@@ -79,7 +80,8 @@ def test_an_mcp_session_gets_no_sandbox_allow_and_a_shell_worker_gets_only_that(
     assert "sandbox" not in settings_of(mcp._args()) and local_http.ENV not in mcp._env()
     worker = ClaudeCodeSession(spec(project, tmp_path, bounded=False, session_id="w"))
     worker.open()
-    assert settings_of(worker._args()) == sandbox.settings([8123, 41234], str(project.orchestra.state_dir.resolve()))
+    assert settings_of(worker._args()) == sandbox.settings([8123, 41234], str(project.orchestra.state_dir.resolve()),
+                                                           escape=False)
 
 
 def test_a_server_on_another_address_or_gone_is_not_allowed(project):
@@ -94,7 +96,7 @@ def test_a_server_on_another_address_or_gone_is_not_allowed(project):
 
 
 def test_the_supervisor_is_told_never_to_rerun_a_command_outside_the_sandbox():
-    core = " ".join((prompting.PROMPTS_DIR / "supervisor_core.md").read_text().split())
+    core = " ".join(prompting.core_text(sandbox_escape=False).split())
     assert "You never rerun a command outside the sandbox." in core
     assert "stop, and tell the owner the exact setting their sandbox needs" in core
     assert '"allowedDomains": ["127.0.0.1:<port>"]' in core and local_http.MARK in core
@@ -287,3 +289,77 @@ open({str(tmp_path / "retried")!r}, "w").write("outside")
     assert res.error and f"writing in Orchestra's state directory {state}" in res.error and "Ask IT" in res.error
     assert f'"sandbox": {{"filesystem": {{"allowWrite": ["{state}"]}}}}' in res.error
     assert not (tmp_path / "retried").exists()
+
+
+# [agents] sandbox_escape (the owner, 2026-11-04: "it's fine to escape the sandbox")
+
+def test_the_setting_defaults_to_escape_and_takes_only_a_boolean():
+    from orchestra_agents.config import Config, ConfigError
+    assert Config.from_raw({}).sandbox_escape is True
+    assert Config.from_raw({"agents": {"sandbox_escape": False}}).sandbox_escape is False
+    with pytest.raises(ConfigError, match="sandbox_escape"):
+        Config.from_raw({"agents": {"sandbox_escape": "no"}})
+
+
+@pytest.mark.parametrize("escape", [True, False])
+def test_the_session_settings_leave_the_retry_on_only_when_escape_is_allowed(project, tmp_path, escape):
+    record_servers(project, 41234, 8123)
+    s = ClaudeCodeSession(spec(project, tmp_path, escape=escape))
+    s.open()
+    got = settings_of(s._args())["sandbox"]
+    assert got["network"] == {"allowedDomains": ["127.0.0.1:8123", "127.0.0.1:41234"]}
+    if escape:
+        assert "allowUnsandboxedCommands" not in got and s._env()[local_http.ESCAPE_ENV] == "1"
+    else:
+        assert got["allowUnsandboxedCommands"] is False and local_http.ESCAPE_ENV not in s._env()
+
+
+@pytest.mark.parametrize("escape", [True, False])
+def test_the_core_prompt_has_the_rule_the_setting_picks(project, escape):
+    from orchestra_agents.config import Config
+    project.config = Config.from_raw({"agents": {"sandbox_escape": escape}})
+    core = " ".join(prompting._core(project, type("A", (), {"name": "supervisor"})()).split())
+    rerun = ("When Claude Code's sandbox blocks a command Orchestra needs** (the tool command, a source's probe reading its "
+             "token file), rerun it outside the sandbox (`dangerouslyDisableSandbox: true`) and say so in one line")
+    assert (rerun in core) is escape
+    assert ("You never rerun a command outside the sandbox." in core) is not escape
+    assert "sandbox_escape" not in core and "<!--" not in core
+    assert "never list or offer credential files" in core          # that guard stays either way
+
+
+def test_the_refusal_says_to_rerun_outside_and_still_what_to_ask_it_for():
+    said = local_http.blocked(41234, {local_http.ESCAPE_ENV: "1"})
+    assert "dangerouslyDisableSandbox: true" in said and "Never rerun" not in said
+    assert '"allowedDomains": ["127.0.0.1:41234"]' in said and "ask IT" in said
+    assert "Never rerun this command outside the sandbox" in local_http.blocked(41234, {})
+    wrote = sandbox_writes.words("/s", "/s/events.jsonl", escape=True)
+    assert "dangerouslyDisableSandbox: true" in wrote and '"allowWrite": ["/s"]' in wrote
+
+
+def test_with_escape_allowed_a_blocked_tool_call_goes_back_to_the_model(project, tmp_path):
+    binary = _claude_whose_tool_call_the_sandbox_blocks(tmp_path)
+    res = ClaudeCodeSession(spec(project, tmp_path, escape=True), binary=binary).prompt("hello", timeout=30)
+    assert not res.error and res.text == "ran it outside the sandbox"
+    assert (tmp_path / "retried").exists()                     # its retry with dangerouslyDisableSandbox was not stopped
+
+
+def test_the_token_files_the_configuration_names_are_readable_and_still_denied_to_read(project, tmp_path):
+    token = Path.home() / ".config" / "orchestra" / "store-token"      # named, never opened here
+    toml = project.repo_root / "orchestra.toml"
+    toml.write_text(toml.read_text() + f"""
+[[sources]]
+name = "shop"
+url = "http://127.0.0.1:9"
+match = ['{{job="shop"}}']
+auth = {{ bearer_file = "{token}" }}
+
+[scm]
+token_file = "~/.config/orchestra/scm-token"
+""")
+    s = ClaudeCodeSession(spec(project, tmp_path, escape=True))
+    s.open()
+    got = settings_of(s._args())
+    readable = got["sandbox"]["filesystem"]["allowRead"]
+    assert str(token) in readable and str(Path.home() / ".config/orchestra/scm-token") in readable
+    assert all(not p.endswith("**") and "*" not in p for p in readable)        # exact files, never a directory
+    assert "Read(~/.config/**)" in got["permissions"]["deny"]                  # the Read tool and cat are still refused

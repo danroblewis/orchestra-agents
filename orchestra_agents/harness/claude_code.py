@@ -22,6 +22,7 @@ import uuid
 from pathlib import Path
 
 from ..local_http import ENV as SANDBOX_PROXY
+from ..local_http import ESCAPE_ENV
 from . import bash_tools, bounds, sandbox
 from .base import (
     TOOL_CALL_S,
@@ -209,6 +210,8 @@ class ClaudeCodeSession(AgentSession):
             ms = str(int(TOOL_CALL_S * 1000))
             env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms,
                     SANDBOX_PROXY: "1"}     # in Claude Code's sandbox, the tool command reaches Orchestra through its proxy
+            if self.spec.sandbox_escape:          # its refusal says to run the command again outside the sandbox
+                env[ESCAPE_ENV] = "1"
         return env
 
     def _mcp_config(self, via: str = "mcp") -> Path:
@@ -262,10 +265,12 @@ class ClaudeCodeSession(AgentSession):
     def _settings(self, via: str) -> Path | None:
         """The session's settings file: the Supervisor's bounds, as far as Claude Code's settings hold
         them (bounds.py), and, with the tools from the shell, the sandbox's allow for exactly Orchestra's
-        local ports and the project's state directory to write in (sandbox.py), read at every turn. None when it needs neither."""
+        local ports, the project's state directory to write in and the credential files the configuration
+        names to read (sandbox.py), read at every turn. None when it needs neither."""
         own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
         repo = self.spec.env.get("ORCHESTRA_REPO")
-        extra = sandbox.settings(sandbox.ports(repo), sandbox.state_dir(repo)) if via == "bash" else {}
+        extra = (sandbox.settings(sandbox.ports(repo), sandbox.state_dir(repo), self.spec.sandbox_escape, sandbox.readable(repo))
+                 if via == "bash" else {})
         if not self.spec.bounds and not extra:
             return None
         return bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own, extra)
@@ -354,12 +359,12 @@ class ClaudeCodeSession(AgentSession):
                         elif part.get("type") == "tool_use" and part.get("name") == "Bash" and via == "bash":
                             given = part.get("input") if isinstance(part.get("input"), dict) else {}
                             if bash_tools.parse(str(given.get("command") or "")) is not None:
-                                if given.get("dangerouslyDisableSandbox"):
+                                if given.get("dangerouslyDisableSandbox") and not self.spec.sandbox_escape:
                                     self.kill()
                                     result.error, result.text = sandbox.ESCAPE, last_text
                                     return result, None
                                 shell.add(part.get("id", ""))
-                elif t == "user" and shell and (why := self._sandboxed(ev, shell)):
+                elif t == "user" and shell and not self.spec.sandbox_escape and (why := self._sandboxed(ev, shell)):
                     self.kill()
                     result.error, result.text = why, last_text
                     return result, None
@@ -390,7 +395,8 @@ class ClaudeCodeSession(AgentSession):
     def _sandboxed(ev: dict, shell: set[str]) -> str | None:
         """A tool command's answer that says Claude Code's sandbox refused its call to Orchestra
         (local_http.MARK): the owner's report (said once in full: sandbox.Blocked), and the turn ends
-        there, before the model can try the command outside the sandbox."""
+        there, before the model can try the command outside the sandbox. Only with ``[agents]
+        sandbox_escape = false``: otherwise the refusal goes to the model, which says to run it outside."""
         content = (ev.get("message") or {}).get("content")
         for part in content if isinstance(content, list) else []:
             if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("tool_use_id") in shell):

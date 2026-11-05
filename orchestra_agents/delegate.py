@@ -98,7 +98,7 @@ def delegate(project: Project, store: AgentStore, a: dict, role: str, env: dict 
     bounds = tuple(dict.fromkeys(str(p) for p in (project.repo_root, project.orchestra.state_dir)))
     spec = SessionSpec(session_id=sid, session_dir=project.sessions_dir, cwd=project.repo_root, system_prompt=system,
                        role="supervisor", tool_groups=groups, env=senv, log_path=logs / f"{sid}.stderr.log", model=model_,
-                       provider=cfg.provider, thinking=cfg.thinking, compact_tokens=None, tools_via=cfg.tools_via,
+                       provider=cfg.provider, thinking=cfg.thinking, compact_tokens=None, tools_via=cfg.tools_via, sandbox_escape=cfg.sandbox_escape,
                        read_only=True, bounds=bounds)
     session = harness.start(spec)
     try:

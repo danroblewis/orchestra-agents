@@ -62,17 +62,24 @@ def _catalogue(project: Project, a: dict):
                  **({"match": bound} if bound else {})}
         specs = load({"sources": [entry]}, project.repo_root)
         if specs.refused:
-            raise StoreError("that source cannot be read: " + "; ".join(specs.refused.values()))
+            raise StoreError("that source cannot be read: " + "; ".join(specs.refused.values()) + _unseen(specs.refused))
     else:
         specs = for_project(project.orchestra)
         name = (a.get("source") or "").strip()
         names = [s.name for s in specs.sources]
         if name and name not in names:
             refused = specs.refused.get(name)
-            raise StoreError(f"[[sources]] {name}: refused: {refused}" if refused else
+            raise StoreError(f"[[sources]] {name}: refused: {refused}{_unseen(specs.refused)}" if refused else
                              f"no source {name!r} in [[sources]] (declared: {', '.join(names) or 'none'}); "
                              "give a url to look at one before declaring it")
     return Catalogue(project.orchestra, metrics_for(project.orchestra), specs), name
+
+
+def _unseen(refused: dict[str, str]) -> str:
+    """When the refusal is only a token file this process cannot see (Claude Code's sandbox): what to do
+    instead of giving up (the owner, 2026-11-04): write the entry, and let the host and the Core page probe it."""
+    from .credential_paths import AFTER, unseen
+    return f". {AFTER}" if unseen(refused) else ""
 
 
 def check_sources(project: Project, a: dict) -> dict:

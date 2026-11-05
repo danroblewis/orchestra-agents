@@ -328,10 +328,10 @@ class AgentHost:
         return {w.split(":")[0] for w in BUILTIN_ROLES["supervisor"].wake_on} - {INTENT_REQUESTED}
 
     def _harness_settings(self) -> tuple:
-        return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking, self.cfg.tools_via)
+        return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking, self.cfg.tools_via, self.cfg.sandbox_escape)
 
     def _follow_harness(self) -> None:
-        """``[agents]`` harness, model, provider, thinking or tools_via changed (the Supervisor sets them at the
+        """``[agents]`` harness, model, provider, thinking, tools_via or sandbox_escape changed (the Supervisor sets them at the
         human's choice): once no turn runs, the resident sessions are closed and the next tick opens
         them on what is configured now. A session on another harness is a new conversation."""
         want = self._harness_settings()
@@ -451,7 +451,7 @@ class AgentHost:
             system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd),
+            tools_via=self.cfg.tools_via, sandbox_escape=self.cfg.sandbox_escape, read_only=read_only, bounds=self._bounds(role, cwd),
             skills=skills.for_session(self.project) if role == protocol.SUPERVISOR else ())
         proc = file_output.start(self.harness, spec) if spec.tools_via == file_output.MODE else self.harness.start(spec)
         if not ticket_id:

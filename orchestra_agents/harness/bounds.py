@@ -68,10 +68,14 @@ def settings(roots_file: Path) -> dict:
                                       "hooks": [{"type": "command", "command": hook, "timeout": 10}]}]}}
 
 
-def write(directory: Path, session_id: str, bounds: tuple[str, ...], claude_dir: Path) -> Path:
-    """The session's settings file (and its roots beside it); its path, for ``--settings``."""
-    roots_file = directory / f"{session_id}.bounds.json"
-    roots_file.write_text(json.dumps(roots(bounds, claude_dir), indent=1) + "\n", encoding="utf-8")
+def write(directory: Path, session_id: str, bounds: tuple[str, ...], claude_dir: Path, extra: dict | None = None) -> Path:
+    """The session's settings file (and its roots beside it, when it is bounded), with ``extra``'s keys
+    (the sandbox's: sandbox.py); its path, for ``--settings``."""
+    out: dict = {}
+    if bounds:
+        roots_file = directory / f"{session_id}.bounds.json"
+        roots_file.write_text(json.dumps(roots(bounds, claude_dir), indent=1) + "\n", encoding="utf-8")
+        out = settings(roots_file)
     p = directory / f"{session_id}.settings.json"
-    p.write_text(json.dumps(settings(roots_file), indent=1) + "\n", encoding="utf-8")
+    p.write_text(json.dumps(out | (extra or {}), indent=1) + "\n", encoding="utf-8")
     return p

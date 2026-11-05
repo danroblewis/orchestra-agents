@@ -21,7 +21,8 @@ import threading
 import uuid
 from pathlib import Path
 
-from . import bash_tools, bounds
+from ..local_http import ENV as SANDBOX_PROXY
+from . import bash_tools, bounds, sandbox
 from .base import (
     TOOL_CALL_S,
     AgentSession,
@@ -206,7 +207,8 @@ class ClaudeCodeSession(AgentSession):
         env = {**session_env(CLAUDE_AUTH), **self.spec.env, "ORCHESTRA_TOOLS": ",".join(self.spec.tool_groups)}
         if self.via() == "bash":              # a tool run from the Bash tool may take as long as any tool call
             ms = str(int(TOOL_CALL_S * 1000))
-            env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms}
+            env |= {"BASH_DEFAULT_TIMEOUT_MS": ms, "BASH_MAX_TIMEOUT_MS": ms,
+                    SANDBOX_PROXY: "1"}     # in Claude Code's sandbox, the tool command reaches Orchestra through its proxy
         return env
 
     def _mcp_config(self, via: str = "mcp") -> Path:
@@ -240,9 +242,8 @@ class ClaudeCodeSession(AgentSession):
         if self.spec.model:
             args += ["--model", self.spec.model]
         args += ["--disallowedTools", ",".join(NOT_ORCHESTRA + (EDITS if self.spec.read_only else ()))]
-        if self.spec.bounds:              # the Supervisor's bounds, as far as Claude Code's settings hold them (bounds.py)
-            own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
-            args += ["--settings", str(bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own))]
+        if (settings := self._settings(via)) is not None:
+            args += ["--settings", str(settings)]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""
@@ -254,6 +255,17 @@ class ClaudeCodeSession(AgentSession):
             args += ["--append-system-prompt-file", str(sp)]
         args += ["--resume", self.uuid] if resume else ["--session-id", self.uuid]
         return args
+
+    def _settings(self, via: str) -> Path | None:
+        """The session's settings file: the Supervisor's bounds, as far as Claude Code's settings hold
+        them (bounds.py), and, with the tools from the shell, the sandbox's allow for exactly Orchestra's
+        local ports and the project's state directory to write in (sandbox.py), read at every turn. None when it needs neither."""
+        own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
+        repo = self.spec.env.get("ORCHESTRA_REPO")
+        extra = sandbox.settings(sandbox.ports(repo), sandbox.state_dir(repo)) if via == "bash" else {}
+        if not self.spec.bounds and not extra:
+            return None
+        return bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own, extra)
 
     def prompt(self, text: str, timeout: float | None, on_event: OnEvent | None = None,
                idle_timeout: float | None = None) -> TurnResult:
@@ -305,6 +317,7 @@ class ClaudeCodeSession(AgentSession):
             reader = _LineReader(self.proc.stdout)
             last_text = ""
             calls: dict[str, str] = {}       # Orchestra's tool calls through the server: tool_use id -> tool
+            shell: set[str] = set()          # Orchestra's tool calls from the shell: their tool_use ids
             while True:
                 why = clock.expired()
                 if why:
@@ -335,6 +348,18 @@ class ClaudeCodeSession(AgentSession):
                             last_text = part["text"]
                         elif part.get("type") == "tool_use" and str(part.get("name", "")).startswith(TOOL_PREFIX):
                             calls[part.get("id", "")] = part["name"]
+                        elif part.get("type") == "tool_use" and part.get("name") == "Bash" and via == "bash":
+                            given = part.get("input") if isinstance(part.get("input"), dict) else {}
+                            if bash_tools.parse(str(given.get("command") or "")) is not None:
+                                if given.get("dangerouslyDisableSandbox"):
+                                    self.kill()
+                                    result.error, result.text = sandbox.ESCAPE, last_text
+                                    return result, None
+                                shell.add(part.get("id", ""))
+                elif t == "user" and shell and (why := self._sandboxed(ev, shell)):
+                    self.kill()
+                    result.error, result.text = why, last_text
+                    return result, None
                 elif t == "user" and via == "mcp" and calls:
                     stop = self._refused(ev, calls, result, emit)
                     if stop:
@@ -357,6 +382,19 @@ class ClaudeCodeSession(AgentSession):
         finally:
             self.proc = None
             stderr.close()
+
+    @staticmethod
+    def _sandboxed(ev: dict, shell: set[str]) -> str | None:
+        """A tool command's answer that says Claude Code's sandbox refused its call to Orchestra
+        (local_http.MARK): the owner's report (said once in full: sandbox.Blocked), and the turn ends
+        there, before the model can try the command outside the sandbox."""
+        content = (ev.get("message") or {}).get("content")
+        for part in content if isinstance(content, list) else []:
+            if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("tool_use_id") in shell):
+                continue
+            if (found := sandbox.BLOCKED.found(sandbox.result_text(part.get("content")))) is not None:
+                return sandbox.BLOCKED.report(found)
+        return None
 
     def _settle(self, ev: dict, result: TurnResult) -> None:
         """A turn's result: its cost is the change in Claude Code's running total (``total_cost_usd``

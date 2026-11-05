@@ -20,6 +20,7 @@ import urllib.request
 from orchestra import runtime
 from orchestra.runtime import alive
 
+from . import local_http
 from .config import Project
 from .store import StoreError
 
@@ -41,7 +42,7 @@ def fetch(project: Project, version: int | None = None) -> dict:
     req = urllib.request.Request(f"http://127.0.0.1:{int(web['port'])}{PATH}{query}",
                                  headers={"Authorization": f"Bearer {auth.token(project.orchestra)}"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+        with local_http.urlopen(req, TIMEOUT_S) as r:
             return json.loads(r.read() or b"{}")
     except urllib.error.HTTPError as e:
         raise StoreError(f"Orchestra's web server refused the Dynamics page's model (HTTP {e.code})") from None

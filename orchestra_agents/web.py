@@ -4,7 +4,8 @@ transcripts, the Supervisor chat and the way to it on every page, and the agents
 Its API is at ``/api/plugins/agents``. Besides the pages, the plugin declares the configured
 agents (the machines it implements, for the Machines page before they run), the host that runs
 them (``Plugin.processes``), which is no machine and so is declared as none, and the instrument
-that reads their measurements (``Plugin.collectors``: ``agents.turns``, measures.py)."""
+that reads their measurements (``Plugin.collectors``: ``agents.turns``, measures.py; ``agents.valves``,
+the valves' decisions by outcome, valve/metrics.py)."""
 
 from __future__ import annotations
 
@@ -107,7 +108,9 @@ def collectors(project) -> list[Collector]:
         return []
     step = max(1.0, float(project.orchestra.config.discovery_step))
     return [Collector.collect("turns", f"{shlex.quote(sys.executable)} -m orchestra agents metrics", every_s=step,
-                              timeout_s=min(step, 10.0), views=TURN_VIEWS)]
+                              timeout_s=min(step, 10.0), views=TURN_VIEWS),
+            Collector.collect("valves", f"{shlex.quote(sys.executable)} -m orchestra_agents.valve.metrics", every_s=step,
+                              timeout_s=min(step, 10.0))]
 
 
 # How agents.turns makes its series (Orchestra's collect.views): the level of sessions in a turn, per

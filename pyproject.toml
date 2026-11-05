@@ -31,6 +31,10 @@ agents = "orchestra_agents.cli:main"   # `orchestra agents ...` (PLUGINS.md §4.
 [project.entry-points."orchestra.plugins"]
 agents = "orchestra_agents.web:plugin"
 
+[project.entry-points."orchestra_workflows.programs"]
+# a program shipped to the Workflows plugin's program host, run as `python -I -m <module>` (its guide, Programs)
+valve = "orchestra_agents.valve"
+
 [tool.hatch.metadata]
 allow-direct-references = true   # the dev extra takes orchestra-tasking from GitHub (a git URL)
 

@@ -106,7 +106,7 @@ def test_the_measurements_reach_the_store_through_the_plugins_instrument(project
     a_run(project, tmp_path)
     for name in ("agents_working", "agent_turns_started_total", "agent_turns_finished_total"):
         assert not for_project(project.orchestra).dump(name, {}), name                    # the host wrote none
-    [c] = web.collectors(project)
+    c, _ = web.collectors(project)
     assert c.name == "turns" and c.kind == "collect" and c.target.endswith("-m orchestra agents metrics")
     monkeypatch.chdir(project.repo_root)
     capsys.readouterr()                                                                     # the host's log so far
@@ -125,7 +125,7 @@ def test_the_instrument_declares_its_series_views_so_the_level_balances_by_const
     """D33: agents_working and the two turn counters come from one record, so the instrument says
     so (Orchestra's collect.views) and discovery keeps the stock by construction, never a fit
     ("R² 1.000 · trust 0.83 high" was a balance of its own making)."""
-    [c] = web.collectors(project)
+    c, _ = web.collectors(project)
     views = {v.series: v.record(c.name) for v in c.views}
     assert views["agents_working"] == {"source": "own", "instrument": "turns", "view": "count", "place": "role",
                                        "describes": "agent sessions of a role in a turn now"}

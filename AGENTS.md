@@ -51,7 +51,9 @@ broken without updating the spec and saying so in the commit.
    that contract. The exceptions, each a lazy import of an optional dependency that says the plugin
    is not installed when it is not: the Supervisor's workflow tools (`workflow_tools.py`, 2026-11-01,
    W7; that plugin's SPEC §10) import its validated writer, loader and record API, and its start match and settings (`adopt.py`, 2026-11-03), and `program_tools.py`
-   its programs reader (`programs.machines`, 2026-11-03, for `declare_program`); and
+   its programs reader (`programs.machines`, 2026-11-03, for `declare_program`, and `declare_valve`,
+   2026-11-04); and the valve (`valve/inputs.py`, 2026-11-04, T66) its record API
+   (`orchestra_workflows.api.Record`), to read an item's last facts; and
    `integrate_system` (`integrate_kits.py`, I3) imports `orchestra_bridges.kits` (its scaffold,
    templates and settings, and its `machine.toml` reader); and `propose_people` (`people_tools.py`,
    2026-11-04, B10) imports its identity map and the table that proposes joins

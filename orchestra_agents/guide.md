@@ -720,6 +720,10 @@ not installed: tell the owner, and write nothing.
   has no program declared, it is "declared but not running", and so is the goal it serves; say so,
   never "fully running" (Orchestra corrects a reply that does). `declare_program` declares a
   program the plugin ships, on the owner's quoted yes.
+- **A decision step** ("filter tickets that don't need on-call"): `declare_valve` declares a valve,
+  a program step that asks a model the owner has access to which way each item flows, from exactly
+  the inputs it names, and inserts it into the workflow; its label is the step's outcome, the
+  fallback (`ask`) goes to the workflow's `person: owner` step. The `valve` skill has the steps.
 - **Confirming machines**: `confirm` of a machine takes the owner's yes that names it, or all of
   them ("confirm all three"); "Start tracking" or "go ahead" confirms none. Ask in one sentence
   and confirm on their answer. `list_workflows` reads them all back; `explain_item` says why an item is where it is.

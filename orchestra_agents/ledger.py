@@ -28,7 +28,7 @@ AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "res
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES | BINDING_CHANGES
            | frozenset({"restart_machine", "edit_machine_file", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
-                         "draft_upstream_issue", "declare_workflow", "declare_program", "retry_step",
+                         "draft_upstream_issue", "declare_workflow", "declare_program", "declare_valve", "retry_step",
                          "clear_items"}))
 
 PAST = {"create": "created", "update": "updated", "delete": "deleted", "close": "closed", "pause": "paused",
@@ -74,6 +74,9 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
                 + (", as the owner asked" if result.get("author") == "owner" else ", as your proposal"))
     if command == "declare_program":
         return f"declared the program {result.get('program')} at {result.get('path')} (not committed), as the owner said"
+    if command == "declare_valve":
+        return (f"declared the valve {result.get('valve')} at {result.get('declaration')} (not committed), "
+                f"at most {result.get('cap')} model calls a day")
     if command == "draft_upstream_issue":
         return f"drafted the upstream issue {result.get('draft') or ''} for the owner's approval ({result.get('repo')})"
     if command in SETUP_COMMANDS:

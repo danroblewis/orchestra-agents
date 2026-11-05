@@ -49,7 +49,7 @@ details.fold { display:inline } details.fold summary { display:inline; cursor:po
 details.msg.toolResult > summary { cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis } details.msg.toolResult > summary code { font-size:11px; color:var(--muted) }
 .convo-only { display:inline-flex; gap:6px; align-items:center; font-size:12px; cursor:pointer; margin:0 0 6px }
 #transcript.convo .msg.marker, #transcript.convo .msg.toolResult, #transcript.convo .tc, #transcript.convo .msg.user:not(.owner), #transcript.convo .msg.assistant.notext { display:none }
-.chat.top { position:static; border-top:0; border-bottom:1px solid var(--border); padding:4px 0 10px; margin:10px 0 }
+/* the chat sits at the bottom of the transcript, sticky (2026-11-04) */
 @media (max-width: 900px) { .chat { bottom:-14px } }   /* Orchestra's drawer has 14px of padding there, not 18px */
 .chip.waiting { color:#fde68a; border-color:#92400e } .chip.waiting .dot { background:#f59e0b; animation:pulse 2.4s infinite }
 .chip.archived { color:var(--muted) }

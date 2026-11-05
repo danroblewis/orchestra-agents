@@ -59,20 +59,24 @@ async function openTranscript(id) {
   const d = await r.json(); const s = d.session;
   const perTicket = /^(worker|reviewer)-/.test(id);
   let html = `<div id="transcript-head">${transcriptHead(id, s, d)}</div>`;
-  if (id === "supervisor") html += `<form id="chat" class="chat top" onsubmit="return sendToSupervisor(event)">
-      <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
-      <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
-      ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
-    </form><div id="pending">${renderPending(d.pending, s)}</div><div id="live"></div>`;
   if (d.started_with) html += `<details class="started"><summary>The prompt this session was started with <span class="muted">(${d.started_with.length.toLocaleString()} chars; roles, team responsibilities, where it works)</span></summary><div class="prompt md">${md(d.started_with)}</div></details>`;
   else if (!perTicket) html += `<div class="empty">The prompt file this session was started with is missing: the agents' state directory was cleaned since. The agent's current prompt is on the Agents page.</div>`;
-  html += `<h2>Transcript · newest first</h2>${id === "supervisor" ? `<label class="convo-only muted"><input type="checkbox" id="convo-only" onchange="setConversationOnly(this.checked)" ${conversationOnly() ? "checked" : ""}> Only the conversation</label>` : ""}<div id="transcript"${id === "supervisor" && conversationOnly() ? ' class="convo"' : ""}>`;
+  html += `<h2>Transcript</h2>${id === "supervisor" ? `<label class="convo-only muted"><input type="checkbox" id="convo-only" onchange="setConversationOnly(this.checked)" ${conversationOnly() ? "checked" : ""}> Only the conversation</label>` : ""}<div id="transcript"${id === "supervisor" && conversationOnly() ? ' class="convo"' : ""}>`;
   // Only markers at least as new as the oldest message on this page are placed; older ones belong to older pages.
   const oldest = d.messages.length ? Math.min(...d.messages.map(tsOf)) : 0;
   const first = withMarkers(d.messages, d.markers, d.has_more ? oldest - 1 : 0);
+  const more = `<div id="transcript-more" class="empty" style="margin-bottom:8px">${d.has_more ? "scroll up for older messages…" : "beginning of session"}</div>`;
+  html = html.replace(/<div id="transcript"/, more + '<div id="transcript"');
   html += first.length ? first.map(renderMessage).join("") : `<div class="empty">${s.file_exists ? "No messages yet." : "No turns yet: the harness creates the session file on the first prompt. This agent is woken by events or, for the Supervisor, by a message."}</div>`;
-  html += `</div><div id="transcript-more" class="empty" style="margin-top:8px">${d.has_more ? "scroll for older messages…" : "beginning of session"}</div>`;
+  html += `</div><div id="progress">${progressHtml(s)}</div>`;
+  if (id === "supervisor") html += `<div id="pending">${renderPending(d.pending, s)}</div><div id="live"></div>
+    <form id="chat" class="chat" onsubmit="return sendToSupervisor(event)">
+      <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
+      <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
+      ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
+    </form>`;
   openDrawer(html);
+  scrollTranscriptToEnd();
   transcriptPaging = { id, nextBefore: d.next_before, hasMore: d.has_more, loading: false, total: d.total,
                        markerTs: Math.max(0, ...(d.markers || []).map(tsOf)), finished: !transcriptLive(d.session) };
   const ta = $("chat-input");
@@ -95,15 +99,25 @@ function transcriptHead(id, s, d) {
   const scripted = id === "supervisor" && s.harness === "dummy" ? ' <span class="tag" title="the dummy harness: a script answers, no model">scripted (dummy)</span>' : "";
   return `<h3>${esc(id)} <span class="chip ${st.cls}" title="${esc(st.title)}"><span class="dot"></span>${esc(st.text)}${st.tag ? `<span class="chip-tag">${esc(st.tag)}</span>` : ""}</span>${scripted}${agentLink}</h3>
     ${id === "supervisor" ? `<details class="started"><summary class="muted">session details</summary>${kv}</details>` : kv}
-    ${s.status === "running" && (s.partial_text || s.thinking_chars) ? `<div class="msg assistant inprogress"><div class="r">reply in progress <span class="muted">· not in the transcript until the message completes${s.thinking_chars ? ` · ${Number(s.thinking_chars).toLocaleString()} chars of thinking so far` : ""}</span></div>${s.partial_text ? md(s.partial_text) : '<span class="muted">(thinking; no reply text yet)</span>'}</div>` : ""}`;
+`;
 }
+
+// The reply being written, below the transcript (not in it until the message completes).
+function progressHtml(s) {
+  return s && s.status === "running" && (s.partial_text || s.thinking_chars) ? `<div class="msg assistant inprogress"><div class="r">reply in progress <span class="muted">· not in the transcript until the message completes${s.thinking_chars ? ` · ${Number(s.thinking_chars).toLocaleString()} chars of thinking so far` : ""}</span></div>${s.partial_text ? md(s.partial_text) : '<span class="muted">(thinking; no reply text yet)</span>'}</div>` : "";
+}
+
+// Oldest at the top, newest at the bottom, as a chat reads. The drawer follows new messages
+// while the reader is at the bottom, and leaves them alone while they read further up.
+const atTranscriptEnd = () => { const el = $("drawer"); return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80; };
+function scrollTranscriptToEnd() { const el = $("drawer"); if (el) el.scrollTop = el.scrollHeight; }
 
 const TRANSCRIPT_POLL_MS = 5000;
 // a transcript that can still grow: its turn runs, or its session is kept between turns (resident)
 const transcriptLive = (s) => !!s && s.status !== "archived" && (s.status === "running" || !!s.alive);
 
-// The open transcript polls for what arrived since it was rendered and prepends it
-// (newest first), keeping the reader's place and the older pages already loaded.
+// The open transcript polls for what arrived since it was rendered and appends it (newest at the
+// bottom), following it when the reader is at the bottom, keeping their place otherwise.
 async function refreshTranscript() {
   const p = transcriptPaging;
   if (!p || p.loading || p.finished || !$("overlay").classList.contains("open") || !$("transcript")) return;
@@ -113,18 +127,20 @@ async function refreshTranscript() {
     if (!r.ok) return;
     const d = await r.json();
     if (d.total < p.total) { transcriptPaging = null; return openTranscript(p.id); }  // file replaced: start over
+    const follow = atTranscriptEnd();
     const head = $("transcript-head"); if (head) head.innerHTML = transcriptHead(p.id, d.session, d);
+    const prog = $("progress"); if (prog) prog.innerHTML = progressHtml(d.session);
     showPending(d.pending, d.session);
+    if (follow) scrollTranscriptToEnd();
     if (!transcriptLive(d.session)) p.finished = true;          // nothing more will come: stop polling it
     const fresh = withMarkers(d.messages, d.markers, p.markerTs);
     p.markerTs = Math.max(p.markerTs || 0, ...(d.markers || []).map(tsOf));
     if (!fresh.length) return;
-    const box = $("transcript"), drawer = $("drawer");
+    const box = $("transcript");
     const empty = box.querySelector(".empty"); if (empty) empty.remove();
-    const before = drawer.scrollHeight;
-    box.insertAdjacentHTML("afterbegin", fresh.map(renderMessage).join(""));
+    box.insertAdjacentHTML("beforeend", fresh.map(renderMessage).join(""));
     highlightCode(box);
-    if (drawer.scrollTop > 0) drawer.scrollTop += drawer.scrollHeight - before;  // reading older messages: do not yank
+    if (follow) scrollTranscriptToEnd();
     p.nextBefore += d.messages.length; p.total = d.total;
   } catch (e) { /* next tick tries again */ }
   finally { p.loading = false; }
@@ -135,25 +151,27 @@ async function loadOlderTranscript() {
   p.loading = true;
   try {
     const d = await (await fetch(`${AGENTS_API}/sessions/${p.id}/transcript?before=${p.nextBefore}&limit=30`)).json();
-    const box = $("transcript"); if (!box) return;
-    box.insertAdjacentHTML("beforeend", d.messages.map(renderMessage).join(""));
+    const box = $("transcript"), drawer = $("drawer"); if (!box) return;
+    const before = drawer.scrollHeight;
+    box.insertAdjacentHTML("afterbegin", withMarkers(d.messages, [], 0).map(renderMessage).join(""));
     highlightCode(box);
+    drawer.scrollTop += drawer.scrollHeight - before;      // the message they were reading stays put
     p.nextBefore = d.next_before; p.hasMore = d.has_more;
-    $("transcript-more").textContent = p.hasMore ? "scroll for older messages…" : "beginning of session";
+    $("transcript-more").textContent = p.hasMore ? "scroll up for older messages…" : "beginning of session";
   } finally { p.loading = false; }
 }
 // An open transcript follows its session and pages back as the drawer scrolls. On the pages that
 // load this file late (every page but the Agents page: attention.js and machine-cards.js load it
 // on demand, after the page has loaded) DOMContentLoaded has passed, so it starts at once there.
 function agentsFollowTranscripts() {
-  $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && el.scrollTop + el.clientHeight > el.scrollHeight - 300) loadOlderTranscript(); });
+  $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && el.scrollTop < 300) loadOlderTranscript(); });
   setInterval(refreshTranscript, TRANSCRIPT_POLL_MS);
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", agentsFollowTranscripts);
 else agentsFollowTranscripts();
 
 // The owner's messages the host accepted and the transcript does not hold yet (owner_messages.py,
-// the transcript's `pending`), newest first like the transcript: sent and queued, being answered,
+// the transcript's `pending`), oldest first like the transcript, just above the message box: sent and queued, being answered,
 // answered (the transcript is about to show it) or not answered, with why. Never shown as lost.
 let sendingText = null, sendingTaken = false;   // the message this tab is sending, until the host's list (or the transcript) has it
 function renderPending(list, s) {
@@ -166,8 +184,8 @@ function renderPending(list, s) {
                                 : running ? "sent · queued: next, once the Supervisor's current turn ends" : "sent · starting")
     : p.status === "answered" ? "sent · answered; the transcript below shows it in a moment"
     : `sent · not answered: ${p.error || "the turn failed"}. Send it again if it still matters.`;
-  const rows = [...list].reverse().map((p) => `<div class="msg user owner pending ${esc(p.status)}"><div class="r"><b>you</b>${msgTime({ ts: p.at })} <span class="muted">· ${esc(state(p))}</span></div>${md(p.text)}</div>`);
-  if (sendingText != null && !list.some((p) => p.text === sendingText)) rows.unshift(`<div class="msg user owner pending sending"><div class="r"><b>you</b> <span class="muted">· sending…</span></div>${md(sendingText)}</div>`);
+  const rows = [...list].map((p) => `<div class="msg user owner pending ${esc(p.status)}"><div class="r"><b>you</b>${msgTime({ ts: p.at })} <span class="muted">· ${esc(state(p))}</span></div>${md(p.text)}</div>`);
+  if (sendingText != null && !list.some((p) => p.text === sendingText)) rows.push(`<div class="msg user owner pending sending"><div class="r"><b>you</b> <span class="muted">· sending…</span></div>${md(sendingText)}</div>`);
   return rows.join("");
 }
 function showPending(list, s) {
@@ -192,9 +210,9 @@ async function sendToSupervisor(ev) {
   if (!message) return false;
   ta.value = ""; ta.disabled = true; btn.disabled = true;
   sendingText = message; sendingTaken = false;
-  const box = $("pending"); if (box) { box.insertAdjacentHTML("afterbegin", renderPending([], null)); highlightCode(box); }
-  live.insertAdjacentHTML("afterbegin", `<div class="msg assistant"><div class="r">supervisor · working…</div><div id="live-body"></div></div>`);
-  $("drawer").scrollTop = 0;
+  const box = $("pending"); if (box) { box.insertAdjacentHTML("beforeend", renderPending([], null)); highlightCode(box); }
+  live.insertAdjacentHTML("beforeend", `<div class="msg assistant"><div class="r">supervisor · working…</div><div id="live-body"></div></div>`);
+  scrollTranscriptToEnd();
   let accepted = false;
   // Not accepted (refused, or the host is down): the words go back into the box, never lost.
   const notSent = (why) => {
@@ -207,7 +225,7 @@ async function sendToSupervisor(ev) {
     if (!resp.ok) {
       const body = await resp.text();
       const proxy = /^\s*<!doctype html|<html/i.test(body);
-      if (proxy) $("live-body").innerHTML = `<div class="bad">The connection was closed by the proxy in front of this page (HTTP ${resp.status}). If the host took your message it is listed above, with where it stands; the reply will appear in the transcript below.</div>`;
+      if (proxy) $("live-body").innerHTML = `<div class="bad">The connection was closed by the proxy in front of this page (HTTP ${resp.status}). If the host took your message it is listed above, with where it stands; the reply will appear in the transcript above.</div>`;
       else notSent(esc(body.slice(0, 300)));
       return false;
     }
@@ -215,6 +233,7 @@ async function sendToSupervisor(ev) {
     while (true) {
       const { value, done } = await reader.read(); if (done) break;
       buf += dec.decode(value, { stream: true });
+      const follow = atTranscriptEnd();
       let nl; while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
         const e = JSON.parse(line); const body = $("live-body");
@@ -229,6 +248,7 @@ async function sendToSupervisor(ev) {
           if (e.error) body.innerHTML += `<div class="bad">${md(e.error)}</div>`;
         }
       }
+      if (follow) scrollTranscriptToEnd();
     }
   } catch (err) {
     $("live-body").innerHTML += `<div class="bad">${esc(String(err))}. ${accepted ? "Your message was taken: it is listed above until the transcript shows it." : ""}</div>`;
@@ -236,6 +256,7 @@ async function sendToSupervisor(ev) {
   } finally { ta.disabled = false; btn.disabled = false; ta.focus(); if (accepted) sendingTaken = true; }
   await refreshTranscript();   // the exchange is in the session file now; show it once, there
   live.innerHTML = "";
+  scrollTranscriptToEnd();
   return false;
 }
 
@@ -275,10 +296,20 @@ function renderMarker(e) {
   else text = esc(e.type);
   return `<div class="msg marker ${esc(String(e.type).replace(/\./g, "_"))}"><div class="r">orchestra${msgTime({ ts: e.ts })}</div>${text}</div>`;
 }
-// Markers are Orchestra's events for the session; they are merged with the messages by time, newest first.
+// Markers are Orchestra's events for the session; they are merged with the messages by time, oldest first.
+// Messages keep the session file's order (by index; a harness may record no time on some); each
+// marker goes before the first message stamped later than it.
 function withMarkers(messages, markers, newerThan) {
-  const ms = (markers || []).filter((e) => tsOf(e) > (newerThan || 0)).map((e) => ({ ...e, _marker: true }));
-  return [...messages, ...ms].sort((a, b) => tsOf(b) - tsOf(a));
+  const ms = (markers || []).filter((e) => tsOf(e) > (newerThan || 0)).map((e) => ({ ...e, _marker: true }))
+    .sort((a, b) => tsOf(a) - tsOf(b));
+  const msgs = messages.every((m) => m.i != null) ? [...messages].sort((a, b) => a.i - b.i) : [...messages].reverse();
+  const out = [];
+  for (const m of msgs) {
+    const t = tsOf(m);
+    while (t && ms.length && tsOf(ms[0]) <= t) out.push(ms.shift());
+    out.push(m);
+  }
+  return [...out, ...ms];
 }
 // A user message that Orchestra wrote: a wake-up, an assignment, a review request, a nudge.
 const FROM_ORCHESTRA = /^(\[Orchestra:|# Wake-up for |# Your assignment|# Review request|You stopped without)/;

@@ -693,7 +693,9 @@ State is in `~/.orchestrator/<key>/agents/`: `runtime.json` (sessions and archiv
 with the host's markers for its transcript; the reports an agent's tool handed to the host;
 queued wake-ups; each agent's state, with the changes its tools made, `actions`; the live
 sessions' token grants, `grants` (digests only); probe states; the control endpoint; the metric counters,
-`metric_counts`; and `supervisor_seen_at`, when the human last read the Supervisor), behind one
+`metric_counts`; `supervisor_seen_at`, when the human last read the Supervisor; and
+`owner_messages`, each chat message the host accepted that the Supervisor's transcript does not
+hold yet, with its time and status, `owner_messages.py`), behind one
 file lock and written only by `store.py`; `sessions/` (the harnesses' session records and, for a
 harness that keeps its transcript here, the archive; a reset keeps the old transcript where its
 harness keeps it and records the path on the archived run); `logs/` (the host's log and, under `agents/`, each
@@ -741,7 +743,10 @@ Mounted by Orchestra's web app (`orchestra/plugins.py`):
   page, which observes it), agents outside a team,
   the teams' probes, the roles; a drawer for each agent, team and role (definition, tools,
   prompt, runs) and for each session (its transcript, newest first, with the host's markers for
-  cut-off turns, and the Supervisor's chat);
+  cut-off turns, and the Supervisor's chat: the owner's own messages tinted with the accent,
+  apart from Orchestra's context, wake-ups and tool calls; each tool result folded to one line;
+  "Only the conversation", remembered per browser, shows only the owner's messages and the
+  Supervisor's written replies);
 - the **Supervisor button** in every page's navigation and a banner when something waits on the
   human: a message from the Supervisor not yet read, and the task system's blocked tickets
   (read from its plugin when installed; its own banner is asked to stand aside) (`attention.js`).
@@ -771,13 +776,21 @@ highlight.js, each loaded once from cdnjs); Orchestra renders none.
 API at `/api/plugins/agents`: `GET /org`, `/roles/{name}`, `/agents/{name}`, `/teams/{name}`
 (the organisation); `GET /agents` (every agent and every session as the instance it runs as,
 with the ticket it is on; the cards read this); `GET /state` (sessions and probes);
-`GET /sessions/{id}/transcript` (paged, with the markers; each message carries its index `i`);
+`GET /sessions/{id}/transcript` (paged, with the markers; each message carries its index `i`; in a
+Supervisor transcript a user message with the owner's words carries them, verbatim, as `owner`,
+and Orchestra's context in front as `context`, split at `prompting.CHAT_SEAM`,
+`session_turns.owner_words`; the live Supervisor's also lists `pending`: the owner's messages the
+host accepted that the transcript does not hold yet, oldest first, each `waiting` with its `place`
+in the queue, `answering`, `answered` or `failed` with why, so a message sent is shown from its
+acceptance, across a refresh, a reopened dialog, another tab or a proxy that cut the stream, and
+the chat's messages are answered in the order accepted);
 `GET /sessions?ticket=<id>` (the agent turns on a ticket, `session_turns.ticket_sessions`) and
 `GET /sessions/{id}/messages?start=&end=` (one turn's messages in order, with its markers);
 `GET /attention`
 (the unread message, and whether the host that answers is up: with it down the banner and the
 button stop offering an answer) and `POST /attention/seen`; `POST /supervisor` (a message to the
-Supervisor, proxied to the host, streamed). Every read re-reads `[agents]` from `orchestra.toml`,
+Supervisor, proxied to the host, streamed; its first line once the host has recorded the message
+is `{"type": "accepted", "id"}`). Every read re-reads `[agents]` from `orchestra.toml`,
 as the host does each tick. The UI is read-only for humans except the Supervisor chat
 (Orchestra's rule 9): an agent, a role, a team or a ticket is changed only by telling the
 Supervisor. The pages, these routes and the static files are behind Orchestra's web login

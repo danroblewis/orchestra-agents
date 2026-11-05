@@ -63,10 +63,10 @@ async function openTranscript(id) {
       <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
       <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
       ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
-    </form><div id="live"></div>`;
+    </form><div id="pending">${renderPending(d.pending, s)}</div><div id="live"></div>`;
   if (d.started_with) html += `<details class="started"><summary>The prompt this session was started with <span class="muted">(${d.started_with.length.toLocaleString()} chars; roles, team responsibilities, where it works)</span></summary><div class="prompt md">${md(d.started_with)}</div></details>`;
   else if (!perTicket) html += `<div class="empty">The prompt file this session was started with is missing: the agents' state directory was cleaned since. The agent's current prompt is on the Agents page.</div>`;
-  html += `<h2>Transcript · newest first</h2><div id="transcript">`;
+  html += `<h2>Transcript · newest first</h2>${id === "supervisor" ? `<label class="convo-only muted"><input type="checkbox" id="convo-only" onchange="setConversationOnly(this.checked)" ${conversationOnly() ? "checked" : ""}> Only the conversation</label>` : ""}<div id="transcript"${id === "supervisor" && conversationOnly() ? ' class="convo"' : ""}>`;
   // Only markers at least as new as the oldest message on this page are placed; older ones belong to older pages.
   const oldest = d.messages.length ? Math.min(...d.messages.map(tsOf)) : 0;
   const first = withMarkers(d.messages, d.markers, d.has_more ? oldest - 1 : 0);
@@ -114,6 +114,7 @@ async function refreshTranscript() {
     const d = await r.json();
     if (d.total < p.total) { transcriptPaging = null; return openTranscript(p.id); }  // file replaced: start over
     const head = $("transcript-head"); if (head) head.innerHTML = transcriptHead(p.id, d.session, d);
+    showPending(d.pending, d.session);
     if (!transcriptLive(d.session)) p.finished = true;          // nothing more will come: stop polling it
     const fresh = withMarkers(d.messages, d.markers, p.markerTs);
     p.markerTs = Math.max(p.markerTs || 0, ...(d.markers || []).map(tsOf));
@@ -151,20 +152,62 @@ function agentsFollowTranscripts() {
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", agentsFollowTranscripts);
 else agentsFollowTranscripts();
 
+// The owner's messages the host accepted and the transcript does not hold yet (owner_messages.py,
+// the transcript's `pending`), newest first like the transcript: sent and queued, being answered,
+// answered (the transcript is about to show it) or not answered, with why. Never shown as lost.
+let sendingText = null, sendingTaken = false;   // the message this tab is sending, until the host's list (or the transcript) has it
+function renderPending(list, s) {
+  list = list || [];
+  const running = s && s.status === "running", answering = list.some((p) => p.status === "answering");
+  const state = (p) => p.status === "answering" ? "sent · the Supervisor is answering it"
+    : p.status === "waiting" ? (p.place > 1 ? `sent · queued behind ${p.place - 1} other message${p.place > 2 ? "s" : ""} of yours`
+                                : answering ? "sent · queued: next, after the message being answered"
+                                : running ? "sent · queued: next, once the Supervisor's current turn ends" : "sent · starting")
+    : p.status === "answered" ? "sent · answered; the transcript below shows it in a moment"
+    : `sent · not answered: ${p.error || "the turn failed"}. Send it again if it still matters.`;
+  const rows = [...list].reverse().map((p) => `<div class="msg user owner pending ${esc(p.status)}"><div class="r"><b>you</b>${msgTime({ ts: p.at })} <span class="muted">· ${esc(state(p))}</span></div>${md(p.text)}</div>`);
+  if (sendingText != null && !list.some((p) => p.text === sendingText)) rows.unshift(`<div class="msg user owner pending sending"><div class="r"><b>you</b> <span class="muted">· sending…</span></div>${md(sendingText)}</div>`);
+  return rows.join("");
+}
+function showPending(list, s) {
+  const box = $("pending"); if (!box) return;
+  // in the host's list now, or taken and already out of it: the transcript holds it
+  if (sendingText != null && (sendingTaken || (list || []).some((p) => p.text === sendingText))) sendingText = null;
+  box.innerHTML = renderPending(list, s); highlightCode(box);
+}
+
+// "Only the conversation": the owner's messages and the Supervisor's written replies, without the
+// tool calls, their results and Orchestra's markers. Remembered per browser.
+function conversationOnly() { try { return localStorage.getItem("agents.conversationOnly") === "1"; } catch (e) { return false; } }
+function setConversationOnly(on) {
+  try { localStorage.setItem("agents.conversationOnly", on ? "1" : "0"); } catch (e) { /* not remembered */ }
+  const box = $("transcript"); if (box) box.classList.toggle("convo", !!on);
+}
+
 async function sendToSupervisor(ev) {
   ev.preventDefault();
   const ta = $("chat-input"), btn = ev.target.querySelector("button"), live = $("live");
   const message = ta.value.trim();
   if (!message) return false;
   ta.value = ""; ta.disabled = true; btn.disabled = true;
-  live.insertAdjacentHTML("afterbegin", `<div class="msg assistant"><div class="r">supervisor · working…</div><div id="live-body"></div></div><div class="msg user"><div class="r">you</div>${md(message)}</div>`);
-  highlightCode(live); $("drawer").scrollTop = 0;
+  sendingText = message; sendingTaken = false;
+  const box = $("pending"); if (box) { box.insertAdjacentHTML("afterbegin", renderPending([], null)); highlightCode(box); }
+  live.insertAdjacentHTML("afterbegin", `<div class="msg assistant"><div class="r">supervisor · working…</div><div id="live-body"></div></div>`);
+  $("drawer").scrollTop = 0;
+  let accepted = false;
+  // Not accepted (refused, or the host is down): the words go back into the box, never lost.
+  const notSent = (why) => {
+    sendingText = null; const b = $("pending"); if (b) b.querySelector(".sending")?.remove();
+    if (!ta.value) ta.value = message;
+    $("live-body").innerHTML += `<div class="bad">Not sent: ${why} Your message is back in the box.</div>`;
+  };
   try {
     const resp = await fetch(AGENTS_API + "/supervisor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
     if (!resp.ok) {
       const body = await resp.text();
       const proxy = /^\s*<!doctype html|<html/i.test(body);
-      $("live-body").innerHTML = `<div class="bad">${proxy ? `The connection was closed by the proxy in front of this page (HTTP ${resp.status}). The Supervisor is still working on your message; its reply will appear in the transcript below.` : esc(body.slice(0, 300))}</div>`;
+      if (proxy) $("live-body").innerHTML = `<div class="bad">The connection was closed by the proxy in front of this page (HTTP ${resp.status}). If the host took your message it is listed above, with where it stands; the reply will appear in the transcript below.</div>`;
+      else notSent(esc(body.slice(0, 300)));
       return false;
     }
     const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -174,18 +217,22 @@ async function sendToSupervisor(ev) {
       let nl; while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1); if (!line.trim()) continue;
         const e = JSON.parse(line); const body = $("live-body");
-        if (e.type === "tool_start") body.innerHTML += `<div class="tc"><div class="r">⚙ ${esc(e.name || "tool")}</div></div>`;
+        if (e.type === "accepted") { accepted = sendingTaken = true; refreshTranscript(); }
+        else if (e.type === "tool_start") body.innerHTML += `<div class="tc"><div class="r">⚙ ${esc(e.name || "tool")}</div></div>`;
         else if (e.type === "assistant_end") {
           const txt = e.text || "";
           if (txt.trim()) { body.innerHTML += md(txt); highlightCode(body); }
         } else if (e.type === "done") {
+          if (!accepted && e.error) { body.previousElementSibling.textContent = "supervisor"; notSent(md(e.error)); continue; }
           body.previousElementSibling.textContent = e.error ? "supervisor · failed" : e.timed_out ? "supervisor · timed out" : "supervisor";
           if (e.error) body.innerHTML += `<div class="bad">${md(e.error)}</div>`;
         }
       }
     }
-  } catch (err) { $("live-body").innerHTML += `<div class="bad">${esc(String(err))}</div>`; return false; }
-  finally { ta.disabled = false; btn.disabled = false; ta.focus(); }
+  } catch (err) {
+    $("live-body").innerHTML += `<div class="bad">${esc(String(err))}. ${accepted ? "Your message was taken: it is listed above until the transcript shows it." : ""}</div>`;
+    return false;
+  } finally { ta.disabled = false; btn.disabled = false; ta.focus(); if (accepted) sendingTaken = true; }
   await refreshTranscript();   // the exchange is in the session file now; show it once, there
   live.innerHTML = "";
   return false;
@@ -234,22 +281,6 @@ function withMarkers(messages, markers, newerThan) {
 }
 // A user message that Orchestra wrote: a wake-up, an assignment, a review request, a nudge.
 const FROM_ORCHESTRA = /^(\[Orchestra:|# Wake-up for |# Your assignment|# Review request|You stopped without)/;
-// The Supervisor's prompt is the context Orchestra put in front (leading `[Orchestra: ...]` blocks:
-// the project context document, the events since its last turn, the ticket counts) and then the
-// human's words. The last block is either the one-line counts or the context document, which
-// ends at the last blank line before the human's words.
-function splitSupervisorPrompt(text) {
-  if (!text.startsWith("[Orchestra:") || /^\[Orchestra: escalation/.test(text) || /\n# Wake-up for /.test(text)) return null;
-  const lines = text.split("\n");
-  let last = -1;
-  lines.forEach((ln, i) => { if (ln.startsWith("[Orchestra:")) last = i; });
-  let cut = last + 1;
-  if (!/^\[Orchestra: ticket counts now/.test(lines[last])) { cut = lines.length; while (cut > last + 1 && lines[cut - 1] !== "") cut--; }
-  while (cut < lines.length && lines[cut] === "") cut++;
-  if (cut >= lines.length) return null;
-  const context = lines.slice(0, cut).join("\n").trimEnd();
-  return { context, contextLines: context.split("\n").length, human: lines.slice(cut).join("\n") };
-}
 // A wake-up is Orchestra's prompt to an agent the human did not write: what woke it, then the
 // whole project snapshot. In a transcript it is one line, the reasons, with the prompt folded under
 // it, so what the agent answered is what the eye lands on.
@@ -268,19 +299,21 @@ function renderMessage(m) {
   if (m._marker) return renderMarker(m);
   const at = m.i != null ? ` data-i="${m.i}"` : "";
   if (m.role === "toolResult") {
+    // folded to one line, the tool and the result's first line; the shell command itself stays open on its call
     const shell = SHELL_TOOLS.has(m.tool_name);
     const body = shell ? `<pre class="term">${highlightLog(m.text)}</pre>` : `<pre><code>${esc(m.text)}</code></pre>`;
-    return `<div class="msg toolResult ${m.is_error ? "err" : ""}"${at}><div class="r">result · ${esc(m.tool_name || "tool")}${m.is_error ? ' <span class="bad">error</span>' : ""}${msgTime(m)}</div>${body}</div>`;
+    const first = ((m.text || "").split("\n").find((l) => l.trim()) || "(empty)").slice(0, 120);
+    return `<details class="msg toolResult ${m.is_error ? "err" : ""}"${at}><summary class="r">result · ${esc(m.tool_name || "tool")}${m.is_error ? ' <span class="bad">error</span>' : ""}${msgTime(m)} <code>${esc(first)}</code></summary>${body}</details>`;
   }
   if (m.role === "user") {
+    // the server marks the owner's words in a Supervisor prompt (owner_messages.marked), all of them
+    if (m.owner != null) return (m.context ? `<details class="msg marker context"><summary>context the Supervisor was given (${m.context.split("\n").length} lines)</summary><div class="prompt md">${md(m.context.slice(0, 12000))}</div></details>` : "") +
+      `<div class="msg user owner"${at}><div class="r"><b>you</b>${msgTime(m)}</div>${md(m.owner)}</div>`;
     if (m.text.startsWith("# Wake-up for ") || (m.text.startsWith("[Orchestra:") && m.text.includes("\n# Wake-up for "))) return renderWake(m);
-    const split = splitSupervisorPrompt(m.text);
-    if (split) return `<details class="msg marker context"><summary>context the Supervisor was given (${split.contextLines} lines)</summary><div class="prompt md">${md(split.context.slice(0, 12000))}</div></details>
-      <div class="msg user"${at}><div class="r">you${msgTime(m)}</div>${md(split.human.slice(0, 12000))}</div>`;
     const who = FROM_ORCHESTRA.test(m.text) ? "orchestra" : "you";
     return `<div class="msg user"${at}><div class="r">${who}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}</div>`;
   }
-  return `<div class="msg ${m.role}"${at}><div class="r">${m.role}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}${m.tool_calls.map(renderToolCall).join("")}</div>`;
+  return `<div class="msg ${m.role}${m.role === "assistant" && !(m.text || "").trim() ? " notext" : ""}"${at}><div class="r">${m.role}${msgTime(m)}</div>${md(m.text.slice(0, 12000))}${m.tool_calls.map(renderToolCall).join("")}</div>`;
 }
 
 // One turn of a session, in order, for reading at a glance (the ticket drawer's agent sessions,

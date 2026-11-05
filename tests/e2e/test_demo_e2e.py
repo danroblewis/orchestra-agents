@@ -167,11 +167,14 @@ def test_a_program_worker_and_ai_agents_work_the_same_queue_and_land_on_main(dem
     assert tr["started_with"].startswith("# You are an Orchestra Reviewer")      # the code reviewer's prompt
 
     # the Supervisor answers through the host's control endpoint, as the web proxies it
-    lines = chat(web, "What is going on?")
-    assert lines[-1]["type"] == "done" and not lines[-1].get("error")
+    lines = chat(web, "What is going on?\n\nAnd what is next?")
+    assert next(ln for ln in lines if ln["type"] != "ping")["type"] == "accepted" and lines[-1]["type"] == "done" and not lines[-1].get("error")
     assert any(ln["type"] == "assistant_end" and ln["text"].startswith("supervisor acknowledges") for ln in lines)
     sup = web.get(f"{AGENTS}/sessions/supervisor/transcript")
     assert sup["turns"] == 1 and sup["session"]["alive"]
+    # the fake Claude's transcript gives the owner's words back whole, and nothing is left pending
+    assert [m["owner"] for m in sup["messages"] if m.get("owner") is not None] == ["What is going on?\n\nAnd what is next?"]
+    assert sup["pending"] == []
     assert web.get(f"{AGENTS}/attention")["message"]["text"].startswith("supervisor acknowledges")
 
 

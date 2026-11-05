@@ -25,7 +25,7 @@ from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
-from . import installed
+from . import installed, owner_messages
 from .api_org import read_org
 from .attention import unread
 from .config import Config, ConfigError, Project
@@ -217,7 +217,9 @@ def router(project) -> APIRouter:
     @r.post("/supervisor")
     async def supervisor_message(request: Request):
         """The one write path in the UI: a human message to the resident Supervisor.
-        Proxied to the control endpoint that the agents' host (`orchestra agents run`) serves; streams its NDJSON."""
+        Proxied to the control endpoint that the agents' host (`orchestra agents run`) serves; streams its NDJSON.
+        The host records the message once it accepts it (owner_messages.py) and says so on the stream
+        (``accepted``), so the transcript's ``pending`` shows it however this stream ends."""
         body = await request.json()
         current(project)
         ctl = store.runtime().get("control") or {}
@@ -281,6 +283,9 @@ def router(project) -> APIRouter:
             page = msgs[max(0, end - max(1, min(limit, 200))):end]
         page = [{**m, "i": i} for i, m in enumerate(page, end - len(page) if after is None else max(0, after))]
         page.reverse()
+        supervisor = s.get("kind") == "supervisor" or session_id == "supervisor"
+        if supervisor:                                   # the owner's words apart from Orchestra's context
+            page = [owner_messages.marked(m) for m in page]
         ctl = store.runtime().get("control") or {}
         host_alive = alive(ctl.get("pid"))
         s = {**s, "alive": session_alive(s, host_alive, residents_of(project)), "file_exists": exists}
@@ -290,7 +295,9 @@ def router(project) -> APIRouter:
         # its record; the session file stays the only transcript, and the view overlays these.
         return {"session": s, "messages": page, "total": total, "before": before, "next_before": total - (end - len(page)) if page else before,
                 "has_more": end - len(page) > 0, "turns": sum(1 for m in msgs if m["role"] == "user"), "started_with": started_with,
-                "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive}}
+                "markers": s.get("markers") or [], "host": {**ctl, "alive": host_alive},
+                # the owner's messages accepted and not in the transcript yet (owner_messages.py)
+                **({"pending": owner_messages.pending(store, msgs)} if session_id == "supervisor" else {})}
 
     @r.get("/sessions")
     async def sessions_on(ticket: str) -> dict:
@@ -310,6 +317,8 @@ def router(project) -> APIRouter:
         msgs = messages(s)
         stop = len(msgs) if end is None else max(0, min(end, len(msgs)))
         page = [{**m, "i": i} for i, m in enumerate(msgs[max(0, start):stop], max(0, start))]
+        if s.get("kind") == "supervisor":
+            page = [owner_messages.marked(m) for m in page]
         lo = epoch(page[0].get("ts")) - 1 if page else 0
         hi = epoch(page[-1].get("ts")) + 5 if page and end is not None and end < len(msgs) else float("inf")
         markers = [m for m in s.get("markers") or [] if lo <= epoch(m.get("ts")) <= hi and m.get("type") != "session.started"]

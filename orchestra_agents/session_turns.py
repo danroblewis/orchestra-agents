@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .harness import read_transcript
+from .prompting import ORCHESTRA_STARTS
 
 # A user message that goes on the turn before it instead of starting one: the host's nudge after
 # a turn that ended without its report (runner.py) and the Supervisor's promise follow-up (promises.py).
@@ -61,6 +62,35 @@ def kind_of(prompt: str) -> str:
     if HUMAN in prompt or not prompt.startswith("[Orchestra:"):
         return "chat"
     return "notice"
+
+
+# The seam prompting.chat_turn puts between Orchestra's notices and the owner's words: its notice
+# line, a blank line, then HUMAN. Since 2026-10-26 every chat turn with notices has it.
+_SEAM = re.compile(r"\[Orchestra: the notices above[^\n]*\]\n\n\[The human's message\]\n")
+_COUNTS = "[Orchestra: ticket counts now"
+
+
+def owner_words(text: str) -> tuple[str, str] | None:
+    """A Supervisor prompt as (Orchestra's context, the owner's words), or None when Orchestra
+    wrote all of it (a wake-up, an escalation, a follow-up). The owner's words are everything
+    after the first seam, verbatim, blank lines and lines that look like Orchestra's included; a
+    prompt with no notices is the owner's words alone. A prompt from before the seam existed is
+    split only after its ticket-counts line, the one boundary that format marked; any other is
+    left whole (None), so the reader sees all of it and nothing of the owner's is folded away."""
+    if text.startswith(HUMAN):
+        return "", text[len(HUMAN):]
+    if m := _SEAM.search(text):
+        return text[:m.end() - len(HUMAN)].rstrip(), text[m.end():]
+    if not text.startswith(ORCHESTRA_STARTS):
+        return "", text
+    if text.startswith("[Orchestra: escalation") or "\n# Wake-up for " in text or not text.startswith("[Orchestra:"):
+        return None
+    lines = text.split("\n")
+    last = max(i for i, ln in enumerate(lines) if ln.startswith("[Orchestra:"))
+    if not lines[last].startswith(_COUNTS):
+        return None
+    words = "\n".join(lines[last + 1:]).lstrip("\n")
+    return ("\n".join(lines[:last + 1]), words) if words.strip() else None
 
 
 def split(msgs: list[dict]) -> list[dict]:

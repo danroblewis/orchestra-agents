@@ -354,6 +354,13 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
         raise StoreError("[agents] pass_env is the owner's alone: it lets a variable of the host's environment, a credential "
                          "perhaps, into every session. Tell the owner the variable's name and to add it to pass_env in "
                          "their private overlay, then restart orchestra run")
+    if key == "scm.open_drafts" or (key == "scm" and isinstance(value, dict) and "open_drafts" in value):
+        raise StoreError("[scm] open_drafts is the owner's alone: it lets the program open_pr open pull requests on GitHub "
+                         "with no one approving each. Tell the owner the one line to add under [scm] in their private "
+                         "overlay, open_drafts = true, if they want the workers' changes opened as draft pull requests")
+    if key == "scm" and "open_drafts" in (project.orchestra.config.raw.get("scm") or {}):
+        raise StoreError("[scm] holds the owner's open_drafts, which only they set or remove: change its other keys one "
+                         "by one (key scm.repo, scm.base, ...), never the whole table")
     unseen = None
     if key in ("sources", "series") and isinstance(value, list):
         unseen = _check_sources(project, key, value)

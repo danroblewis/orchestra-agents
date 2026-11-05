@@ -14,6 +14,7 @@ call is checked against that role's tool groups before it runs (access.authorize
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -76,6 +77,9 @@ def check_args(command: str, args: dict[str, Any]) -> None:
             + f". It takes: {expected or 'no arguments'}.")
 
 
+FIELD = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")     # an item field's name (the program host's)
+
+
 def report_outcome(store: AgentStore, a: dict, role: str, offer: str) -> dict:
     """A floor offer's exit tool (floor.py): the outcome is checked against the offer's own list,
     which the host keeps on the turn's session record (floor_runner.py)."""
@@ -90,8 +94,12 @@ def report_outcome(store: AgentStore, a: dict, role: str, offer: str) -> dict:
         raise StoreError(f"outcome must be one of {', '.join(allowed)} or blocked")
     if outcome == "blocked" and not summary:
         raise StoreError("blocked requires a summary saying why")
-    store.set_report(offer, {"outcome": outcome, "summary": summary})
-    return {"ok": True, "message": "Outcome recorded. You may stop now."}
+    fields = a.get("fields")
+    if fields is not None and not (isinstance(fields, dict) and all(isinstance(k, str) and FIELD.match(k) for k in fields)):
+        raise StoreError("fields is an object of {name: value}, each name a letter or _ then letters, digits, _ or -")
+    store.set_report(offer, {"outcome": outcome, "summary": summary, **({"fields": fields} if fields else {})})
+    return {"ok": True, "message": "Outcome recorded" + (f" with the fields {', '.join(sorted(fields))}" if fields else "")
+            + ". You may stop now."}
 
 
 def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:

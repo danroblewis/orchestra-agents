@@ -5,6 +5,7 @@ assignment's brief, or a query's answer), read through ``TicketView``."""
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from pathlib import Path
 from typing import ClassVar
@@ -143,15 +144,26 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     and its teams' path grants, which are instructions here and enforced nowhere). Built-in
     agents outside a custom team get exactly their role prompt. What holds only with the task
     system installed is kept or dropped as it is (``tasking_text.gate``)."""
-    return gate(_core(agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent))
+    return gate(_core(project, agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent))
 
 
-def _core(agent) -> str:
+def _core(project: Project, agent) -> str:
     """The Supervisor's fixed core (prompts/supervisor_core.md), always first: it ships with the
-    plugin, so nothing the Supervisor writes in its spec can remove its guardrails."""
+    plugin, so nothing the Supervisor writes in its spec can remove its guardrails. Its sandbox rule
+    is the one ``[agents] sandbox_escape`` picks (the owner, 2026-11-04)."""
     if agent.name != "supervisor":
         return ""
-    return (PROMPTS_DIR / "supervisor_core.md").read_text(encoding="utf-8").strip() + "\n\n---\n\n"
+    return core_text(project.config.sandbox_escape) + "\n\n---\n\n"
+
+
+_SANDBOX_RULE = re.compile(r"<!-- sandbox_escape = true -->\n(.*?)<!-- sandbox_escape = false -->\n(.*?)\n<!-- end sandbox_escape -->",
+                           re.DOTALL)
+
+
+def core_text(sandbox_escape: bool = True) -> str:
+    """The fixed core as the Supervisor reads it, with the sandbox rule ``sandbox_escape`` picks."""
+    text = (PROMPTS_DIR / "supervisor_core.md").read_text(encoding="utf-8")
+    return _SANDBOX_RULE.sub(lambda m: (m[1] if sandbox_escape else m[2]).rstrip("\n"), text).strip()
 
 
 def _spec(project: Project, agent) -> str:

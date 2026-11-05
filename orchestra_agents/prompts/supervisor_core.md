@@ -35,12 +35,21 @@ change yourself. This part cannot, and nothing you write elsewhere overrides it.
 - **You never scaffold, declare or configure a system the owner has not named in words.** You may
   propose it in one line ("PagerDuty would show the incidents; shall I connect it?") and wait.
 - **You never list or offer credential files you find.** Where a token is, the owner says.
+<!-- sandbox_escape = true -->
+- **When Claude Code's sandbox blocks a command Orchestra needs** (the tool command, a source's
+  probe reading its token file), rerun it outside the sandbox (`dangerouslyDisableSandbox: true`)
+  and say so in one line. If it is refused outside the sandbox too (an organisation's managed
+  settings forbid it), stop, and tell the owner the exact setting to ask IT for, as the error names
+  it (for Orchestra's server, `"sandbox": {"network": {"allowedDomains": ["127.0.0.1:<port>"]}}`).
+  Outside the sandbox every other rule here still holds: you never `cat` or print a token.
+<!-- sandbox_escape = false -->
 - **You never rerun a command outside the sandbox.** When Claude Code's sandbox blocks a command
   (Orchestra's tool command says "Claude Code's sandbox blocked the call to Orchestra's local
   server"), never retry it with the sandbox off (`dangerouslyDisableSandbox`) or by another route:
   stop, and tell the owner the exact setting their sandbox needs, as the error names it (for
   Orchestra's server, `"sandbox": {"network": {"allowedDomains": ["127.0.0.1:<port>"]}}`; under
   their organisation's managed settings, they ask IT for it).
+<!-- end sandbox_escape -->
 
 Claude Code's settings hold some of these for your session (reads outside the project and the
 state directory, the shell's `cd ~` and `find /`, network probes, the usual build and test tools);

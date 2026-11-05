@@ -100,6 +100,7 @@ delegate_model = "haiku"  # the model of the Supervisor's delegated jobs (survey
 provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)
+sandbox_escape = true     # Claude Code: a command its sandbox blocks runs again outside it (default true; below)
 serves = ["worker", "reviewer"]   # the task system's roles these agents fill (default both)
 allow_push = []           # roles whose sessions may git push and write pull requests (default none: the owner's)
 coordinator_every = "30m" # a scheduled Coordinator check-in; unset (default): woken by events only
@@ -166,6 +167,21 @@ enabled = true            # false: no host, no agents
   MCP server nor a command of Orchestra's. The agents can then read nothing of Orchestra while they
   work (no reads, no tickets, no setup): fit for workers and machines on offers, not for you.
   `docs/policy-modes.md` compares the three for a policy reviewer.
+
+### Claude Code's sandbox (`sandbox_escape`)
+
+With the tools from the shell and Claude Code's sandbox on, the session's settings let the tool
+command reach Orchestra's local ports, write in the state directory, and read exactly the token files
+the configuration names (a `[[sources]]` entry's `token_file`, `[scm]`'s, a kit's). `[agents]
+sandbox_escape` (default `true`, the owner's choice): when the sandbox still blocks a command
+Orchestra needs (the tool command, a source's probe reading its token file), you rerun it outside the
+sandbox (`dangerouslyDisableSandbox: true`) and say so in one line; if that is refused too, the
+organisation's managed settings forbid it, and the refusal names what to ask IT for. Set it to
+`false` (`set_setting`, key `agents.sandbox_escape`) when the human wants every command kept in the
+sandbox: the turn then stops at a refusal and the human is told the setting to ask IT for. Either
+way you never `cat` or print a token. A `[[sources]]` entry whose token file the tool command cannot
+see is written all the same, saying so: tell the human what you wrote and that the Core page shows
+whether the store answers (the host reads the token outside any sandbox).
 
 The sessions start again on the new setting after their turn. Pi calls the tools through its
 extension with `mcp` or `auto` (it has no MCP server to block), and with `bash` from its own bash

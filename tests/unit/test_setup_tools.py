@@ -2,6 +2,7 @@
 orchestra.toml alone, with the reason, announced on the bus, answered with what applies; a change
 that cannot be committed, or that Orchestra's readers would refuse, leaves nothing behind."""
 
+import json
 import subprocess
 import tomllib
 
@@ -381,3 +382,21 @@ def test_what_fails_after_the_commit_is_said_and_the_commit_is_still_announced(p
     assert out["commit"] and "the runtime record is locked" in out["then_failed"]
     [ev] = changed_events(store)
     assert ev["commit"] == out["commit"] and ev["section"] == "project"
+
+
+def test_a_source_is_written_although_its_token_file_cannot_be_seen_from_here(project, store, tmp_path):
+    """The owner, 2026-11-04: in Claude Code's sandbox the tool command could not see the token file,
+    the source was refused and nothing was written. It is written, saying so; the host probes it."""
+    token = tmp_path / "outside" / "store-token"          # not there for this process, as the sandbox hides it
+    begin_turn(store, 'Read the shop\'s store, {job="shop"}, at most 50 series.')
+    entry = [{"name": "shop", "url": "http://127.0.0.1:9", "match": ['{job="shop"}'], "auth": "bearer",
+              "token_file": str(token)}]
+    out = call(project, store, "set_setting", key="sources", value=json.dumps(entry), target="repo", reason="the shop's store")
+    said = json.dumps(out)
+    assert "could not be found" in said and "written without checking it" in said and "Core page" in said and str(token) in said
+    assert toml(project)["sources"][0]["token_file"] == str(token)
+    (tmp_path / "outside").mkdir()
+    token.mkdir()                                          # there, but no file: still refused as Orchestra says
+    with pytest.raises(StoreError, match="no such file"):
+        call(project, store, "set_setting", key="sources", value=json.dumps([{**entry[0], "name": "shop2"}]),
+             target="repo", reason="the shop's store")

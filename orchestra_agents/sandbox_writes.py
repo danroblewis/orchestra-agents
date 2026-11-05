@@ -6,7 +6,8 @@ Sandboxed commands write only to the working directory and the temporary one unl
 "Configure sandboxing"); the Claude Code harness lists exactly that state directory in the
 session's settings (``harness/sandbox.py``). When the write is refused anyway (an organisation's
 managed settings deny it), the tool command answers with ``MARK`` and the path to ask IT for: macOS
-says ``Operation not permitted``, Linux ``Read-only file system``."""
+says ``Operation not permitted``, Linux ``Read-only file system``. With ``[agents] sandbox_escape``
+(``local_http.ESCAPE_ENV``) it says instead to run the command again outside the sandbox."""
 
 from __future__ import annotations
 
@@ -22,7 +23,12 @@ def setting(state_dir: str | Path) -> str:
     return f'"sandbox": {{"filesystem": {{"allowWrite": [{json.dumps(str(state_dir))}]}}}}'
 
 
-def words(state_dir: str | Path, path: str | Path) -> str:
+def words(state_dir: str | Path, path: str | Path, escape: bool | None = None) -> str:
+    from .local_http import RERUN, escape_allowed
+    if escape_allowed() if escape is None else escape:
+        return (f"{MARK} {state_dir} ({path}). {RERUN}If it is refused outside the sandbox too (the organisation's "
+                f"managed settings forbid it), stop and tell the owner to ask IT for {setting(state_dir)} in the managed "
+                f"settings.")
     return (f"{MARK} {state_dir} ({path}). Never rerun this command outside the sandbox: stop, and tell the owner that "
             f"Claude Code's sandbox needs {setting(state_dir)}. Orchestra's harness sets it for the session; when it is "
             f"blocked anyway, the organisation's managed settings refuse the path and only IT can allow it there.")

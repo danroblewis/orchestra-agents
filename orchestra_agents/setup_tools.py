@@ -38,7 +38,15 @@ from orchestra import runtime
 from orchestra.config import ConfigError, parse_duration
 from orchestra.config_edit import Change
 
-from . import era_guard, prompting, runs_project, scm_settings, source_limits, supervisor_pr
+from . import (
+    credential_paths,
+    era_guard,
+    prompting,
+    runs_project,
+    scm_settings,
+    source_limits,
+    supervisor_pr,
+)
 from .builtins import PER_TICKET_ROLES
 from .config import Project
 from .config_change import Edit, change, target_of
@@ -304,18 +312,31 @@ def _remove_entry(project: Project, store: AgentStore, a: dict) -> Plan:
                 label=f"{name} removed", subject=_about(section, name, project))
 
 
-def _check_sources(project: Project, key: str, value: list) -> None:
+def _check_sources(project: Project, key: str, value: list) -> str | None:
     """Refuse a [[sources]] or [[series]] list Orchestra would refuse when it reads it (a bad name,
     a literal secret, a series of no source): config_edit does not check sources, so without this
-    a refused source would be committed and only seen missing at the next discovery."""
+    a refused source would be committed and only seen missing at the next discovery. One refused
+    only because its token file could not be found from here is written all the same (the owner,
+    2026-11-04: never give up silently): the tool command may run in Claude Code's sandbox, which
+    cannot see the file, and the host and the Core page read it from outside any sandbox. What is
+    said then is the caution returned."""
     from orchestra.sources.spec import load
     raw = dict(project.orchestra.config.raw)
     raw[key] = value
     refused = load(raw, project.repo_root).refused
     mine = {k: v for k, v in refused.items() if k.startswith("series[") == (key == "series")}
+    unseen = credential_paths.unseen(mine) if key == "sources" else {}
+    mine = {k: v for k, v in mine.items() if k not in unseen}
     if mine:
         raise StoreError(f"Orchestra would refuse these [[{key}]] entries, so nothing was written: "
                          + "; ".join(f"{k}: {v}" for k, v in mine.items()))
+    if not unseen:
+        return None
+    return ("; ".join(f"[[sources]] {name}: its token_file {tf} could not be {why} from here, so the entry was written "
+                      f"without checking it" for name, (tf, why) in unseen.items())
+            + ". Orchestra's host and the Core page read it from outside any sandbox: the Core page's store section "
+              "shows whether the store is reachable, and a token file that is not there is refused there with why. "
+              "Tell the owner what was written and that the Core page shows whether the store answers")
 
 
 def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
@@ -329,14 +350,15 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
         except ValueError:
             pass
     head = key.split(".")[0]
+    unseen = None
     if key in ("sources", "series") and isinstance(value, list):
-        _check_sources(project, key, value)
+        unseen = _check_sources(project, key, value)
     if key == "sources":
         source_limits.check_scopes(project, store, value)     # on a wake-up: narrow, split, kinds, names only (explore_round.py)
         source_limits.check_declared(project, store, value)   # a match the owner gave, never one picked here (run 6)
     caution = scm_settings.check(project, key, value)      # [scm]: orchestra-scm's schema, the token by file only
     eras = era_guard.check(project, store, key, value)     # [discovery]: never eras faster than discovery can fit a stock in
-    caution = "; ".join(x for x in (caution, eras) if x)
+    caution = "; ".join(x for x in (caution, eras, unseen) if x)
     label = " ".join(str(a.get("subject") or "").split())[:40] or label_for(key)
 
     def edit(ed, kw):

@@ -135,16 +135,21 @@ get no Orchestra tools at all and write their results to a file Orchestra reads 
 tool command reaches Orchestra's own servers on 127.0.0.1 (the host's events endpoint and the web
 server) only through the sandbox's proxy, and only at the addresses its settings list. The harness
 lists exactly those in the session's settings, `"sandbox": {"network": {"allowedDomains":
-["127.0.0.1:<port>"]}}`, one entry per port, and turns the unsandboxed retry off
-(`allowUnsandboxedCommands: false`); nothing broader (no `allowLocalBinding`, no `excludedCommands`).
+["127.0.0.1:<port>"]}}`, one entry per port; nothing broader (no `allowLocalBinding`, no
+`excludedCommands`). The token files your configuration names (a `[[sources]]` entry's `token_file`,
+`[scm]`'s, a kit's) are listed exactly in `"sandbox": {"filesystem": {"allowRead": [...]}}`, so a
+source's probe can read its token; the Read tool and `cat` are still refused them.
 The tool command also writes in the project's state directory (`~/.orchestrator/<key>`: the event
 log, the agents' records), so the settings add exactly that path to `"sandbox": {"filesystem":
 {"allowWrite": ["<state dir>"]}}`. Managed settings win over the session's: if your organisation's
-set `allowManagedDomainsOnly`, or deny writes to that path, the turn stops at the first blocked tool
-call and the Supervisor's reply names the entry to ask IT to add to the managed `allowedDomains` or
+set `allowManagedDomainsOnly`, or deny writes to that path, the Supervisor's reply names the entry to ask IT to add to the managed `allowedDomains` or
 `allowWrite`. Give the ports fixed values first (`[events] listen =
 "127.0.0.1:<port>"`, `orchestra web --port <port>`), since the events endpoint's port is otherwise
-picked at each start. The Supervisor never reruns a blocked command outside the sandbox.
+picked at each start. `[agents] sandbox_escape` (default `true`): a command Orchestra needs that the
+sandbox still blocks is run again outside it (`dangerouslyDisableSandbox`), and the Supervisor says
+so in one line; only if that is refused too does it tell you what to ask IT for. With `false` the
+unsandboxed retry is off (`allowUnsandboxedCommands: false`) and the turn stops at the first blocked
+tool call.
 
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
 duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]

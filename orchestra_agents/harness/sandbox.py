@@ -10,20 +10,31 @@ addresses": ``"allowedDomains": ["127.0.0.1:8080"]``). So the session's settings
 above the user's and the project's files and below managed settings,
 https://code.claude.com/docs/en/settings, "Settings precedence") list exactly those ports, and
 nothing broader: not ``allowLocalBinding`` (every port on localhost, macOS only), not an
-``excludedCommands`` entry (the command would run with no sandbox at all). They also turn off the
-unsandboxed retry (``allowUnsandboxedCommands: false``), which in this harness's
-``--dangerously-skip-permissions`` mode would run without a prompt. The tool command also writes under
+``excludedCommands`` entry (the command would run with no sandbox at all). The tool command also writes under
 the project's state directory (``~/.orchestrator/<key>/``: the event log, the agents' records),
 outside the working directory the sandbox lets a command write to; the settings list exactly that
 directory in ``sandbox.filesystem.allowWrite`` (the docs' "Configure sandboxing": absolute paths,
 merged across scopes; ``--settings`` entries apply even when the sandbox is admin-required, unless a
-managed lock covers them).
+managed lock covers them). The credential files the configuration names, exactly
+(``credential_paths.named``: a ``[[sources]]`` entry's ``token_file``, ``[scm]``'s, a kit's), are
+listed in ``sandbox.filesystem.allowRead``, so a source's probe in the tool command can open its
+token: the bounds' ``Read(~/.config/**)`` deny becomes a sandbox read denial for every sandboxed
+command, and the docs' rule is that where read rules overlap the narrower path applies, so an exact
+file re-opens inside the denied directory ("Configure sandboxing"). The permission rule itself stays:
+the Read tool and ``cat`` are still refused the file, which only the tool command opens.
 
-An organisation's managed settings win over the session's: with ``allowManagedDomainsOnly`` only
-their list counts, and the call is still refused. The tool command says so (``local_http.MARK``);
-the harness stops the turn at that answer and tells the owner, once, the setting to ask IT for
-(``Blocked``), so the model never gets to try the command outside the sandbox. A refused write is said
-the same way (``sandbox_writes.MARK``), naming the path."""
+``[agents] sandbox_escape`` (default true, the owner, 2026-11-04: "it's fine to escape the
+sandbox"): the settings leave Claude Code's unsandboxed retry as it is, the session's environment
+says so to the tool command (``local_http.ESCAPE_ENV``), whose refusal then tells the model to run the
+command again outside the sandbox (``dangerouslyDisableSandbox: true``) and to say what to ask IT for
+only if that is refused too, and the harness passes the refusal through. With it false the settings
+turn the retry off (``allowUnsandboxedCommands: false``, which in this harness's
+``--dangerously-skip-permissions`` mode would otherwise run without a prompt), and an organisation's
+refusal (managed settings win: with ``allowManagedDomainsOnly`` only their list counts) stops the
+turn: the tool command says so (``local_http.MARK``), the harness stops the turn at that answer and
+tells the owner, once, the setting to ask IT for (``Blocked``), so the model never gets to try the
+command outside the sandbox. A refused write is said the same way (``sandbox_writes.MARK``), naming
+the path."""
 
 from __future__ import annotations
 
@@ -68,13 +79,29 @@ def state_dir(repo: str | None) -> str | None:
         return None
 
 
-def settings(listed: list[int], writable: str | None = None) -> dict:
+def readable(repo: str | None) -> list[str]:
+    """The exact credential files the project's configuration names (``credential_paths.named``); [] without a project."""
+    try:
+        from ..config import load_project
+        from ..credential_paths import named
+        return named(load_project(repo or None))
+    except Exception:  # noqa: BLE001 - no project to read: nothing to allow
+        return []
+
+
+def settings(listed: list[int], writable: str | None = None, escape: bool = True,
+             readable: list[str] | tuple[str, ...] = ()) -> dict:
     """The session settings' ``sandbox`` part: exactly these addresses, the state directory to write
-    in, and no unsandboxed retry."""
+    in, exactly these credential files to read, and, unless ``escape``, no unsandboxed retry."""
     out: dict = {"network": {"allowedDomains": [allowed(p) for p in listed]}}
+    fs: dict = {}
     if writable:
-        out["filesystem"] = {"allowWrite": [writable]}
-    return {"sandbox": out | {"allowUnsandboxedCommands": False}}
+        fs["allowWrite"] = [writable]
+    if readable:
+        fs["allowRead"] = list(readable)
+    if fs:
+        out["filesystem"] = fs
+    return {"sandbox": out if escape else out | {"allowUnsandboxedCommands": False}}
 
 
 def result_text(content) -> str:

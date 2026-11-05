@@ -44,7 +44,7 @@ import shlex
 import time
 from pathlib import Path
 
-from . import machines_read
+from . import machines_read, people
 from .bus_reads import recent
 from .config import Project
 from .store import AgentStore
@@ -246,9 +246,8 @@ def machine_ages(project: Project, store: AgentStore, a: dict | None = None) -> 
         return {"ok": False, "error": v.get("error") or "the machines view did not answer"}
     ents, logs, now = entries(project), announced_logs(store), time.time()
     rows, due_ids, fell_back = [], [], []
-    for m in v.get("machines") or []:
-        if m.get("bootstrap"):
-            continue
+    shown, big = people.split([m for m in v.get("machines") or [] if not m.get("bootstrap")])
+    for m in shown:
         r = age_of(project, m, logs.get(m["id"]), ents)
         if r.get("by") == "fallback":
             fell_back.append(m["id"])
@@ -257,11 +256,15 @@ def machine_ages(project: Project, store: AgentStore, a: dict | None = None) -> 
             due_ids.append(m["id"])
         rows.append(r)
     counts = {k: sum(r["age"] == k for r in rows) for k in (*AGES, "other")}
+    counts["other"] += sum(len(ms) for ms in big.values())      # a relayed system's people: announced kind person
+    groups = [{"group": g["group"], "people": g["people"], "age": "other",
+               "reason": f"{g['people']} people announced their kind as person ({g['pattern']}); list_machines with "
+                         f"people=\"{g['group']}\" names them"} for g in people.summaries(big)]
     programs = counts["program in .orchestra/"] + counts["graduated"]
     share = (f"{counts['program in .orchestra/']} of {programs} programs live in .orchestra/"
              + (": the majority, so the system lives mostly in .orchestra/; graduate the proven ones (graduate_machine)"
                 if programs and counts["program in .orchestra/"] * 2 > programs else ""))
-    return {"ok": True, "machines": rows, "counts": counts, "due_to_graduate": due_ids, "share": share,
+    return {"ok": True, "machines": rows, **({"people": groups} if groups else {}), "counts": counts, "due_to_graduate": due_ids, "share": share,
             "agents_due_to_become_programs": NOT_MEASURED, "line": line(counts, due_ids),
             "fell_back": fell_back,
             "note": (f"due to graduate: a program in .orchestra/ first heard {DUE_AFTER_DAYS} days ago or more in the events "

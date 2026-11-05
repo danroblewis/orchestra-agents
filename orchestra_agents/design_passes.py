@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import time
 
+from . import people
 from .design import MACHINE, plural
 
 BUSY_PER_DAY = 200          # a machine woken by events more often than this is a candidate for a schedule
@@ -100,7 +101,7 @@ def check(layer: dict, events: list[dict], drafts: dict, seen: set[str], focus: 
             listen = f"{', '.join(by)} listen{'s' if len(by) == 1 else ''} for {t}, which no declared machine emits"
             if owners := family_publishers(events, t):                               # a known machine owns the family
                 add(f"unemitted:{t}", 2, "heard, never emitted", f"{listen} and is not heard on the bus yet; "
-                    f"{', '.join(owners)} publish{'es' if len(owners) == 1 else ''} {t.split('.')[0]}.* already",
+                    f"{people.named(owners, 5)} publish{'es' if len(owners) == 1 else ''} {t.split('.')[0]}.* already",
                     f"ask whether {owners[0]} publishes {t} (then it is the expected publisher), or use a type it does publish")
             else:
                 add(f"unemitted:{t}", 2, "heard, never emitted", f"{listen} and is not heard on the bus yet",

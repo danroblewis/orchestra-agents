@@ -14,32 +14,70 @@ not hold yet: those whose source names the system (``design_integrate.heard``), 
 a mapped ``person.<key>``, that published one of the system's own event types (``<system>.…``). It
 runs when the system is declared and approved, and once a minute in the host (``sweep``), so
 "declared · never heard" stays only while nothing of the system is on the bus. Each join is one op
-on the declared layer, the Supervisor's, with the sources it adds as its reason."""
+on the declared layer, the Supervisor's, with the sources it adds as its reason.
+
+**Cheap every minute** (the owner, 2026-11-04: hundreds of Jira people). The sweep reads no machines
+view: what each actor published is kept here (``Heard``), read over the newest ``SCAN`` events once and
+then only over the events the bus added since, so a quiet minute costs a read of nothing new and a set
+difference; the declared layer is read once a sweep. A join adds only the actors the declaration does
+not hold, so the 600 people of a first join are one op, once, and never again; what it says counts
+them past ``SHOWN`` (``people.named``)."""
 
 from __future__ import annotations
 
+from threading import Lock
+
+from . import people
 from .config import Project
 from .design import MACHINE, apply
 from .store import AgentStore
 
 TAG = "integration"
+SCAN = 20_000              # the newest events read the first time, as the machines view reads them
+ACTORS = ("person.", "bot.")
 
 
-def _typed(store: AgentStore, system: str) -> list[str]:
-    """The actors that published one of ``system``'s event types, as the Machines page has them."""
-    from .machines_read import view
-    try:
-        rows = view(store).get("machines") or []
-    except Exception:  # noqa: BLE001 - without the view nothing more is joined
-        return []
-    pre = f"{system}."
-    return [m["id"] for m in rows if str(m.get("id") or "").startswith(("person.", "bot."))
-            and any(str(t).startswith(pre) for t in m.get("publishes") or [])]
+class Heard:
+    """The person and bot sources the bus has heard, each with the event types' first parts it
+    published (``jira`` for ``jira.issue.updated``): read once over the newest ``SCAN`` events, then
+    only over what the bus added since."""
+
+    def __init__(self) -> None:
+        self.offset: int | None = None
+        self.actors: dict[str, set[str]] = {}
+        self.lock = Lock()
+
+    def update(self, store: AgentStore) -> dict[str, set[str]]:
+        bus = store.events.bus
+        with self.lock:
+            end = bus.end()
+            if self.offset is None or self.offset > end:          # first read, or a bus that started again
+                self.offset, self.actors = max(0, end - SCAN), {}
+            if end > self.offset:
+                evs, n = bus.read(self.offset, SCAN)
+                for e in evs:
+                    src = str(e.get("source") or "").split("/")[0]
+                    if src.startswith(ACTORS):
+                        self.actors.setdefault(src, set()).add(str(e.get("type") or "").split(".")[0])
+                self.offset = max(n, self.offset)
+            return self.actors
+
+
+_HEARD: dict[str, Heard] = {}
+
+
+def heard_of(store: AgentStore) -> Heard:
+    return _HEARD.setdefault(str(store.project.state_dir), Heard())
 
 
 def heard_as(store: AgentStore, system: str) -> list[str]:
-    from .design_integrate import heard
-    return list(dict.fromkeys([*heard(store, system), *_typed(store, system)]))
+    """The actors heard for ``system``: those whose source names it (``bot.<system>``,
+    ``bot.<system>.<account>``, ``person.<system>.<account>``), then the others that published one of
+    its event types (a mapped ``person.<key>``)."""
+    actors = heard_of(store).update(store)
+    named = sorted(s for s in actors if s == f"bot.{system}" or s.startswith((f"bot.{system}.", f"person.{system}.")))
+    typed = sorted(s for s, types in actors.items() if system in types)
+    return list(dict.fromkeys([*named, *typed]))
 
 
 SHOWN = 20             # actors named in a join's reason; the rest are counted (the declared layer's text is at most 4000)
@@ -53,10 +91,12 @@ def reason_for(system: str, new: list[str]) -> str:
     return text if len(text) <= 3900 else text[:3880] + "…"
 
 
-def join(project: Project, store: AgentStore, system: str) -> list[str]:
-    """Alias each actor heard for ``system`` to its declared machine; the sources added."""
+def join(project: Project, store: AgentStore, system: str, layer: dict | None = None) -> list[str]:
+    """Alias each actor heard for ``system`` to its declared machine; the sources added. ``layer``: the
+    declared layer already read (a sweep reads it once)."""
     from . import design_machines
-    m = (design_machines.intended_api.current(project).get("machines") or {}).get(system)
+    lay = layer if layer is not None else design_machines.intended_api.current(project)
+    m = (lay.get("machines") or {}).get(system)
     if not m or TAG not in (m.get("tags") or []):
         return []
     have = set(m.get("aliases") or [])
@@ -68,10 +108,11 @@ def join(project: Project, store: AgentStore, system: str) -> list[str]:
 
 
 def sweep(project: Project, store: AgentStore) -> list[str]:
-    """``join`` for every declared relayed system; what was said, one line each."""
+    """``join`` for every declared relayed system; what was said, one line each, a system's people counted."""
     from . import design_machines
+    lay = design_machines.intended_api.current(project)
     out = []
-    for mid, m in (design_machines.intended_api.current(project).get("machines") or {}).items():
-        if TAG in (m.get("tags") or []) and m.get("managed") == "external" and (got := join(project, store, mid)):
-            out.append(f"machine {mid} heard as {', '.join(got)}")
+    for mid, m in (lay.get("machines") or {}).items():
+        if TAG in (m.get("tags") or []) and m.get("managed") == "external" and (got := join(project, store, mid, lay)):
+            out.append(f"machine {mid} heard as {people.named(got)}")
     return out

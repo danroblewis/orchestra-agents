@@ -17,7 +17,7 @@ import time
 from orchestra.config import ConfigError, parse_duration
 from orchestra.sd.intended.ops import ENV_NAME
 
-from . import intended_api, machines_running
+from . import intended_api, machines_running, people
 from .config import Project
 from .design import MACHINE, answer, apply, plural
 from .design_clearance import NEEDS_APPROVAL, UNTIL, clearance
@@ -379,6 +379,8 @@ def _event_edges(project: Project, store: AgentStore, layer: dict) -> dict:
             for t in e.get("listens_for") or []:
                 if t in out and src not in out[t]["listened_by"]:
                     out[t]["listened_by"].append(src)
+    for r in out.values():                   # a relayed system's people counted, one entry per system (people.py)
+        r["heard_from"], r["listened_by"] = people.compact(r["heard_from"]), people.compact(r["listened_by"])
     return out
 
 

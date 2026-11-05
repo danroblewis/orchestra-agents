@@ -85,6 +85,8 @@ def test_a_stall_found_wakes_it_once_and_the_cap_stops_its_initiative(host):
     assert host.review.tick(t0 + 3602)["woke"] is False                        # the same stall: no second turn for it
     host.events.publish("orchestra.machine.quiet", {"machine": "baker", "instance": "baker/1", "last_seen": time.time() - 600,
                                                     "usual_gap": 60}, source=HOST, subject="baker")
+    host.events.publish("orchestra.model.stalled", {"kind": "stock", "id": "orders", "since": time.time() - 900},
+                        source=HOST, subject="stock:orders")
     host.project.config.review_usd_per_day = 1.0
     budget.record(host.store, 1.25, initiative=True, t=t0 + 5403)               # spent on the day the round runs, whatever the clock
     got = host.review.tick(t0 + 5403)

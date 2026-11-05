@@ -96,6 +96,7 @@ class ReviewRound:
         st = h.store.agent_state(MACHINE)
         seen = list((st.get("review") or {}).get("seen") or [])
         new = [f for f in findings if f["key"] not in seen]
+        waking = [f for f in new if f.get("kind") != "quiet"]          # a quiet machine alone never wakes it (notices.DIGEST_ONLY)
         record = {"at": now, "findings": [f["text"] for f in findings], "new": len(new), "crossed": [x["signal"] for x in hit],
                   "seen": (seen + [f["key"] for f in new])[-REMEMBER:]}
         try:                                       # the refinement passes, when the declared layer changed (design_passes.py)
@@ -107,13 +108,13 @@ class ReviewRound:
         if design:
             record["design"] = len(design["findings"])
         reason = None
-        if new or proposal or design:
-            why_not = budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))) if (new or design) and not proposal else None
+        if waking or proposal or design:
+            why_not = budget.over(h.store, h.cfg, now, priced=(h.harness, h.model_of(MACHINE))) if (waking or design) and not proposal else None
             if why_not:
                 record["woke"], record["skipped"] = False, why_not
                 h.log(f"review round: {len(new)} new finding(s); the Supervisor is not woken: {why_not}")
             else:
-                reason = "\n\n".join(r for r in (self.reason(new, proposal) if new or proposal else "",
+                reason = "\n\n".join(r for r in (self.reason(new, proposal) if waking or proposal else "",
                                                    design_passes.reason(design, MARK) if design else "") if r)
                 h.store.add_wakeup(MACHINE, reason)
                 record["woke"] = True

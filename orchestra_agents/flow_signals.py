@@ -74,7 +74,7 @@ def check(project: Project, store: AgentStore, evs: list[dict], since: float, no
     for subj, ev in _open(evs, "orchestra.machine.quiet", (), lambda e: e.get("subject") or e.get("machine")).items():
         if last_seen.get(subj, 0.0) > _t(ev):
             continue                                             # heard from since
-        out.append({"key": f"quiet:{subj}:{ev.get('last_seen')}", "kind": "quiet",
+        out.append({"key": f"quiet:{subj}:{time.strftime('%Y-%m-%d', time.localtime(now))}", "kind": "quiet",   # once a day a machine
                     "text": f"machine {subj} quiet since {_ago(ev.get('last_seen') or _t(ev), now)} (usually every "
                             f"{round(ev.get('usual_gap') or 0)} s)"})
     diverged: dict[str, dict] = {}

@@ -30,9 +30,11 @@ def spent(store: AgentStore, t: float | None = None) -> dict:
     return dict((store.agent_state(MACHINE).get("spend") or {}).get(day(t)) or {})
 
 
-def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float | None = None, chat: bool = False) -> None:
+def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float | None = None, chat: bool = False,
+           delegated: bool = False) -> None:
     """One Supervisor turn ended: add what it cost to today's record (``initiative``: a review
-    round's or a duty's wake-up, which the caps limit; ``chat``: the owner's message)."""
+    round's or a duty's wake-up, which the caps limit; ``chat``: the owner's message; ``delegated``: a
+    sub-session's turn, delegate.py, counted in the cap of the turn it ran in and apart as well)."""
     st = store.agent_state(MACHINE)
     spend = dict(st.get("spend") or {})
     today = dict(spend.get(day(t)) or {})
@@ -44,6 +46,9 @@ def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float
     if chat:
         today["chat_usd"] = round(today.get("chat_usd", 0.0) + usd, 6)
         today["chat_turns"] = today.get("chat_turns", 0) + 1
+    if delegated:
+        today["delegate_usd"] = round(today.get("delegate_usd", 0.0) + usd, 6)
+        today["delegate_turns"] = today.get("delegate_turns", 0) + 1
     if initiative:
         today["initiative_usd"] = round(today.get("initiative_usd", 0.0) + usd, 6)
         today["initiative_turns"] = today.get("initiative_turns", 0) + 1

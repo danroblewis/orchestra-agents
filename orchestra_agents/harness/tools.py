@@ -524,6 +524,16 @@ TOOLS: list[ToolDef] = [
             {"name": S("The guide's name, from list_guides (orchestra, tasks, agents, ...)"),
              "section": S("A section's heading (or part of it), from the guide's contents"),
              "offset": I("Where to read on in a long section, as its last answer says (default 0)")}, ("name",)),
+    # delegate: a bounded job in a sub-session of its own (delegate.py), the Supervisor's alone
+    ToolDef("delegate", "delegate",
+            "Run one bounded job in a one-shot sub-session (your harness, the job's skill as its whole prompt, a cheaper "
+            "model when [agents] delegate_model is set) and get its short report: its reads never enter your context. Its "
+            "spend counts toward your caps. survey: one declared store's families, levels and flows; scaffold_poller: "
+            "scaffold and test a named system's poller (integrate_system), its ask_owner returned for you to put to the "
+            "owner; judge_experiment: judge the explore round's last experiment and record the verdict.",
+            {"job": {"type": "string", "enum": ["survey", "scaffold_poller", "judge_experiment"], "description": "The job"},
+             "brief": S("Everything the job needs, since the sub-session knows nothing else: the store and its bound, the "
+                        "system with the owner's scope and quote, or the experiment's id")}, ("job", "brief")),
     ToolDef("read_answer", "guides",
             "A part of a tool answer that came back trimmed (its last line names its id, a-…, and the next part): the whole "
             "answer is kept, so the same call need not run again. Read on only for the part you need.",

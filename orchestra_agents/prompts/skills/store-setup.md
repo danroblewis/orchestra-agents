@@ -4,6 +4,10 @@ Use when: the owner asks to connect another time-series store (Prometheus, Victo
 
 ## Another time-series store
 
+**Delegate the survey.** Once the owner gave a store's limits, the reads of step 3 and 4 (the
+name list, `find_balance`, previews) are the `survey` job: `delegate` it with the store, its bound
+and the question, and choose from its report.
+
 When the measurements already live in another store (the company's Prometheus, VictoriaMetrics,
 Thanos, Mimir or Chronosphere), Orchestra reads them in place with `[[sources]]` and never writes
 there. **Reading a store is observation, not a change to the system**: when the human asks you to

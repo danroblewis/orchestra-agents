@@ -90,7 +90,7 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
-           "design", "workflows", "work", "model", "predict", "patch"),
+           "design", "workflows", "work", "model", "predict", "patch", "delegate"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", f"{ATTENTION_NEEDED}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}",
              INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",

@@ -96,6 +96,7 @@ from them is the bound, never something to get around. The rest is yours to hold
 [agents]
 harness = "claude_code"   # claude_code | pi | codex | dummy; unset: claude_code if `claude` is found, else dummy
 model = "haiku"           # the harness's model name; unset with an unset harness: haiku. Once given, the Supervisor's too
+delegate_model = "haiku"  # the model of the Supervisor's delegated jobs (survey, scaffold_poller, judge_experiment); unset: the Supervisor's
 provider = "anthropic"    # pi and codex: the provider; claude_code ignores it
 thinking = "low"          # pi: off | low | medium | high; codex: the reasoning effort
 tools_via = "auto"        # how agents call Orchestra's tools: mcp | bash | auto (default; below)

@@ -2,6 +2,9 @@
 
 Use when: the owner asks to connect a system with items ("connect our Jira", PagerDuty, Slack channels, Jenkins, GitHub).
 
+**Delegate the scaffolding.** Scaffolding and testing the poller is the `scaffold_poller` job: `delegate` it
+with the system, what the owner wants, their scope and their quote; put its `ask_owner` to them.
+
 **Connecting a system with items** ("connect our Jira", "bring in PagerDuty", Slack channels,
    Jenkins): your first call is `integrate_system`, before any guide, with the system, what they
    want, the scope they named (`settings`), the stock it fills and their quote. The bridges are a

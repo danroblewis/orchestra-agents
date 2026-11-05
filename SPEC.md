@@ -1723,6 +1723,21 @@ line with the id of the whole answer, kept in `<state>/agents/answers/` (the new
 `read_answer` reads part by part (a read tool's own `page` gives the same parts). A skill and a part
 of a kept answer are never trimmed. A session without `read_answer` keeps the bound of `answers.cut`.
 
+**Bounded jobs run in sub-sessions** (`delegate.py`, group `delegate`, the Supervisor's alone).
+`delegate <job> <brief>` starts a one-shot session of the Supervisor's own harness, as the Supervisor
+(its token, its bounds, read-only) with only the job's tool groups and never `delegate`
+(`ORCHESTRA_DELEGATED`), on `[agents] delegate_model` (default the Supervisor's model). Its whole
+system prompt is a preamble, the job's skill (a skill whose "use when" starts `(a delegated job)`,
+left out of the index) and its tools, about 3,000 characters; it runs one turn on the brief, is closed
+and its token revoked, and its report (at most 4,000 characters) is the answer. The jobs: `survey`
+(a declared store's families, levels and flows; observe, flows, guides), `scaffold_poller`
+(`integrate_system` for a named system, its `ask_owner` returned; design, observe, guides) and
+`judge_experiment` (the explore round's last experiment; observe, setup, model). The prompt's index
+says to delegate them. Its spend is the Supervisor's: refused when the cap of the turn it runs in is
+spent (the owner's chat, else its initiative; `design.begin_turn` says which), added to that cap when
+it ends, and counted apart (`delegate_usd`, `delegate_turns`). With `tools_via = "file"` nothing is
+delegated (a sub-session would have no tools).
+
 **Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
 takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;
 the dummy harness records it; Pi and Codex take none, and `[agents] model` stands). A changed

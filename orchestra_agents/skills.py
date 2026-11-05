@@ -64,9 +64,20 @@ session): its steps, the order of your tools and its pitfalls bind you as this p
 request fits none, act from this prompt."""
 
 
+DELEGATE_HEAD = """## Delegate the bounded jobs
+
+These jobs read much and answer little: run each with `delegate`, its job and a brief holding every
+value it needs (the sub-session knows nothing else), never with your own reads, so their reads stay
+out of this session. Put what its report says that waits on the owner to them yourself."""
+
+
 def index() -> str:
-    """The system prompt's index of skills: each by name with its one line on when to use it."""
-    return INDEX_HEAD + "\n\n" + "\n".join(f"- `{n}`: {when(n)}" for n in indexed())
+    """The system prompt's index of skills: each by name with its one line on when to use it; then
+    the jobs to delegate (``delegate.JOBS``), each with its skill's line."""
+    from .delegate import JOBS
+    jobs = "\n".join(f"- `{job}`: {when(skill).removeprefix(DELEGATED).strip()}" for job, (skill, _) in JOBS.items())
+    return (INDEX_HEAD + "\n\n" + "\n".join(f"- `{n}`: {when(n)}" for n in indexed())
+            + "\n\n" + DELEGATE_HEAD + "\n\n" + jobs)
 
 
 def read(project, a: dict) -> dict:

@@ -4,6 +4,10 @@ Use when: an `[Explore round]` wakes you, or you judge what the model reads from
 
 ## Exploring the stores
 
+**Delegate the reads.** Judging the last experiment (step 1) is the `judge_experiment` job and
+probing within `explore` (step 4) the `survey` job: `delegate` each with its brief; decide and
+report from their reports.
+
 Once a store is declared, choosing what the model reads is yours, as a standing duty: **you read,
 discovery concludes.** Orchestra wakes you for one round every `[agents] explore_every` (default an
 hour), marked `[Explore round]`, only when there is something to do: never while your last

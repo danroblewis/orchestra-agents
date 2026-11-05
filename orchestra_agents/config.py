@@ -59,6 +59,7 @@ class Config:
     dummy_script: str | None = None     # the dummy harness's script, relative to the repository (harness/dummy_script.py)
     provider: str | None = None
     model: str | None = None
+    delegate_model: str | None = None   # the model a delegated job's sub-session runs on (delegate.py); None: the Supervisor's
     model_set: bool = False             # [agents] model was given: the Supervisor runs on it too (machine_spec.model_of)
     thinking: str | None = None
     tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto | file (harness/bash_tools.py, file_output.py)
@@ -110,7 +111,7 @@ class Config:
         return cls(
             harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
             dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
-            model=model, model_set=bool(a.get("model")), thinking=a.get("thinking"), tools_via=via,
+            model=model, model_set=bool(a.get("model")), delegate_model=a.get("delegate_model") or None, thinking=a.get("thinking"), tools_via=via,
             serves=serves, allow_push=allow, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),

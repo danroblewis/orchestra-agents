@@ -87,3 +87,4 @@ details.msg.marker.wake > summary { cursor:pointer } details.msg.marker.wake .pr
 /* the conversation scrolls in its own box; the transcript's head and controls above it stay in view (2026-11-04) */
 .convo-scroll { min-height:240px; overflow-y:auto; overscroll-behavior:contain; border:1px solid var(--border); border-radius:8px; padding:4px 10px; background:var(--bg) }
 .convo-scroll + .chat { position:static; margin-top:10px }
+.chat .chat-error { flex-basis:100%; margin-bottom:6px; padding:6px 10px; border:1px solid #7f1d1d; border-radius:8px; background:#2a1215; color:#fca5a5; font-size:13px }

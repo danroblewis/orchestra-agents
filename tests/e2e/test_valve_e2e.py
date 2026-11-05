@@ -21,6 +21,8 @@ from orchestra_agents.events import Events
 from orchestra_agents.store import AgentStore
 
 pytest.importorskip("orchestra_workflows.api")
+if "valve" not in getattr(pytest.importorskip("orchestra_workflows.programs.machines"), "shipped", dict)():
+    pytest.skip("the installed Workflows plugin runs no other package's program (before W20)", allow_module_level=True)
 from orchestra.collect.round import collect
 from orchestra.events import Events as OrchestraEvents
 from orchestra.metrics import for_project as metrics_for

@@ -15,6 +15,8 @@ from orchestra_agents.valve.declaration import parse
 
 pytest_plugins = ["design_fixtures"]
 pytest.importorskip("orchestra_workflows.define")
+if "valve" not in getattr(pytest.importorskip("orchestra_workflows.programs.machines"), "shipped", dict)():
+    pytest.skip("the installed Workflows plugin runs no other package's program (before W20)", allow_module_level=True)
 
 ONCALL = {"name": "oncall", "items": "ticket", "planner": "supervisor",
           "starts": [{"event": "jira.issue.created", "fields": {"summary": {"data": "summary"}}}],

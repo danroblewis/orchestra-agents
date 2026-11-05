@@ -482,11 +482,18 @@ CHAT_SEAM = ("[Orchestra: the notices above are for you; the human has not seen 
              "[The human's message]\n")
 
 
+# How a prompt Orchestra wrote begins (a notice, a wake-up, an assignment, a review request, a nudge).
+ORCHESTRA_STARTS = ("[Orchestra:", "# Wake-up for ", "# Your assignment", "# Review request", "You stopped without")
+
+
 def chat_turn(context: str, message: str) -> str:
     """A chat turn's prompt: Orchestra's notices (supervisor_context), then the human's message,
     marked as theirs, so the reply answers the human and keeps the notices out of it. With no
-    notices the message arrives as itself."""
-    return context + CHAT_SEAM + message if context else message
+    notices the message arrives as itself, unless it begins the way Orchestra's prompts do: then
+    it is marked as the human's, so the transcript's reader (session_turns.owner_words) knows it."""
+    if context:
+        return context + CHAT_SEAM + message
+    return CHAT_SEAM.rsplit("\n\n", 1)[1] + message if message.startswith(ORCHESTRA_STARTS) else message
 
 
 def concerns_supervisor(e: dict) -> bool:

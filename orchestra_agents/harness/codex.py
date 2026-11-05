@@ -46,7 +46,9 @@ MCP_SERVER = "orchestra"
 TOOL_TIMEOUT_S = TOOL_CALL_S              # how long one tool call may take (base.TOOL_CALL_S)
 CODEX_AUTH = ("OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_HOME")   # Codex's own sign-in (its login is under CODEX_HOME)
 TOOL_PREFIX = f"mcp__{MCP_SERVER}__"      # how Codex names an MCP server's functions
-_INJECTED = re.compile(r"\s*<[a-z_]+>")    # <environment_context>, <user_instructions>: Codex's own context messages
+# Codex's own context messages (<environment_context>, <user_instructions>) are wholly one tag;
+# a user message that only begins with a tag is the prompt's, and kept.
+_INJECTED = re.compile(r"\s*<([a-z_]+)>.*</\1>\s*$", re.DOTALL)
 _TOOL_ITEMS = {"command_execution": "exec", "mcp_tool_call": None, "file_change": "apply_patch", "web_search": "web_search"}
 
 

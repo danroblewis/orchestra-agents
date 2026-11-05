@@ -172,6 +172,7 @@ class SessionSpec:
     tools_via: str = "mcp"     # how the session calls Orchestra's tools: mcp | bash | auto ([agents] tools_via; bash_tools.py)
     read_only: bool = False    # the agent reads the checkout and never edits a file: its harness's file-editing tools are taken away
     bounds: tuple[str, ...] = ()   # the directories it may read in (the Supervisor's: the project and its state dir); () unbounded
+    skills: tuple[tuple[str, str, str], ...] = ()   # (name, use when, text): the skills its prompt indexes, for a harness that loads its own (Claude Code)
 
 
 class AgentSession(ABC):

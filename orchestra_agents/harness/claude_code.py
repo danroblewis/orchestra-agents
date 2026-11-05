@@ -243,6 +243,9 @@ class ClaudeCodeSession(AgentSession):
         if self.spec.bounds:              # the Supervisor's bounds, as far as Claude Code's settings hold them (bounds.py)
             own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
             args += ["--settings", str(bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own))]
+        if self.spec.skills:              # its skills, as Claude Code's own (skills.py; read_skill gives the same text)
+            from ..skills import write_claude
+            args += ["--add-dir", str(write_claude(self.spec.skills, self._dir / f"{self.spec.session_id}.skills"))]
         if self.spec.compact_tokens:
             args += ["--autocompact", str(self.autocompact())]
         system = self.spec.system_prompt or ""

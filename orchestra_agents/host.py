@@ -46,6 +46,7 @@ from . import (
     prompting,
     protocol,
     push_guard,
+    skills,
     supervisor_spec,
     tooling,
     workflow_tools,
@@ -436,7 +437,8 @@ class AgentHost:
             system_prompt=system_prompt, role=role, tool_groups=tools, env=env,
             log_path=self.project.logs_dir / "agents" / f"{session_id}.stderr.log",
             model=model, provider=self.cfg.provider, thinking=self.cfg.thinking, compact_tokens=self.cfg.compact_tokens,
-            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd))
+            tools_via=self.cfg.tools_via, read_only=read_only, bounds=self._bounds(role, cwd),
+            skills=skills.for_session(self.project) if role == protocol.SUPERVISOR else ())
         proc = file_output.start(self.harness, spec) if spec.tools_via == file_output.MODE else self.harness.start(spec)
         if not ticket_id:
             self._session_models[role] = model

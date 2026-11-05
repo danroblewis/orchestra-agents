@@ -88,3 +88,28 @@ def read(project, a: dict) -> dict:
         out["next"] = f"read_skill with name {name} and offset {end} for the rest ({len(body) - end:,} more characters)"
     return out
 
+
+def for_session(project) -> tuple[tuple[str, str, str], ...]:
+    """The skills a Supervisor's session is given as (name, use when, text), for a harness that loads
+    skills of its own (``SessionSpec.skills``)."""
+    return tuple((n, when(n), text(project, n)) for n in indexed())
+
+
+def write_claude(skills: tuple[tuple[str, str, str], ...], root: Path) -> Path:
+    """The skills as Claude Code loads its own: ``<root>/.claude/skills/<name>/SKILL.md``, with the
+    front matter it reads (the name, and the "use when" as its description). ``root`` is a directory
+    of the session's own, outside the repository, that the harness adds with ``--add-dir``; a skill no
+    longer given is removed. Returns ``root``."""
+    import shutil
+    base = root / ".claude" / "skills"
+    base.mkdir(parents=True, exist_ok=True)
+    names_ = {n for n, _, _ in skills}
+    for d in base.iterdir():
+        if d.is_dir() and d.name not in names_:
+            shutil.rmtree(d)
+    for n, use, body in skills:
+        (base / n).mkdir(exist_ok=True)
+        desc = use.replace("\\", "").replace('"', "'")
+        (base / n / "SKILL.md").write_text(f'---\nname: {n}\ndescription: "Use when: {desc}"\n---\n\n{body}', encoding="utf-8")
+    return root
+

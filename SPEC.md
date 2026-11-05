@@ -1711,7 +1711,10 @@ tools it holds) is under 35,000 characters (`tests/unit/test_prompt_size.py` fai
 know-how for each kind of work is a skill, `prompts/skills/<name>.md`: a title, a `Use when:` line
 (the index lists each by name with it) and the text, filled and gated like the prompt (`skills.py`).
 The Supervisor reads one with `read_skill` (group `guides`; at most 12,000 characters a piece, a
-longer one says where to read on).
+longer one says where to read on). On Claude Code the host also gives the Supervisor's session its
+skills (`SessionSpec.skills`) and the harness writes them as Claude Code's own,
+`<sessions>/claude-code/<session>.skills/.claude/skills/<name>/SKILL.md` (the "use when" as the
+description), outside the repository, added with `--add-dir`, so its own skill loading finds them.
 
 **Per-machine model.** The host opens an agent's session on its spec's `model` when the harness
 takes that name (`Harness.model_for`: Claude Code takes `haiku`, `sonnet`, `opus` and full ids;

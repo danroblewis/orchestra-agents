@@ -1,13 +1,18 @@
 """What the Supervisor may spend a day. Its own initiative: its review rounds, its explore rounds and
-the wake-ups of its duties (flow-keeping's stalls, quiet machines, divergences), capped by
-``[agents] review_usd_per_day`` and ``review_turns_per_day``; what the fixed core always wakes it for
-(escalations, a program given up on, a plan reported) never waits on it. The owner's chat turns,
+its notices (notices.py: every event in its ``wake_on`` but the owner's page request, the fixed
+core's attention events, a program given up on and a plan reported included, and its duties'),
+capped by ``[agents] review_usd_per_day`` and ``review_turns_per_day``, and held while the owner's
+pause holds (``notices.pause``, until the day ends). Only the owner's page request, an agent's
+escalation and a crash loop wake it whatever was spent (since 2026-11-04, T55: before, everything
+the fixed core listened for did, and a flood of the Workflows floor's ``attention.needed`` was
+uncapped). The owner's chat turns,
 capped apart by ``chat_usd_per_day`` (default 10.0; 0: no cap): past it a message is refused before
 any turn starts, with what was spent and when it resets (``chat_over``; the D5 finding, 2026-11-04:
 chat turns were not capped at all).
 
 Spending is kept in the agent's state (``spend``: per day, dollars and turns, by what started
-the turn), written after every Supervisor turn from what the harness reported (``TurnResult.cost_usd``:
+the turn, and ``by_reason``: each kind of reason, ``wake_classes.label``, with its turns and its share
+of the dollars), written after every Supervisor turn from what the harness reported (``TurnResult.cost_usd``:
 Claude Code reports it; a harness that does not is counted in turns). The caps are the owner's:
 ``[agents] review_usd_per_day`` (default 2.0) and ``review_turns_per_day`` (default 48)."""
 
@@ -31,7 +36,7 @@ def spent(store: AgentStore, t: float | None = None) -> dict:
 
 
 def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float | None = None, chat: bool = False,
-           delegated: bool = False) -> None:
+           delegated: bool = False, labels: list[str] | tuple[str, ...] = ()) -> None:
     """One Supervisor turn ended: add what it cost to today's record (``initiative``: a review
     round's or a duty's wake-up, which the caps limit; ``chat``: the owner's message; ``delegated``: a
     sub-session's turn, delegate.py, counted in the cap of the turn it ran in and apart as well)."""
@@ -49,6 +54,15 @@ def record(store: AgentStore, cost_usd: float | None, initiative: bool, t: float
     if delegated:
         today["delegate_usd"] = round(today.get("delegate_usd", 0.0) + usd, 6)
         today["delegate_turns"] = today.get("delegate_turns", 0) + 1
+    kinds = list(dict.fromkeys(labels or (["chat"] if chat else [])))
+    if kinds:
+        by = dict(today.get("by_reason") or {})
+        for k in kinds:
+            row = dict(by.get(k) or {})
+            row["turns"] = row.get("turns", 0) + 1
+            row["usd"] = round(row.get("usd", 0.0) + usd / len(kinds), 6)
+            by[k] = row
+        today["by_reason"] = by
     if initiative:
         today["initiative_usd"] = round(today.get("initiative_usd", 0.0) + usd, 6)
         today["initiative_turns"] = today.get("initiative_turns", 0) + 1
@@ -63,12 +77,16 @@ def over(store: AgentStore, cfg, t: float | None = None, priced: tuple | None = 
     model) of the Supervisor's turns, refused when the harness cannot price them (``unpriced``)."""
     if priced and (why := unpriced(*priced, cfg)):
         return why
+    held = store.agent_state(MACHINE).get("initiative_pause")
+    if isinstance(held, dict) and held.get("day") == day(t):
+        return (f"the owner paused its own initiative until the day ends ({held.get('via') or 'the Agents page'}); "
+                "chat and the owner's requests go on")
     s = spent(store, t)
     if s.get("initiative_usd", 0.0) >= cfg.review_usd_per_day > 0 or cfg.review_usd_per_day == 0:
-        return (f"its review rounds and duty wake-ups spent ${s.get('initiative_usd', 0.0):.2f} today, the cap is "
+        return (f"its review rounds and notices spent ${s.get('initiative_usd', 0.0):.2f} today, the cap is "
                 f"${cfg.review_usd_per_day:.2f} ([agents] review_usd_per_day)")
     if s.get("initiative_turns", 0) >= cfg.review_turns_per_day:
-        return (f"its review rounds and duty wake-ups took {s.get('initiative_turns', 0)} turns today, the cap is "
+        return (f"its review rounds and notices took {s.get('initiative_turns', 0)} turns today, the cap is "
                 f"{cfg.review_turns_per_day} ([agents] review_turns_per_day)")
     return None
 

@@ -40,6 +40,7 @@ from . import (
     integrate_heard,
     intended_api,
     machine_spec,
+    notices,
     owner_messages,
     parent,
     program_tools,
@@ -50,6 +51,7 @@ from . import (
     skills,
     supervisor_spec,
     tooling,
+    wake_classes,
     workflow_tools,
 )
 from .builtins import ROLES as BUILTIN_ROLES
@@ -124,6 +126,7 @@ class AgentHost:
         self.agent_threads: dict[str, threading.Thread] = {}   # agent name -> the thread running its turn (a wake-up, or the Supervisor chat)
         self._turn_locks: dict[str, threading.Lock] = {}        # agent name -> one turn at a time on its session
         self._owner_line = owner_messages.Line()                # the owner's messages, answered in the order accepted
+        self._wake_running: dict[str, str] = {}                 # agent name -> what its running wake-up turn is (for the chat)
         self.live_procs: dict[str, AgentSession] = {}   # session id -> session, while a per-ticket turn runs
         self.agents: dict[str, AgentDef] = {}
         self.teams: dict = {}
@@ -261,6 +264,7 @@ class AgentHost:
         for why in handoff_overdue.wake(self.store, limit=handoff_overdue.deadline(self.cfg)):
             self.store.add_wakeup("supervisor", why)
         self._wake_on_events()
+        self._release_notices()
         self.verdicts.tick()
         self._expire_drafts()
         try:
@@ -280,6 +284,8 @@ class AgentHost:
                 st = states.get(target) or {}
                 if st.get("paused") or st.get("deleted"):
                     continue  # wake-ups stay queued until resumed
+                if target == "supervisor" and self._owner_line.waiting():
+                    continue  # the owner's message goes first; the wake-ups stay queued and gather for the turn after
                 drained = self.store.drain_wakeups(target)
                 reasons = list(dict.fromkeys(w["reason"] for w in drained))
                 if drained and target == "supervisor":
@@ -315,6 +321,11 @@ class AgentHost:
         spec = load_spec(self.project, "supervisor")
         core = {w.split(":")[0] for w in BUILTIN_ROLES["supervisor"].wake_on}
         return {w.split(":")[0] for w in spec.listens()} - core if spec is not None else set()
+
+    @staticmethod
+    def _notice_types() -> set[str]:
+        """The fixed core's events that are notices (all but the owner's page request): its initiative too."""
+        return {w.split(":")[0] for w in BUILTIN_ROLES["supervisor"].wake_on} - {INTENT_REQUESTED}
 
     def _harness_settings(self) -> tuple:
         return (self.cfg.harness, self.cfg.model, self.cfg.provider, self.cfg.thinking, self.cfg.tools_via)
@@ -511,7 +522,9 @@ class AgentHost:
         """Match new events against every agent's wake_on list and queue wake-ups. Workers and
         reviewers are not woken: their events are assignments, answered by the runner. A ticket
         the Supervisor created for the human that is done wakes it to tell the human (landings.py);
-        a verdict on a prediction wakes the agent that made it (verdicts.py)."""
+        a verdict on a prediction wakes the agent that made it (verdicts.py). For the Supervisor
+        only the owner's page request is queued at once; every other event it wakes on is a notice,
+        held and gathered (notices.py) and let out by ``_release_notices``."""
         evs, self._wake_at = self.events.after(self._wake_at)
         for ev in evs:
             if landed := self.landings.see(ev, self.cfg):
@@ -522,14 +535,22 @@ class AgentHost:
             for name, agent in self.agents.items():
                 if (agent.builtin and not agent.resident) or not event_matches(agent.wake_on, ev):
                     continue
-                if name == "supervisor" and not event_matches(list(BUILTIN_ROLES["supervisor"].wake_on), ev) \
-                        and (why := budget.over(self.store, self.cfg, priced=(self.harness, self.model_of("supervisor")))):
-                    if why != self._over_said:                          # a duty's own wake-up, past the day's cap
-                        log(f"supervisor: not woken for {ev['type']}: {why}")
-                        self._over_said = why
+                if name == "supervisor" and ev.get("type") != INTENT_REQUESTED:
+                    notices.hold(self.store, ev, self._wake_reason(ev))
                     continue
                 self.store.add_wakeup(name, self._wake_reason(ev))
                 self._pending_depth[name] = max(self._pending_depth.get(name, 0), int(ev.get("depth", 0)))
+        self._release_notices()
+
+    def _release_notices(self) -> None:
+        """The Supervisor's held notices queued for one turn, when it may take one (notices.release)."""
+        th = self.agent_threads.get("supervisor")
+        why = budget.over(self.store, self.cfg, priced=(self.harness, self.model_of("supervisor"))) if notices.held(self.store) else None
+        if why and why != self._over_said:
+            log(f"supervisor: its notices wait: {why}")
+            self._over_said = why
+        if n := notices.release(self.store, self.cfg, why, busy=th is not None and th.is_alive(), owner_waiting=self._owner_line.waiting()):
+            log(f"supervisor: {n} notice(s) gathered into one wake-up")
 
     def wake_open_requests(self) -> int:
         """At start: one Supervisor wake-up for each of the owner's page requests the declared layer
@@ -692,6 +713,8 @@ class AgentHost:
         # transcript holds it (owner_messages.py), whatever happens to this stream.
         entry = owner_messages.accept(self.store, message)
         emit({"type": "accepted", "id": entry["id"]})
+        if running := self._wake_running.get("supervisor"):
+            owner_messages.behind(self.store, entry["id"], running)   # it waits for that turn; no new one starts before it
         error = None
         try:
             with self._owner_line.turn(entry["id"]), self._turn_lock("supervisor"):
@@ -725,6 +748,8 @@ class AgentHost:
         snap = tooling.snapshot(self.store, "supervisor")
         prefix = prompting.supervisor_context(snap, new, self.project, self.store, roles=self.fillers.lines(self.cfg.serves))
         facts, began = self.facts.before(snap, message)
+        if held := notices.take_digest(self.store):     # what waited (the interval, the cap, the owner's pause), said once here
+            prefix = (prefix or prompting.clock_line() + "\n\n") + held
         self._turn_began(message)
         self._session_running("supervisor", "supervisor", proc)
         on_session_event = self.turns.on_event("supervisor")
@@ -737,7 +762,7 @@ class AgentHost:
         res = self._honest(proc, prompting.chat_turn(prefix + facts, message), on_event)
         res = self._checked(res, began, message, emit)
         res = self._closed(res, began, emit)
-        budget.record(self.store, res.cost_usd, initiative=False, chat=True)
+        budget.record(self.store, res.cost_usd, initiative=False, chat=True, labels=("chat",))
         self.turns.note("supervisor", res, "supervisor")
         self._session_idle("supervisor", res.text, resident=True)
         self._say("agent.said", session="supervisor", summary=(res.text or "")[:500])
@@ -826,7 +851,15 @@ class AgentHost:
         if agent is None or needs_task_system(agent):     # the Coordinator without the task system: nothing to plan into
             return
         with self._turn_lock(target):
-            self._wake_turn(agent, target, reasons)
+            if target == "supervisor" and self._owner_line.waiting():
+                for r in reasons:                         # the owner's message came first: these wait for the turn after it
+                    self.store.add_wakeup(target, r)
+                return
+            self._wake_running[target] = f"a wake-up turn ({', '.join(wake_classes.labels(reasons))})"
+            try:
+                self._wake_turn(agent, target, reasons)
+            finally:
+                self._wake_running.pop(target, None)
 
     def _wake_turn(self, agent: AgentDef, target: str, reasons: list[str]) -> None:
         sid = agent.session_id
@@ -858,7 +891,8 @@ class AgentHost:
             task = prompting.SUPERVISOR_WAKE + context + facts + task
             res = self._checked(self._honest(proc, task, self.turns.on_event(sid)), began)
             self.first_run.ended(reasons, ok=not (res.error or res.timed_out))
-            budget.record(self.store, res.cost_usd, initiative=initiative(reasons, self._duty_types()))
+            budget.record(self.store, res.cost_usd, initiative=initiative(reasons, self._duty_types() | self._notice_types()),
+                          labels=wake_classes.labels(reasons))
         else:
             res = proc.prompt(task, self.cfg.turn_timeout or None, on_event=self.turns.on_event(sid), idle_timeout=self.cfg.silence_timeout)
         self.turns.note(sid, res, target)

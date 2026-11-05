@@ -162,6 +162,7 @@ function renderPending(list, s) {
   const state = (p) => p.status === "answering" ? "sent · the Supervisor is answering it"
     : p.status === "waiting" ? (p.place > 1 ? `sent · queued behind ${p.place - 1} other message${p.place > 2 ? "s" : ""} of yours`
                                 : answering ? "sent · queued: next, after the message being answered"
+                                : running && p.behind ? `sent · queued: next, once ${p.behind} ends (it is not interrupted; no other wake-up turn starts before your message)`
                                 : running ? "sent · queued: next, once the Supervisor's current turn ends" : "sent · starting")
     : p.status === "answered" ? "sent · answered; the transcript below shows it in a moment"
     : `sent · not answered: ${p.error || "the turn failed"}. Send it again if it still matters.`;

@@ -75,6 +75,7 @@ class Config:
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
     review_turns_per_day: int = 48      # ... and how many turns, for a harness that reports no cost
     explore_every: float = 3600.0       # the Supervisor's explore round (explore_round.py); 0: off
+    attention_every: float = 600.0      # the Supervisor's notices gathered into one turn at most this often (notices.py); 0: no wait
     chat_usd_per_day: float = 10.0      # what the owner's chat turns with the Supervisor may spend a day; 0: no cap (budget.py)
     design_passes: int = 3              # the most refinement passes in one round (design_passes.py)
     draft_expiry_s: float = 86_400.0    # how long a draft instrument records before it expires unkept (design_instruments.py)
@@ -121,7 +122,7 @@ class Config:
             review_turns_per_day=_count(a, "review_turns_per_day", 48), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
             design_passes=_count(a, "design_passes", 3),
             draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),
-            explore_every=_every(a, "explore_every", 3600.0),
+            explore_every=_every(a, "explore_every", 3600.0), attention_every=_every(a, "attention_every", 600.0),
             base_branch=p.get("base_branch", "main"), ticket_prefix=p.get("ticket_prefix", "ORC"), work=p.get("work", "tasks"))
 
 

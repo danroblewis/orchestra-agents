@@ -66,16 +66,20 @@ async function openTranscript(id) {
   const oldest = d.messages.length ? Math.min(...d.messages.map(tsOf)) : 0;
   const first = withMarkers(d.messages, d.markers, d.has_more ? oldest - 1 : 0);
   const more = `<div id="transcript-more" class="empty" style="margin-bottom:8px">${d.has_more ? "scroll up for older messages…" : "beginning of session"}</div>`;
-  html = html.replace(/<div id="transcript"/, more + '<div id="transcript"');
+  html = html.replace(/<div id="transcript"/, '<div id="convo-scroll" class="convo-scroll">' + more + '<div id="transcript"');
   html += first.length ? first.map(renderMessage).join("") : `<div class="empty">${s.file_exists ? "No messages yet." : "No turns yet: the harness creates the session file on the first prompt. This agent is woken by events or, for the Supervisor, by a message."}</div>`;
   html += `</div><div id="progress">${progressHtml(s)}</div>`;
-  if (id === "supervisor") html += `<div id="pending">${renderPending(d.pending, s)}</div><div id="live"></div>
+  if (id === "supervisor") html += `<div id="pending">${renderPending(d.pending, s)}</div><div id="live"></div>`;
+  html += `</div>`;                                   // the end of the conversation's own scroll box
+  if (id === "supervisor") html += `
     <form id="chat" class="chat" onsubmit="return sendToSupervisor(event)">
       <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
       <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
       ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
     </form>`;
   openDrawer(html);
+  const box = $("convo-scroll");
+  if (box) box.addEventListener("scroll", () => { if (transcriptPaging && box.scrollTop < 300) loadOlderTranscript(); });
   scrollTranscriptToEnd();
   transcriptPaging = { id, nextBefore: d.next_before, hasMore: d.has_more, loading: false, total: d.total,
                        markerTs: Math.max(0, ...(d.markers || []).map(tsOf)), finished: !transcriptLive(d.session) };
@@ -109,8 +113,10 @@ function progressHtml(s) {
 
 // Oldest at the top, newest at the bottom, as a chat reads. The drawer follows new messages
 // while the reader is at the bottom, and leaves them alone while they read further up.
-const atTranscriptEnd = () => { const el = $("drawer"); return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80; };
-function scrollTranscriptToEnd() { const el = $("drawer"); if (el) el.scrollTop = el.scrollHeight; }
+// The conversation scrolls in its own box (#convo-scroll), so the head and the controls above it stay put.
+const convoBox = () => $("convo-scroll") || $("drawer");
+const atTranscriptEnd = () => { const el = convoBox(); return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80; };
+function scrollTranscriptToEnd() { const el = convoBox(); if (el) el.scrollTop = el.scrollHeight; }
 
 const TRANSCRIPT_POLL_MS = 5000;
 // a transcript that can still grow: its turn runs, or its session is kept between turns (resident)
@@ -151,7 +157,7 @@ async function loadOlderTranscript() {
   p.loading = true;
   try {
     const d = await (await fetch(`${AGENTS_API}/sessions/${p.id}/transcript?before=${p.nextBefore}&limit=30`)).json();
-    const box = $("transcript"), drawer = $("drawer"); if (!box) return;
+    const box = $("transcript"), drawer = convoBox(); if (!box) return;
     const before = drawer.scrollHeight;
     box.insertAdjacentHTML("afterbegin", withMarkers(d.messages, [], 0).map(renderMessage).join(""));
     highlightCode(box);
@@ -164,7 +170,7 @@ async function loadOlderTranscript() {
 // load this file late (every page but the Agents page: attention.js and machine-cards.js load it
 // on demand, after the page has loaded) DOMContentLoaded has passed, so it starts at once there.
 function agentsFollowTranscripts() {
-  $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && el.scrollTop < 300) loadOlderTranscript(); });
+  $("drawer").addEventListener("scroll", () => { const el = $("drawer"); if (transcriptPaging && !$("convo-scroll") && el.scrollTop < 300) loadOlderTranscript(); });
   setInterval(refreshTranscript, TRANSCRIPT_POLL_MS);
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", agentsFollowTranscripts);

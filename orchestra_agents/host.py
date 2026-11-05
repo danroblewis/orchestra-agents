@@ -136,7 +136,7 @@ class AgentHost:
         self._started_at = time.time()
         self._last_scheduled: dict[str, float] = {}
         self._slots: dict[str, str] = {}               # session id -> the machine instance it runs as ("worker/1")
-        self._announced: set[tuple] = set()            # (source, floor roles, adopted types) announced in this host's lifetime
+        self._announced: set[tuple] = set()            # (source, floor roles, adopted types, listens_for) announced in this host's lifetime
         self._wake_at = events.end()                   # events that wake agents: only those after startup
         self._digest_at = events.end()                 # what the Supervisor is told happened since its last turn
         self._drafts_at = 0.0                          # when draft instruments were last checked for expiry
@@ -317,10 +317,11 @@ class AgentHost:
         return machine_spec.model_of(self.project, self.harness, name)
 
     def _duty_types(self) -> set[str]:
-        """The event types only the Supervisor's own duties listen for (not its fixed core's)."""
+        """The event types only the Supervisor's own duties and bindings listen for (not its fixed core's)."""
         spec = load_spec(self.project, "supervisor")
         core = {w.split(":")[0] for w in BUILTIN_ROLES["supervisor"].wake_on}
-        return {w.split(":")[0] for w in spec.listens()} - core if spec is not None else set()
+        own = [*spec.listens(), *(b.event for b in spec.bindings)] if spec is not None else []
+        return {w.split(":")[0] for w in own} - core
 
     @staticmethod
     def _notice_types() -> set[str]:
@@ -404,6 +405,19 @@ class AgentHost:
         self.residents.stop_changed(agents_, states)
         self.role_defs, self.teams, self.agents = roles, teams, agents_
         self.residents.start_missing(states)
+        self._announce_rebound(states)
+
+    def _announce_rebound(self, states: dict) -> None:
+        """An agent whose bindings changed (bindings.py) is announced again with what it listens for
+        now, so the Event Map shows it; one never announced in this host's lifetime is announced when
+        its session opens, as any is."""
+        for name, st in states.items():
+            if not st.get("bindings_changed"):
+                continue
+            self.store.set_agent_state(name, bindings_changed=False)
+            if name in self.agents and any(k[0] == name for k in self._announced):
+                self._announce(name, name)
+                log(f"{name}: its bindings changed; announced again with what it listens for now")
 
     def _session_for(self, agent: AgentDef, session_id: str) -> AgentSession:
         """A session for an agent: its roles' prompts plus its team's responsibilities and access,
@@ -494,15 +508,16 @@ class AgentHost:
         mode and what it listens for): an AI agent, engaged as ``listening.engaged`` says (the rule
         its declaration shares), and the Workflows floor roles it answers. Once per source in the
         host's lifetime (``reviewer/1`` is one machine instance however many tickets it reviews),
-        again when those floor roles change."""
+        again when those floor roles or what it listens for change (its bindings, bindings.py)."""
         floor = sorted(r for r, a in served(self.project).items() if a == role)   # the floor roles it answers (floor_roles.py)
-        key = (source, tuple(floor), tuple(adopt.listened(self.store)) if role == "supervisor" else ())
+        agent = self.agents.get(role) or all_agents(self.project).get(role)
+        listens = self._listens_for(agent)
+        key = (source, tuple(floor), tuple(adopt.listened(self.store)) if role == "supervisor" else (), tuple(listens))
         if key in self._announced:
             return
         self._announced.add(key)
-        agent = self.agents.get(role) or all_agents(self.project).get(role)
         # Events.announce adds ``process``, the launcher's name for this host (ORCHESTRA_PROCESS)
-        self.events.announce({"package": "agents", "mode": engaged(agent), "listens_for": self._listens_for(agent),
+        self.events.announce({"package": "agents", "mode": engaged(agent), "listens_for": listens,
                               "kind": "agent", "role": role, **({"roles": floor} if floor else {})}, source=source)
 
     def _listens_for(self, agent: AgentDef | None) -> list[str]:

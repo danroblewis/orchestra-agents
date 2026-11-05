@@ -2,7 +2,7 @@
 Workflows floor's attention.needed gathers into one wake turn per [agents] attention_every and none
 past the day's cap, kept for the page and handed to the next chat turn; the owner's message gets the
 next turn during a flood; a page request still wakes it at once; the owner's pause holds wake turns
-and not chat; and a duty may not listen for activity."""
+and not chat; and a duty may listen for activity, with a warning, but never a heartbeat unfiltered."""
 
 import subprocess
 import threading
@@ -223,7 +223,9 @@ def test_duty_wake_ups_are_gathered_like_the_core_s(project):
     assert store.runtime()["wakeups"] == [] and len(notices.held(store)) == 1   # within the interval: held
 
 
-def test_a_duty_may_not_listen_for_activity(project, monkeypatch):
+def test_a_duty_may_listen_for_activity_with_a_warning_but_never_a_heartbeat_unfiltered(project, monkeypatch):
+    """T55 refused a duty on activity; since T67 (the owner, 2026-11-04) it is allowed, with a
+    warning naming its rate and that it is gathered: only offer.alive unfiltered is refused."""
     store = AgentStore(project, Events.for_project(project))
     AgentHost(project, store, store.events)                               # writes the Supervisor's spec
     from orchestra_agents.machine_spec import load
@@ -234,16 +236,16 @@ def test_a_duty_may_not_listen_for_activity(project, monkeypatch):
             (project.repo_root / rel).write_text(body)
     monkeypatch.setattr(duties, "_commit", lambda *a, **k: {"ok": True})
     add = {"name": "watch_floor", "text": "Keep the floor moving.", "reason": "the owner asked for it today"}
-    for busy, instead in (("offer.alive", "offer.withdrawn"), ("item.closed", "attention.needed"),
-                          ("outbox.sent", "outbox.draft.rejected"), ("offer.made", "attention.needed")):
-        with pytest.raises(StoreError, match=instead):
-            duties.handle(project, store, "add_duty", {**add, "listens": [busy]}, "supervisor")
-    with pytest.raises(StoreError, match="heartbeat"):
-        duties.handle(project, store, "add_duty", {**add, "listens": ["offer.alive:item-1"]}, "supervisor")
-    assert duties.handle(project, store, "add_duty", {**add, "listens": ["item.closed:item-1"]}, "supervisor")["ok"]   # narrowed
+    with pytest.raises(StoreError, match="heartbeat.*offer.withdrawn"):
+        duties.handle(project, store, "add_duty", {**add, "listens": ["offer.alive"]}, "supervisor")
+    for busy, instead in (("item.closed", "attention.needed"), ("outbox.sent", "outbox.draft.rejected"),
+                          ("offer.made", "attention.needed")):
+        got = duties.handle(project, store, "add_duty", {**add, "listens": [busy]}, "supervisor")
+        assert got["ok"] and instead in got["warnings"][0] and "gathered" in got["warnings"][0]
+    assert duties.handle(project, store, "add_duty", {**add, "listens": ["offer.alive:item-1"]}, "supervisor")["warnings"]
     for i in range(40):                                                   # a type busy on this bus
         store.events.publish("ci.check.completed", {"n": i}, source="ci")
-    with pytest.raises(StoreError, match="40 times in the last hour"):
-        duties.handle(project, store, "add_duty", {**add, "listens": ["ci.check.completed"]}, "supervisor")
-    assert duties.handle(project, store, "add_duty", {**add, "listens": ["ci.check.completed:main"]}, "supervisor")["ok"]
-    assert duties.handle(project, store, "add_duty", {**add, "listens": ["outbox.draft.rejected"]}, "supervisor")["ok"]
+    got = duties.handle(project, store, "add_duty", {**add, "listens": ["ci.check.completed"]}, "supervisor")
+    assert "40 times in the last hour" in got["warnings"][0] and "every 10m" in got["warnings"][0]
+    assert "warnings" not in duties.handle(project, store, "add_duty", {**add, "listens": ["ci.check.completed:main"]}, "supervisor")
+    assert "warnings" not in duties.handle(project, store, "add_duty", {**add, "listens": ["outbox.draft.rejected"]}, "supervisor")

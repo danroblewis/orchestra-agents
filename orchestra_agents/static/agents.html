@@ -280,7 +280,7 @@ async function openRole(name) {
 function wakesCard(w, now) {
   const every = w.attention_every_s >= 60 ? `${Math.round(w.attention_every_s / 60)}m` : `${w.attention_every_s}s`;
   const rows = (list) => list.map((x) => `<div><code>${esc(x.what)}</code> <span class="muted">${esc(x.why || "")}</span></div>`).join("");
-  const co = w.coalesced.map((x) => `<div><code>${esc(x.what)}</code> <span class="muted">${esc(x.from)} · ${x.per_hour}/h in the last hour</span>${x.busy ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="${esc(x.busy)}">busy</span>` : ""}</div>`).join("");
+  const co = w.coalesced.map((x) => `<div><code>${esc(x.what)}</code> <span class="muted">${esc(x.from)} · ${x.per_hour}/h in the last hour</span>${x.busy ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="${esc(x.busy)}">busy</span>` : ""}${x.unbound ? ` <span class="tag" title="unbound with unbind_event: it no longer wakes the Supervisor">unbound</span>` : ""}</div>`).join("");
   const by = Object.entries(w.today.by_reason || {}).sort((a, b) => b[1].turns - a[1].turns)
     .map(([k, v]) => `<div><code>${esc(k)}</code> <span class="muted">${v.turns} turn${v.turns === 1 ? "" : "s"} · $${(v.usd || 0).toFixed(2)}</span></div>`).join("") || '<div class="muted">no turns yet today</div>';
   const h = w.held;

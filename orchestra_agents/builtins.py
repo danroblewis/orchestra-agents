@@ -91,7 +91,7 @@ def register(role: Role) -> Role:
 register(Role(
     name="supervisor", prompt="supervisor",
     tools=("tickets", "handoff", "guides", "context", "pipeline", "roles", "team", "events", "observe", "flows", "setup",
-           "design", "workflows", "work", "model", "predict", "patch", "delegate"),
+           "design", "workflows", "work", "model", "predict", "patch", "delegate", "bindings"),
     wake_on=(f"{ATTENTION}:{SUPERVISOR}", f"{ATTENTION_NEEDED}:{SUPERVISOR}", GAVE_UP, f"{PLANNED}:{SUPERVISOR}",
              INTENT_REQUESTED),
     triggers=("a message from the human", "escalate_to_supervisor from any agent", "a crash loop pausing an agent",
@@ -108,7 +108,7 @@ register(Role(
 ))
 register(Role(
     name="coordinator", prompt="coordinator",
-    tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model", "work"),
+    tools=("tickets", "planning", "guides", "capacity", "escalate", "flows", "model", "work", "bindings"),
     wake_on=(f"{ATTENTION}:{COORDINATOR}", f"{ATTENTION_NEEDED}:{COORDINATOR}", f"{REQUESTED}:{COORDINATOR}"),
     emits=(REQUESTS["create_milestone"], REQUESTS["create_ticket"], PLANNED, REQUESTS["update_ticket"],
            REQUESTS["cancel_ticket"], REQUESTS["add_note"], REQUESTS["unblock_ticket"], REQUESTS["set_capacity"],

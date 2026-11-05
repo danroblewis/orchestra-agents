@@ -2,8 +2,8 @@
 (``/supervisor/wakes``) and the spend record's ``by_reason`` (budget.py): **immediate** (never held,
 never capped), **capped** (its rounds: they count against the day's cap, each on its own interval),
 and **coalesced** (its notices, notices.py: capped too, and gathered into one turn at most every
-``[agents] attention_every``). Each duty's events come with their count in the last hour, the busy
-ones marked (bus_rates.py)."""
+``[agents] attention_every``). Each duty's events and its own bindings (bindings.py) come with their
+count in the last hour, the busy ones marked (bus_rates.py), and one it unbound marked so."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from .builtins import ROLES
 from .bus_rates import busy, rates
 from .events import INTENT_REQUESTED
 from .explore_round import MARK as EXPLORE
+from .machine_spec import unbinds
 from .review import MARK as REVIEW
 
 MACHINE = "supervisor"
@@ -58,10 +59,16 @@ def view(project, store, cfg, spec=None) -> dict:
     """The Supervisor's listening, its held notices and today's wake turns with their spend."""
     rate = rates(store)
     core = [w for w in ROLES[MACHINE].wake_on if w.split(":")[0] != INTENT_REQUESTED]
-    coalesced = [{"what": w, "from": "the fixed core", "per_hour": rate.get(w.split(":")[0], 0), "busy": busy(w, rate)} for w in core]
+    unbound = spec.unbound if spec is not None else []
+
+    def row(w: str, src: str) -> dict:
+        r = {"what": w, "from": src, "per_hour": rate.get(w.split(":")[0], 0), "busy": busy(w, rate)}
+        return {**r, "unbound": True} if unbinds(unbound, w) else r
+    coalesced = [row(w, "the fixed core") for w in core]
     for d in (spec.duties if spec is not None else []):
-        for w in d.listens:
-            coalesced.append({"what": w, "from": f"duty {d.name}", "per_hour": rate.get(w.split(":")[0], 0), "busy": busy(w, rate)})
+        coalesced += [row(w, f"duty {d.name}") for w in d.listens]
+    coalesced += [{**row(b.event, "its own binding"), "unbound": False} for b in (spec.bindings if spec is not None else [])
+                  if b.event.split(":")[0] != INTENT_REQUESTED]
     st = store.agent_state(MACHINE)
     today = budget.spent(store)
     held = notices.held(store)

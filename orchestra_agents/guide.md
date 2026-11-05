@@ -51,7 +51,8 @@ Propose, recommend, and wait:
   when the owner asks, and say what it lets that role do.
 - **What your own initiative may spend** (`review_usd_per_day`, `review_turns_per_day`), **what the
   owner's chat may spend** (`chat_usd_per_day`), and **how
-  often you may change your own spec** (`spec_changes_per_day`): the owner's caps on you. Propose a
+  often you may change your own spec** (`spec_changes_per_day`) and an agent's bindings
+  (`binding_changes_per_day`): the owner's caps on you. Propose a
   change with its reason; never raise them on your own.
 
 ## Your bounds while you look and set up
@@ -111,6 +112,7 @@ compact_tokens = 100000   # a session's context past this many tokens is compact
 dummy_script = "demo/dummy.toml"  # the dummy harness's script; unset: .orchestra/dummy.toml if it exists
 control_port = 0          # the Supervisor chat's local port; 0 (default): any free one
 spec_changes_per_day = 5  # the Supervisor's changes to its own spec in 24 hours (default 5; a revert is never refused)
+binding_changes_per_day = 30  # changes to one agent's event bindings in 24 hours (default 30; apart from the spec's cap)
 review_usd_per_day = 2.0  # what its review rounds and notices may spend a day, in dollars (default 2.0)
 review_turns_per_day = 12 # ... and in turns a day (default 12)
 review_every = "2h"       # its review round at most this often, whatever its spec says (default 2h; 0: the spec alone)

@@ -311,7 +311,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
 
   | Agent | Listens for | Why |
   |---|---|---|
-  | each agent | its `wake_on` types | its wake-ups |
+  | each agent | its `wake_on` types (with its own bindings, without what it unbound: section 12; announced again when they change) | its wake-ups |
   | each agent the host wakes (every resident, scheduled or ad hoc agent; not a worker or reviewer) | `request.done`, `request.refused` | the answers to its own requests: the snapshot each wake-up asks for as the agent, and its tools' requests. The task system publishes the answer as the asker (its D17) |
   | the Supervisor | `gate.landed`, `request.done`, and in tasks mode `review.approved` (`protocol.endings`) | the end of a ticket it created for the human, which it then tells the human about (`landings.py`) |
   | the Supervisor | `ticket.created` | how it remembers which tickets were its own (`by` = supervisor) |
@@ -677,7 +677,8 @@ no host),
 when the harness takes the name, section 12), `serves` (the task system's roles these agents fill; default worker and
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
-hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 12: what its review
+hours), `binding_changes_per_day` (default 30: changes to one agent's event bindings in 24 hours,
+apart from the spec's cap, section 12), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 12: what its review
 rounds, explore rounds and its notices may spend a day, section 12), `chat_usd_per_day`
 (default 10.0, 0 no cap: what the owner's chat turns may spend a day), `attention_every` (default
 `10m`, 0 no wait: the Supervisor's notices gathered into one turn at most this often, section 12), `ask`
@@ -723,8 +724,10 @@ verdict wakes, `verdicts.py`), `scratch/` (the worktree of a patch the Superviso
 change out on it, `config_change.py`), `upstream/` (the issues it drafts for other repositories,
 `upstream.py`), `live_overlay.json` (each overlay change that keeps a change to `orchestra.toml` on
 the Supervisor's branch live until merged, and a graduation's overlay command waiting for its move,
-`live_layers.py`) and `machines/<name>/` with `.pending.json` (a spec change's live copy until
-merged, `spec_git.py`).
+`live_layers.py`), `machines/<name>/` with `.pending.json` (a spec change's live copy until
+merged, `spec_git.py`) and `bindings/<name>.json` (a designed machine's own event bindings, what it
+unbound and their history, kept outside its `machines/<name>/` so a confirm that writes that again
+keeps them; removed with it; `bindings.py`).
 Beside it, in Orchestra's state directory and not the agents' own, `integrate_system` writes a
 scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffold: its
 `machine.toml`, with a top-level `kit`, and its program and test; `integrate_kits.py` edits the
@@ -1951,6 +1954,37 @@ in the same turn with the owner's words as the reason. Every change:
 - can be undone: `revert_change` undoes one spec commit by what it did to each duty, applied to the
   spec as it is now, so later changes to other duties stay; the owner may also `git revert`.
 
+**What wakes an agent is its own** (`bindings.py`, group `bindings`, which every agent the host
+wakes holds; T67, the owner, 2026-11-04: "I think agents should be able to adjust their own event
+bindings ... I really do want agents to be able to remove their own event bindings and add more
+event bindings"). `list_bindings` says what wakes it, by where it comes from (built in: its record's
+`wake_on`, a designed machine's declared receives; each duty's `listens`; its own bindings) and what
+it unbound, each event with its count on the bus in the last hour and how it wakes it (the
+Supervisor's at once only for the owner's page request, the rest gathered as notices, below; another
+agent's at once). `bind_event` (type or `type:filter`) and `unbind_event` (a type takes out every
+entry of it, `type:filter` that entry) change it, each with a reason; an agent changes its own, the
+Supervisor also another's (`agent`). They are kept as their own lists, apart from the duties' text:
+`[[bindings]]` and `[[unbound]]` in the agent's `machine.toml` (`machine_spec.apply`: duties added,
+the unbound taken out, its own bindings added last), each change one commit with its reason and a
+line in `ledger.md`, as a duty's is (an agent with no spec gets one under `.orchestra/machines/` by
+its first change); a designed machine's in the state directory (`bindings/<name>.json`, section 7),
+never committed. Built-in wake events may be unbound (the Supervisor's `attention.needed`,
+`orchestra.process.gave_up`, `work.planned`); never the owner's own channels (the chat, which is
+no event, and `orchestra.intent.requested` from `owner`) nor the crash-loop guard
+(`agent.crash_loop`; `machine_spec.PROTECTED`, which `apply` keeps whatever a file says). A busy
+event is allowed, answered with a warning naming its rate and how it wakes the agent; only a
+heartbeat unfiltered (`offer.alive`) is refused (`bus_rates.refusal`). Refused past `[agents]
+binding_changes_per_day` (default 30) for that agent in 24 hours, never counted against
+`spec_changes_per_day`. Undone with `revert_change`: a binding commit (another agent's too), or a
+designed machine's change by its `bind-…` id. Each change is published as `role.changed` (subject
+`machine:<name>`) and applies at the host's next tick with no restart; the host then announces the
+agent again (`orchestra.machine.started` with its new `listens_for`, `AgentHost._announce_rebound`),
+so the Event Map shows what wakes it now. A designed machine's declaration is not touched: its
+declared receives in Orchestra's declared layer change only through `refine_machine`, which on a
+confirmed machine is a pending change the owner confirms (Orchestra's rule 2 and 9); its binding is
+the running agent's, which its announcement shows, and under `ask = "outside"` or `"always"` alike
+it needs no question of the owner.
+
 **Flow-keeping** (`keep_flow`). It wakes on Orchestra's domain-free statements
 `orchestra.model.stalled` (subject `stock:<id>` or `flow:<id>`), `orchestra.machine.quiet`,
 `orchestra.model.diverged`, and on `gate.base_broken`, `pipeline.paused` and
@@ -2008,12 +2042,13 @@ next chat turn is handed them as a short digest (`notices.take_digest`), which c
 owner's **pause** ("Pause the Supervisor's own initiative until tomorrow" on the Agents page, the
 plugin's operator control, AGENTS.md rule 10) holds the same initiative until the day ends (host
 time; `initiative_pause` {day, at, by, via}, with a short history); chat and the immediate wake-ups
-go on. A duty may not listen for activity (`bus_rates.busy`, in `add_duty`/`edit_duty`): a
-heartbeat (`offer.alive`), the floor's and the Outbox's every-piece-of-work events (`offer.made`,
-`offer.claimed`, `offer.finished`, `item.closed`, `outbox.sent`) unless a filter narrows them, or
-an unfiltered type seen over 30 times in the last hour; the refusal names the trouble signal to wake
-on instead. The Agents page lists what wakes it, at once, capped, and gathered (each duty's events
-with their count in the last hour, the busy ones marked), with today's wake turns and spend by
+go on. A duty or a binding may listen for activity since T67 (T55 refused it): the floor's and the
+Outbox's every-piece-of-work events (`offer.made`, `offer.claimed`, `offer.finished`,
+`item.closed`, `outbox.sent`) unfiltered, or a type seen over 30 times in the last hour, are
+answered with a warning (`bindings.warning`) naming the rate, the trouble signal to wake on instead
+and that it is gathered every `attention_every`; only a heartbeat unfiltered (`offer.alive`) is
+refused. The Agents page lists what wakes it, at once, capped, and gathered (each duty's events and
+its own bindings with their count in the last hour, the busy ones marked, the unbound marked so), with today's wake turns and spend by
 reason (`wake_classes.py`, `GET /api/plugins/agents/supervisor/wakes`). The owner's chat turns have their own cap,
 `chat_usd_per_day` (default 10.0; 0: none): past it a message is refused before any turn
 (`budget.chat_over`, raised in `prompt_supervisor`), saying what was spent, the cap and how to go

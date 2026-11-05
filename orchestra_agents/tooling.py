@@ -20,6 +20,7 @@ from typing import Any
 from . import (
     access,
     balance_tools,
+    bindings,
     bus_reads,
     design,
     design_dynamics,
@@ -234,6 +235,8 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
 
     if command in duties.COMMANDS:
         return duties.handle(project, store, command, a, role)
+    if command in bindings.COMMANDS:
+        return bindings.handle(project, store, command, a, role)
     if command == "read_transcript":
         return transcripts.read_transcript(project, store, a)
     if command == "predict_fix":

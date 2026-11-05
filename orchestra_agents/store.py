@@ -2,7 +2,8 @@
 their sessions (live and archived, each with the host's markers for its transcript), the reports
 an agent's tool hands to the agent that runs it, wake-ups queued for an agent, each agent's state
 (paused, crashes, schedules, the changes its tools made), the grants of the live sessions' tokens (access.py), the probes' states, the control endpoint, the metric counters (measures.py) and
-when the human last read the Supervisor. Nothing of the task system's is here: tickets are the
+when the human last read the Supervisor, and the owner's chat messages the Supervisor's
+transcript does not hold yet (owner_messages.py). Nothing of the task system's is here: tickets are the
 task system's, reached over the bus (protocol.TaskClient)."""
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ class StoreError(Exception):
     """A request the agents cannot carry out (an unknown agent, a role in use, a grant missing)."""
 
 
-EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}, "grants": {}}
+EMPTY = {"sessions": {}, "archived_sessions": {}, "reports": {}, "wakeups": [], "agent_state": {}, "probes": {}, "grants": {},
+         "owner_messages": []}
 MARKERS_KEPT = 50         # the host's markers kept per session, newest last
 
 
@@ -249,6 +251,10 @@ class AgentStore:
     def clear_control(self, pid: int) -> None:
         """Only the host that recorded the endpoint clears it: a replacement may already be up."""
         self._mutate_runtime(lambda d: d.pop("control", None) if (d.get("control") or {}).get("pid") == pid else None)
+
+    def update_owner_messages(self, fn) -> Any:
+        """The owner's accepted chat messages (owner_messages.py) changed by ``fn`` under the lock."""
+        return self._mutate_runtime(lambda d: fn(d["owner_messages"]))
 
     def mark_supervisor_seen(self) -> float:
         """The human has read what the Supervisor last said; returns when."""

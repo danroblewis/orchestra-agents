@@ -6,6 +6,7 @@
 :root {
   --OPEN:#6b7280; --BLOCKED:#f0883e; --IN_PROGRESS:#3b82f6; --READY_FOR_REVIEW:#7c3aed; --IN_REVIEW:#a855f7; --REJECTED:#ef4444;
   --APPROVED:#d97706; --MERGING:#f59e0b; --DONE:#16a34a; --CANCELLED:#374151;
+  --owner-tint:color-mix(in srgb, var(--accent) 13%, transparent);   /* behind the owner's own messages, from the theme's accent */
   --r-supervisor:#c084fc; --r-coordinator:#38bdf8; --r-worker:#60a5fa; --r-reviewer:#e879f9;
 }
 .msg.inprogress { border:1px dashed #1d4ed8; opacity:.9 }
@@ -42,6 +43,12 @@ details.fold { display:inline } details.fold summary { display:inline; cursor:po
 .chat textarea { flex:1; min-width:0; background:var(--bg); color:var(--text); border:1px solid var(--border2); border-radius:8px; padding:8px; font:13px/1.4 inherit; resize:vertical }
 .chat button { background:var(--accent); color:#000; border:0; border-radius:8px; padding:8px 14px; font-weight:700; cursor:pointer } .chat button:disabled,.chat textarea:disabled { opacity:.5 }
 .chat .empty { flex-basis:100% }
+/* the owner's own messages stand out from Orchestra's context, wake-ups and tool calls */
+.msg.user.owner { background:var(--owner-tint); border-left:5px solid var(--accent); border-radius:0 8px 8px 0; padding:6px 12px }
+.msg.user.owner > .r b { color:var(--accent) } .msg.user.owner.pending { border-left-style:dashed } .msg.user.owner.pending.failed { border-left-color:#ef4444 }
+details.msg.toolResult > summary { cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis } details.msg.toolResult > summary code { font-size:11px; color:var(--muted) }
+.convo-only { display:inline-flex; gap:6px; align-items:center; font-size:12px; cursor:pointer; margin:0 0 6px }
+#transcript.convo .msg.marker, #transcript.convo .msg.toolResult, #transcript.convo .tc, #transcript.convo .msg.user:not(.owner), #transcript.convo .msg.assistant.notext { display:none }
 .chat.top { position:static; border-top:0; border-bottom:1px solid var(--border); padding:4px 0 10px; margin:10px 0 }
 @media (max-width: 900px) { .chat { bottom:-14px } }   /* Orchestra's drawer has 14px of padding there, not 18px */
 .chip.waiting { color:#fde68a; border-color:#92400e } .chip.waiting .dot { background:#f59e0b; animation:pulse 2.4s infinite }

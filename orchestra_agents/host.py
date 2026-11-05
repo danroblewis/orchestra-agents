@@ -40,6 +40,7 @@ from . import (
     integrate_heard,
     intended_api,
     machine_spec,
+    owner_messages,
     parent,
     program_tools,
     promises,
@@ -83,6 +84,7 @@ from .restart import recover as recover_restart
 from .review import ReviewRound, initiative
 from .roles import all_roles
 from .runner import AgentRunner
+from .session_turns import messages as session_messages
 from .store import AgentStore, StoreError
 from .turns import Turns
 from .verdicts import Verdicts
@@ -121,6 +123,7 @@ class AgentHost:
         self.stop = threading.Event()
         self.agent_threads: dict[str, threading.Thread] = {}   # agent name -> the thread running its turn (a wake-up, or the Supervisor chat)
         self._turn_locks: dict[str, threading.Lock] = {}        # agent name -> one turn at a time on its session
+        self._owner_line = owner_messages.Line()                # the owner's messages, answered in the order accepted
         self.live_procs: dict[str, AgentSession] = {}   # session id -> session, while a per-ticket turn runs
         self.agents: dict[str, AgentDef] = {}
         self.teams: dict = {}
@@ -665,6 +668,7 @@ class AgentHost:
         self.control = ControlServer(port, self.prompt_supervisor, owner_only(token_file(self.project)))
         self.control.start()
         self.store.set_control(self.control.port, os.getpid())
+        owner_messages.interrupted(self.store)           # what an earlier host accepted and never answered
         log(f"control endpoint on 127.0.0.1:{self.control.port} (orchestra agents chat and the web attach here)")
 
     def _turn_lock(self, name: str) -> threading.Lock:
@@ -684,13 +688,30 @@ class AgentHost:
                 budget.chat_over(self.store, self.cfg):
             log(f"supervisor: a chat message refused: {over}")
             raise StoreError(over)
-        with self._turn_lock("supervisor"):
-            self.agent_threads["supervisor"] = threading.current_thread()
+        # Accepted: from here the chat shows the message, waiting or being answered, until the
+        # transcript holds it (owner_messages.py), whatever happens to this stream.
+        entry = owner_messages.accept(self.store, message)
+        emit({"type": "accepted", "id": entry["id"]})
+        error = None
+        try:
+            with self._owner_line.turn(entry["id"]), self._turn_lock("supervisor"):
+                owner_messages.answering(self.store, entry["id"])
+                self.agent_threads["supervisor"] = threading.current_thread()
+                try:
+                    out = self._supervisor_turn(message, emit)
+                    error = out.get("error") or ("the turn timed out" if out.get("timed_out") else None)
+                    return out
+                finally:
+                    if self.agent_threads.get("supervisor") is threading.current_thread():
+                        self.agent_threads.pop("supervisor")
+        except Exception as e:
+            error = str(e) or type(e).__name__
+            raise
+        finally:
             try:
-                return self._supervisor_turn(message, emit)
-            finally:
-                if self.agent_threads.get("supervisor") is threading.current_thread():
-                    self.agent_threads.pop("supervisor")
+                owner_messages.settle(self.store, entry["id"], session_messages(self.store.find_session("supervisor") or {}), error)
+            except Exception as e:  # noqa: BLE001 - the record stays as it was; the next host start settles it
+                log(f"supervisor: the owner's message record not settled: {e!r}")
 
     def _supervisor_turn(self, message: str, emit) -> dict:
         self.residents.trim_if_large(self.residents.procs.get("supervisor"), "supervisor", "supervisor")

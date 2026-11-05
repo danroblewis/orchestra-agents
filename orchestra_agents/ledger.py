@@ -27,7 +27,8 @@ AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "res
 CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
            | frozenset({"restart_machine", "edit_machine_file", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
-                         "draft_upstream_issue", "declare_workflow", "declare_program", "retry_step"}))
+                         "draft_upstream_issue", "declare_workflow", "declare_program", "retry_step",
+                         "clear_items"}))
 
 PAST = {"create": "created", "update": "updated", "delete": "deleted", "close": "closed", "pause": "paused",
         "resume": "resumed", "restart": "asked for a restart of", "reset": "asked for a reset of", "cancel": "cancelled",
@@ -78,6 +79,13 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         return None
     if command == "retry_step":
         return f"asked the floor to offer {a.get('item')}'s {a.get('step')} again now: {a.get('reason')}"
+    if command == "clear_items":
+        if not result.get("requested"):
+            return None                                           # the dry run changes nothing
+        which = f"the workflow {result.get('workflow')}'s" if result.get("workflow") else "every"
+        done = (f"cleared {result.get('cleared')} items" if result.get("cleared") is not None
+                else "asked the Workflows record to clear the items (no answer yet)")
+        return (f"{done} ({which}" + (", rebuilt from the bus" if result.get("rebuild") else "") + f"): {a.get('reason')}")
     if command == "restart_process":
         return f"asked orchestra run to restart the process {result.get('requested') or a.get('name')}: {a.get('reason')}"
     if command == "edit_machine_file":

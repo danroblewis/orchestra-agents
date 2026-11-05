@@ -215,6 +215,18 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "step": S("The step to offer again: the one it is blocked at, or the one it was moved to stalled from (write)"),
              "reason": S("What failed the step and what you fixed, in a sentence (git push refused over ssh: the ssh "
                          "agent's key is loaded again)")}, ("item", "step", "reason")),
+    ToolDef("clear_items", "workflows",
+            "Clear the Workflows items, every one or one workflow's, when the owner says clear, reset, delete or start "
+            "over with them. Without confirm it changes nothing and answers a dry run: how many items (open, closed), of "
+            "which workflows, and how many remain. With confirm: true it publishes items.clear_requested as you; the "
+            "recorder clears them in its tick while orchestra run runs, the floor withdraws their offers, and its answer "
+            "(items.cleared) is waited for and reported. rebuild: true makes them again from the bus's history under the "
+            "current definitions: how to start over after changing a workflow. Definitions are never touched. Local, "
+            "never a write outside this machine.",
+            {"workflow": S("Only this workflow's items (leave out: every item)"),
+             "rebuild": B("Make them again from the bus's history (default false: gone)"),
+             "confirm": B("true to clear; leave out for the dry run"),
+             "quote": QUOTE, "reason": REASON}, ("reason",)),
     ToolDef("request_work", "work",
             "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
             "with the fields, if any). With role in place of workflow, a one-off item that role does once: code work is "

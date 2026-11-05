@@ -11,6 +11,8 @@ ATTENTION_NEEDED = "attention.needed"    # the floor asks a planner (``to``) to 
 CLOSED = "item.closed"                   # an item's end, by anyone; nothing waits on a closed item
 RETRY_REQUESTED = "item.retry_requested"  # the item's planner: offer a blocked or stalled step again now (W17)
 RETRIED = ("blocked", "error")           # a turn's outcomes the floor tries the step again on (W16)
+CLEAR_REQUESTED = "items.clear_requested"  # the owner or the Supervisor: clear the items, all or one workflow's (W19)
+ITEMS_CLEARED = "items.cleared"          # the floor's answer, as dispatch: what it cleared and made again (W19)
 STALLED = "stalled"                      # the step a workflow moves an item to when its tries are spent (W15, W16)
 PROTOCOL = (MADE, CLAIMED, ALIVE, FINISHED, WITHDRAWN, ATTENTION_NEEDED, CLOSED)
 """The floor's protocol types, as this copy names them: the plugin's, never the owner's. A machine the

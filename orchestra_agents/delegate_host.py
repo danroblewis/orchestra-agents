@@ -29,6 +29,7 @@ from collections.abc import Callable, Mapping
 from orchestra.runtime import alive
 
 from . import access, delegate, ledger, local_http
+from .answers import first
 from .config import Project
 from .store import AgentStore, StoreError
 
@@ -90,6 +91,7 @@ def ask(project: Project, store: AgentStore, a: dict, role: str, env: Mapping[st
             raise StoreError(str(reason)) from None
         if not heard:
             raise StoreError(DOWN.format(why=f"its control endpoint did not answer: {reason}")) from None
+    known["tools_called"] = first(known["tools_called"])        # a long sub-session's calls: the first, and how many more
     known["error"] = (f"no report from the agents host within {int(wait)}s; the sub-session may still be running there "
                       "(the host ends it at its own bound, revokes its token and counts its spend). What is known is "
                       "here: its session, its transcript and the tools it called")

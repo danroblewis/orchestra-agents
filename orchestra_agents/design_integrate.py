@@ -222,7 +222,9 @@ def writes(rec: dict) -> bool:
 
 def _ask(system: str, kit_env: str | None, scope: str | None = None, acting: bool = False) -> str:
     t = kits.title(system)
-    first = ((f"I will read {t}: metadata only (ids, keys, accounts, states, times; never titles, text or messages), at "
+    # tied to the owner's answer ("once you tell me"): a bare "I will read" relayed in a reply is a promise
+    # nobody keeps (promises.py), and costs a turn to correct
+    first = ((f"Once you tell me the following, I will read {t}: metadata only (ids, keys, accounts, states, times; never titles, text or messages), at "
               "most the configured rate, writing nothing to it, with a read-only token") if acting else
              (f"May I read {t}? It reads metadata only (ids, keys, accounts, states, times; never titles, text or "
               "messages), at most the configured rate, and writes nothing to it. Your yes, in your words, naming the "

@@ -49,7 +49,9 @@
     .att-bar .att-x { background:transparent; border-color:transparent; color:var(--muted, #8a90a3); font-weight:400; padding:4px 6px }
     .att-bar button.att-down, .att-item button.att-down { background:transparent; border-color:var(--border2, #2a3142); color:var(--muted, #8a90a3); font-weight:400 }
     .att-panel { border:1px solid rgba(245,158,11,.5); background:rgba(245,158,11,.07); border-radius:8px; padding:12px 14px; margin:4px 0 14px }
-    .att-panel h4 { margin:0 0 8px; color:#fbbf24; font-size:12px; letter-spacing:.06em; text-transform:uppercase }
+    .att-panel h4 { margin:0 0 8px; color:#fbbf24; font-size:12px; letter-spacing:.06em; text-transform:uppercase; display:flex; align-items:center; gap:8px }
+    .att-panel h4 .att-close { margin-left:auto; background:transparent; border:0; color:var(--muted, #8a90a3); cursor:pointer; font-size:14px; padding:2px 6px }
+    .att-panel h4 .att-close:hover { color:var(--text, #e6e8ee) }
     .att-item { display:grid; grid-template-columns:1fr auto; gap:4px 12px; padding:8px 0; border-top:1px solid rgba(245,158,11,.2) }
     .att-item:first-of-type { border-top:none }
     .att-item .att-t { font-weight:600 } .att-item .att-t code { color:#fbbf24 }
@@ -70,6 +72,7 @@
   let A = { blocked: [], message: null, count: 0, working: false, host: { alive: true } };   // blocked: the task system's [{id, reason}]
   let shown = null;                         // the message the open chat was opened for: its panel item stays while the chat is open
   let dismissed = "";                       // the banner's content when the viewer closed it
+  let closedPanel = "";                     // the chat's "Waiting on you" panel's content when the viewer closed it
   let rendered = "";                        // the banner's content as last built: a click never lands on a replaced button
   const baseTitle = document.title;
   const hostUp = () => !A.host || A.host.alive !== false;
@@ -121,7 +124,7 @@
 
   function panelHtml() {
     const msg = shown || A.message;
-    if (!A.blocked.length && !msg) return '<div id="att-panel"></div>';
+    if ((!A.blocked.length && !msg) || sig() === closedPanel) return '<div id="att-panel"></div>';
     const items = A.blocked.map((b) => `<div class="att-item">
         <div class="att-t"><code>${e_(b.id)}</code> <span class="muted" style="font-weight:400">· blocked</span></div>
         <div class="att-r">${e_(b.reason) || "(no reason recorded)"}</div>
@@ -139,7 +142,7 @@
         ${woke}${where}
         <div class="att-acts">${answerBtn("document.getElementById('chat-input')?.focus()", "Reply")}</div></div>`);
     }
-    return `<div id="att-panel" class="att-panel"><h4>Waiting on you</h4>${items.join("")}
+    return `<div id="att-panel" class="att-panel"><h4>Waiting on you <button class="att-x att-close" title="close: it comes back only when something new waits" onclick="window.SupervisorAttention.closePanel()">✕</button></h4>${items.join("")}
       ${A.blocked.length ? '<div class="muted" style="font-size:11px;margin-top:6px">Answer by telling the Supervisor what to do; it unblocks, changes or cancels the ticket.</div>' : ""}</div>`;
   }
 
@@ -203,6 +206,8 @@
     open: () => openSupervisor(),
     show: () => mark(shown, true),
     dismiss: () => { dismissed = sig(); render(); },
+    // the chat's panel closed: what it said is read (marked seen, so the banner and the chip clear too)
+    closePanel: () => { closedPanel = sig(); dismissed = sig(); shown = null; markSeen(); render(); },
     answer: (id) => openSupervisor(`About ${id}, which is blocked: `),
   };
 

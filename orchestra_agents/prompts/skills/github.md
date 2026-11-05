@@ -8,6 +8,7 @@ Use when: the owner asks to follow GitHub pull requests, or a ticket's steps wai
   events, `of: children`, and nothing relates a pull request to its ticket), the waiting is the
   signal: never silently remove the goal by re-declaring the workflow without the relation
   (`declare_workflow` refuses it without the owner's words about the link). The linker is the
-  relator the Workflows plugin ships, `relate_prs`: propose it in one sentence, and on their yes
-  declare it with `declare_program` (the `workflows` skill has the words).
+  relator the Workflows plugin ships, `relate_prs`: [[act]]declare it with `declare_program` and your
+  reason, and say so in one line[[/act]][[ask]]propose it in one sentence, and on their yes
+  declare it with `declare_program`[[/ask]] (the `workflows` skill has the words).
 - Your own pull request (the branch your setup changes go to) is the `pr-workflow` skill.

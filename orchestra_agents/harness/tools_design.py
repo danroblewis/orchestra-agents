@@ -375,7 +375,9 @@ DESIGN_TOOLS: list[ToolDef] = [
              "quote": QUOTE, "reason": REASON},
             ("system", "wants", "reason")),
     ToolDef("approve_integration", "design",
-            "The owner approved reading the system (their yes, quoted) and said where its token is: the clearance and the "
+            "Approve reading the system once the owner said where its token is: a read-only one is yours to approve with "
+            "your reason ([agents] ask = \"outside\", the default; tell the owner in one line); one that writes to the "
+            "system, or any under ask = \"always\", takes the owner's yes, quoted. The clearance and the "
             "credentials, by reference only (a variable's name or a file's path, never a value), are recorded in the "
             "script's poller.toml, and what runs it is written to the owner's overlay, so the program reads the real system "
             "from then on. Jira Cloud also needs the account's email (user_env or user_file). Never pass or ask for the "
@@ -391,7 +393,7 @@ DESIGN_TOOLS: list[ToolDef] = [
              "base_url": S("The system's address, when it was not given before: only as the owner said it this session "
                            "(their words hold it), never a guess or a template's default"),
              "settings": INTEGRATION_SETTINGS, "quote": QUOTE, "reason": REASON},
-            ("name", "quote", "reason")),
+            ("name", "reason")),
     ToolDef("graduate_machine", "design",
             "A program proven in .orchestra/machines/<name>/ moves into the project's own tree, in its language "
             "(pyproject.toml: <pkg>/<name>/, run as python3 -m <pkg>.<name>; package.json: scripts/<name>/ and a script "

@@ -7,10 +7,11 @@ The source is whose request it is (the rule the design tools follow for provenan
 ``design.provenance``, and Orchestra's for the owner's page requests, ``orchestra.intent.requested``
 from ``owner``):
 
-- the Supervisor asks only for the owner, so its call must quote the owner's words in their message
-  of this turn (``design.quote_in``), and the request goes out as ``owner``, with ``via:
-  supervisor``; without a verified quote it is refused (starting work is the owner's call, never
-  the Supervisor's own proposal);
+- the Supervisor's call with the owner's words quoted (``design.quote_in``) goes out as ``owner``,
+  with ``via: supervisor``; without a quote, under ``[agents] ask = "outside"`` (the default,
+  ``ask.py``) it is the Supervisor's own request, as ``supervisor``, with its ``reason`` in the
+  event, never as the owner's; under ``ask = "always"`` it is refused (starting work is then the
+  owner's call);
 - the Coordinator plans work, a planner by the plugin's contract: its request is its own, as
   ``coordinator``.
 
@@ -35,9 +36,10 @@ from urllib.parse import quote as urlquote
 
 from orchestra import runtime
 
-from . import design, workflow_tools
+from . import ask, design, workflow_tools
 from .config import Project
 from .store import AgentStore, StoreError
+from .tasking_text import gate
 
 FLOOR = "workflows.floor"            # the plugin's process, as the launcher names it (<owner>.<name>)
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,79}$")
@@ -114,10 +116,13 @@ def request_work(project: Project, store: AgentStore, a: dict, role: str) -> dic
     fields = _fields(a)
     if role == design.MACHINE:
         prov = design.provenance(store, a)
-        if prov.get("author") != design.OWNER:
-            raise StoreError("starting work is the owner's to ask: quote their words in their message of this turn "
-                             "(quote), the request then goes out as theirs; never start work on your own")
-        source, extra = design.OWNER, {"via": design.MACHINE}
+        if prov.get("author") == design.OWNER:
+            source, extra = design.OWNER, {"via": design.MACHINE}
+        elif ask.acts(project):
+            source, extra = design.MACHINE, {"reason": prov["reason"]}     # the Supervisor's own decision, never the owner's
+        else:
+            raise StoreError("starting work is the owner's to ask ([agents] ask = \"always\"): quote their words in their "
+                             "message of this turn (quote), the request then goes out as theirs; never start work on your own")
     else:
         if len(str(a.get("reason") or "").strip()) < 10:
             raise StoreError("give the reason in a sentence: which plan this item is part of")
@@ -181,6 +186,8 @@ def _one_off_notes(project: Project, role: str, item: str, needs: list[str]) -> 
         out["say_branch"] = "Name the branch and say " + ("that it may push (allow_push)." if pushes else "that nothing is pushed.")
     if role not in served(project):
         out["unfilled"] = (f"no AI agent fills the role {role} here ([agents] serves): unless a program of the role "
-                           "announces itself, nobody claims the item. Propose in one sentence that the AI agents fill it "
-                           "(set_agent_roles, the owner's yes quoted), on the same model")
+                           "announces itself, nobody claims the item. " + gate(
+                               "[[act]]Make the AI agents fill it (set_agent_roles, with your reason), on the same model, "
+                               "and say so in one line[[/act]][[ask]]Propose in one sentence that the AI agents fill it "
+                               "(set_agent_roles, the owner's yes quoted), on the same model[[/ask]]", ask=ask.mode(project)))
     return out

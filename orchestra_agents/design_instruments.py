@@ -29,8 +29,10 @@ entry and script. The points it wrote stay in the store. A simulated
 instrument's entry carries ``simulated = true`` and never ``draft``, so discovery reads it like any
 other; it is still removed at its expiry unless kept, and once a real option of the same element
 records, the simulated one is removed. Discarding a declared element removes its unkept drafts and
-simulated placeholders, never one the owner kept. Keeping one needs the owner's backing: their
-quoted words, or their expect mark on the instrument's series or on the element's linked stock."""
+simulated placeholders, never one the owner kept. Keeping one needs the owner's backing (their
+quoted words, or their expect mark on the instrument's series or on the element's linked stock)
+under ``[agents] ask = "always"``; under ``outside`` (the default) the Supervisor keeps it on its own
+reason, recorded as its decision (``kept_by``)."""
 
 from __future__ import annotations
 
@@ -44,6 +46,7 @@ from orchestra.launcher import NAME
 from orchestra.overlay import OVERLAY
 
 from . import handoff, instruments, intended_api, runs_project
+from .ask import acts
 from .config import Project
 from .config_change import change
 from .design import MACHINE, OWNER, answer, apply
@@ -323,9 +326,11 @@ def unapplied(e: BaseException) -> str:
     return str(e).replace("; nothing was applied", "").replace(": nothing was applied", "")
 
 
-def _backed(project: Project, rec: dict, prov: dict) -> str | None:
-    """The owner's backing of a keep, in words: their quoted words, or their expect mark on one of
-    the instrument's series or on the stock its element is linked to; None without one."""
+def _backed(project: Project, rec: dict, prov: dict, deciding: bool = False) -> str | None:
+    """The backing of a keep, in words: the owner's quoted words, or their expect mark on one of the
+    instrument's series or on the stock its element is linked to; under ``[agents] ask = "outside"``,
+    else the Supervisor's own decision with its reason (``deciding``: a keep it asked for, never an
+    expiry, which would otherwise keep every draft); None without one."""
     if prov.get("author") == OWNER:
         return "the owner's words"
     lay = intended_api.current(project)
@@ -335,6 +340,8 @@ def _backed(project: Project, rec: dict, prov: dict) -> str | None:
         if (mk.get("provenance") or {}).get("author") == OWNER and (key.split("{", 1)[0] in (rec.get("series") or [])
                                                                    or key == found_as):
             return f"the owner's expect mark on {key}"
+    if deciding and acts(project):
+        return "the Supervisor's decision ([agents] ask = \"outside\")"
     return None
 
 
@@ -385,7 +392,7 @@ def keep_instrument(project: Project, store: AgentStore, a: dict, prov: dict) ->
     rec = drafts(store).get(name)
     if rec is None:
         raise StoreError(f"no draft instrument {name!r}; read_design lists them")
-    if (backing := _backed(project, rec, prov)) is None:
+    if (backing := _backed(project, rec, prov, deciding=True)) is None:
         raise StoreError(f"keeping {name} is the owner's to say: quote their words, or wait for their expect mark on its series "
                          f"({', '.join(rec.get('series') or []) or 'none read yet'}) on the Dynamics page")
     from .design_machines import rewrite_readers

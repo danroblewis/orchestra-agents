@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 
+from .ask import acts
 from .config import Project
 from .store import StoreError
 
@@ -104,8 +105,10 @@ def log_experiment(project: Project, a: dict) -> dict:
         e = _runs(project).explorer().add(_change(a.get("change")), str(a.get("expect") or ""), by="supervisor")
     except ExperimentError as err:
         raise StoreError(str(err)) from None
-    return {"ok": True, "experiment": e, "next": "Make the change now (set_setting key sources), or ask the owner in one "
-                                               "sentence when it widens match; judge it after discovery's next rounds."}
+    then = ("Make the change now (set_setting key sources), widening match too as far as explore, and say what you "
+            "changed in one line" if acts(project) else
+            "Make the change now (set_setting key sources), or ask the owner in one sentence when it widens match")
+    return {"ok": True, "experiment": e, "next": f"{then}; judge it after discovery's next rounds."}
 
 
 def judge_experiment(project: Project, a: dict) -> dict:

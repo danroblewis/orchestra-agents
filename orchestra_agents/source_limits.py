@@ -17,7 +17,12 @@ that gave one store's limits counts for another. A refusal says why and the one 
 On a turn with no owner's message (a wake-up, such as an explore round), ``check_scopes`` holds the
 explore loop's standing rule: a declared source's ``match`` may narrow and its ``split``, ``kinds``
 and ``names`` change, but its ``match`` never widens and its ``explore`` (the owner's alone) is
-never written; those wait for the owner's yes in a turn of theirs."""
+never written; those wait for the owner's yes in a turn of theirs. Under ``[agents] ask = "outside"``
+(the default, ``ask.py``) a ``match`` may also widen, in any turn, as far as the source's ``explore``
+and no further: ``explore`` is the owner's scope for exactly that (Orchestra's guide, "Exploring
+beyond the match"), and it is still never written here. A source with no ``explore`` widens only on
+the owner's words; a match-everything selector and the store's rate and daily caps are Orchestra's
+refusals (``orchestra.sources``), in every mode."""
 
 from __future__ import annotations
 
@@ -81,6 +86,16 @@ def check(project, store: AgentStore | None, command: str, a: dict) -> None:
     raise StoreError(refusal(", ".join(str(r.get("url") if isinstance(r, dict) else r) for r in unbounded)))
 
 
+def within_explore(project, match: list[str], explore: list[str] | None) -> bool:
+    """Whether a widened ``match`` stays inside the source's ``explore``, under ``ask = "outside"`` only:
+    then the Supervisor widens it as its own decision (``ask.py``); never past ``explore``."""
+    from .ask import acts
+    if not acts(project) or not explore or not match:
+        return False
+    from orchestra.sources.within import outside
+    return not outside(match, explore)
+
+
 def check_declared(project, store: AgentStore | None, value) -> None:
     """Refuse declaring a ``[[sources]]`` match the owner's words did not give (a scope picked by the
     Supervisor, which would then pass ``check``); an entry whose match is already declared is kept."""
@@ -88,9 +103,12 @@ def check_declared(project, store: AgentStore | None, value) -> None:
     raw = project.orchestra.config.raw.get("sources") or []
     had = {str(e.get("name")): e.get("match") for e in raw if isinstance(e, dict)}
 
+    explores = {str(e.get("name")): _scopes(e)[1] for e in raw if isinstance(e, dict)}
+
     def narrowed(e: dict) -> bool:                # within the match the owner gave: the explore loop's standing rule
         old = had.get(str(e.get("name")))
-        return bool(old) and not outside(_scopes(e)[0], _scopes({"match": old})[0])
+        return bool(old) and (not outside(_scopes(e)[0], _scopes({"match": old})[0])
+                              or within_explore(project, _scopes(e)[0], explores.get(str(e.get("name")))))
     new = [e for e in (value if isinstance(value, list) else [])
            if isinstance(e, dict) and e.get("match") and e.get("match") != had.get(str(e.get("name"))) and not narrowed(e)]
     if new and not gave_limits(_messages(store)):
@@ -116,8 +134,9 @@ def check_scopes(project, store: AgentStore | None, value) -> None:
     nothing in the core stops a plugin's setting tool from writing ``explore``). On a turn with no
     owner's message (a wake-up: an explore round, a duty), a ``[[sources]]`` change may narrow a
     source's ``match`` and change its ``split``, ``kinds`` and ``names``, but never widen its ``match``
-    (a selector outside every one it had) nor write its ``explore``, which is the owner's alone: those
-    are asked in one sentence, and made in the turn of their yes."""
+    (a selector outside every one it had; under ``ask = "outside"``, outside its ``explore``) nor write
+    its ``explore``, which is the owner's alone: those are asked in one sentence, and made in the turn
+    of their yes."""
     if store is None or not isinstance(value, list):
         return
     from .design import turn_of
@@ -135,12 +154,16 @@ def check_scopes(project, store: AgentStore | None, value) -> None:
         (new_match, new_explore), (old_match, old_explore) = _scopes(e), _scopes(old)
         if new_explore != old_explore:
             explored.append(str(e.get("name")))
-        if new_match and old_match and outside(new_match, old_match):
+        if new_match and old_match and outside(new_match, old_match) and not within_explore(project, new_match, old_explore):
             wider.append(str(e.get("name")))
     if explored or wider:
         why = "; ".join(x for x in (
             f"its explore ({', '.join(explored)}) is the owner's alone: never written or widened by you" if explored else "",
             f"its match widens ({', '.join(wider)}): a selector outside every one it had" if wider else "") if x)
+        from .ask import acts
+        then = ("widening match as far as its explore applies too ([agents] ask = \"outside\"); past explore it is the "
+                "owner's words, in a turn of theirs" if acts(project) else
+                "ask the owner in one sentence for this one (the change and its expected effect), and make it in the turn of "
+                "their yes")
         raise StoreError(f"refused on a turn with no owner's message, so nothing was written: {why}. Narrowing match and "
-                         "changing split, kinds or names apply on the standing rule; ask the owner in one sentence for this "
-                         "one (the change and its expected effect), and make it in the turn of their yes")
+                         f"changing split, kinds or names apply on the standing rule; {then}")

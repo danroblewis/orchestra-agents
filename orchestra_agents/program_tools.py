@@ -3,7 +3,9 @@ workflow has one behind it (``lacking``, ``status``): bootstrap run 7's headline
 first step because nothing could write the relator's ``machine.json``, while ``confirm`` said
 nothing was to be written and the Supervisor told the owner the goal was "fully running".
 
-- ``declare_program`` is the Supervisor's alone, on the owner's quoted yes. It writes
+- ``declare_program`` is the Supervisor's alone: on the owner's quoted yes under ``[agents] ask =
+  "always"``, on its own reason under ``outside`` (the default, ``ask.py``: a shipped program reads
+  the systems it relates and writes nothing to them; the answer's ``author`` says whose it was). It writes
   ``machines/<id>/machine.json`` in the state directory's root, the file the Workflows plugin's
   program host reads (its guide, "Relating pull requests to tickets" and "Programs"; its
   ``programs/machines.py``), for a program **the plugin ships** (``spec.program``: ``relate_prs``
@@ -25,7 +27,7 @@ import os
 from importlib import import_module
 from pathlib import Path
 
-from . import design
+from . import ask, design
 from .config import Project
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
@@ -33,8 +35,8 @@ from .store import AgentStore, StoreError
 ID_CHARS = "lowercase letters, digits and _"
 # what each program the plugin ships is declared with when the call leaves it out (the plugin's guide)
 DEFAULTS = {"relate_prs": {"role": "relate_prs", "timeout": "1m", "exit": {"0": "related", "3": "unrelated"}}}
-NEXT = ("declare_program declares a program the Workflows plugin ships (relate_prs), on the owner's yes; a program of "
-        "the project's own is code, a worker's to write")
+NEXT = ("declare_program declares a program the Workflows plugin ships (relate_prs), with your reason (on the owner's yes "
+        "under [agents] ask = \"always\"); a program of the project's own is code, a worker's to write")
 
 
 def programs_module():
@@ -140,9 +142,9 @@ def declare_program(project: Project, store: AgentStore, a: dict, role: str) -> 
         from .workflow_tools import MISSING
         raise StoreError(MISSING)
     prov = design.provenance(store, a)
-    if prov.get("author") != design.OWNER:
-        raise StoreError("declare_program runs a program on the owner's systems: quote their yes to it (quote), as they said "
-                         "it this session; ask in one sentence first. Nothing was written")
+    if not ask.decided(project, prov):
+        raise StoreError("declare_program runs a program on the owner's systems ([agents] ask = \"always\"): quote their yes "
+                         "to it (quote), as they said it this session; ask in one sentence first. Nothing was written")
     program = str(a.get("program") or "").strip()
     shipped = sorted(getattr(m, "SHIPPED", {}) or {})
     if program not in shipped:

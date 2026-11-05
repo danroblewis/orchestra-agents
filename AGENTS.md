@@ -62,7 +62,8 @@ broken without updating the spec and saying so in the commit.
    subject and the agent's instance (`supervisor`, `worker/1`) the source; the one exception
    (2026-11-01, W9) is the Supervisor's `request_work` on the owner's quoted words, which is the
    owner's request and goes out as `owner` (`via: supervisor`), as Orchestra's page requests do
-   (`request_work.py`). **The host is no
+   (`request_work.py`); without their words, under `[agents] ask = "outside"`, it is the
+   Supervisor's own, as `supervisor`. **The host is no
    machine** (Orchestra's rule for a plugin's infrastructure; the owner, 2026-10-27): it never
    announces itself, never publishes as `agents` or with no source (`events.py` refuses both),
    and writes no metrics (the plugin's instrument `agents.turns` reads them from the record). It
@@ -133,7 +134,8 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     state directory only when the owner keeps the repository clean), adapted by
     a coding tool or the Coordinator's worker (a failed test or a system with no template is handed
     to the Coordinator, moved out of the checkout first; the ticket's review and gate land it), never by the Supervisor, which changes only its `machine.toml` (the owner's
-    settings; on the owner's quoted yes, `approve_integration`, the clearance and the credentials by
+    settings; on the owner's quoted yes, or for a read-only one on its own reason under `[agents] ask =
+    "outside"` (2026-11-04, `ask.py`), `approve_integration`, the clearance and the credentials by
     reference: a variable's name or a file's path; the scaffolded test reads them from `machine.toml`)
     and the overlay entries that run it, and (since 2026-11-04, T54, the owner) the files of Orchestra's own
     places with `edit_machine_file` (`machine_files.py`: `.orchestra/machines|workflows|resources/` on its

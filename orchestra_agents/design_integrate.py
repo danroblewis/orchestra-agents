@@ -30,8 +30,10 @@ approval"`` and what runs it is only planned (``integrate_schedule``). The answe
 question the Supervisor puts to the owner in the chat (``ask_owner``): their approval, and where the
 token is (a variable's NAME or a file's path), never the token.
 
-``approve_integration`` is the owner's alone (a quote of their words this turn, ``author: owner``):
-it records the clearance, the data class and the credentials by reference in ``poller.toml``
+``approve_integration`` is the owner's (a quote of their words this turn, ``author: owner``) under
+``[agents] ask = "always"``; under ``outside`` (the default, ``ask.py``) the Supervisor approves a
+read-only one itself, with its reason, recorded as its decision (``approved.by``). One that writes to
+the system it connects (``writes``) takes the owner's quoted yes in every mode. It records the clearance, the data class and the credentials by reference in ``poller.toml``
 (``token_env`` or ``token_file``, and ``user_env``/``user_file`` for an HTTP Basic account such as
 Jira Cloud's email; ``integrate_kits.credentials``), or the store's ``auth.bearer_env`` or
 ``bearer_file``, then writes the plan to the overlay, so the program then reads the real system. The record of each integration is the Supervisor's state (``integrations``)."""
@@ -50,6 +52,8 @@ from . import integrate_branch as branch
 from . import integrate_handoff as handoff
 from . import integrate_kits as kits
 from . import integrate_schedule as schedule
+from .ask import acts as ask_acts
+from .ask import decision
 from .config import Project
 from .design import MACHINE, OWNER, answer, apply, said_in_session, turn_of
 from .secret_shapes import redact
@@ -202,11 +206,28 @@ def _effect(project: Project, store: AgentStore, mid: str, sid: str, prov: dict)
     return got["said"], list(got.get("changes") or [])
 
 
-def _ask(system: str, kit_env: str | None, scope: str | None = None) -> str:
+def writes(rec: dict) -> bool:
+    """Whether the integration writes to the system it connects: its record says so, or its
+    ``poller.toml`` does (``writes = true``). The bridges' kits only read (their client refuses any
+    other method), and a ``[[sources]]`` entry only reads, so one is read-only unless it says otherwise."""
+    if rec.get("writes"):
+        return True
+    if rec.get("dir") and rec.get("strategy") != "source":
+        try:
+            return bool(kits.read(Path(rec["dir"])).get("writes"))
+        except (OSError, ValueError, StoreError):
+            return False
+    return False
+
+
+def _ask(system: str, kit_env: str | None, scope: str | None = None, acting: bool = False) -> str:
     t = kits.title(system)
-    parts = [(f"May I read {t}? It reads metadata only (ids, keys, accounts, states, times; never titles, text or "
-             "messages), at most the configured rate, and writes nothing to it. Your yes, in your words, naming the "
-             "token's scope (read-only)"),
+    first = ((f"I will read {t}: metadata only (ids, keys, accounts, states, times; never titles, text or messages), at "
+              "most the configured rate, writing nothing to it, with a read-only token") if acting else
+             (f"May I read {t}? It reads metadata only (ids, keys, accounts, states, times; never titles, text or "
+              "messages), at most the configured rate, and writes nothing to it. Your yes, in your words, naming the "
+              "token's scope (read-only)"))
+    parts = [first,
              (f"where the token is: the NAME of the environment variable that will hold it (for example "
               f"{kit_env or system.upper() + '_TOKEN'}, set in the environment `orchestra run` starts with), or the path of a "
               "chmod 600 file outside the project's repository that no repository tracks; never the token itself, "
@@ -465,13 +486,16 @@ def _report(project: Project, name: str, rec: dict, done: dict, lines: list, kit
         lines.append("where the owner said the credentials are, checked (no commit can carry them), recorded for the approval: "
                      + ", ".join(f"{k} {v}" for k, v in rec["named"].items()))
         lines += rec.get("cautions") or []
-    ask = _ask(rec["system"], kit_env, rec.get("scope"))
+    acting = ask_acts(project) and not writes(rec)
+    ask = _ask(rec["system"], kit_env, rec.get("scope"), acting)
     if missing_url:
         ask += " " + address.ask(kits.title(rec["system"]), rec.get("template_url"))
-    lines.append("waiting for the owner's approval and where the token is, by name or path (approve_integration)")
+    lines.append("waiting for where the token is, by name or path; approve_integration with your reason once the owner "
+                 "says it (read-only: yours to approve, [agents] ask = \"outside\")" if acting else
+                 "waiting for the owner's approval and where the token is, by name or path (approve_integration)")
     return answer(project, done, lines, integration=name, clearance=NEEDS, planned=planned, ask_owner=ask,
-                  owner_must_set=[f"the approval, in their words, for {kits.title(rec['system'])}",
-                                  ("where the token is: an environment variable's name in orchestra run's environment, or "
+                  owner_must_set=([] if acting else [f"the approval, in their words, for {kits.title(rec['system'])}"])
+                                 + [("where the token is: an environment variable's name in orchestra run's environment, or "
                                   "a chmod 600 file outside the project's repository that no repository tracks")]
                   + ([f"{kits.title(rec['system'])}'s base URL"] if missing_url else [])
                   + ([kits.SCOPE[rec["scope"]]] if rec.get("scope") else []),
@@ -485,9 +509,12 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     if rec is None:
         known = ", ".join(integrations(store)) or "none"
         raise StoreError(f"no integration {name!r} (integrate_system first); the integrations: {known}")
-    if prov["author"] != OWNER:
-        raise StoreError("approving a company system is the owner's alone: quote their yes from this turn's message (quote); "
-                         "nothing was changed")
+    if prov["author"] != OWNER and writes(rec):
+        raise StoreError(f"{name} writes to {kits.title(rec['system'])}: a write outside this machine is the owner's in every "
+                         "mode, so approving it takes their yes from this turn's message, quoted (quote); nothing was changed")
+    if prov["author"] != OWNER and not ask_acts(project):
+        raise StoreError("approving a company system is the owner's alone ([agents] ask = \"always\"): quote their yes from "
+                         "this turn's message (quote); nothing was changed")
     if rec.get("state") not in ("needs approval", "approved"):
         raise StoreError(f"{name} is {rec.get('state')}: only an integration whose test passed is approved")
     was = rec.get("dir")
@@ -540,7 +567,8 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     lines += schedule.write(project, store, steps, prov["reason"])
     rec.update(state="approved", clearance="approved", token_env=creds.get("token_env"), credentials=creds,
                data_class=data_class, base_url=base_url, base_url_from=came,
-               approved={"at": time.time(), "quote": prov.get("quote"), "turn": prov.get("turn")}, steps=steps)
+               approved=({"at": time.time(), "by": OWNER, "quote": prov.get("quote"), "turn": prov.get("turn")}
+                         if prov["author"] == OWNER else {**decision(prov), "read_only": True}), steps=steps)
     _save(store, name, rec)
     missing = []
     for k, v in creds.items():
@@ -559,14 +587,19 @@ def approve_integration(project: Project, store: AgentStore, a: dict, prov: dict
     said, more = _confirm_heard(store, rec, project)
     lines += said
     if installed.workflows():
-        lines.append(items_follow_up(kits.title(rec["system"])))
+        lines.append(items_follow_up(kits.title(rec["system"]), ask_acts(project)))
     return answer(project, {"changes": []}, lines, integration=name, clearance="approved", credentials=creds, **more,
                   token_env=creds.get("token_env"), env_set=bool(creds.get("token_env") and os.environ.get(creds["token_env"])),
                   owner_must_set=missing)
 
 
-def items_follow_up(title: str) -> str:
-    """The line after a connection, with the Workflows plugin installed: its items as a workflow, observe only."""
+def items_follow_up(title: str, acting: bool = False) -> str:
+    """The line after a connection, with the Workflows plugin installed: its items as a workflow, observe only
+    (declared at once under ``[agents] ask = "outside"``, proposed first under ``always``)."""
+    if acting:
+        return (f"next: if {title} has items (tickets, incidents, threads), declare a workflow that makes them items, observe "
+                f"only, writing nothing to {title} (skill connect-system), and tell the owner in one line the items and the "
+                "stocks they get (each step's count and the moves between steps, which discovery finds)")
     return (f"next: if {title} has items (tickets, incidents, threads), propose in one sentence a workflow that makes them "
             "items, naming the items and the stocks the owner gets (each step's count and the moves between steps, which "
             f"discovery finds), observe only, writing nothing to {title} (skill connect-system); declare it only on their yes")

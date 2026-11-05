@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from . import installed
+from .ask import mode as ask_mode
 from .config import Project
 from .org import EVENT_TYPES, team_chain, tools_path
 from .org_store import RepoOrgStore, all_teams
@@ -144,7 +145,8 @@ def agent_prompt(project: Project, agent, roles: dict | None = None, teams: dict
     and its teams' path grants, which are instructions here and enforced nowhere). Built-in
     agents outside a custom team get exactly their role prompt. What holds only with the task
     system installed is kept or dropped as it is (``tasking_text.gate``)."""
-    return gate(_core(project, agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent))
+    return gate(_core(project, agent) + _agent_prompt(project, agent, roles, teams) + _spec(project, agent),
+                ask=ask_mode(project))
 
 
 def _core(project: Project, agent) -> str:

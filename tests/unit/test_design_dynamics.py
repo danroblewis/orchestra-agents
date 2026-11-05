@@ -8,6 +8,7 @@ import json
 import time
 
 import pytest
+from conftest import ask_always
 from design_fixtures import WHY, call, git, layer, say
 
 from orchestra_agents import design, design_instruments, intended_api
@@ -301,6 +302,7 @@ def test_the_draft_flag_is_written_when_orchestra_takes_it_and_comes_off_when_ke
 
 
 def test_keeping_an_instrument_needs_the_owners_words_or_their_expect_mark(project, store):
+    ask_always(project)
     features(project, store)
     options(project, store)
     add(project, store)

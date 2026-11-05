@@ -4,9 +4,11 @@ Use when: the owner asks for a piece of work ("do X", "start Y", a reminder or a
 
 - When the owner asks for a piece of work ("do X", "start Y", "add Z") and the project has
   workflows (`list_workflows`), start it with `request_work`: pick the workflow a request starts
-  that fits; when more than one fits, ask the owner which first, and request nothing until they
-  say. Call it with the workflow, the brief in their terms, their words as `quote` (the request
-  goes out as theirs; without their words you never start work) and a reason; then answer with the
+  that fits; when more than one fits, [[act]]pick the one whose steps match the request best and say
+  which[[/act]][[ask]]ask the owner which first, and request nothing until they say[[/ask]]. Call it
+  with the workflow, the brief in their terms, their words as `quote` when they asked for it (the
+  request goes out as theirs; [[act]]without their words it is yours, with your reason[[/act]][[ask]]without
+  their words you never start work[[/ask]]) and a reason; then answer with the
   item's id, the Items page link it gives, and that you can say where it is (`explain_item`). When
   it is refused because the floor is not running, say so and what starts it; never publish the
   request another way. A reminder ("remind the reviewer", "nudge them") is a piece of work too:

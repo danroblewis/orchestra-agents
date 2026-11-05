@@ -6,6 +6,7 @@ the suite stays in process."""
 import tomllib
 
 import pytest
+from conftest import ask_always
 from design_fixtures import WHY, call, git, layer, say
 
 from orchestra_agents import design_integrate, integrate_kits, tooling
@@ -100,9 +101,10 @@ def test_the_owners_approval_records_the_name_and_schedules_it(project, store):
 
 
 def test_approval_is_the_owners_and_names_a_variable_never_a_token(project, store):
+    ask_always(project)
     connect(project, store)
     say(store, YES, 2)
-    with pytest.raises(StoreError, match="missing quote"):
+    with pytest.raises(StoreError, match="the owner's alone"):
         call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN", quote="", reason=WHY)
     with pytest.raises(StoreError, match="the owner's alone"):                     # past the schema too
         tooling.handle(project, store, "approve_integration", {"name": "jira_poller", "token_env": "JIRA_TOKEN",

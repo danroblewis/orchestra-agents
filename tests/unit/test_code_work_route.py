@@ -8,7 +8,7 @@ A connected system with items is followed by the proposal of a workflow that mak
 import re
 
 import pytest
-from conftest import supervisor_knows
+from conftest import ask_always, supervisor_knows
 from test_request_work import BRIEF, WHY, Plugin, published
 from test_workflow_tools import DEF, MESSAGE
 
@@ -90,6 +90,11 @@ def test_with_the_task_system_the_route_skill_is_not_indexed(project, monkeypatc
 
 
 def test_a_connected_system_with_items_is_followed_by_an_observing_workflow(project, monkeypatch):
+    installs(monkeypatch, tasking=False, workflows=True)
+    text = flat(skills.text(project, "connect-system"))                   # [agents] ask = "outside": declared, then said
+    assert "declare a workflow that makes them items, with your reason" in text and "Shall I" not in text
+    assert "declare a workflow that makes them items" in design_integrate.items_follow_up("Jira", True)
+    ask_always(project)
     for tasking in (True, False):
         installs(monkeypatch, tasking=tasking, workflows=True)
         text = flat(skills.text(project, "connect-system"))
@@ -135,6 +140,7 @@ def test_one_off_work_says_when_no_agent_fills_the_role_and_when_it_may_push(pro
 
 
 def test_one_off_work_takes_a_role_or_a_workflow_never_both(project, store, fake, floor):
+    ask_always(project)
     end = store.events.end()
     with pytest.raises(Exception, match="not both"):
         handle(project, store, {"role": "worker", "workflow": "write_review", "brief": BRIEF, "quote": QUOTE, "reason": WHY})

@@ -165,11 +165,13 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "channel), and the answer's bot_threads says which channels count them.",
             {"definition": DEFINITION,
              "root": E(["state", "repository"], "state (default): the state directory, never committed; repository: "
-                                                "the repository's .orchestra/, only when the owner says so (quote them)"),
+                                                "the repository's .orchestra/, when it belongs there: the owner's words, quoted, or your reason "
+                                                "([agents] ask = \"outside\")"),
              "adopt": ADOPT, "quote": QUOTE, "reason": REASON}, ("definition", "reason")),
     ToolDef("declare_program", "workflows",
             "Declare a program the Workflows plugin ships (relate_prs: relates each pull request to its ticket by the key in "
-            "its branch or title) for a workflow's program step, on the owner's quoted yes: writes machines/<id>/machine.json "
+            "its branch or title) for a workflow's program step, with your reason (the owner's quoted yes under [agents] ask = "
+            "\"always\"): writes machines/<id>/machine.json "
             "in the state directory, which the plugin's program host runs each time the step is offered. The plugin's reader "
             "checks it; with a problem nothing stays written. A token only by its file's path (--token-file) or variable's "
             "name (--token-env), never its value. A workflow step whose program has no machine.json waits there: its goal is "
@@ -182,7 +184,7 @@ WORKFLOW_TOOLS: list[ToolDef] = [
                       "\"3\": \"unrelated\"}"},
              "timeout": S("A duration bounding one run (relate_prs: 1m)"),
              "role": S("The role it runs as (default: its id)"),
-             "quote": QUOTE, "reason": REASON}, ("program", "quote", "reason")),
+             "quote": QUOTE, "reason": REASON}, ("program", "reason")),
     ToolDef("list_workflows", "workflows",
             "The project's workflows as the plugin loads them: each with where it is defined, its planner, starts and "
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),
@@ -217,8 +219,10 @@ WORKFLOW_TOOLS: list[ToolDef] = [
             "Start a piece of work on a workflow: publishes the Workflows plugin's item.requested (and an item.fact "
             "with the fields, if any). With role in place of workflow, a one-off item that role does once: code work is "
             "role worker with needs [\"worktree\"], made on the item's branch in a worktree, pushed only if allow_push "
-            "names the role. The Supervisor asks only for the owner: quote their words, and the request goes "
-            "out as theirs (source owner)[[tasking]]; the Coordinator's is its own, as the planner[[/tasking]]. Refused, nothing published: "
+            "names the role. The Supervisor's request with the owner's words quoted goes out as theirs (source owner); "
+            "without a quote, under [agents] ask = \"outside\" (the default), it is the Supervisor's own, as supervisor, "
+            "with its reason (under ask = \"always\" it is refused)[[tasking]]; the Coordinator's is its own, as the "
+            "planner[[/tasking]]. Refused, nothing published: "
             "an unknown workflow or one a request does not start (list_workflows), an id already used, or the floor "
             "not running. Answers the item's id, the Items page link and how to follow it (explain_item).",
             {"workflow": S("The workflow's name, as list_workflows shows it (task_loop); or leave it out and give role"),
@@ -230,7 +234,7 @@ WORKFLOW_TOOLS: list[ToolDef] = [
                         "{\"priority\": 2}"},
              "item": S("The new item's id (leave out: <workflow>-<6 hex>)"),
              "quote": S("The Supervisor's: the owner's own words asking for this work, from their message this turn, "
-                        "exactly, at least three words (or their whole message). Required of the Supervisor; never "
+                        "exactly, at least three words (or their whole message), when they asked for it; never "
                         "invent one.[[tasking]] The Coordinator leaves it out[[/tasking]]"),
              "reason": REASON}, ("brief", "reason")),
 ]

@@ -151,6 +151,13 @@ so in one line; only if that is refused too does it tell you what to ask IT for.
 unsandboxed retry is off (`allowUnsandboxedCommands: false`) and the turn stops at the first blocked
 tool call.
 
+**When the Supervisor asks first.** `[agents] ask = "outside"` (the default): the Supervisor decides
+and acts, then tells you in one line what it did and why; it asks first only before a write outside
+this machine (an Outbox draft, a push or a pull request, a connector that writes). It still never
+writes a store's `explore`, never reads a store with no selector or past its rate and daily caps,
+and a machine's confirm stays yours (Orchestra's declared layer). `ask = "always"` puts every change
+your words did not ask for to you first, as before.
+
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
 duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
 review_usd_per_day` and `review_turns_per_day`). Its explore rounds over the declared stores (every `explore_every`, default an hour, 0 off: one

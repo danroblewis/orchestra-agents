@@ -9,7 +9,8 @@ validated writer, its loader and its record's read API, the one exception to AGE
   the owner's words, verified like the design tools' (``design.provenance``). The plugin's checks
   run first; with any problem nothing is written and the refusal names every one. It writes only
   through the plugin's ``define.write``: by default to the state directory; to the repository's
-  ``.orchestra/`` only with the owner's quoted words, and then it is **not committed** (at work the
+  ``.orchestra/`` only with the owner's quoted words (or, under ``[agents] ask = "outside"``, the
+  default, on the Supervisor's own reason: ``ask.py``), and then it is **not committed** (at work the
   base branch is protected, and the plugin's writer leaves landing it to a pull request): the answer
   says so and that it is live, and the Supervisor hands it to the Coordinator to land through a ticket
   (never asking the owner to commit, discard or land it). A re-declaration that drops a relation the
@@ -31,7 +32,7 @@ from types import SimpleNamespace
 
 from orchestra.config import ConfigError
 
-from . import adopt, bot_threads, design, program_tools, relation_guard
+from . import adopt, ask, bot_threads, design, program_tools, relation_guard
 from .clock import resolve_tz
 from .config import Project
 from .store import AgentStore, StoreError
@@ -100,9 +101,9 @@ def declare_workflow(project: Project, store: AgentStore, a: dict, role: str) ->
     if root not in ROOTS:
         raise StoreError("root is state (the state directory, the default) or repository (the repository's .orchestra/, "
                          "only when the owner says so)")
-    if root == "repository" and prov.get("author") != design.OWNER:
-        raise StoreError("root repository is the owner's choice: quote their words saying it belongs in the repository, "
-                         "or leave root out (the state directory)")
+    if root == "repository" and not ask.decided(project, prov):
+        raise StoreError("root repository is the owner's choice ([agents] ask = \"always\"): quote their words saying it "
+                         "belongs in the repository, or leave root out (the state directory)")
     definition = a.get("definition")
     if not isinstance(definition, dict):
         raise StoreError("definition is the workflow as an object: {name, starts, steps: [{name, who, ...}], ...}")

@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import agents_project, skill_files, supervisor_knows
+from conftest import agents_project, ask_always, skill_files, supervisor_knows
 
 from orchestra_agents import design_machines, tooling, workflow_tools
 from orchestra_agents.builtins import ROLES
@@ -206,6 +206,7 @@ def test_a_writer_refusal_is_said_the_same_way(project, store, fake, monkeypatch
 
 
 def test_the_repository_needs_the_owners_words_and_is_never_committed(project, store, fake):
+    ask_always(project)
     head = git(project.repo_root, "rev-parse", "HEAD")
     with pytest.raises(StoreError, match="owner's choice"):
         call(project, store, "declare_workflow", definition=DEF, reason=WHY, root="repository")

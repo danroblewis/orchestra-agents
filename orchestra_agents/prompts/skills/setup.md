@@ -20,7 +20,7 @@ reviewed and, in code work, tested and landed.
   that it all stays read-only. Read no store before they answer. Their answer is the short
   discussion; what follows is yours: declare each store with their `match`, `explore`, caps and
   credential path (`set_setting` key `sources`, quoting them), set the rest up, and explore within
-  it (the `exploring` skill) without asking again, except to widen `match` beyond their words.
+  it (the `exploring` skill) without asking again, [[act]]widening `match` as far as `explore` too[[/act]][[ask]]except to widen `match` beyond their words[[/ask]].
 - **Read the guides first.** `list_guides`, then `read_guide` for each one whose settings you will
   touch (Orchestra's, the task system's, the agents'): without a section it gives the guide's
   contents (each section's heading and size) and its opening; then read each section you need by
@@ -57,10 +57,14 @@ reviewed and, in code work, tested and landed.
     that comes faster than that (a merge every few minutes, a deploy per pull request);
     `set_setting` refuses it with the numbers. Compare releases before and after
     (`read_eras`, a prediction) instead.
-- **Ask the human only their choices**, in one short message, each with your recommendation:
+[[act]]- **Decide the rest; ask only what writes outside this machine**: in one short message, pushing
+  (`push`) and anything that acts as the human (messages, pull requests in their name). Whether the
+  agents change the code (`work = "code"`), the model and its cost (`[agents]` harness and model,
+  how many agents run at once) and how often a slow test suite runs you set yourself, each said in
+  one line with why.[[/act]][[ask]]- **Ask the human only their choices**, in one short message, each with your recommendation:
   whether the agents may change the code (`work = "code"`), pushing (`push`), anything that acts
   as the human (messages, pull requests in their name), the model and its cost (`[agents]`
-  harness and model, how many agents run at once), and how often to run a slow test suite.
+  harness and model, how many agents run at once), and how often to run a slow test suite.[[/ask]]
 - **Check what you set works**: `read_instrument` (with `wait_s`) for each instrument you added,
   `read_config`, `check_setup`.
 - **Report**: what you set and why, with each commit; the choices that are theirs; what happens

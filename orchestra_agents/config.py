@@ -21,6 +21,8 @@ from orchestra.config import ConfigError, parse_duration
 from orchestra.config import Project as OrchestraProject
 from orchestra.config import load_project as load_orchestra_project
 
+from .ask import DEFAULT as ASK_DEFAULT
+from .ask import MODES as ASK_MODES
 from .builtins import PER_TICKET_ROLES
 from .clock import parse_interval
 
@@ -64,6 +66,7 @@ class Config:
     thinking: str | None = None
     tools_via: str = "auto"             # how sessions call Orchestra's tools: mcp | bash | auto | file (harness/bash_tools.py, file_output.py)
     sandbox_escape: bool = True         # Claude Code: a command its sandbox blocks may run again outside it (harness/sandbox.py; the owner, 2026-11-04)
+    ask: str = "outside"                # when the Supervisor asks the owner first: outside (only before a write outside this machine) | always (ask.py; the owner, 2026-11-04)
     serves: list[str] = field(default_factory=lambda: ["worker", "reviewer"])   # the task system's roles they fill
     allow_push: list[str] = field(default_factory=list)   # roles whose sessions may push and write pull requests (push_guard.py)
     coordinator_every: str | None = None   # a scheduled check-in for the Coordinator ("10m"); None: woken by events only
@@ -107,6 +110,11 @@ class Config:
         if not isinstance(escape, bool):
             raise ConfigError(f"[agents] sandbox_escape is {escape!r}; it is true (the default: a command Claude Code's sandbox "
                               "blocks runs again outside it) or false (the turn stops at the refusal)")
+        ask = a.get("ask", ASK_DEFAULT)
+        if ask not in ASK_MODES:
+            raise ConfigError(f"[agents] ask is {ask!r}; it is outside (the default: the Supervisor decides and acts, and asks "
+                              "first only before a write outside this machine) or always (it asks the owner before every "
+                              "change their words did not ask for)")
         allow = a.get("allow_push", [])
         if not isinstance(allow, list) or not all(isinstance(r, str) and r for r in allow):
             raise ConfigError(f"[agents] allow_push is {allow!r}; it is a list of role names, like [\"worker\"] "
@@ -117,7 +125,7 @@ class Config:
         return cls(
             harness=harness, harness_note=note, enabled=a.get("enabled", True) is not False,
             dummy_script=a.get("dummy_script") or None, provider=a.get("provider") or None,
-            model=model, model_set=bool(a.get("model")), delegate_model=a.get("delegate_model") or None, thinking=a.get("thinking"), tools_via=via, sandbox_escape=escape,
+            model=model, model_set=bool(a.get("model")), delegate_model=a.get("delegate_model") or None, thinking=a.get("thinking"), tools_via=via, sandbox_escape=escape, ask=ask,
             serves=serves, allow_push=allow, coordinator_every=every,
             turn_timeout=parse_duration(a.get("turn_timeout"), 0.0),
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),

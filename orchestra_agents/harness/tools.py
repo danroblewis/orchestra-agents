@@ -381,7 +381,11 @@ TOOLS: list[ToolDef] = [
             "notes it announced about itself (disabled with its reason first, then fake, stand_in, writes, ...). The "
             "disabled ones are listed apart: they do no work until what they name is fixed. An ad hoc machine is 'last heard "
             "<when>; acts when offered work', never quiet; gone_quiet is the core's mark on a continuous or scheduled one, and "
-            "the only sign that a machine stopped."),
+            "the only sign that a machine stopped. A relayed system's people (person.<system>.<account>) are one line per "
+            "system once there are more than a few: how many, how many heard today, the few heard most by name; "
+            "people=<system> names that system's people (people=* every person), match narrows them by name or account.",
+            {"people": S("a system whose relayed people to name (jira, github, slack; mapped for the identity map's; * for all)"),
+             "match": S("with people: only those whose name or account holds this, any case")}),
     ToolDef("machine_ages", "observe",
             "Each machine on the bus in its age, with the counts: agent (announced kind agent), program in .orchestra/ "
             "(its [[machines]] command runs a file under .orchestra/, being proven), graduated (its command is the "

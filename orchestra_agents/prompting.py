@@ -541,6 +541,18 @@ def supervisor_context(snapshot: dict, events: list[dict], project: Project | No
     return clock_line() + "\n\n" + out if out else ""
 
 
+def _people_line(events: list[dict]) -> list[str]:
+    """The people a relayed system's poller announced in the batch, counted per system (people.py),
+    when one system announced more than a few: the count, never the names."""
+    from .people import SUMMARISED, group_of, pattern
+    by: dict[str, set[str]] = {}
+    for e in events:
+        if e.get("type") == "orchestra.machine.started" and (g := group_of(e.get("source"))) is not None:
+            by.setdefault(g, set()).add(str(e.get("source")))
+    said = [f"{len(v)} of {pattern(g)}" for g, v in sorted(by.items(), key=lambda kv: -len(kv[1])) if len(v) > SUMMARISED]
+    return [f"[Orchestra: people announced by a relay: {', '.join(said)}; list_machines with people=<system> names them]"] if said else []
+
+
 def _notices(snapshot: dict, events: list[dict], project: Project | None, store, roles: list[str] | None) -> str:
     out = ""
     if project is not None:
@@ -566,7 +578,7 @@ def _notices(snapshot: dict, events: list[dict], project: Project | None, store,
     counted = ", ".join(f"{t}={n}" for t, n in common[:DIGEST_TYPES])
     rest = sum(n for _, n in common[DIGEST_TYPES:])
     counted += f", {rest} of {len(common) - DIGEST_TYPES} other types" if rest else ""
-    lines = [f"[Orchestra: {len(events)} events since your last turn: {counted}]"]
+    lines = [f"[Orchestra: {len(events)} events since your last turn: {counted}]", *_people_line(events)]
     named = [e for e in events if concerns_supervisor(e)]
     if named:
         lines.append("Of these, for you" + (f" (the last {DIGEST_EVENTS} of {len(named)})" if len(named) > DIGEST_EVENTS else "") + ":")

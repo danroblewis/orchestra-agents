@@ -1132,6 +1132,18 @@ over the bus: each machine's kind, engagement and announced notes, `disabled` fi
 `machines_read.py`), `machine_ages` (each machine's age, below), and `read_outbox` (the outbox plugin's state API through Orchestra's web server:
 the drafts waiting, sent and rejected, with how each was approved; `outbox_read.py`). All of it reads through Orchestra as a library; nothing is written.
 
+**People by the hundred** (since 2026-11-04, the owner: "way too many people names sometimes, and it's
+breaking various things"; `people.py`). A relayed system's people (`person.<system>.<account>`, and the
+identity map's `person.<key>` as `mapped`) are one line per system once there are more than ten of them,
+wherever the Supervisor reads machines: `list_machines` (how many, how many heard today, the five heard
+most in the last day by name; `people` with the system, or `*`, and `match` with part of a name or
+account names them, at most 25), `machine_ages` (counted as `other`), `read_design`'s `heard_from` and
+`listened_by`, `read_model`'s machines line, a refinement finding's publishers, `integrate_system`'s
+and the sweep's lines, and a note every person carries (a poller's `fake`) said once for the group.
+The Supervisor's notices count the people a batch announced per system, never by name. A person a
+declaration is heard through stays listed. The plugin's pages name no person: its machine cards draw
+agents only, and Orchestra draws the rest.
+
 **"What changed since"** (`read_events` with `since`: its `digest`, `since_digest.py`, which the
 Supervisor replies with as it is; since 2026-11-03, T2j s16, the morning after on the standing demo).
 **An owner reads it in a minute:** the reply is bounded to 1,500 characters (`LIMIT`; T2j's ran
@@ -1479,7 +1491,11 @@ itself, only as who acted, `person.<system>.<account>`, `bot.<system>.<account>`
 mapped `person.<key>` that published the system's own types; the core counts a declared machine heard
 only by its id or an alias, exactly, so "declared · never heard" stood beside some 120 of their
 events. The join runs when the system is declared and approved, and once a minute in the host, one
-`alias` op per actor, the Supervisor's), with an `appears` expected effect into the stock the owner named (declared
+`alias` op per actor, the Supervisor's; the minute's sweep builds no machines view: the actors heard
+are kept in the host, read over the newest 20,000 events once and then only over what the bus added,
+so 600 Jira people are joined in one change once and a quiet minute reads nothing; exact aliases,
+since Orchestra's `alias` op takes no pattern: 600 of them are some 15 KB of the declared layer, read
+in milliseconds), with an `appears` expected effect into the stock the owner named (declared
 when new); the poller itself is never declared (Orchestra's rule 2). A failed test declares and
 plans nothing and hands the script to the Coordinator (`integrate_handoff.hand_on`, `work.requested`
 naming the directory, the failure and the kit's rules); so does a system with no template of its

@@ -15,13 +15,18 @@ harness was holding "quiet" and told the owner to restart it.
 
 What the page adds from elsewhere (counted traffic, the declared envelope) is not here: read_design
 has the declared machines. A machine the declared layer holds is said ``declared`` (who proposed or
-confirmed it) and ``running`` (``machines_running``): heard on the bus, or a workflow's program. Nothing is written."""
+confirmed it) and ``running`` (``machines_running``): heard on the bus, or a workflow's program. Nothing is written.
+
+**People** (``people.py``, the owner, 2026-11-04): a system's relayed people (``person.<system>.<account>``)
+are one line once there are more than ``people.SUMMARISED`` of them, under ``people`` (how many, how many
+heard today, the few heard most by name); ``people`` (the system, or ``*``) with ``match`` names them, at
+most ``people.LISTED``."""
 
 from __future__ import annotations
 
 import time
 
-from . import machines_running
+from . import machines_running, people
 from .bus_reads import _ts, recent
 from .store import AgentStore
 
@@ -91,14 +96,37 @@ def line(m: dict, heard: str) -> str:
     return f"{m['id']} ({how})" + ("".join(f"; {k}: {v}" for k, v in said.items()) if said else "")
 
 
-def list_machines(store: AgentStore, a: dict | None = None) -> dict:
-    v = view(store)
-    if v.get("ok") is False:
-        return {"ok": False, "error": v.get("error") or "the machines view did not answer"}
-    rows = [m for m in v.get("machines") or [] if not m.get("bootstrap")]
-    marks = quiet_marks(store)
+NOTE = ("notes are what each machine announced about itself (orchestra.machine.started), passed on as said; "
+        "a disabled machine does no work until what it names is fixed; state is how it is heard: an ad hoc machine "
+        "acts when it is offered work, so its silence is no fault; only gone_quiet (the core's mark, on a "
+        "continuous or scheduled machine) means it stopped being heard, not that it stopped running (list_processes "
+        "says whether its process runs): say what the tools returned, and when a tool did not answer, say that; "
+        "running says whether a declared machine runs: one heard on the bus is running, and a program a "
+        "workflow's step names runs as that workflow's program, confirmed or not (unconfirmed is the declared "
+        "layer's state, never a switch that stops it)")
+PEOPLE_NOTE = ("people: a relayed system's people, one line per system (who acted there, never a machine of the "
+               "project's own); name them with people=<system> and match=<part of a name or account>")
+
+
+def noted(said: list[tuple[str, dict]], key: str, big: dict) -> list[str]:
+    """``<id>: <note>`` for each machine that announced ``key``; a big group's people who said the same
+    (a poller's notes are on each person it announces) as one entry."""
+    out: list[str] = []
+    by: dict[tuple, list[str]] = {}
+    held = {m["id"] for ms in big.values() for m in ms}
+    for mid, n in said:
+        if not n.get(key):
+            continue
+        if mid in held:
+            by.setdefault((people.group_of(mid), str(n[key])), []).append(mid)
+        else:
+            out.append(f"{mid}: {n[key]}")
+    out += [f"{people.pattern(g)} ({len(ids)} people): {note}" for (g, note), ids in by.items()]
+    return out
+
+
+def _rows(store: AgentStore, rows: list[dict], marks: dict, programs: dict) -> tuple[list[dict], list[str]]:
     states = [state(m, marks.get(m["id"])) for m in rows]
-    programs = machines_running.workflow_programs(store.project)
     runs = {m["id"]: machines_running.running(m["id"], m.get("intent"), m.get("last_seen"), programs)
             for m in rows if m.get("intent") or m["id"] in programs}
     machines = [{"id": m["id"], "kind": m.get("kind"), "mode": m.get("mode"), "state": heard, "gone_quiet": gone,
@@ -106,18 +134,44 @@ def list_machines(store: AgentStore, a: dict | None = None) -> dict:
                  **({"running": runs[m["id"]]} if m["id"] in runs else {}),
                  "package": m.get("package"), "name": m.get("name"), "notes": notes(m.get("about")),
                  "last_seen": m.get("last_seen")} for m, (heard, gone) in zip(rows, states, strict=True)]
-    disabled = [f"{m['id']}: {m['notes']['disabled']}" for m in machines if m["notes"].get("disabled")]
-    fakes = [f"{m['id']}: {m['notes']['fake']}" for m in machines if m["notes"].get("fake")]
     summary = [line(m, heard) + (f"; {runs[m['id']]}" if m["id"] in runs else "")
                for m, (heard, _) in zip(rows, states, strict=True)]
+    return machines, summary
+
+
+def _people(rows: list[dict], a: dict) -> dict:
+    """``people=<system>``: that system's people by name, those ``match`` holds, at most ``people.LISTED``."""
+    group = str(a.get("people")).strip()
+    got, n = people.pick(rows, group, a.get("match"))
+    found = [{"id": m["id"], "name": m.get("name"), "events_last_day": people.events_today(m)} for m in got]
+    said = [f"last heard {when(m.get('last_seen'))}" + "".join(f"; {k}: {v}" for k, v in notes(m.get("about")).items()) for m in got]
+    head = (f"{n} {'person' if n == 1 else 'people'} of {group}" + (f" matching {a['match']!r}" if a.get("match") else "")
+            + (f"; the {len(got)} heard most in the last day are named (match narrows them)" if n > len(got) else ""))
+    lines = [f"{p['name'] or p['id']} ({p['id']}): {h}, {p['events_last_day']} events in the last day"
+             for p, h in zip(found, said, strict=True)]
+    return {"ok": True, "people": group, "matched": n, "summary": [head, *lines], "machines": found,
+            **({} if n else {"groups": sorted(people.groups(rows))}), "note": PEOPLE_NOTE}
+
+
+def list_machines(store: AgentStore, a: dict | None = None) -> dict:
+    a = a or {}
+    v = view(store)
+    if v.get("ok") is False:
+        return {"ok": False, "error": v.get("error") or "the machines view did not answer"}
+    rows = [m for m in v.get("machines") or [] if not m.get("bootstrap")]
+    marks = quiet_marks(store)
+    programs = machines_running.workflow_programs(store.project)
+    if a.get("people"):
+        return _people(rows, a)
+    shown, big = people.split(rows)
+    machines, summary = _rows(store, shown, marks, programs)
+    said = [(m["id"], notes(m.get("about"))) for m in rows]
+    disabled = noted(said, "disabled", big)
+    fakes = noted(said, "fake", big)
+    groups = people.summaries(big)
+    summary += [g["line"] for g in groups]
     if disabled:
         summary.insert(0, "disabled (needs the owner): " + "; ".join(disabled))
     return {"ok": True, "summary": summary, "machines": machines, "disabled": disabled, "fakes": fakes,
-            "note": ("notes are what each machine announced about itself (orchestra.machine.started), passed on as said; "
-                     "a disabled machine does no work until what it names is fixed; state is how it is heard: an ad hoc machine "
-                     "acts when it is offered work, so its silence is no fault; only gone_quiet (the core's mark, on a "
-                     "continuous or scheduled machine) means it stopped being heard, not that it stopped running (list_processes "
-                     "says whether its process runs): say what the tools returned, and when a tool did not answer, say that; "
-                     "running says whether a declared machine runs: one heard on the bus is running, and a program a "
-                     "workflow's step names runs as that workflow's program, confirmed or not (unconfirmed is the declared "
-                     "layer's state, never a switch that stops it)")}
+            **({"people": groups} if groups else {}),
+            "note": NOTE + ("; " + PEOPLE_NOTE if groups else "")}

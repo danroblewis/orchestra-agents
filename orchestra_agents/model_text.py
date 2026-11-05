@@ -111,9 +111,20 @@ def model_lines(model: dict) -> list[str]:
     if model.get("loops"):
         out.append("feedback loops: " + "; ".join(" -> ".join(lp["stocks"]) for lp in model["loops"]))
     if model.get("machines"):
-        out.append("machines associated with flows (hypotheses from their events): "
-                   + "; ".join(f"{m['id']}: {', '.join(m['flows'])}" for m in model["machines"]))
+        out.append("machines associated with flows (hypotheses from their events): " + machines_line(model["machines"]))
     return out
+
+
+def machines_line(machines: list[dict]) -> str:
+    """Each machine with its flows; a relayed system's people (``people.split``) as one entry, with the
+    flows any of them is a hypothesis for."""
+    from .people import pattern, split
+    shown, big = split(machines)
+    said = [f"{m['id']}: {', '.join(m['flows'])}" for m in shown]
+    for g, ms in sorted(big.items()):
+        flows = sorted({f for m in ms for f in m.get("flows") or []})
+        said.append(f"{len(ms)} people of {pattern(g)}: {', '.join(flows)}")
+    return "; ".join(said)
 
 
 def eras_lines(e: dict) -> list[str]:

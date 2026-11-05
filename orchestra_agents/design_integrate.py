@@ -46,7 +46,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import design_dynamics, design_machines, installed, integrate_heard
+from . import design_dynamics, design_machines, installed, integrate_heard, people
 from . import integrate_address as address
 from . import integrate_branch as branch
 from . import integrate_handoff as handoff
@@ -181,7 +181,7 @@ def _declare(project: Project, system: str, name: str, every: str, emits: list[s
     lines = [(f"machine {mid} ({m['title']}) {'already declared; ' if known else 'declared, programmatic, managed elsewhere, ' + who + '; '}"
              f"heard as the actors its poller relays: {actor}, person.{system}.<account> and bot.{system}.<account>, each "
              "joined to it as it is heard (the poller never publishes as itself)"
-             + (f"; heard already as {', '.join(joined)}" if joined else "")),
+             + (f"; heard already as {people.named(joined)}" if joined else "")),
              ("the Machines page draws it dashed, \"unconfirmed\", until the owner confirms it, and \"never heard\" only "
               "while none of those actors is on the bus")]
     return done, lines
@@ -623,7 +623,7 @@ def _confirm_heard(store: AgentStore, rec: dict, project: Project | None = None)
     if got:
         joined = integrate_heard.join(project, store, system) if project is not None else []
         return [f"{kits.title(system)} is heard on the bus already: {', '.join(got[:5])}"
-                + (f"; joined to machine {system}" if joined else "")], {"heard": got}
+                + (f"; joined to machine {system}" if joined else "")], {"heard": people.compact(got)}
     return ([(f"{kits.title(system)} is not heard on the bus yet: its first poll is within {every} of orchestra run reading "
              "the overlay")],
             {"heard": [], "next": (f"Confirm it is heard: after {every}, read_design shows machine {system} running, its "

@@ -285,6 +285,48 @@ Not yet: passing an item on directly (the contract's pass-on, `offer.made` with 
 finish carries them as `facts: {set: ...}`); a worker on the floor finishes `ready` and the workflow's next step is the
 floor's to offer.
 
+### 3.2 The valve: a decision step (`valve/`, `valve_tools.py`)
+
+The owner, 2026-11-04: "a 'decision' type of machine ... It would need to collect some information
+to help make decisions, but it could be a really easy way to add filters". A valve regulates a
+flow: for each item at its step it asks a model the owner has access to which way the item goes.
+Orchestra's core runs no AI (its rule 1), so it lives here, as a program this package ships to the
+Workflows plugin: the entry point `orchestra_workflows.programs` names `valve =
+"orchestra_agents.valve"`, and the plugin's program host runs it as `<python> -I -m
+orchestra_agents.valve --declaration <valve.json>` (that plugin's guide, "Programs"; it imports
+nothing of this package). A workflow step names it by its id, `who: {"program": "oncall_filter"}`.
+
+- **Its declaration** (`valve/declaration.py`), `<state>/machines/<id>/valve.json` beside its
+  `machine.json`: `name`, `question`, `labels` (the allowed answers), `inputs` (`fields` of the item,
+  `facts: {types, data, last}`, `workflow`, `step`, `item`, `max_chars`), `api` (`openai`,
+  `anthropic`, `classify`), `base_url`, `model`, `token_file`, `min_confidence`, `fallback` (`ask` by
+  default), `max_calls_per_day`, `timeout_s`, `retries`, `backoff_s`, `max_tokens`, and for
+  `classify` its path and field names. The outcomes are the labels, then the fallback; outcome `i`
+  exits `10 + i`, and the `machine.json`'s `exit` map says so (1 and 2, a Python failure, are `error`).
+- **Its inputs** (`valve/inputs.py`) are exactly those named: from `ORCHESTRA_WORKFLOW`,
+  `ORCHESTRA_STEP`, `ORCHESTRA_ITEM` and `ORCHESTRA_FIELDS`, and the item's last facts of the named
+  types from the Workflows record (`orchestra_workflows.api.Record`, imported lazily), each its
+  type, time and named data fields; every string cut to `max_chars`.
+- **The call** (`valve/apis.py`, `valve/http.py`): chat completions with a strict JSON schema,
+  the messages API with a forced `decide` tool, or a generic endpoint answering `{label, score}`;
+  the standard library, a timeout per attempt, retries with a doubling back-off on a timeout, 429 or
+  5xx (none on a 401), the environment's proxies honoured (`spec.env` passes `HTTPS_PROXY` and its
+  kin). The token is read from its file, which must be chmod 600, and goes only in a header.
+- **The answer** (`valve/decide.py`): a declared label at `min_confidence` or above is the outcome;
+  else the fallback, with why. The program prints the decision in one line (the step's summary) and
+  its result line sets the item's field `valve_<id>` (`outcome`, `label`, `score`, `reason`,
+  `cached`, and `fallback`'s why), which the Items drawer shows.
+- **Bounds** (`valve/ledger.py`): a cache by the inputs' fingerprint (with the question, labels, API
+  and model), so an unchanged item is never asked twice; `max_calls_per_day`, each attempt counted;
+  a log line per decision. Never the token, the inputs' text or the reason in the log.
+- **Measured** by the instrument `agents.valves` (`valve/metrics.py`, `Plugin.collectors`):
+  `valve_decisions_total{valve, outcome}`, cumulative, so discovery sees the split. The valve writes
+  no metric and announces nothing of its own; the program host announces its instances.
+- **Declared** by the Supervisor with `declare_valve` (the `valve` skill): both files, read back by
+  the plugin's reader, and with `workflow` the step inserted (before `before`, each label by
+  `routes`, the fallback to the workflow's `person: owner` step) through `declare_workflow`. Under
+  `[agents] ask = "outside"` it is local and asks nothing; the answer's `say` states the daily cap.
+
 ## 4. The host (`host.py`, `residents.py`, `turns.py`, `control.py`, `cli.py`)
 
 `orchestra agents run` is one process per project, and no machine: the runtime the configured
@@ -725,6 +767,7 @@ change out on it, `config_change.py`), `upstream/` (the issues it drafts for oth
 the Supervisor's branch live until merged, and a graduation's overlay command waiting for its move,
 `live_layers.py`) and `machines/<name>/` with `.pending.json` (a spec change's live copy until
 merged, `spec_git.py`).
+`valves/<name>/`: a valve's `cache.json`, `day.json`, `tally.json`, `calls.jsonl` and `lock` (section 3.2).
 Beside it, in Orchestra's state directory and not the agents' own, `integrate_system` writes a
 scaffolded poller's files under `<state>/machines/<name>/` (the bridges' scaffold: its
 `machine.toml`, with a top-level `kit`, and its program and test; `integrate_kits.py` edits the

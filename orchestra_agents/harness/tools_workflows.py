@@ -185,6 +185,39 @@ WORKFLOW_TOOLS: list[ToolDef] = [
              "timeout": S("A duration bounding one run (relate_prs: 1m)"),
              "role": S("The role it runs as (default: its id)"),
              "quote": QUOTE, "reason": REASON}, ("program", "reason")),
+    ToolDef("declare_valve", "workflows",
+            "Declare a valve: a decision step that asks a model the owner has access to which way each item flows (the "
+            "owner's words: \"filter tickets that don't need on-call\"), from exactly the inputs you name; its label is the "
+            "step's outcome. Writes machines/<id>/valve.json and machine.json in the state directory (never committed); "
+            "with workflow, inserts the step before `before` (default: the first step) through declare_workflow's checks. "
+            "Below min_confidence, over the daily cap, with the model down or a label not declared, the outcome is the "
+            "fallback (ask: the workflow's person: owner step). The token only by its file's path (chmod 600). Say the "
+            "answer's say line to the owner: it states the daily cap. Read the valve skill first.",
+            {"id": S("The valve's id, as the step names it (who: {program: <id>}): oncall_filter"),
+             "question": S("The decision, in a sentence: Does this ticket need the on-call engineer now?"),
+             "labels": A("The allowed answers, 2 to 12 lowercase names: page, queue, ignore"),
+             "inputs": {"type": "object", "description": (
+                 "Exactly what the model sees, nothing else: {fields: [the item's fields: summary, priority], facts: "
+                 "{types: [event types: jira.issue.commented], data: [their data fields: body], last: 5}, workflow: "
+                 "true, step: true, item: false, max_chars: 2000}. A field must be on the item (a start's fields)")},
+             "api": E(["openai", "anthropic", "classify"], "openai: chat completions; anthropic: the messages API; "
+                                                           "classify: a generic endpoint answering {label, score}"),
+             "base_url": S("The API's address: https://api.example.com (the path is the api's)"),
+             "model": S("The model's id (openai and anthropic)"),
+             "token_file": S("The token file's full path, as the owner gave it (chmod 600); never the token"),
+             "min_confidence": {"type": "number", "description": "Below this confidence (0 to 1) the outcome is the fallback"},
+             "fallback": S("The outcome when the model cannot decide: ask (default), or one of the labels"),
+             "max_calls_per_day": I("The owner's daily cap on calls to the model (each costs): say it to them"),
+             "timeout_s": {"type": "number", "description": "Seconds per call (default 20)"},
+             "retries": I("Retries on a timeout, 429 or 5xx (default 2)"),
+             "classify": {"type": "object", "description": "classify only: {path: /classify, request: {inputs, labels, "
+                          "question}, response: {label, score, reason}: the endpoint's field names}"},
+             "workflow": S("The workflow to insert the step into"),
+             "before": S("The step it goes before (default: the workflow's first)"),
+             "step": S("The new step's name (default: the id)"),
+             "routes": {"type": "object", "description": "Label -> the step it leads to, or null for the end; a label "
+                        "left out goes to `before`: {\"ignore\": null, \"queue\": \"backlog\"}"},
+             "quote": QUOTE, "reason": REASON}, ("id", "question", "labels", "api", "base_url", "max_calls_per_day", "reason")),
     ToolDef("list_workflows", "workflows",
             "The project's workflows as the plugin loads them: each with where it is defined, its planner, starts and "
             "steps (who, needs, outcomes, guards), and the loader's problems (definitions left out) and notes (shadowed)."),

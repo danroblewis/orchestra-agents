@@ -73,6 +73,7 @@ async function openTranscript(id) {
   html += `</div>`;                                   // the end of the conversation's own scroll box
   if (id === "supervisor") html += `
     <form id="chat" class="chat" onsubmit="return sendToSupervisor(event)">
+      <div id="chat-error" class="chat-error bad" role="alert" hidden></div>
       <textarea id="chat-input" rows="3" placeholder="Message the Supervisor… (Enter to send, Shift+Enter for a new line)" ${s.alive ? "" : "disabled"}></textarea>
       <button type="submit" ${s.alive ? "" : "disabled"}>Send</button>
       ${s.alive ? "" : '<div class="empty">The Supervisor is reachable while the agents&#39; host is up (<code>orchestra run</code> starts it).</div>'}
@@ -230,6 +231,7 @@ async function sendToSupervisor(ev) {
   const message = ta.value.trim();
   if (!message) return false;
   ta.value = ""; ta.disabled = true; btn.disabled = true;
+  const err = $("chat-error"); if (err) { err.hidden = true; err.innerHTML = ""; }
   sendingText = message; sendingTaken = false;
   const box = $("pending"); if (box) { box.insertAdjacentHTML("beforeend", renderPending([], null)); highlightCode(box); }
   live.insertAdjacentHTML("beforeend", `<div class="msg assistant"><div class="r">supervisor · working…</div><div id="live-body"></div></div>`);
@@ -239,15 +241,26 @@ async function sendToSupervisor(ev) {
   const notSent = (why) => {
     sendingText = null; const b = $("pending"); if (b) b.querySelector(".sending")?.remove();
     if (!ta.value) ta.value = message;
-    $("live-body").innerHTML += `<div class="bad">Not sent: ${why} Your message is back in the box.</div>`;
+    // said beside the box, where it stays until the next send (it was in the live reply, which the
+    // transcript's refresh then cleared: the owner, 2026-11-04, a spent chat cap shown for an instant)
+    const box = $("chat-error");
+    if (box) { box.innerHTML = `Not sent: ${why} Your message is back in the box.`; box.hidden = false; }
+    else $("live-body").innerHTML += `<div class="bad">Not sent: ${why} Your message is back in the box.</div>`;
+    const lv = $("live"); if (lv) lv.innerHTML = "";
+    refused = true;
   };
+  let refused = false;
   try {
     const resp = await fetch(AGENTS_API + "/supervisor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
     if (!resp.ok) {
       const body = await resp.text();
       const proxy = /^\s*<!doctype html|<html/i.test(body);
       if (proxy) $("live-body").innerHTML = `<div class="bad">The connection was closed by the proxy in front of this page (HTTP ${resp.status}). If the host took your message it is listed above, with where it stands; the reply will appear in the transcript above.</div>`;
-      else notSent(esc(body.slice(0, 300)));
+      else {
+        let said = body;
+        try { const j = JSON.parse(body); said = typeof j.detail === "string" ? j.detail : j.error || body; } catch (e) { /* plain text */ }
+        notSent(md(String(said).slice(0, 1200)));
+      }
       return false;
     }
     const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
@@ -275,6 +288,7 @@ async function sendToSupervisor(ev) {
     $("live-body").innerHTML += `<div class="bad">${esc(String(err))}. ${accepted ? "Your message was taken: it is listed above until the transcript shows it." : ""}</div>`;
     return false;
   } finally { ta.disabled = false; btn.disabled = false; ta.focus(); if (accepted) sendingTaken = true; }
+  if (refused) return false;  // the refusal stays beside the box
   await refreshTranscript();   // the exchange is in the session file now; show it once, there
   live.innerHTML = "";
   scrollTranscriptToEnd();

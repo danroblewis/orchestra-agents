@@ -167,9 +167,21 @@ def cmd_tool(args) -> int:
             raise TypeError("the arguments are one JSON object, as {\"name\": \"value\"}")
         print(caller.answer(args.name, payload))
     except Exception as e:  # noqa: BLE001 - the session reads why, as the MCP server would answer it
-        print(error(e))
+        print(_sandboxed(e, caller) or error(e))
         return 1
     return 0
+
+
+def _sandboxed(e: BaseException, caller) -> str | None:
+    """In a session the Claude Code harness started in its sandbox (local_http.ENV): a write under the
+    project's state directory the sandbox refused, said with the setting it needs (sandbox_writes)."""
+    from .local_http import ENV
+    from .sandbox_writes import blocked
+    project = getattr(caller, "_project", None)
+    if os.environ.get(ENV) != "1" or project is None:
+        return None
+    said = blocked(e, project.orchestra.state_dir)
+    return json.dumps({"ok": False, "error": said}) if said else None
 
 
 def _print_event(ev: dict) -> None:

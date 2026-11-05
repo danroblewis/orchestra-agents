@@ -19,7 +19,7 @@ import pytest
 from conftest import agents_project
 from orchestra import endpoint, runtime
 
-from orchestra_agents import local_http, prompting
+from orchestra_agents import local_http, prompting, sandbox_writes
 from orchestra_agents.harness import claude_code, sandbox
 from orchestra_agents.harness.base import SessionSpec
 from orchestra_agents.harness.claude_code import ClaudeCodeSession
@@ -60,8 +60,11 @@ def test_the_settings_allow_exactly_orchestras_ports_and_nothing_broader(project
     s = ClaudeCodeSession(spec(project, tmp_path))
     s.open()
     got = settings_of(s._args())
+    state = str(project.orchestra.state_dir.resolve())
     assert got["sandbox"] == {"network": {"allowedDomains": ["127.0.0.1:8123", "127.0.0.1:41234"]},
+                              "filesystem": {"allowWrite": [state]},       # the project's own, and no other path
                               "allowUnsandboxedCommands": False}
+    assert state.endswith(project.orchestra.key) and state != str(Path(state).parent)
     text = json.dumps(got)
     for broader in ("allowLocalBinding", "excludedCommands", "allowAllUnixSockets", "localhost\"", "\"*\"", "enabled"):
         assert broader not in text, broader
@@ -76,7 +79,7 @@ def test_an_mcp_session_gets_no_sandbox_allow_and_a_shell_worker_gets_only_that(
     assert "sandbox" not in settings_of(mcp._args()) and local_http.ENV not in mcp._env()
     worker = ClaudeCodeSession(spec(project, tmp_path, bounded=False, session_id="w"))
     worker.open()
-    assert settings_of(worker._args()) == sandbox.settings([8123, 41234])
+    assert settings_of(worker._args()) == sandbox.settings([8123, 41234], str(project.orchestra.state_dir.resolve()))
 
 
 def test_a_server_on_another_address_or_gone_is_not_allowed(project):
@@ -85,6 +88,9 @@ def test_a_server_on_another_address_or_gone_is_not_allowed(project):
         "web": {"port": 8123, "pid": 999_999_999}}))
     assert sandbox.ports(str(project.repo_root)) == []
     assert sandbox.ports(str(project.repo_root / "nowhere")) == []
+    elsewhere = project.repo_root.parent / "elsewhere"           # no orchestra.toml: no project, nothing to allow
+    elsewhere.mkdir()
+    assert sandbox.state_dir(str(elsewhere)) is None
 
 
 def test_the_supervisor_is_told_never_to_rerun_a_command_outside_the_sandbox():
@@ -205,7 +211,7 @@ def test_a_refusal_by_the_proxy_says_the_sandbox_blocked_it_and_the_setting(prox
     said = str(e.value)
     assert local_http.MARK in said and f'"allowedDomains": ["127.0.0.1:{port}"]' in said
     assert "Never rerun this command outside the sandbox" in said
-    assert sandbox.BLOCKED.found(json.dumps({"error": said})) == str(port)
+    assert sandbox.BLOCKED.found(json.dumps({"error": said})) == ("port", str(port))
 
 
 def test_outside_the_sandbox_a_server_that_is_down_is_said_as_before():
@@ -217,3 +223,67 @@ def test_outside_the_sandbox_a_server_that_is_down_is_said_as_before():
 
 def test_claude_codes_harness_imports_the_sandbox_module():
     assert claude_code.sandbox is sandbox
+
+
+def test_a_write_the_sandbox_refuses_is_said_with_the_path_to_allow(project, monkeypatch, capsys):
+    """The tool command in the sandbox, its write to the event log refused as macOS refuses it."""
+    import errno
+
+    from orchestra_agents import cli
+    from orchestra_agents.harness.caller import Caller
+    events_file = project.orchestra.events_file
+
+    def refused(self, name, args):
+        self._ctx()                                   # the project is read, then its event log is written
+        raise PermissionError(errno.EPERM, "Operation not permitted", str(events_file))
+    monkeypatch.setattr(Caller, "answer", refused)
+    for k, v in {"ORCHESTRA_REPO": str(project.repo_root), "ORCHESTRA_TOOLS": "events", local_http.ENV: "1"}.items():
+        monkeypatch.setenv(k, v)
+    capsys.readouterr()
+    code = cli.main(["tool", "read_events", "{}"])
+    out = capsys.readouterr().out
+    state = str(project.orchestra.state_dir.resolve())
+    assert code == 1 and sandbox_writes.MARK in out, out
+    said = json.loads(out)["error"]
+    assert f'"allowWrite": ["{state}"]' in said and "Never rerun this command outside the sandbox" in said
+    assert sandbox.BLOCKED.found(out) == ("path", state)
+    monkeypatch.delenv(local_http.ENV)
+    capsys.readouterr()
+    cli.main(["tool", "read_events", "{}"])
+    assert sandbox_writes.MARK not in capsys.readouterr().out          # outside the sandbox: said as before
+
+
+def test_the_words_are_only_for_a_refused_write_in_the_state_dir(tmp_path):
+    import errno
+    state = tmp_path / "state"
+    inside = PermissionError(errno.EPERM, "Operation not permitted", str(state / "events.jsonl"))
+    assert sandbox_writes.blocked(RuntimeError("wrapped"), state) is None
+    try:
+        raise RuntimeError("could not publish") from inside
+    except RuntimeError as e:
+        assert sandbox_writes.MARK in sandbox_writes.blocked(e, state)
+    assert sandbox_writes.blocked(PermissionError(errno.EPERM, "no", str(tmp_path / "other")), state) is None
+    assert sandbox_writes.blocked(OSError(errno.ENOSPC, "full", str(state / "x")), state) is None
+    assert sandbox_writes.blocked(OSError(errno.EROFS, "Read-only file system", str(state / "x")), state)   # Linux
+
+
+def test_a_blocked_write_stops_the_turn_and_names_the_path_for_it(project, tmp_path):
+    state = str(project.orchestra.state_dir.resolve())
+    recorded = json.dumps({"ok": False, "error": sandbox_writes.words(state, state + "/events.jsonl")})
+    f = tmp_path / "fake-claude"
+    call = {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "orchestra agents tool read_events '{}'"}}
+    f.write_text(f"""#!{sys.executable}
+import json, sys, time
+sys.stdin.read()
+def out(ev): print(json.dumps(ev), flush=True)
+out({{"type": "assistant", "message": {{"content": [{call!r}]}}}})
+out({{"type": "user", "message": {{"content": [{{"type": "tool_result", "tool_use_id": "t1", "is_error": True,
+                                              "content": [{{"type": "text", "text": {recorded!r}}}]}}]}}}})
+time.sleep(5)
+open({str(tmp_path / "retried")!r}, "w").write("outside")
+""")
+    f.chmod(0o755)
+    res = ClaudeCodeSession(spec(project, tmp_path), binary=str(f)).prompt("hello", timeout=30)
+    assert res.error and f"writing in Orchestra's state directory {state}" in res.error and "Ask IT" in res.error
+    assert f'"sandbox": {{"filesystem": {{"allowWrite": ["{state}"]}}}}' in res.error
+    assert not (tmp_path / "retried").exists()

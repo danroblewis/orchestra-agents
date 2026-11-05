@@ -12,21 +12,34 @@ https://code.claude.com/docs/en/settings, "Settings precedence") list exactly th
 nothing broader: not ``allowLocalBinding`` (every port on localhost, macOS only), not an
 ``excludedCommands`` entry (the command would run with no sandbox at all). They also turn off the
 unsandboxed retry (``allowUnsandboxedCommands: false``), which in this harness's
-``--dangerously-skip-permissions`` mode would run without a prompt.
+``--dangerously-skip-permissions`` mode would run without a prompt. The tool command also writes under
+the project's state directory (``~/.orchestrator/<key>/``: the event log, the agents' records),
+outside the working directory the sandbox lets a command write to; the settings list exactly that
+directory in ``sandbox.filesystem.allowWrite`` (the docs' "Configure sandboxing": absolute paths,
+merged across scopes; ``--settings`` entries apply even when the sandbox is admin-required, unless a
+managed lock covers them).
 
 An organisation's managed settings win over the session's: with ``allowManagedDomainsOnly`` only
 their list counts, and the call is still refused. The tool command says so (``local_http.MARK``);
 the harness stops the turn at that answer and tells the owner, once, the setting to ask IT for
-(``Blocked``), so the model never gets to try the command outside the sandbox."""
+(``Blocked``), so the model never gets to try the command outside the sandbox. A refused write is said
+the same way (``sandbox_writes.MARK``), naming the path."""
 
 from __future__ import annotations
 
 import re
 import urllib.parse
 
+from .. import sandbox_writes
 from ..local_http import MARK, allowed, setting
 
 PORT = re.compile(re.escape(MARK) + r" at 127\.0\.0\.1:(\d+)")
+PATH = re.compile(re.escape(sandbox_writes.MARK) + r" (/[^\s(]*)")
+
+
+def _core(repo: str | None):
+    from ..config import load_project
+    return load_project(repo or None).orchestra
 
 
 def ports(repo: str | None) -> list[int]:
@@ -34,9 +47,7 @@ def ports(repo: str | None) -> list[int]:
     now: the host's events endpoint and the web server. [] when there is no project or record."""
     try:
         from orchestra import endpoint, runtime
-
-        from ..config import load_project
-        core = load_project(repo or None).orchestra
+        core = _core(repo)
         out: list[int] = []
         rec = endpoint.recorded(core)
         if rec and (u := urllib.parse.urlsplit(str(rec.get("url") or ""))).hostname == "127.0.0.1" and u.port:
@@ -49,9 +60,21 @@ def ports(repo: str | None) -> list[int]:
         return []
 
 
-def settings(listed: list[int]) -> dict:
-    """The session settings' ``sandbox`` part: exactly these addresses, and no unsandboxed retry."""
-    return {"sandbox": {"network": {"allowedDomains": [allowed(p) for p in listed]}, "allowUnsandboxedCommands": False}}
+def state_dir(repo: str | None) -> str | None:
+    """The project's state directory (``~/.orchestrator/<key>``), as the project says it; None without one."""
+    try:
+        return str(_core(repo).state_dir.resolve())
+    except Exception:  # noqa: BLE001 - no project to read: nothing to allow
+        return None
+
+
+def settings(listed: list[int], writable: str | None = None) -> dict:
+    """The session settings' ``sandbox`` part: exactly these addresses, the state directory to write
+    in, and no unsandboxed retry."""
+    out: dict = {"network": {"allowedDomains": [allowed(p) for p in listed]}}
+    if writable:
+        out["filesystem"] = {"allowWrite": [writable]}
+    return {"sandbox": out | {"allowUnsandboxedCommands": False}}
 
 
 def result_text(content) -> str:
@@ -64,14 +87,33 @@ class Blocked:
     """The sandbox refused the tool command: said once in full (per port), then in one line."""
 
     def __init__(self) -> None:
-        self.said: set[str] = set()
+        self.said: set = set()
 
-    def found(self, text: str) -> str | None:
-        """The port the tool command's answer says the sandbox blocked; None when it says no such thing."""
-        m = PORT.search(text)
-        return m.group(1) if m else (None if MARK not in text else "?")
+    def found(self, text: str) -> tuple[str, str] | None:
+        """What the tool command's answer says the sandbox blocked: ("port", its port) or ("path", the
+        state directory); None when it says no such thing."""
+        if (m := PATH.search(text)) is not None:
+            return "path", m.group(1)
+        if (m := PORT.search(text)) is not None:
+            return "port", m.group(1)
+        return ("port", "?") if MARK in text else None
 
-    def report(self, port: str) -> str:
+    def report(self, found: tuple[str, str]) -> str:
+        kind, value = found
+        return self._path(value) if kind == "path" else self._port(value)
+
+    def _path(self, path: str) -> str:
+        if ("path", path) in self.said:
+            return (f"Orchestra's tools are still blocked by Claude Code's sandbox from writing in {path}; the turn was "
+                    f"stopped again. The managed settings need {sandbox_writes.setting(path)}: ask IT, as said before.")
+        self.said.add(("path", path))
+        return (f"Claude Code's sandbox blocked Orchestra's tool command from writing in Orchestra's state directory "
+                f"{path} (its event log and records), so the turn was stopped instead of the command being run outside "
+                f"the sandbox. The session's own settings allow writing there (sandbox.filesystem.allowWrite), so this "
+                f"machine's managed settings refuse it. Ask IT to allow that path in the managed settings: "
+                f"{sandbox_writes.setting(path)}.")
+
+    def _port(self, port: str) -> str:
         if port in self.said:
             return (f"Orchestra's tools are still blocked by Claude Code's sandbox at {allowed(port)}; the turn was stopped "
                     f"again. The managed settings need {setting([port])}: ask IT, as said before.")

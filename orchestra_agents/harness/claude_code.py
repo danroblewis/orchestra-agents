@@ -259,9 +259,10 @@ class ClaudeCodeSession(AgentSession):
     def _settings(self, via: str) -> Path | None:
         """The session's settings file: the Supervisor's bounds, as far as Claude Code's settings hold
         them (bounds.py), and, with the tools from the shell, the sandbox's allow for exactly Orchestra's
-        local ports (sandbox.py), read from the runtime record at every turn. None when it needs neither."""
+        local ports and the project's state directory to write in (sandbox.py), read at every turn. None when it needs neither."""
         own = transcript_path(self.spec.cwd, self.uuid or "x").parent      # its transcripts and saved tool answers
-        extra = sandbox.settings(sandbox.ports(self.spec.env.get("ORCHESTRA_REPO"))) if via == "bash" else {}
+        repo = self.spec.env.get("ORCHESTRA_REPO")
+        extra = sandbox.settings(sandbox.ports(repo), sandbox.state_dir(repo)) if via == "bash" else {}
         if not self.spec.bounds and not extra:
             return None
         return bounds.write(self._dir, self.spec.session_id, self.spec.bounds, own, extra)
@@ -391,8 +392,8 @@ class ClaudeCodeSession(AgentSession):
         for part in content if isinstance(content, list) else []:
             if not (isinstance(part, dict) and part.get("type") == "tool_result" and part.get("tool_use_id") in shell):
                 continue
-            if (port := sandbox.BLOCKED.found(sandbox.result_text(part.get("content")))) is not None:
-                return sandbox.BLOCKED.report(port)
+            if (found := sandbox.BLOCKED.found(sandbox.result_text(part.get("content")))) is not None:
+                return sandbox.BLOCKED.report(found)
         return None
 
     def _settle(self, ev: dict, result: TurnResult) -> None:

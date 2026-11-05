@@ -137,9 +137,12 @@ server) only through the sandbox's proxy, and only at the addresses its settings
 lists exactly those in the session's settings, `"sandbox": {"network": {"allowedDomains":
 ["127.0.0.1:<port>"]}}`, one entry per port, and turns the unsandboxed retry off
 (`allowUnsandboxedCommands: false`); nothing broader (no `allowLocalBinding`, no `excludedCommands`).
-Managed settings win over the session's: if your organisation's set `allowManagedDomainsOnly`, the
-turn stops at the first blocked tool call and the Supervisor's reply names the entry to ask IT to add
-to the managed `allowedDomains`. Give the ports fixed values first (`[events] listen =
+The tool command also writes in the project's state directory (`~/.orchestrator/<key>`: the event
+log, the agents' records), so the settings add exactly that path to `"sandbox": {"filesystem":
+{"allowWrite": ["<state dir>"]}}`. Managed settings win over the session's: if your organisation's
+set `allowManagedDomainsOnly`, or deny writes to that path, the turn stops at the first blocked tool
+call and the Supervisor's reply names the entry to ask IT to add to the managed `allowedDomains` or
+`allowWrite`. Give the ports fixed values first (`[events] listen =
 "127.0.0.1:<port>"`, `orchestra web --port <port>`), since the events endpoint's port is otherwise
 picked at each start. The Supervisor never reruns a blocked command outside the sandbox.
 

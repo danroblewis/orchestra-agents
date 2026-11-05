@@ -25,7 +25,7 @@ from orchestra.launcher import Process
 from orchestra.plugins import Declared, Page, Plugin
 from orchestra.runtime import alive
 
-from . import installed, owner_messages
+from . import installed, notices, owner_messages, wake_classes
 from .api_org import read_org
 from .attention import unread
 from .config import Config, ConfigError, Project
@@ -213,6 +213,28 @@ def router(project) -> APIRouter:
     @r.post("/attention/seen")
     async def attention_seen() -> dict:
         return {"ok": True, "seen_at": store.mark_supervisor_seen()}
+
+    @r.get("/supervisor/wakes")
+    async def supervisor_wakes() -> dict:
+        """What wakes the Supervisor (immediate, capped, coalesced; each duty's events with their rate
+        in the last hour), its notices held and why, the owner's pause, and today's wake turns with
+        their spend by reason (wake_classes.view)."""
+        from .machine_spec import load as load_spec
+        p = current(project)
+        return wake_classes.view(p, store, p.config, load_spec(p, "supervisor"))
+
+    @r.post("/supervisor/initiative")
+    async def supervisor_initiative(request: Request) -> dict:
+        """The plugin's one operator control (AGENTS.md rule 10, Orchestra's rule 9): the owner pauses
+        the Supervisor's own initiative until the day ends, or lifts that pause. It holds its review
+        rounds, explore rounds and notices (budget.over); chat and the immediate wake-ups go on. It
+        changes no configuration, no machine and no agent's paused state; recorded with who, when
+        and from where (notices.pause)."""
+        body = await request.json()
+        if body.get("pause"):
+            return {"ok": True, "paused": notices.pause(store, by="owner", via="the Agents page")}
+        notices.resume(store, by="owner", via="the Agents page")
+        return {"ok": True, "paused": None}
 
     @r.post("/supervisor")
     async def supervisor_message(request: Request):

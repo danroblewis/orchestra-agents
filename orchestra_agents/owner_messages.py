@@ -8,7 +8,8 @@ stopped) is kept a while, marked so.
 
 Each entry: ``id``, ``text`` (as sent), ``at`` (accepted), ``status`` (``waiting`` in the queue,
 ``answering``, ``answered``: the turn ended but the transcript does not show it yet, ``failed``)
-and, once known, ``started_at``, ``ended_at``, ``error``. The host writes; the pages read
+and, once known, ``started_at``, ``ended_at``, ``error``, and ``behind`` when it was accepted while a wake-up
+turn ran (it waits for that turn, never interrupts it; no new wake-up turn starts before it). The host writes; the pages read
 (``pending``). Messages are answered in the order accepted (``Line``)."""
 
 from __future__ import annotations
@@ -54,6 +55,11 @@ def _set(store: AgentStore, mid: str, **fields) -> None:
 
 def answering(store: AgentStore, mid: str) -> None:
     _set(store, mid, status="answering", started_at=time.time())
+
+
+def behind(store: AgentStore, mid: str, what: str) -> None:
+    """A waiting message's place: behind the turn that runs (a wake-up's), said on the chat."""
+    _set(store, mid, behind=what)
 
 
 def settle(store: AgentStore, mid: str, msgs: list[dict], error: str | None = None) -> None:
@@ -127,6 +133,11 @@ class Line:
     def __init__(self):
         self._cv = threading.Condition()
         self._ids: list[str] = []
+
+    def waiting(self) -> bool:
+        """A message of the owner's waits for its turn, or has it: no wake-up turn may start."""
+        with self._cv:
+            return bool(self._ids)
 
     @contextmanager
     def turn(self, mid: str) -> Iterator[None]:

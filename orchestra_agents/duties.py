@@ -11,6 +11,11 @@ Every change:
 - changes only ``.orchestra/machines/supervisor/``: never the fixed core, which is the plugin's,
   and never a built-in duty, whose text is the plugin's too;
 - never gives the Supervisor a tool: a duty may name only tool groups it holds;
+- never listens for activity (``bus_rates.busy``, since 2026-11-04, T55): a heartbeat
+  (``offer.alive``), the floor's and the Outbox's every-piece-of-work events (``offer.made``,
+  ``offer.claimed``, ``offer.finished``, ``item.closed``, ``outbox.sent``) unless a filter narrows
+  them, or a type seen more than ``BUSY_PER_HOUR`` times in the last hour unfiltered; the refusal
+  names the trouble signal to wake on instead;
 - is one commit (``spec_git``): on the base branch when the checkout is clean there and the
   gate is not landing, else on the side branch ``orchestra/supervisor``; with a line in
   ``ledger.md``; announced as ``role.changed`` (subject ``machine:supervisor``, the commit, the
@@ -112,6 +117,12 @@ def _write(project: Project, store: AgentStore, spec: MachineSpec, duty: Duty, a
         bad = [w for w in listens if not LISTEN.match(w)]
         if bad:
             raise StoreError(f"not an event type (type or type:filter, e.g. orchestra.model.stalled:stock:queue): {bad}")
+        if listens:
+            from .bus_rates import busy, rates
+            rate = rates(store)
+            if why := [w for w in (busy(x, rate) for x in listens) if w]:
+                raise StoreError("refused: a duty wakes you on each event it listens for, and these are activity, not "
+                                 "trouble: " + "; ".join(why))
         duty.listens = listens
     if "tools" in a:
         tools = [str(t).strip() for t in a.get("tools") or [] if str(t).strip()]

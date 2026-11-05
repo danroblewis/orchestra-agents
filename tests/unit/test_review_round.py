@@ -122,8 +122,9 @@ def test_a_stalled_stock_on_the_bus_wakes_it_through_keep_flow_within_the_cap(ho
     host.events.publish("orchestra.machine.quiet", {"machine": "baker"}, source=HOST, subject="baker")
     host.events.publish("task.attention_needed", {"to": "supervisor", "reason": "stuck"}, source="worker")
     host._wake_on_events()
-    [left] = wakeups(host)                                                     # past the cap only the fixed core's wake-ups pass
-    assert left.startswith("event task.attention_needed")
+    assert wakeups(host) == []                                                 # past the cap the core's notices wait too (T55)
+    held = host.store.agent_state("supervisor")["notices"]
+    assert {n["type"] for n in held} == {"orchestra.machine.quiet", "task.attention_needed"}
 
 
 def test_crossed_signals_write_a_split_proposal_once_and_tell_it_to_tell_the_owner(host):

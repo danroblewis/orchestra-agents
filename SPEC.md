@@ -277,6 +277,8 @@ holder toward the step's rounds.
 role) wakes the Coordinator (`attention.needed:coordinator` in its `wake_on`) or the Supervisor
 (`attention.needed:supervisor`), matched on `to` as the task system's `task.attention_needed` is;
 the wake-up (`floor.wake_reason`) names the item, its workflow and step, the guard and the reason.
+For the Supervisor it is a notice (section 12, `notices.py`): held, the same item and guard once,
+gathered into one turn at most every `[agents] attention_every` and capped by the day's budget.
 
 Not yet: passing an item on directly (the contract's pass-on, `offer.made` with `ends`), and
 `facts` on a finish other than a file-mode session's `fields` (section 6, `tools_via = "file"`: the
@@ -326,7 +328,8 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   recorded (`agent.crashed`) and restarted; three exits in fifteen minutes pause the agent
   (`agent.crash_loop`) and wake the Supervisor;
 - each second: reloads the config, matches new events on the bus against every agent's
-  `wake_on` (a filter after the colon matches a status, a probe name, the role an attention
+  `wake_on` (for the Supervisor, every match but the owner's page request is a notice, held and
+  gathered: `notices.py`, section 12) (a filter after the colon matches a status, a probe name, the role an attention
   event is addressed to, the state a turn ended in (`task.reported`'s `report.state`: BLOCKED),
   the state a request left its ticket in (`request.done`'s `result.ticket.state`: CANCELLED), or
   an agent-raised event's subject; section 3's table), queues
@@ -390,7 +393,7 @@ close at most `closing.CLOSE_S` (5 s): 20 s at worst, under the 30 s stop grace 
   ticket it names on the wrong side of done (the snapshot read again), gets a correction written
   by Orchestra appended to the reply: the changes, or each ticket's true state (`truth.py`,
   narrow heuristics). The human sees it on the live chat and as an `agent.corrected` marker on
-  the transcript. A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause, restart or reset waits for the running one, and a paused
+  the transcript. A session runs one turn at a time: a chat and a wake-up queue behind each other, a pause, restart or reset waits for the running one; the owner's message goes first (since 2026-11-04, T55): while one waits, no new wake-up turn starts, the wake-ups that come meanwhile stay queued and gather into the turn after it, a running turn is never interrupted, and the chat's pending list says the message waits on that wake-up turn (`owner_messages` `behind`); and a paused
   Supervisor refuses the chat with the reason. The web plugin proxies it; `orchestra agents chat` attaches to it. A host that cannot
   bind the endpoint exits instead of running unreachable;
 - wakes the Supervisor once, at start, when the project is not set up (`first_run.py`): no
@@ -675,8 +678,9 @@ when the harness takes the name, section 12), `serves` (the task system's roles 
 reviewer), `allow_push` (the roles whose sessions may push and write pull requests; default none,
 section 6), `spec_changes_per_day` (default 5: the Supervisor's changes to its own spec in 24
 hours), `review_usd_per_day` (default 2.0) and `review_turns_per_day` (default 48: what its review
-rounds, explore rounds and its duties' wake-ups may spend a day, section 12), `chat_usd_per_day`
-(default 10.0, 0 no cap: what the owner's chat turns may spend a day), `model` once given is the
+rounds, explore rounds and its notices may spend a day, section 12), `chat_usd_per_day`
+(default 10.0, 0 no cap: what the owner's chat turns may spend a day), `attention_every` (default
+`10m`, 0 no wait: the Supervisor's notices gathered into one turn at most this often, section 12), `model` once given is the
 Supervisor's too, over its spec's shipped `sonnet` (`machine_spec.model_of`; D5, 2026-11-04), `coordinator_every` (a scheduled check-in for the Coordinator, like `"10m"`; unset,
 the Coordinator is woken by events only), `turn_timeout` (default none), `silence_timeout`
 (default 20m), `compact_tokens` (default 100,000: the context, in tokens, past which a session is
@@ -738,7 +742,10 @@ organisation's custom records are in the repository under `.orchestra/`.
 
 Mounted by Orchestra's web app (`orchestra/plugins.py`):
 
-- the **Agents page** (`/agents`): upcoming scheduled wake-ups, the teams with their agents (each
+- the **Agents page** (`/agents`): what wakes the Supervisor (at once, capped, gathered; each duty's
+  events with their rate; today's wake turns and spend by reason; the notices waiting and why) and
+  the owner's one control there, "Pause the Supervisor's own initiative until tomorrow" (and its
+  resume; `POST /api/plugins/agents/supervisor/initiative`, section 12), upcoming scheduled wake-ups, the teams with their agents (each
   with its wake rules and what it emits; who publishes and who listens is Orchestra's Machines
   page, which observes it), agents outside a team,
   the teams' probes, the roles; a drawer for each agent, team and role (definition, tools,
@@ -1546,7 +1553,7 @@ or effect removes its unkept drafts and simulated placeholders and names the ins
 kept, which stay.
 
 The owner's page request, `orchestra.intent.requested`, wakes the Supervisor only when its source
-is `owner` (a fixed wake-up, never capped). **The `refine_map` duty is built into the plugin**
+is `owner` (a fixed wake-up, never capped, never held: section 12's day's budget). **The `refine_map` duty is built into the plugin**
 (its text is the plugin's `refine-map` skill, `prompts/skills/refine-map.md`, named in every Supervisor's skill index), so
 every Supervisor has it whatever its spec lists: the review round runs the refinement passes, a
 quick heuristic check with no model, when the declared layer changed, and they run again after the
@@ -1811,16 +1818,40 @@ owner's message a source's `match` may narrow and its `split`, `kinds`, `names` 
 state `explore` (and `explore_rounds`, a week), `next_explore_at`; the digest carries a line
 (`explore_round.digest_line`).
 
-**The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, and wake-ups
-on events only its spec's duties listen for) stops at `[agents] review_usd_per_day` dollars
+**The day's budget** (`budget.py`). The Supervisor's own initiative (review rounds, explore rounds,
+and its notices) stops at `[agents] review_usd_per_day` dollars
 (Claude Code reports each turn's cost: `TurnResult.cost_usd`) or `review_turns_per_day` turns.
-What the fixed core wakes it for never waits on it. The owner's chat turns have their own cap,
+**Changed 2026-11-04 (T55, the owner's standstill report: Workflows' `attention.needed` for every
+Jira item and guard woke it uncapped, and the owner's chat waited behind those turns): "what the
+fixed core wakes it for never waits on it" no longer holds.** Only three things wake it at once,
+whatever was spent: the owner's page request (`orchestra.intent.requested` from `owner`), an
+agent's `escalate_to_supervisor`, and a crash loop pausing an agent (and Orchestra's own one-off
+wake-ups: the first run, a ticket made for the owner done, a verdict, an overdue hand-off, a
+harness's notice). Every other event in its `wake_on`, the fixed core's (`task.attention_needed`,
+`attention.needed`, `orchestra.process.gave_up`, `work.planned`) and every duty's alike, is a
+**notice** (`notices.py`): held in its agent state (`notices`), the same item and guard (the event's
+type and the fields that name what it is about) once with a count; let out as wake-ups for one turn
+when `[agents] attention_every` (default 10m) has passed since the last, no Supervisor turn runs, no
+owner's message waits, and the day's cap is not spent; counted against that cap. Past the cap
+they are not dropped: the Agents page says "N notices waiting; the day's cap is spent", and the
+next chat turn is handed them as a short digest (`notices.take_digest`), which clears them. The
+owner's **pause** ("Pause the Supervisor's own initiative until tomorrow" on the Agents page, the
+plugin's operator control, AGENTS.md rule 10) holds the same initiative until the day ends (host
+time; `initiative_pause` {day, at, by, via}, with a short history); chat and the immediate wake-ups
+go on. A duty may not listen for activity (`bus_rates.busy`, in `add_duty`/`edit_duty`): a
+heartbeat (`offer.alive`), the floor's and the Outbox's every-piece-of-work events (`offer.made`,
+`offer.claimed`, `offer.finished`, `item.closed`, `outbox.sent`) unless a filter narrows them, or
+an unfiltered type seen over 30 times in the last hour; the refusal names the trouble signal to wake
+on instead. The Agents page lists what wakes it, at once, capped, and gathered (each duty's events
+with their count in the last hour, the busy ones marked), with today's wake turns and spend by
+reason (`wake_classes.py`, `GET /api/plugins/agents/supervisor/wakes`). The owner's chat turns have their own cap,
 `chat_usd_per_day` (default 10.0; 0: none): past it a message is refused before any turn
 (`budget.chat_over`, raised in `prompt_supervisor`), saying what was spent, the cap and how to go
 on. A harness that cannot price its turns (`Harness.priced` False: Pi on a model `harness/pi_cost.py`
 does not price; its turns are priced from Pi's session file, a compaction's call included, at list
 prices, never Pi's own figure alone, which a login reports as 0) is refused under a dollar cap
-before the turn starts (`budget.unpriced`). Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`;
+before the turn starts (`budget.unpriced`). Spending is kept per day in its agent state (`spend`: `usd`, `turns`, `initiative_*`, `chat_*`,
+`by_reason`: each kind of reason, `wake_classes.label`, its turns and an even share of each turn's dollars;
 `spend_total`).
 
 **Self-healing** (group `patch`, the Supervisor's alone, decided by the owner for now; a separate

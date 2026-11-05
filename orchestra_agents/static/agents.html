@@ -274,9 +274,35 @@ async function openRole(name) {
     <div class="prompt-head"><h4>Job description</h4><span class="muted">What this kind of agent is good at. Schedules, teams, and access are the agent's and the team's, not the role's.</span></div>
     <div class="prompt md">${md(r.prompt || "(empty)")}</div>`);
 }
+// What wakes the Supervisor (wake_classes.view): immediate, capped, and gathered into one turn per
+// attention_every; its held notices; today's wake turns and spend by reason; and the owner's pause
+// of its own initiative until the day ends (the plugin's operator control: chat goes on).
+function wakesCard(w, now) {
+  const every = w.attention_every_s >= 60 ? `${Math.round(w.attention_every_s / 60)}m` : `${w.attention_every_s}s`;
+  const rows = (list) => list.map((x) => `<div><code>${esc(x.what)}</code> <span class="muted">${esc(x.why || "")}</span></div>`).join("");
+  const co = w.coalesced.map((x) => `<div><code>${esc(x.what)}</code> <span class="muted">${esc(x.from)} · ${x.per_hour}/h in the last hour</span>${x.busy ? ` <span class="tag" style="color:#fcd34d;border-color:#92400e" title="${esc(x.busy)}">busy</span>` : ""}</div>`).join("");
+  const by = Object.entries(w.today.by_reason || {}).sort((a, b) => b[1].turns - a[1].turns)
+    .map(([k, v]) => `<div><code>${esc(k)}</code> <span class="muted">${v.turns} turn${v.turns === 1 ? "" : "s"} · $${(v.usd || 0).toFixed(2)}</span></div>`).join("") || '<div class="muted">no turns yet today</div>';
+  const h = w.held;
+  const held = !h.count ? "" : `<div class="harness-note warn">${h.count} notice${h.count === 1 ? "" : "s"} waiting${h.times > h.count ? ` (${h.times} events)` : ""}; ${h.cap_spent ? "the day's cap is spent" : w.paused ? "you paused its initiative until tomorrow" : esc(h.why || "gathered for its next turn")}. Your next message to the Supervisor hands them to it in a few lines.</div>`;
+  const ctl = w.paused
+    ? `<span class="muted">Its own initiative is paused until the day ends (by ${esc(w.paused.by)}, ${esc(w.paused.via)}, ${ago(now - w.paused.at)} ago). Chat and your page requests go on.</span> <button class="ctl" onclick="setInitiative(false)">Resume its initiative now</button>`
+    : `<button class="ctl" onclick="setInitiative(true)" title="Holds its review rounds, explore rounds and notices until midnight (host time). Chat, your page requests, escalations and crash loops still reach it. Nothing in the configuration changes.">Pause the Supervisor's own initiative until tomorrow</button>`;
+  return `<h2>What wakes the Supervisor</h2>${held}<div class="def">
+      <div>at once</div><div class="tools">${rows(w.immediate)}</div>
+      <div>capped</div><div class="tools">${rows(w.capped)}<div class="muted">against the day's cap: $${w.today.initiative_usd.toFixed(2)} of $${Number(w.caps.review_usd_per_day).toFixed(2)}, ${w.today.initiative_turns} of ${w.caps.review_turns_per_day} turns</div></div>
+      <div>gathered, one turn per ${esc(every)}, capped</div><div class="tools">${co || '<div class="muted">none</div>'}</div>
+      <div>today (${esc(w.day)})</div><div class="tools"><div class="muted">${w.today.turns} turn${w.today.turns === 1 ? "" : "s"}, $${w.today.usd.toFixed(2)}; chat ${w.today.chat_turns}, $${w.today.chat_usd.toFixed(2)}</div>${by}</div>
+    </div><div style="margin:6px 0 14px">${ctl}</div>`;
+}
+async function setInitiative(pause) {
+  await fetch(API + "/supervisor/initiative", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pause }) });
+  refresh();
+}
 async function refresh() {
   try {
-    const [st, org] = await Promise.all([fetch(API + "/state").then((r) => r.json()), fetch(API + "/org").then((r) => r.json())]);
+    const [st, org, wakes] = await Promise.all([fetch(API + "/state").then((r) => r.json()), fetch(API + "/org").then((r) => r.json()),
+      fetch(API + "/supervisor/wakes").then((r) => r.json()).catch(() => null)]);
     STATE = st; ORG = org; $("conn").textContent = "live";
     const byName = Object.fromEntries(org.agents.map((a) => [a.name, a]));
     const top = org.teams.filter((t) => !t.parent);
@@ -289,6 +315,7 @@ async function refresh() {
       : org.harness === "dummy" ? `; the Supervisor's spec asks for ${esc(org.supervisor_model)} (used once a model harness runs it)`
       : `; the Supervisor on ${esc(org.supervisor_model)}`;
     let html = `<div class="harness-note${org.harness_note ? " warn" : ""}" id="harness-note">Running on <b>${esc(org.harness)}</b>${org.model ? " · " + esc(org.model) : ""}${sup}${org.harness === "dummy" ? " (scripted agents: no model, no cost)" : ""}.${org.harness_note ? " " + esc(org.harness_note) : ""}</div>`;
+    if (wakes && wakes.ok) html += wakesCard(wakes, org.now);
     html += timeline(org.agents, org.now);
     html += `<h2>Teams <span class="count">${org.teams.length}</span></h2>` + (top.map((t) => teamCard(t, byName, org.now, false)).join("") || '<div class="empty">none</div>');
     html += `<h2>Agents outside a team <span class="count">${loose.length}</span></h2>` + (loose.map((a) => agentRow(a, false, org.now)).join("") || '<div class="empty">none</div>');

@@ -35,6 +35,11 @@ REASON_MAX = 400
 KEY_FIELDS = ("subject", "to", "workflow", "step", "guard", "name", "ticket", "probe", "request")
 
 
+# Said in the next chat turn's digest, never a turn of their own (the owner, 2026-11-04: "The Supervisor
+# keeps wasting tokens on this quiet reminder"): a machine gone quiet is news, not work.
+DIGEST_ONLY = frozenset({"orchestra.machine.quiet"})
+
+
 def key_of(ev: dict) -> str:
     """The same item and guard (or process, ticket, request) once: the event's type and the fields
     that name what it is about, never its time or id."""
@@ -54,7 +59,8 @@ def hold(store: AgentStore, ev: dict, reason: str, now: float | None = None) -> 
             if n["key"] == key:
                 n.update(count=n.get("count", 1) + 1, last=now, reason=reason[:REASON_MAX * 4])
                 return held
-        held.append({"key": key, "type": ev.get("type"), "reason": reason[:REASON_MAX * 4], "first": now, "last": now, "count": 1})
+        held.append({"key": key, "type": ev.get("type"), "reason": reason[:REASON_MAX * 4], "first": now, "last": now, "count": 1,
+                     **({"digest": True} if ev.get("type") in DIGEST_ONLY else {})})
         if len(held) > KEEP:
             dropped = len(held) - KEEP
             held = held[-KEEP:]
@@ -83,7 +89,7 @@ def release(store: AgentStore, cfg, why_not: str | None, busy: bool, owner_waiti
     were queued. The reason they wait is kept (``notices_why``) for the Agents page."""
     now = time.time() if now is None else now
     st = store.agent_state(MACHINE)
-    notes = list(st.get("notices") or [])
+    notes = [n for n in st.get("notices") or [] if not n.get("digest")]
     if not notes:
         return 0
     every = float(getattr(cfg, "attention_every", 600.0) or 0.0)
@@ -99,8 +105,8 @@ def release(store: AgentStore, cfg, why_not: str | None, busy: bool, owner_waiti
     taken: list[dict] = []
 
     def take(cur):
-        taken.extend(cur or [])
-        return []
+        taken.extend(n for n in cur or [] if not n.get("digest"))
+        return [n for n in cur or [] if n.get("digest")]          # digest-only notices wait for the next chat
     store.update_agent_state(MACHINE, "notices", take)
     for n in taken:
         store.add_wakeup(MACHINE, wording(n))

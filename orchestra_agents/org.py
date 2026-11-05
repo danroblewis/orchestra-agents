@@ -404,12 +404,16 @@ def teams_led_by(teams: dict[str, TeamDef], agent: str) -> list[TeamDef]:
     return [t for t in teams.values() if t.lead == agent]
 
 
+BINDINGS = "bindings"
+
+
 def effective_tools(agent: AgentDef, roles: dict, teams: dict[str, TeamDef]) -> tuple[str, ...]:
     """Tool groups an agent runs with: its roles' groups, its team chain's granted groups,
     and `team` for every agent in a team, so a member can reach its lead with
     message_agent and read the organisation. Who may message whom is enforced in the
     API by the tree, not by the grant. A worker or reviewer on a ticket gets its role's
-    groups (its exit tool and the modeling groups) and nothing else."""
+    groups (its exit tool and the modeling groups) and nothing else. Every other agent holds
+    ``bindings``: its own event bindings (bindings.py)."""
     out: list[str] = []
     for r in agent.roles:
         for g in (roles[r].tools if r in roles else ()):
@@ -423,6 +427,8 @@ def effective_tools(agent: AgentDef, roles: dict, teams: dict[str, TeamDef]) -> 
                 out.append(g)
     if (agent.team in teams or teams_led_by(teams, agent.name)) and "team" not in out:
         out.append("team")
+    if BINDINGS not in out:              # what wakes it is every woken agent's own (bindings.py)
+        out.append(BINDINGS)
     return tuple(out)
 
 

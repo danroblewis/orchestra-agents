@@ -17,6 +17,7 @@ import time
 from typing import Any
 
 from .api_org import MUTATIONS as ORG_MUTATIONS
+from .bindings import CHANGES as BINDING_CHANGES
 from .duties import CHANGES as SPEC_CHANGES
 from .protocol import REQUESTS
 from .setup_tools import SETUP_COMMANDS
@@ -24,7 +25,7 @@ from .setup_tools import SETUP_COMMANDS
 KEPT = 40                 # the newest actions kept per agent
 AGENT_COMMANDS = frozenset({"pause_agent", "resume_agent", "restart_agent", "reset_agent", "run_agent", "message_agent",
                             "emit_event"})
-CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES
+CHANGES = (SETUP_COMMANDS | ORG_MUTATIONS | AGENT_COMMANDS | frozenset(REQUESTS) | SPEC_CHANGES | BINDING_CHANGES
            | frozenset({"restart_machine", "edit_machine_file", "restart_process", "update_project_context", "escalate_to_supervisor", "announce_change",
                          "hand_to_coordinator", "report_plan", "predict_fix", "propose_patch", "write_override",
                          "draft_upstream_issue", "declare_workflow", "declare_program", "retry_step",
@@ -55,6 +56,11 @@ def did(command: str, args: dict[str, Any], result: dict) -> str | None:
         what = f"duty {result.get('duty')}" if result.get("duty") else "your spec"
         where = f"the branch {result['branch']}" if result.get("branch") else f"the {result.get('where')} branch"
         return f"committed {result.get('commit')} on {where}: {result.get('change')} {what}" + _pr(result)
+    if command in BINDING_CHANGES:
+        if not result.get("changed"):
+            return None
+        kept = f"committed {result['commit']}" if result.get("commit") else f"kept ({result.get('revert')})"
+        return f"{kept}: {result.get('change')} event {result.get('event')} for {result.get('agent')}" + _pr(result)
     if command == "predict_fix":
         return f"committed prediction {result.get('prediction')} of change {result.get('change')}"
     if command == "propose_patch":

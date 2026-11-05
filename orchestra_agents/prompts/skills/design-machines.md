@@ -38,7 +38,10 @@ are in each age and which are due, and you say its line when asked how the syste
 
 **Events go in `receives`.** What a machine watches, or reads at each run (a scheduled machine
 too), is a list of event types in `receives` (`declare_machine`), changed with `add_receives` and
-`remove_receives` (`refine_machine`); what it publishes is in `emits`. Never put them only in
+`remove_receives` (`refine_machine`; on a confirmed machine, the owner confirms the change); what it
+publishes is in `emits`. A confirmed machine's agent may change what wakes it at once
+(`bind_event`, `unbind_event`, you with `agent`): kept here, never in its declaration, and shown by
+its announcement on the Event Map. Never put them only in
 `steps` or `uses`: those are words, and nothing wakes on them. Name only types a machine speaks:
 `read_events` lists them, in `by_type` (heard on the bus) and `announced_not_heard` (announced by
 a machine that listens for them: `gate.rejected` before the gate first rejects). A type in

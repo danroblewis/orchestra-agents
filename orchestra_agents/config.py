@@ -76,6 +76,7 @@ class Config:
     prompt_overrides: dict[str, str] = field(default_factory=dict)
     control_port: int = 0               # 0: any free port, recorded for the web and `chat`
     spec_changes_per_day: int = 5       # the Supervisor's changes to its own spec in 24 hours (duties.py), the owner's cap
+    binding_changes_per_day: int = 30   # changes to one agent's event bindings in 24 hours (bindings.py), apart from the spec's cap
     review_usd_per_day: float = 2.0     # what the Supervisor's review rounds and flow wake-ups may spend a day (budget.py)
     review_turns_per_day: int = 12      # ... and how many turns a day, whatever the harness reports
     # Fewer wake-ups by default (the owner, 2026-11-04: "Can you significantly reduce the amount of wakeups"):
@@ -133,7 +134,8 @@ class Config:
             silence_timeout=parse_duration(a.get("silence_timeout"), 1200.0),
             compact_tokens=int(a.get("compact_tokens", 100_000)),
             prompt_overrides=dict(a.get("prompts", {})), control_port=int(a.get("control_port", 0)),
-            spec_changes_per_day=_count(a, "spec_changes_per_day", 5), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
+            spec_changes_per_day=_count(a, "spec_changes_per_day", 5),
+            binding_changes_per_day=_count(a, "binding_changes_per_day", 30), review_usd_per_day=_amount(a, "review_usd_per_day", 2.0),
             review_turns_per_day=_count(a, "review_turns_per_day", 12), chat_usd_per_day=_amount(a, "chat_usd_per_day", 10.0),
             design_passes=_count(a, "design_passes", 3),
             draft_expiry_s=parse_duration(a.get("draft_expiry"), 86_400.0),

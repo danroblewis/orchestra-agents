@@ -619,6 +619,22 @@ TOOLS: list[ToolDef] = [
             "day's cap; or, with an edit-… id edit_machine_file answered (its revert), put that file back as it was. Use it "
             "when the owner asks, or when a change of yours made things worse.",
             {"commit": S("The commit's id, or edit_machine_file's revert id (edit-…)"), "reason": S("Why, in a sentence")}, ("commit", "reason")),
+    # bindings: what wakes an agent, every woken agent's own (bindings.py)
+    ToolDef("list_bindings", "bindings",
+            "What wakes you, by where it comes from (built in, each duty, your own bindings) and what you unbound, with each "
+            "event's count on the bus in the last hour and whether it wakes you at once or is gathered.",
+            {"agent": S("Another agent's name (the Supervisor's to read); default yourself")}),
+    ToolDef("bind_event", "bindings",
+            "Be woken by an event type from now on, with the reason; a busy one is allowed, with a warning. Applies at the "
+            "host's next tick, no restart.",
+            {"event": S("type or type:filter, e.g. gate.rejected, orchestra.model.stalled:stock:queue"),
+             "reason": S("Why, in a sentence"), "agent": S("Another agent (the Supervisor only); default yourself")},
+            ("event", "reason")),
+    ToolDef("unbind_event", "bindings",
+            "Stop being woken by an event type, a built-in one included, with the reason. Never the owner's chat or page "
+            "requests, nor the crash-loop guard.",
+            {"event": S("type (every entry of it) or type:filter (that entry)"), "reason": S("Why, in a sentence"),
+             "agent": S("Another agent (the Supervisor only); default yourself")}, ("event", "reason")),
     # patch: self-healing, the Supervisor's alone (patching.py, upstream.py)
     ToolDef("propose_patch", "patch",
             "Repair a bug in the project's own code (work = code): your unified diff is applied and committed in a scratch "
@@ -665,7 +681,7 @@ PAGE = "page"
 PAGED = frozenset({
     "project_status", "list_milestones", "list_tickets", "get_ticket", "get_project_context", "get_gate_run",
     "list_gate_runs", "get_staging_status", "get_capacity", "read_events", "list_teams", "get_team", "list_agents",
-    "get_agent", "list_roles", "get_role", "org_guide", "list_duties", "check_setup", "read_config", "list_processes",
+    "get_agent", "list_roles", "get_role", "org_guide", "list_duties", "list_bindings", "check_setup", "read_config", "list_processes",
     "read_machine_log", "list_metrics", "get_model", "read_instrument", "check_sources", "source_schema",
     "preview_query", "infer_source", "explore_source", "read_discovery_runs", "read_experiments", "read_transcript", "list_machines", "machine_ages", "read_outbox", "snapshot",
     "read_design", "find_balance", "modeling_guide", "read_model", "read_series", "read_eras", "read_observability",

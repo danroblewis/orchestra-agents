@@ -11,17 +11,19 @@ Every change:
 - changes only ``.orchestra/machines/supervisor/``: never the fixed core, which is the plugin's,
   and never a built-in duty, whose text is the plugin's too;
 - never gives the Supervisor a tool: a duty may name only tool groups it holds;
-- never listens for activity (``bus_rates.busy``, since 2026-11-04, T55): a heartbeat
-  (``offer.alive``), the floor's and the Outbox's every-piece-of-work events (``offer.made``,
-  ``offer.claimed``, ``offer.finished``, ``item.closed``, ``outbox.sent``) unless a filter narrows
-  them, or a type seen more than ``BUSY_PER_HOUR`` times in the last hour unfiltered; the refusal
-  names the trouble signal to wake on instead;
+- never listens for a heartbeat unfiltered (``offer.alive``, ``bus_rates.refusal``); activity (the
+  floor's and the Outbox's every-piece-of-work events, a type seen more than ``BUSY_PER_HOUR`` times
+  in the last hour) is allowed since 2026-11-04 (T67; T55 refused it), with a warning naming its
+  rate and that it is gathered every ``[agents] attention_every`` (``bindings.warning``);
 - is one commit (``spec_git``): on the base branch when the checkout is clean there and the
   gate is not landing, else on the side branch ``orchestra/supervisor``; with a line in
   ``ledger.md``; announced as ``role.changed`` (subject ``machine:supervisor``, the commit, the
   reason), which begins an era where ``[discovery] eras_from`` names it;
 - restarts the Supervisor's resident session after its turn, so its next turn runs the new
-  prompt (the conversation is kept)."""
+  prompt (the conversation is kept).
+
+``revert_change`` also undoes an agent's binding commit (``bindings.py``: another agent's spec
+too, the Supervisor's to revert) and, with a ``bind-…`` id, a designed machine's binding change."""
 
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ from typing import Any
 from . import spec_git, supervisor_pr
 from .config import Project
 from .gate_busy import landing
-from .machine_spec import NAME, Duty, MachineSpec, SpecError, lint, load, parse, render
+from .machine_spec import NAME, ROOT, Duty, MachineSpec, SpecError, lint, load, parse, render
 from .secret_shapes import secret_in
 from .store import AgentStore, StoreError
 
@@ -68,6 +70,12 @@ def handle(project: Project, store: AgentStore, command: str, a: dict[str, Any],
         if len(reason) < 10:
             raise StoreError("give the reason in a sentence: it goes in the commit and the ledger")
         return machine_files.revert(project, store, a["commit"].strip(), reason)
+    if command == "revert_change" and str(a.get("commit") or "").startswith("bind-"):     # a designed machine's binding
+        from . import bindings
+        reason = (a.get("reason") or "").strip()
+        if len(reason) < 10:
+            raise StoreError("give the reason in a sentence: it goes in the ledger")
+        return bindings.revert(project, store, a["commit"].strip(), reason)
     machine = (a.get("machine") or MACHINE).strip()
     if machine != MACHINE:
         raise StoreError("only the Supervisor's own spec is changed with these tools for now (splitting into new machines comes later)")
@@ -108,6 +116,7 @@ def handle(project: Project, store: AgentStore, command: str, a: dict[str, Any],
 
 def _write(project: Project, store: AgentStore, spec: MachineSpec, duty: Duty, a: dict, reason: str, change: str, new: bool) -> dict:
     text = a.get("text")
+    warnings: list[str] = []
     if new and not (text or "").strip():
         raise StoreError("write the duty's text: what it keeps true, what wakes it, the fixes it may make, what it must never "
                          "do, and how success is measured")
@@ -124,11 +133,12 @@ def _write(project: Project, store: AgentStore, spec: MachineSpec, duty: Duty, a
         if bad:
             raise StoreError(f"not an event type (type or type:filter, e.g. orchestra.model.stalled:stock:queue): {bad}")
         if listens:
-            from .bus_rates import busy, rates
+            from .bindings import warning
+            from .bus_rates import rates, refusal
+            if why := [w for w in (refusal(x) for x in listens) if w]:
+                raise StoreError("refused: " + "; ".join(why))
             rate = rates(store)
-            if why := [w for w in (busy(x, rate) for x in listens) if w]:
-                raise StoreError("refused: a duty wakes you on each event it listens for, and these are activity, not "
-                                 "trouble: " + "; ".join(why))
+            warnings = [w for w in (warning(project, MACHINE, x, rate) for x in listens) if w]
         duty.listens = listens
     if "tools" in a:
         tools = [str(t).strip() for t in a.get("tools") or [] if str(t).strip()]
@@ -143,7 +153,8 @@ def _write(project: Project, store: AgentStore, spec: MachineSpec, duty: Duty, a
     files = {f"{spec.dir}/machine.toml": render(spec)}
     if text is not None:
         files[f"{spec.dir}/{duty.prompt or f'duties/{duty.name}.md'}"] = text.rstrip() + "\n"
-    return _commit(project, store, spec, files, f"{change} duty {duty.name}", duty.name, change, reason)
+    done = _commit(project, store, spec, files, f"{change} duty {duty.name}", duty.name, change, reason)
+    return {**done, "warnings": warnings} if warnings else done
 
 
 def _ledger(spec: MachineSpec, line: str) -> str:
@@ -166,6 +177,8 @@ def _commit(project: Project, store: AgentStore, spec: MachineSpec, files: dict,
                                                 f"run it from {spec_git.SIDE} at once"), quote=supervisor_pr.owner_words(store)))
     if count:
         store.set_agent_state(MACHINE, spec_changes=[*changes_today(store), time.time()])
+    if spec.name != MACHINE:                    # a revert of another agent's binding commit: no restart of the Supervisor's
+        store.set_agent_state(spec.name, bindings_changed=True)
     store.events.publish("role.changed", {"machine": spec.name, "duty": duty, "change": change, "reason": reason,
                                           "commit": done["commit"], "where": done["where"], "by": MACHINE},
                          subject=f"machine:{spec.name}")
@@ -173,7 +186,8 @@ def _commit(project: Project, store: AgentStore, spec: MachineSpec, files: dict,
     store.events.publish("config.changed", {"section": "machine spec", "change": what, "for": f"the machine {spec.name}",
                                             "reason": reason, "commit": done["commit"], "target": "repo", "by": MACHINE},
                          subject=f"machine:{spec.name}")
-    store.set_agent_state(MACHINE, restart_requested=True)
+    if spec.name == MACHINE:
+        store.set_agent_state(MACHINE, restart_requested=True)
     left = project.config.spec_changes_per_day - len(changes_today(store))
     return {"ok": True, "changed": True, "duty": duty, "change": change, **done,
             "applies": "your session starts again after this turn with the new prompt (the conversation is kept)",
@@ -193,13 +207,22 @@ def _revert(project: Project, store: AgentStore, a: dict, reason: str) -> dict:
         before, after, touched, subject = spec_git.commit_of(project, sha)
     except spec_git.SpecGitError as e:
         raise StoreError(str(e)) from None
-    spec = load(project, MACHINE)
-    if any(not p.startswith(spec.dir + "/") for p in touched):
-        raise StoreError(f"refused: {sha} changed another machine's spec")
+    names = {p[len(ROOT) + 1:].partition("/")[0] for p in touched if p.startswith(ROOT + "/")}
+    if len(names) != 1 or any(not p.startswith(ROOT + "/") for p in touched):
+        raise StoreError(f"refused: {sha} is not one machine's spec change")
+    machine = names.pop()
+    if machine != MACHINE and not _bindings_only(before, after, machine):
+        raise StoreError(f"refused: {sha} changed {machine}'s duties; only a binding change of another agent's is reverted here")
+    spec = load(project, machine) or MachineSpec(name=machine)
     rel = lambda files: {p[len(spec.dir) + 1:]: t for p, t in files.items() if p.startswith(spec.dir + "/")}
     b_files, a_files = rel(before), rel(after)
-    b_spec = parse(MACHINE, b_files) if "machine.toml" in b_files else MachineSpec(name=MACHINE)
-    a_spec = parse(MACHINE, a_files) if "machine.toml" in a_files else MachineSpec(name=MACHINE)
+    b_spec = parse(machine, b_files) if "machine.toml" in b_files else MachineSpec(name=machine)
+    a_spec = parse(machine, a_files) if "machine.toml" in a_files else MachineSpec(name=machine)
+    for key in ("bindings", "unbound"):                       # what it bound or unbound, put back as it was
+        was, now_ = {b.event: b for b in getattr(b_spec, key)}, {b.event: b for b in getattr(a_spec, key)}
+        cur = [b for b in getattr(spec, key) if not (b.event in now_ and b.event not in was)]
+        cur += [b for e, b in was.items() if e not in now_ and all(c.event != e for c in cur)]
+        setattr(spec, key, cur)
     files: dict[str, str | None] = {}
     for name in dict.fromkeys([d.name for d in a_spec.duties] + [d.name for d in b_spec.duties]):
         was, now_ = b_spec.duty(name), a_spec.duty(name)
@@ -225,6 +248,17 @@ def _revert(project: Project, store: AgentStore, a: dict, reason: str) -> dict:
         files[path] = b_files.get(inner)
     files[f"{spec.dir}/machine.toml"] = render(spec)
     return _commit(project, store, spec, files, f"revert {sha[:10]} ({subject[:60]})", "", "revert", reason, count=False)
+
+
+def _bindings_only(before: dict, after: dict, machine: str) -> bool:
+    """Whether a commit to ``machine``'s spec changed only its bindings (and its ledger)."""
+    def strip(files: dict) -> tuple:
+        toml = files.get(f"{ROOT}/{machine}/machine.toml")
+        spec = parse(machine, {"machine.toml": toml}) if toml else MachineSpec(name=machine)
+        spec.bindings, spec.unbound = [], []
+        others = {p: t for p, t in files.items() if p.startswith(f"{ROOT}/{machine}/") and not p.endswith(("/machine.toml", "/ledger.md"))}
+        return render(spec), others
+    return strip(before) == strip(after)
 
 
 def _list(project: Project, store: AgentStore, spec: MachineSpec) -> dict:

@@ -13,6 +13,12 @@ whose name is no agent is ignored. What it adds to that agent (``apply``):
 - ``role.md``: the project's own words on how this machine works a wake-up;
 - ``duties/<duty>.md``: one standing duty each: what it keeps true, its signals, its fixes and
   the prediction each fix carries;
+- its own **bindings** (``[[bindings]]``: an event that wakes it, with its reason) and what it
+  unbound (``[[unbound]]``: a built-in wake event or a duty's that no longer wakes it), kept apart
+  from the duties' text and changed with ``bind_event`` and ``unbind_event`` (``bindings.py``; the
+  owner, 2026-11-04: "agents should be able to adjust their own event bindings"). A designed
+  machine's are kept beside its spec in the state directory (``bindings/<name>.json``), since its
+  spec is written again whole when the owner confirms a change;
 - ``ledger.md``: why each duty exists: who asked, when, the commit (``duties.py`` appends);
 - ``proposals/``: what its review rounds proposed about itself (a split, ``split_proposal.py``).
 
@@ -82,6 +88,35 @@ class Duty:
 
 
 @dataclass
+class Binding:
+    """An event this machine binds (``type`` or ``type:filter``), or unbinds, with why."""
+    event: str
+    reason: str = ""
+    by: str = ""
+    at: str = ""
+
+    def to_dict(self) -> dict:
+        return {k: getattr(self, k) for k in ("event", "reason", "by", "at") if getattr(self, k)}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Binding:
+        return cls(**{k: str(d.get(k) or "") for k in ("event", "reason", "by", "at")})
+
+
+# What no agent unbinds (bindings.py refuses it, ``apply`` keeps it whatever a file says): the
+# owner's page request and the crash-loop guard. The owner's chat is no event: nothing unbinds it.
+PROTECTED = {"orchestra.intent.requested": "the owner's own channel: their click on a page (confirm, discard, the kind switch)",
+             "agent.crash_loop": "the crash-loop guard: an agent paused after repeated crashes"}
+
+
+def unbinds(unbound: list[Binding], w: str) -> bool:
+    """Whether an entry ``w`` of the agent's wake-ups is taken out by ``unbound``: an unbound
+    ``type`` takes out every entry of that type, an unbound ``type:filter`` that entry alone."""
+    t = w.split(":", 1)[0]
+    return t not in PROTECTED and any(u.event == w or (":" not in u.event and u.event == t) for u in unbound)
+
+
+@dataclass
 class MachineSpec:
     name: str
     description: str = ""
@@ -90,6 +125,8 @@ class MachineSpec:
     created_by: str = ""
     review_every: str | None = None
     duties: list[Duty] = field(default_factory=list)
+    bindings: list[Binding] = field(default_factory=list)     # its own wake events, apart from the duties'
+    unbound: list[Binding] = field(default_factory=list)      # built-in or duty wake events it took out
     publishes: list[dict] = field(default_factory=list)
     emits: list[str] = field(default_factory=list)            # the only types its emit_event may raise (a designed machine's)
     files: dict[str, str] = field(default_factory=dict)       # this machine's files, relative to its directory
@@ -133,7 +170,10 @@ def parse(name: str, files: dict[str, str]) -> MachineSpec:
                                listens=[str(x) for x in d.get("listens") or []], tools=[str(x) for x in d.get("tools") or []],
                                added_by=str(d.get("added_by") or ""), added_at=str(d.get("added_at") or ""),
                                reason=str(d.get("reason") or "")))
+    binds = {k: [Binding.from_dict(b) for b in raw.get(k) or [] if isinstance(b, dict) and isinstance(b.get("event"), str)]
+             for k in ("bindings", "unbound")}
     return MachineSpec(name=raw.get("name") or name, description=str(raw.get("description") or ""),
+                       bindings=binds["bindings"], unbound=binds["unbound"],
                        engagement=str(raw.get("engagement") or "continuous"), model=raw.get("model") or None,
                        created_by=str(raw.get("created_by") or ""), review_every=review.get("every") or None, duties=duties,
                        publishes=[p for p in raw.get("publishes") or [] if isinstance(p, dict)], emits=[str(x) for x in raw.get("emits") or []],
@@ -197,7 +237,24 @@ def load_all(project: Project) -> dict[str, MachineSpec]:
             out[name].root = roots[name]
         except SpecError:
             continue
+        if out[name].root != ROOT:                       # a designed machine's: kept beside its spec (bindings.py)
+            out[name].bindings, out[name].unbound = state_bindings(project, name)
     return out
+
+
+def state_bindings_path(project: Project, name: str):
+    """Where a designed machine's own bindings are kept: outside its spec's directory, which its
+    confirm writes again whole (state_machines.write_files)."""
+    return project.state_dir / "bindings" / f"{name}.json"
+
+
+def state_bindings(project: Project, name: str) -> tuple[list[Binding], list[Binding]]:
+    try:
+        raw = json.loads(state_bindings_path(project, name).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return [], []
+    return tuple([Binding.from_dict(b) for b in raw.get(k) or [] if isinstance(b, dict) and b.get("event")]
+                 for k in ("bindings", "unbound"))
 
 
 def load(project: Project, name: str) -> MachineSpec | None:
@@ -224,10 +281,18 @@ def model_of(project: Project, harness, name: str) -> str | None:
 
 def apply(agent, spec: MachineSpec) -> None:
     """The spec's contract on the agent record it belongs to: its duties' wake-ups are the agent's
-    too (the core's own are kept: a spec only adds)."""
+    too; what it unbound is taken out of them and of what it reads each run (never the owner's
+    channel nor the crash-loop guard, ``PROTECTED``); its own bindings are added last, so a binding
+    stands even beside an unbound type."""
     for w in spec.listens():
         if w not in agent.wake_on:
             agent.wake_on.append(w)
+    if spec.unbound:
+        agent.wake_on = [w for w in agent.wake_on if not unbinds(spec.unbound, w)]
+        agent.reads_events = [w for w in agent.reads_events or [] if not unbinds(spec.unbound, w)]
+    for b in spec.bindings:
+        if b.event not in agent.wake_on:
+            agent.wake_on.append(b.event)
 
 
 def _s(v: str) -> str:
@@ -259,6 +324,9 @@ def render(spec: MachineSpec) -> str:
                 lines.append(f"{k} = [{', '.join(_s(x) for x in v)}]")
             else:
                 lines.append(f"{k} = {_s(v)}")
+    for key in ("bindings", "unbound"):
+        for b in getattr(spec, key):
+            lines += ["", f"[[{key}]]"] + [f"{k} = {_s(v)}" for k, v in b.to_dict().items()]
     for p in spec.publishes:
         lines += ["", "[[publishes]]"] + [f"{k} = {_s(str(v))}" for k, v in p.items() if isinstance(v, str)]
     return "\n".join(lines) + "\n"
@@ -272,11 +340,14 @@ def prompt_part(spec: MachineSpec) -> str:
         return (f"## Your machine spec (`{spec.dir}/`)\n\n"
                 "The Supervisor wrote it from the declaration the owner confirmed. It is kept in the state directory and "
                 "never committed; it changes only when the owner confirms a change to the declaration, and then it is "
-                "written again whole. You have no tools to change it.\n")
+                "written again whole. What wakes you is yours: " + BINDING_TOOLS + ".\n" + _bindings_part(spec))
+    head = ("your own loop and standing duties, which you change with `add_duty`, `edit_duty` and `remove_duty` (each "
+            "change a commit with its reason) and undo with `revert_change`; `list_duties` shows them with their history. "
+            if spec.name == "supervisor" else "")
     parts = [(f"## Your machine spec (`{spec.dir}/`)\n\n"
-              "This part of your prompt is the project's: your own loop and standing duties, which you change with "
-              "`add_duty`, `edit_duty` and `remove_duty` (each change a commit with its reason) and undo with "
-              "`revert_change`; `list_duties` shows them with their history.")]
+              f"This part of your prompt is the project's: {head}What wakes you is yours: {BINDING_TOOLS}.")]
+    if b := _bindings_part(spec):
+        parts.append(b.strip())
     if spec.role_text.strip():
         parts.append(f"### How you work a wake-up\n\n{spec.role_text.strip()}")
     from .supervisor_spec import inactive
@@ -292,6 +363,19 @@ def prompt_part(spec: MachineSpec) -> str:
         body = spec.duty_text(d).strip() or "(no text written yet)"
         parts.append(f"### Duty `{d.name}`\n\nWakes you on: {wakes}. Tool groups: {tools}.\n\n{body}")
     return "\n\n".join(parts) + "\n"
+
+
+BINDING_TOOLS = ("`list_bindings` shows it, `bind_event` adds an event and `unbind_event` takes one out, built-in ones "
+                 "included, each with its reason")
+
+
+def _bindings_part(spec: MachineSpec) -> str:
+    if not (spec.bindings or spec.unbound):
+        return ""
+    said = [f"also woken by {', '.join(f'`{b.event}`' for b in spec.bindings)}" if spec.bindings else "",
+            f"no longer woken by {', '.join(f'`{b.event}`' for b in spec.unbound)}" if spec.unbound else ""]
+    line = "; ".join(x for x in said if x)
+    return "\n### Your own bindings\n\n" + line[0].upper() + line[1:] + ".\n"
 
 
 def lint(spec: MachineSpec, groups: tuple[str, ...] | list[str], known_types: set[str] | frozenset[str]) -> list[str]:

@@ -142,8 +142,8 @@ def test_effective_tools_and_the_message_tree(project):
     os_.save_team(TeamDef(name="product/qa", lead="qa_lead", members=["hunter"], access=[{"tools": ["pipeline"]}]), "# Q\n\n1. y")
     from orchestra_agents.roles import all_roles
     roles, teams, ags = all_roles(project), all_teams(project), all_agents(project)
-    assert effective_tools(ags["hunter"], roles, teams) == ("events", "pipeline", "escalate", "team")  # role + team + parent team; `team` so it can reach its lead
-    assert effective_tools(ags["qa_lead"], roles, teams) == ("tickets", "events", "pipeline", "escalate", "team")
+    assert effective_tools(ags["hunter"], roles, teams) == ("events", "pipeline", "escalate", "team", "bindings")  # role + team + parent team; `team` so it can reach its lead; `bindings`, its own wake events
+    assert effective_tools(ags["qa_lead"], roles, teams) == ("tickets", "events", "pipeline", "escalate", "team", "bindings")
     assert may_message(teams, ags, "qa_lead", "hunter") is None          # lead to member
     assert may_message(teams, ags, "hunter", "qa_lead") is None          # member to its lead
     assert may_message(teams, ags, "po", "qa_lead") is None              # lead to a sub-team's lead
@@ -202,7 +202,7 @@ def test_api_builds_a_team_the_way_the_guide_says(project):
     assert t["team"]["lead"] == "po" and [a["name"] for a in t["team"]["agents"]] == ["po", "writer"]
     assert "never empty" in t["responsibilities"] and t["tools_dir"].endswith("spaces/product/tools")
     a = api.handle(project, store, "get_agent", {"name": "po"}, role="supervisor")
-    assert a["tool_groups"] == ["tickets", "escalate", "events", "team"] and a["leads"] == ["product"]
+    assert a["tool_groups"] == ["tickets", "escalate", "events", "team", "bindings"] and a["leads"] == ["product"]
     assert "team" in api.handle(project, store, "get_agent", {"name": "writer"}, role="supervisor")["tool_groups"]   # members too
     assert "## Team `product` (your team)" in a["prompt"] and a["agent"]["every_seconds"] == 6 * 3600
     # an ephemeral agent's runs are all kept and listed, newest first; its transcript button opens the latest

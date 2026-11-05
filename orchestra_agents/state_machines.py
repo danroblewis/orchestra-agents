@@ -20,7 +20,8 @@ agents run it from:
 ``machine_spec.load_all`` (its one loader, ``state_root``) read them beside the repository's ``.orchestra/`` (the repository's wins
 on a name both have). A confirmed change to it writes them again; retiring it (``discard`` on a
 declared machine, which retracts the declaration) or switching it to Programmatic removes the
-directory (``remove``). Nothing here commits.
+directory (``remove``), and its own event bindings with it (``bindings/<name>.json``, bindings.py:
+kept outside the directory, so a confirmed change that writes it again keeps them). Nothing here commits.
 
 The Supervisor's ``create_role``, ``update_role``, ``create_agent`` and ``update_agent`` on a
 confirmed designed machine's name write here too (``save_role``, ``save_agent``; ``api_org``), so
@@ -143,9 +144,11 @@ def write(project: Project, m: dict, reads: dict[str, str] | None = None) -> Pat
 
 def remove(project: Project, name: str) -> bool:
     """Take a confirmed machine's records out; whether there were any."""
+    from .machine_spec import state_bindings_path
     d = root(project) / name
     had = d.is_dir()
     shutil.rmtree(d, ignore_errors=True)
+    state_bindings_path(project, name).unlink(missing_ok=True)     # its own bindings (bindings.py) go with it
     return had
 
 

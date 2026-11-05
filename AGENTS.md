@@ -150,8 +150,9 @@ Sonnet by default (D20), where the harness takes the name, and on `[agents] mode
     `patch` tools: a patch to the project's code lands through a ticket, a review and the gate; a
     patch to an installed plugin is a project-local override pinned to the installed version,
     never of Orchestra or this package, with its upstream issue an outbox draft the owner approves.
-    Its own spec (`.orchestra/machines/supervisor/`) it changes only with its duty tools, each a
-    commit with its reason, capped per day; the fixed core of its prompt ships here and no spec
+    Its own spec (`.orchestra/machines/supervisor/`) it changes only with its duty tools and its
+    binding tools (`bind_event`, `unbind_event`, which any agent holds for its own wake events and
+    the Supervisor for another's, 2026-11-04, T67), each a commit with its reason, each capped per day; the fixed core of its prompt ships here and no spec
     removes it. Nor does it make
     tickets: it hands the human's requirements to the Coordinator (`work.requested`,
     `handoff.py`), which plans them into milestones and tickets (the `planning` group) and reports

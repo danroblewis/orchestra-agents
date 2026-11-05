@@ -180,6 +180,9 @@ def _handle(project: Project, store: AgentStore, command: str, args: dict[str, A
         return handle_setup(project, store, command, a, author, role)
     if command == "restart_machine":
         return restart_machine(project, store, a, author, role)
+    if command == "propose_people":
+        from .people_tools import propose_people
+        return propose_people(project, store, a, role)
     if command == "edit_machine_file":
         from .machine_files import edit_machine_file
         return edit_machine_file(project, store, a, role)

@@ -2,7 +2,8 @@
 problem now where we have way too many people names sometimes, and it's breaking various things").
 
 The bridges' pollers publish each act as who acted, ``person.<system>.<account>``, and announce each
-person once, kind ``person``, with their display name: at work, hundreds of Jira people. Every
+account once, kind ``person``, named as an account (``jira.user.<account>``, the display name a
+detail; the bridges' SPEC §8): at work, hundreds of Jira people. Every
 answer that listed the machines one by one listed them all. Here a system's people are grouped by
 their source (``person.<system>.``; ``person.<key>``, a person the identity map lists, groups as
 ``mapped``) and, once a group holds more than ``SUMMARISED``, said as one line: how many, how many

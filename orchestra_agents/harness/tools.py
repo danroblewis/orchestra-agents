@@ -461,6 +461,19 @@ TOOLS: list[ToolDef] = [
             "Remove a [[machines]], [[collect]], [[scrape]] or [[gate.unit]] entry by name. A removed machine is stopped.",
             {"section": {"type": "string", "enum": ["machines", "collect", "scrape", "gate.unit"]}, "name": S("Entry name"),
              "target": TARGET, "change": CHANGE, "reason": S("Why, in a sentence")}, ("section", "name", "reason")),
+    ToolDef("propose_people", "setup",
+            "The table that combines relayed accounts into people: candidate identity-map entries from the accounts the "
+            "bridges' pollers announced (person.<system>.<account>, named <system>.user.<account>) that the map does not "
+            "list. Exact: the same display name on two systems; weak: namesakes, the same handle, the same words in "
+            "another order, a close spelling. Each has an id, its accounts, a proposed key and name, its evidence and "
+            "confidence. Without join: a dry listing, nothing written. An account is not a person until the map joins "
+            "it, and every join is the owner's yes in both ask modes, exact ones included: ask the exact ones together "
+            "in one sentence and each weak one on its own, then pass join with their quote; the entries go to the "
+            "identity map in the state directory, never the repository.",
+            {"join": A("Candidate ids to write into the identity map, on the owner's yes; leave out for the dry listing"),
+             "quote": S("With join: the owner's words this session that said yes to these joins (a weak one by its name, "
+                        "id or account)"),
+             "reason": S("With join: why, in a sentence (recorded with the change)")}),
     ToolDef("restart_machine", "setup",
             "Restart one of the project's programs ([[machines]]), including one Orchestra gave up on: its entry is taken "
             "out until Orchestra has stopped it, then put back as it was, which starts it again. Nothing is committed.",

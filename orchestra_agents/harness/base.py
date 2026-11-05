@@ -173,6 +173,7 @@ class SessionSpec:
     sandbox_escape: bool = True   # Claude Code: a command its sandbox blocks may run again outside it ([agents] sandbox_escape)
     read_only: bool = False    # the agent reads the checkout and never edits a file: its harness's file-editing tools are taken away
     bounds: tuple[str, ...] = ()   # the directories it may read in (the Supervisor's: the project and its state dir); () unbounded
+    pass_env: tuple[str, ...] = ()   # [agents] pass_env: further variables the owner names for the harness's sign-in, kept
     skills: tuple[tuple[str, str, str], ...] = ()   # (name, use when, text): the skills its prompt indexes, for a harness that loads its own (Claude Code)
 
 
@@ -264,6 +265,13 @@ class Harness(ABC):
         when this harness cannot take that name, and the configured ``[agents] model`` stands.
         Default: none taken (a harness whose model names differ says which it accepts)."""
         return None
+
+    def sign_in(self, environ: dict[str, str] | None = None) -> tuple[str, ...]:
+        """The variables this harness's process signs in with, given the host's environment ``environ``
+        (a provider switched on there may need more): what ``session_env`` keeps of the host's
+        credentials, beside ``[agents] pass_env``, and what a failed sign-in's report names (by name
+        only, ``sign_in.py``). Default: none."""
+        return ()
 
     def priced(self, model: str | None) -> bool | None:
         """Whether this harness knows what a turn on ``model`` costs: True when it reports or prices

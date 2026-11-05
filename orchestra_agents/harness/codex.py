@@ -177,7 +177,7 @@ class CodexSession(AgentSession):
             stderr = self.spec.log_path.open("a", encoding="utf-8")
             try:
                 self.proc = subprocess.Popen(self._args(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
-                                             text=True, cwd=str(self.spec.cwd), env={**session_env(CODEX_AUTH), **self.spec.env},
+                                             text=True, cwd=str(self.spec.cwd), env={**session_env(CODEX_AUTH + self.spec.pass_env), **self.spec.env},
                                              bufsize=1, start_new_session=True)
             except OSError as e:
                 result.error = f"cannot start {self.binary}: {e}"
@@ -289,6 +289,9 @@ class CodexHarness(Harness):
 
     def __init__(self, binary: str | None = None):
         self.binary = binary
+
+    def sign_in(self, environ: dict[str, str] | None = None) -> tuple[str, ...]:
+        return CODEX_AUTH
 
     def start(self, spec: SessionSpec) -> CodexSession:
         return CodexSession(spec, self.binary)

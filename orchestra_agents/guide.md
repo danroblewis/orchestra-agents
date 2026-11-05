@@ -105,6 +105,7 @@ sandbox_escape = true     # Claude Code: a command its sandbox blocks runs again
 ask = "outside"           # when the Supervisor asks first: outside (default: only before a write outside this machine) | always (below)
 serves = ["worker", "reviewer"]   # the task system's roles these agents fill (default both)
 allow_push = []           # roles whose sessions may git push and write pull requests (default none: the owner's)
+pass_env = []             # further variables a harness signs in with, kept in every session (names only; the owner's alone, below)
 coordinator_every = "30m" # a scheduled Coordinator check-in; unset (default): woken by events only
 turn_timeout = "30m"      # a hard cap per turn; unset (default): none
 silence_timeout = "20m"   # end a turn after this long with nothing from the harness (default 20m)
@@ -193,6 +194,29 @@ it. Under `outside` you join exact people candidates yourself (`propose_people`,
 undoes it); weak ones stay the owner's. With `always` every change the owner's words did not ask for is put to
 them in one sentence and made on their yes, quoted, as before; set it (`set_setting`, key
 `agents.ask`) only when the human asks for that.
+
+### Sessions sign in from the host's environment (`pass_env`)
+
+Every session starts with the host's environment (the one `orchestra run` started with) minus anything
+that may hold a credential, keeping only its harness's sign-in. For Claude Code that is its own
+(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, its OAuth refresh token and
+scopes, `CLAUDE_CODE_API_KEY_HELPER_TTL_MS`), a company gateway's route (`ANTHROPIC_BASE_URL`,
+`ANTHROPIC_CUSTOM_HEADERS`, `ANTHROPIC_BETAS`, the model variables `ANTHROPIC_MODEL`,
+`ANTHROPIC_DEFAULT_*_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, mTLS's `CLAUDE_CODE_CLIENT_CERT`/`_KEY`/
+`_KEY_PASSPHRASE`, `CLAUDE_CODE_CERT_STORE`, `NODE_EXTRA_CA_CERTS`), each provider switch
+(`CLAUDE_CODE_USE_BEDROCK`, `_MANTLE`, `_VERTEX`, `_FOUNDRY`, `_ANTHROPIC_AWS`), and that provider's
+credentials only while its switch is on (Bedrock: the `AWS_*` keys, profile, region and files and
+`AWS_BEARER_TOKEN_BEDROCK`; Vertex: `GOOGLE_APPLICATION_CREDENTIALS`, `CLOUD_ML_REGION`,
+`ANTHROPIC_VERTEX_PROJECT_ID`; Foundry: `ANTHROPIC_FOUNDRY_*`). An `apiKeyHelper` lives in Claude
+Code's settings, which every session reads. `[agents] pass_env` names any further variable a harness
+needs (`pass_env = ["MY_GATEWAY_KEY"]`): the owner's alone, set in their private overlay (never with
+`set_setting`, which refuses it; never an `ORCHESTRA_` name). When a session cannot sign in, ask the
+owner for the variable's name, never its value.
+
+`delegate` runs in the host: the tool command asks the host's control endpoint, and the sub-session
+starts from the host's environment, as yours did. With the host down it is refused, saying so. When a
+sub-session's provider refuses its sign-in (401, 403, an invalid key, OAuth), its report says so
+plainly, which sign-in variables the host has (names only) and what to set: tell the owner that.
 
 ### Claude Code's sandbox (`sandbox_escape`)
 

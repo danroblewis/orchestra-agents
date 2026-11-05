@@ -102,3 +102,62 @@ def test_pi_s_extension_is_given_the_limit(tmp_path, popen):
         pi.PiSession(spec(tmp_path), pi_binary="pi")
     assert popen["ORCHESTRA_TOOL_CALL_MS"] == str(int(TOOL_CALL_S * 1000))
     assert "process.env.ORCHESTRA_TOOL_CALL_MS" in pi.EXTENSION_PATH.read_text()
+
+
+GATEWAY = {"ANTHROPIC_BASE_URL": "https://llm.example.internal", "ANTHROPIC_CUSTOM_HEADERS": "X-Team: data",
+           "ANTHROPIC_MODEL": "team-sonnet", "ANTHROPIC_SMALL_FAST_MODEL": "team-haiku", "CLAUDE_CODE_USE_BEDROCK": "1",
+           "AWS_ACCESS_KEY_ID": "aws-id-value", "AWS_SECRET_ACCESS_KEY": "aws-secret-value",
+           "AWS_SESSION_TOKEN": "aws-session-value", "AWS_PROFILE": "team", "MY_GATEWAY_KEY": "named-by-the-owner",
+           "GOOGLE_APPLICATION_CREDENTIALS": "/keys/gcp.json", "ANTHROPIC_FOUNDRY_API_KEY": "foundry-value"}
+
+
+def test_claude_code_keeps_a_company_gateways_sign_in_and_pass_env(tmp_path, host, monkeypatch):
+    """Built from the host's environment: the gateway's route, Bedrock's credentials while Bedrock is on,
+    and what [agents] pass_env names; every other credential stripped, and no stripped value anywhere."""
+    for k, v in GATEWAY.items():
+        monkeypatch.setenv(k, v)
+    s = spec(tmp_path)
+    s.pass_env = ("MY_GATEWAY_KEY",)
+    env = ClaudeCodeSession(s)._env()
+    kept_out(env)
+    for k in ("ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
+              "CLAUDE_CODE_USE_BEDROCK", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_PROFILE",
+              "MY_GATEWAY_KEY"):
+        assert env[k] == GATEWAY[k], k
+    stripped = {"GOOGLE_APPLICATION_CREDENTIALS", "ANTHROPIC_FOUNDRY_API_KEY"}     # Vertex and Foundry are off
+    assert not stripped & set(env)
+    values = "\n".join(env.values())
+    for k in stripped | {"JIRA_TOKEN", "ORCHESTRA_EVENTS_TOKEN", "DB_PASSWORD", "SLACK_BOT_SECRET"}:
+        assert (GATEWAY.get(k) or HOST[k]) not in values, k
+
+
+def test_cloud_credentials_follow_their_providers_switch(tmp_path, host, monkeypatch):
+    for k, v in GATEWAY.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("CLAUDE_CODE_USE_BEDROCK")
+    monkeypatch.setenv("CLAUDE_CODE_USE_VERTEX", "1")
+    env = ClaudeCodeSession(spec(tmp_path))._env()
+    assert env["GOOGLE_APPLICATION_CREDENTIALS"] == "/keys/gcp.json" and env["CLAUDE_CODE_USE_VERTEX"] == "1"
+    assert not {"AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_ACCESS_KEY_ID", "MY_GATEWAY_KEY"} & set(env)
+    monkeypatch.setenv("CLAUDE_CODE_USE_VERTEX", "0")                 # off is off
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in ClaudeCodeSession(spec(tmp_path))._env()
+
+
+def test_every_harness_keeps_pass_env(tmp_path, host, popen, monkeypatch):
+    monkeypatch.setenv("MY_GATEWAY_KEY", "named-by-the-owner")
+    s = spec(tmp_path)
+    s.pass_env = ("MY_GATEWAY_KEY",)
+    with pytest.raises(Started):
+        pi.PiSession(s, pi_binary="pi")
+    kept_out(popen)
+    assert popen["MY_GATEWAY_KEY"] == "named-by-the-owner"
+
+
+def test_pass_env_is_names_and_never_an_orchestra_token(tmp_path):
+    from orchestra.config import ConfigError
+
+    from orchestra_agents.config import Config
+    assert Config.from_raw({"agents": {"harness": "dummy", "pass_env": ["MY_GATEWAY_KEY"]}}).pass_env == ("MY_GATEWAY_KEY",)
+    for bad in ("MY_GATEWAY_KEY", ["MY KEY"], ["ORCHESTRA_EVENTS_TOKEN"], [1]):
+        with pytest.raises(ConfigError, match="pass_env"):
+            Config.from_raw({"agents": {"harness": "dummy", "pass_env": bad}})

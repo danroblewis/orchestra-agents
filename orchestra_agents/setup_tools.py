@@ -350,6 +350,10 @@ def _set_setting(project: Project, store: AgentStore, a: dict) -> Plan:
         except ValueError:
             pass
     head = key.split(".")[0]
+    if key == "agents.pass_env" or (key == "agents" and isinstance(value, dict) and "pass_env" in value):
+        raise StoreError("[agents] pass_env is the owner's alone: it lets a variable of the host's environment, a credential "
+                         "perhaps, into every session. Tell the owner the variable's name and to add it to pass_env in "
+                         "their private overlay, then restart orchestra run")
     unseen = None
     if key in ("sources", "series") and isinstance(value, list):
         unseen = _check_sources(project, key, value)

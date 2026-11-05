@@ -75,7 +75,7 @@ class PiSession(AgentSession):
             args += ["--exclude-tools", "edit,write"]
         if spec.thinking:
             args += ["--thinking", spec.thinking]
-        full_env = {**session_env(PI_AUTH), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
+        full_env = {**session_env(PI_AUTH + spec.pass_env), **spec.env, "ORCHESTRA_TOOLS": ",".join(spec.tool_groups),
                     "ORCHESTRA_PYTHON": sys.executable, "ORCHESTRA_TOOL_CALL_MS": str(int(TOOL_CALL_S * 1000))}
         system = spec.system_prompt or ""
         if spec.tools_via == "bash":              # the tools as a command Pi's bash tool runs, in this environment
@@ -324,6 +324,9 @@ class PiHarness(Harness):
 
     def __init__(self, binary: str | None = None):
         self.binary = binary
+
+    def sign_in(self, environ: dict[str, str] | None = None) -> tuple[str, ...]:
+        return PI_AUTH
 
     def start(self, spec: SessionSpec) -> PiSession:
         return PiSession(spec, self.binary)

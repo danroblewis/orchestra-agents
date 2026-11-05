@@ -26,7 +26,7 @@ def project(tmp_path, monkeypatch):
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
     p = agents_project(repo)
     toml = p.repo_root / "orchestra.toml"
-    toml.write_text(toml.read_text().rstrip() + "\nreview_turns_per_day = 2\n")   # [agents] is the last table
+    toml.write_text(toml.read_text().rstrip() + "\nreview_turns_per_day = 2\nattention_every = \"10m\"\nreview_every = 0\n")   # [agents] is the last table; the pre-2026-11-04 rhythm
     p.reload_config()
     return p
 

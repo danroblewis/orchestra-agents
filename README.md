@@ -159,7 +159,7 @@ and a machine's confirm stays yours (Orchestra's declared layer). `ask = "always
 your words did not ask for to you first, as before.
 
 **What it costs.** The Supervisor's own initiative (its review rounds, and the wake-ups of its
-duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 48 turns a day (`[agents]
+duties: a stalled flow, a quiet machine, a divergence) is capped at $2 and 12 turns a day (`[agents]
 review_usd_per_day` and `review_turns_per_day`). Its explore rounds over the declared stores (every `explore_every`, default an hour, 0 off: one
 experiment a round in Orchestra's experiment log, applied when it narrows `match` or changes `split`,
 `kinds` or `names`, asked of you when it widens `match`) count as its initiative. Your chat turns

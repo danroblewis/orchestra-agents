@@ -46,11 +46,15 @@ LOOK_BACK = 20_000           # events read back for a round (a day or more on a 
 REMEMBER = 200               # finding keys remembered, so the same finding wakes it once
 
 
-def due_every(spec) -> float:
+def due_every(spec, cfg=None) -> float:
+    """How often the round runs: its spec's interval, never more often than ``[agents] review_every``
+    (the owner's floor; 2h by default)."""
+    floor = float(getattr(cfg, "review_every", 0.0) or 0.0)
     try:
-        return max(FLOOR_S, parse_interval(spec.review_every or DEFAULT_REVIEW_EVERY))
+        own = parse_interval(spec.review_every or DEFAULT_REVIEW_EVERY)
     except Exception:  # noqa: BLE001 - a spec's bad interval falls back to the default
-        return max(FLOOR_S, parse_interval(DEFAULT_REVIEW_EVERY))
+        own = parse_interval(DEFAULT_REVIEW_EVERY)
+    return max(FLOOR_S, own, floor)
 
 
 class ReviewRound:
@@ -69,7 +73,7 @@ class ReviewRound:
         st = h.store.agent_state(MACHINE)
         if st.get("paused") or st.get("deleted"):
             return None
-        every = due_every(spec)
+        every = due_every(spec, h.cfg)
         last = (st.get("review") or {}).get("at") or self.started
         if st.get("next_review_at") != last + every:
             h.store.set_agent_state(MACHINE, next_review_at=last + every)
@@ -121,7 +125,7 @@ class ReviewRound:
         else:
             record["woke"] = False
         h.store.set_agent_state(MACHINE, review=record, load={**values, "at": now, "crossed": record["crossed"]},
-                                next_review_at=now + due_every(spec))
+                                next_review_at=now + due_every(spec, h.cfg))
         if not record["woke"] and not record.get("skipped"):
             h.log(f"review round: nothing new ({len(findings)} known finding(s)); no turn")
         return {**record, "reason": reason, "proposal": proposal}

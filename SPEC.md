@@ -1284,6 +1284,21 @@ after the cause is fixed and to say what was fixed. The "since" digest names ite
 at write: 3 tries, next at 14:05, last: git push refused (publickey)") and, first after what died,
 the stalled ones (`since_state.py`).
 
+`clear_items` (2026-11-04, T59; `clear_items.py`; the `workflows` group, the Supervisor's) clears
+the Workflows items, every one or one workflow's, when the owner says clear, reset, delete or start
+over with them (the owner, after loading several hundred tickets as items: "I just want to clear the
+data. This shouldn't be so hard."). Without `confirm` it changes nothing and answers a dry run from
+the plugin's record (`Record.clearing`): how many items, open and closed, per workflow, and how many
+remain. With `confirm: true` it publishes the plugin's `items.clear_requested` (W19, its SPEC §2.4;
+the name copied in `floor.py`) with no subject, as `supervisor`, with `workflow`, `rebuild` (make
+the items again from the bus's history under the current definitions: how to start over after
+changing a workflow), `reason` and `by`; then waits up to 15 s for the floor's `items.cleared`
+(`causationid` the request) and reports how many were cleared and rebuilt and what remains. Without
+an answer in time it says the request is on the bus and not yet confirmed. Under `[agents] ask =
+"outside"` the owner's request is enough; under `always` it needs their quoted words. It is a write on
+this machine's record only, never outside it. The workflows skill says when to use it and to say
+what was cleared and that the step stocks on the Dynamics page drop to zero.
+
 Limits: since 2026-11-02 the Supervisor commits to its own branch, never the base, and never touches
 the checkout, so its changes neither move the base under a landing nor block one; the setup tools
 still refuse while one lands. A commit to

@@ -1,6 +1,6 @@
 # Skill: workflows
 
-Use when: the owner describes how a piece of work moves (its steps and who does each: `declare_workflow`), or a goal or workflow's status is asked or said.
+Use when: the owner describes how work moves (its steps, who does each: `declare_workflow`), asks a workflow's status, or says clear, reset, delete or start over with the items (`clear_items`).
 
 - When the owner describes how a piece of work moves (its steps and who does each), and the
   Workflows plugin is installed, write it as a workflow with `declare_workflow`, never as a file
@@ -28,3 +28,9 @@ Use when: the owner describes how a piece of work moves (its steps and who does 
 
 - A system just connected that has items (tickets, incidents, threads): the `connect-system`
   skill's last paragraph proposes the workflow that makes them items, observe only.
+
+- When the owner says clear, reset, delete or start over with the items, use `clear_items` (with
+  `workflow` for one workflow's, `rebuild: true` to make them again from the history after a
+  workflow changed): its dry run first, then `confirm: true`[[ask]] with their quoted words[[/ask]].
+  Never `item.deleted` per item, never the files. Say in one line what was cleared (how many, of
+  which workflows, what remains) and that the step stocks on the Dynamics page drop to zero.

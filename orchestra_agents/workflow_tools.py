@@ -446,7 +446,7 @@ def _summary(row: dict, snap: dict) -> dict:
 
 
 READS = {"list_workflows": list_workflows, "list_items": list_items, "explain_item": explain_item}
-COMMANDS = frozenset({"declare_workflow", "declare_program", "retry_step", *READS})
+COMMANDS = frozenset({"declare_workflow", "declare_program", "retry_step", "clear_items", *READS})
 
 
 def handle(project: Project, store: AgentStore, command: str, a: dict, role: str) -> dict:
@@ -457,4 +457,7 @@ def handle(project: Project, store: AgentStore, command: str, a: dict, role: str
     if command == "retry_step":
         from .retry_step import retry_step
         return retry_step(project, store, a, role)
+    if command == "clear_items":
+        from .clear_items import clear_items
+        return clear_items(project, store, a, role)
     return READS[command](project, a)

@@ -17,6 +17,7 @@ from orchestra_agents import (
     ask,
     design_integrate,
     integrate_kits,
+    promises,
     prompting,
     push_guard,
     request_work,
@@ -88,6 +89,8 @@ def test_the_setting_is_outside_by_default_always_on_request_and_nothing_else():
 PERMISSION = re.compile(r"on their yes|their yes, quoted|quoted yes|ask the owner in one sentence|shall i |"
                         r"propose (it )?in one sentence|never fill it on your own|ask in one sentence first", re.IGNORECASE)
 OUTSIDE_WRITE = re.compile(r"pull request|outbox|push|graduat|writes to the system|write outside", re.IGNORECASE)
+# the no-question rule (T69) quotes the questions it forbids: a sentence that forbids asking asks nothing
+FORBIDS_ASKING = re.compile(r"^Never end with ")
 
 
 def _text(project) -> str:
@@ -106,7 +109,8 @@ def _sentences(text: str) -> list[str]:
 def test_under_outside_the_prompt_asks_first_only_before_a_write_outside_this_machine(project):
     set_ask(project)
     text = _text(project)
-    asks = [s for s in _sentences(text) if PERMISSION.search(s) and not OUTSIDE_WRITE.search(s)]
+    asks = [s for s in _sentences(text) if PERMISSION.search(s) and not OUTSIDE_WRITE.search(s)
+            and not FORBIDS_ASKING.search(s)]
     assert asks == []
     assert "Decide and act, then say" in text and "[[act]]" not in text and "[[ask]]" not in text
     assert "widens `match` within `explore`" in _flat(text) and "`approve_integration` with what they gave and your reason" in _flat(text)
@@ -175,6 +179,7 @@ def test_under_outside_a_read_only_kit_is_approved_on_the_supervisors_reason(pro
     set_ask(project)
     got = connect(project, store)
     assert "I will read Jira" in got["ask_owner"] and "May I" not in got["ask_owner"]
+    assert promises.unkept(got["ask_owner"], ["integrate_system"]) is None     # relayed, it waits on the owner's answer
     assert not any("approval, in their words" in m for m in got["owner_must_set"])
     say(store, "The token is in JIRA_TOKEN", 2)
     out = call(project, store, "approve_integration", name="jira_poller", token_env="JIRA_TOKEN",

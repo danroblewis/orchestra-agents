@@ -95,11 +95,8 @@ class Caller:
         tooling.check_args(tool.name, args)
         project, store = self._ctx()
         role, ticket = access.identify(store, self.env)
-        if tool.name == "delegate":       # the host runs it, from its environment and sign-in (delegate_host.py)
-            from ..delegate_host import ask
-            access.authorize(project, tool.name, role)
-            return ask(project, store, args, role, self.env)
-        return tooling.handle(project, store, tool.name, args, role=role, ticket_env=ticket)
+        # host_env: a delegate the host runs, from its environment and sign-in (delegate_host.py)
+        return tooling.handle(project, store, tool.name, args, role=role, ticket_env=ticket, host_env=self.env)
 
 
 def text(result) -> str:

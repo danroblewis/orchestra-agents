@@ -45,11 +45,13 @@ def running(tmp_path, monkeypatch):
     for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@t"], ["config", "user.name", "t"]):
         git(repo, *args)
     p = agents_project(repo, harness="dummy")
-    (repo / "orchestra.toml").write_text((repo / "orchestra.toml").read_text() + 'dummy_script = "dummy.toml"\n')
+    # review_every = "30m": the round on its spec's interval, as before T64's default of 2h
+    (repo / "orchestra.toml").write_text((repo / "orchestra.toml").read_text() + 'dummy_script = "dummy.toml"\nreview_every = "30m"\n')
     (repo / "dummy.toml").write_text(SCRIPT)
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     p.reload_config()
+    assert p.config.review_every == 1800.0
     store, events = AgentStore(p), Events.for_project(p)
     host = AgentHost(p, store, events)
     th = threading.Thread(target=host.run, daemon=True)

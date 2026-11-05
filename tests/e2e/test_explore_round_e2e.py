@@ -74,14 +74,16 @@ def running(tmp_path, monkeypatch):
         git(repo, *args)
     p = agents_project(repo, harness="dummy")
     toml = repo / "orchestra.toml"
-    toml.write_text(toml.read_text() + 'dummy_script = "dummy.toml"\nexplore_every = "5m"\n\n[[sources]]\nname = "metrics"\n'
+    # ask = "always": the round's wider match is refused as before (under "outside", the default since
+    # 2026-11-04, a match widened within explore is applied; test_supervisor_ask holds that)
+    toml.write_text(toml.read_text() + 'dummy_script = "dummy.toml"\nexplore_every = "5m"\nask = "always"\n\n[[sources]]\nname = "metrics"\n'
                     'url = "http://127.0.0.1:9/"\nmatch = [\'{namespace="team"}\']\n'
                     'explore = [\'{namespace="team"}\', \'{__name__=~"queue_.*", env="prod"}\']\n')
     (repo / "dummy.toml").write_text(SCRIPT)
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     p.reload_config()
-    assert p.config.explore_every == 300.0 and p.orchestra.config.raw["sources"][0]["name"] == "metrics"
+    assert p.config.explore_every == 300.0 and p.config.ask == "always" and p.orchestra.config.raw["sources"][0]["name"] == "metrics"
     store, events = AgentStore(p), Events.for_project(p)
     host = AgentHost(p, store, events)
     th = threading.Thread(target=host.run, daemon=True)

@@ -49,7 +49,9 @@ def chat(request, tmp_path, monkeypatch):
         git(repo, *args)
     project = agents_project(repo, harness="claude_code")
     toml = repo / "orchestra.toml"
-    toml.write_text(toml.read_text() + f'tools_via = "{request.param}"\n')
+    # ask = "always": the clearance waits for the owner's quoted yes, as this flow was written (under "outside",
+    # the default since 2026-11-04, a read-only kit is approved on the Supervisor's reason: test_supervisor_ask)
+    toml.write_text(toml.read_text() + f'tools_via = "{request.param}"\nask = "always"\n')
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "init")
     project.reload_config()

@@ -15,6 +15,7 @@ call is checked against that role's tool groups before it runs (access.authorize
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from typing import Any
 
 from . import (
@@ -94,12 +95,18 @@ def report_outcome(store: AgentStore, a: dict, role: str, offer: str) -> dict:
     return {"ok": True, "message": "Outcome recorded. You may stop now."}
 
 
-def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "") -> dict:
+def handle(project: Project, store: AgentStore, command: str, args: dict[str, Any], role: str = "", ticket_env: str = "",
+           host_env: Mapping[str, str] | None = None) -> dict:
     """One tool call, first checked against the caller's role and its tool groups (access.py:
     an unknown or missing role, or a tool outside the role's groups, is refused). A call that
     changed something is answered with what it changed, and the change is kept in the agent's
-    record (ledger.py), whatever the model says about it later."""
+    record (ledger.py), whatever the model says about it later. ``host_env``: the calling session's
+    environment, when the call comes from a session (harness/caller.py): its ``delegate`` is then the
+    host's to run, from the host's own environment, and the host keeps its record (delegate_host.py)."""
     access.authorize(project, command, role)
+    if command == "delegate" and host_env is not None:
+        from .delegate_host import ask
+        return ask(project, store, args or {}, role, host_env)
     with store.events.acting_as(role):          # what the call publishes is the caller's, never the host's
         return ledger.record(store, role, command, args or {}, _handle(project, store, command, args, role, ticket_env))
 

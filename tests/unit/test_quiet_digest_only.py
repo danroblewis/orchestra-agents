@@ -38,7 +38,8 @@ def test_other_notices_still_wake_and_leave_the_quiet_ones_for_the_digest(tmp_pa
 
 
 def test_a_review_round_that_finds_only_a_quiet_machine_wakes_nobody():
-    from orchestra_agents import review
     from pathlib import Path
+
+    from orchestra_agents import review
     src = Path(review.__file__).read_text()
     assert 'waking = [f for f in new if f.get("kind") != "quiet"]' in src and "if waking or proposal or design:" in src
